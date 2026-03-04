@@ -105,8 +105,7 @@ Outlook MCP needs permission to access your mailbox data. These are **delegated 
 | `Calendars.ReadWrite` | Create, update, and delete calendar events |
 | `Contacts.Read` | Read your contacts |
 | `Contacts.ReadWrite` | Create, update, and delete contacts |
-| `MailboxSettings.Read` | Read your mailbox settings |
-| `MailboxSettings.ReadWrite` | Update mailbox settings (auto-replies, working hours) |
+| `MailboxSettings.ReadWrite` | Read and update mailbox settings (auto-replies, working hours, categories) |
 | `People.Read` | Search for relevant people |
 
 ### Optional Permissions
@@ -213,6 +212,8 @@ USE_TEST_MODE=false
 ```bash
 npm run auth-server
 ```
+
+> **Note**: The auth server reads `OUTLOOK_CLIENT_ID` and `OUTLOOK_CLIENT_SECRET` from environment variables (or the legacy `MS_CLIENT_ID`/`MS_CLIENT_SECRET` aliases). When running from source, ensure your `.env` file is in the project root. When using Claude Desktop/Code, the env vars from your MCP config are passed automatically to the server process.
 
 You should see:
 

@@ -1,13 +1,10 @@
 /**
  * Email rules management module for Outlook MCP server
  */
-const handleListRules = require('./list');
+const { handleListRules, getInboxRules } = require('./list');
 const handleCreateRule = require('./create');
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
-
-// Import getInboxRules for the reorder action
-const { getInboxRules } = require('./list');
 
 /**
  * Edit rule sequence handler

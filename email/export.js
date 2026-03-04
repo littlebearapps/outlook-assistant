@@ -5,6 +5,7 @@
  * Supports single and batch export with attachment handling.
  */
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { callGraphAPI, callGraphAPIRaw } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
@@ -56,7 +57,7 @@ async function handleExportEmail(args) {
     const email = await callGraphAPI(
       accessToken,
       'GET',
-      `me/messages/${encodeURIComponent(emailId)}`,
+      `me/messages/${emailId}`,
       null,
       { $select: selectFields }
     );
@@ -90,8 +91,8 @@ async function handleExportEmail(args) {
         finalPath = savePath;
       }
     } else {
-      // Save to current directory
-      finalPath = defaultFilename;
+      // Default to OS temp directory to avoid polluting the working directory
+      finalPath = path.join(os.tmpdir(), defaultFilename);
     }
 
     // Export based on format
@@ -444,7 +445,7 @@ async function exportSingleForBatch(
     const email = await callGraphAPI(
       accessToken,
       'GET',
-      `me/messages/${encodeURIComponent(emailId)}`,
+      `me/messages/${emailId}`,
       null,
       { $select: selectFields }
     );
@@ -503,7 +504,7 @@ async function saveAttachments(accessToken, emailId, outputDir) {
     const response = await callGraphAPI(
       accessToken,
       'GET',
-      `me/messages/${encodeURIComponent(emailId)}/attachments`,
+      `me/messages/${emailId}/attachments`,
       null,
       { $select: 'id,name,contentBytes,size,contentType' }
     );

@@ -112,7 +112,7 @@ function formatRulesList(rules, includeDetails) {
       return ruleText;
     });
 
-    return `Found ${rules.length} inbox rules (sorted by execution order):\n\n${detailedRules.join('\n\n')}\n\nRules are processed in order of their sequence number. You can change rule order using the 'edit-rule-sequence' tool.`;
+    return `Found ${rules.length} inbox rules (sorted by execution order):\n\n${detailedRules.join('\n\n')}\n\nRules are processed in order of their sequence number. You can change rule order using manage-rules with action=reorder.`;
   } else {
     // Simple format
     const simpleRules = sortedRules.map((rule, index) => {

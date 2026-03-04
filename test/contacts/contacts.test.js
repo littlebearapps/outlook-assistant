@@ -331,7 +331,7 @@ describe('handleDeleteContact', () => {
 describe('handleSearchPeople', () => {
   const mockPerson = {
     displayName: 'Jane Doe',
-    emailAddresses: [{ address: 'jane@example.com' }],
+    scoredEmailAddresses: [{ address: 'jane@example.com' }],
     companyName: 'Acme Corp',
     jobTitle: 'Manager',
     personType: { class: 'Person' },

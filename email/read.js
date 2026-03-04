@@ -66,7 +66,7 @@ async function handleReadEmail(args) {
     const selectFields = getEmailFields(fieldPreset);
 
     // Make API call to get email details
-    const endpoint = `me/messages/${encodeURIComponent(emailId)}`;
+    const endpoint = `me/messages/${emailId}`;
     const queryParams = {
       $select: selectFields,
     };

@@ -106,12 +106,12 @@ async function handleGetMailboxSettings(args) {
   try {
     const accessToken = await ensureAuthenticated();
 
-    let endpoint = '/me/mailboxSettings';
+    let endpoint = 'me/mailboxSettings';
     if (section && section !== 'all') {
-      endpoint = `/me/mailboxSettings/${section}`;
+      endpoint = `me/mailboxSettings/${section}`;
     }
 
-    const settings = await callGraphAPI(accessToken, endpoint, 'GET');
+    const settings = await callGraphAPI(accessToken, 'GET', endpoint);
 
     let output = [];
     output.push('# Mailbox Settings\n');
@@ -260,15 +260,15 @@ async function handleSetAutomaticReplies(args) {
     }
 
     // Apply settings
-    await callGraphAPI(accessToken, '/me/mailboxSettings', 'PATCH', {
+    await callGraphAPI(accessToken, 'PATCH', 'me/mailboxSettings', {
       automaticRepliesSetting: settings,
     });
 
     // Get updated settings
     const updated = await callGraphAPI(
       accessToken,
-      '/me/mailboxSettings/automaticRepliesSetting',
-      'GET'
+      'GET',
+      'me/mailboxSettings/automaticRepliesSetting'
     );
 
     let output = [];
@@ -372,8 +372,8 @@ async function handleSetWorkingHours(args) {
     // Get current settings first
     const current = await callGraphAPI(
       accessToken,
-      '/me/mailboxSettings/workingHours',
-      'GET'
+      'GET',
+      'me/mailboxSettings/workingHours'
     );
 
     // Build update
@@ -395,15 +395,15 @@ async function handleSetWorkingHours(args) {
     };
 
     // Apply settings
-    await callGraphAPI(accessToken, '/me/mailboxSettings', 'PATCH', {
+    await callGraphAPI(accessToken, 'PATCH', 'me/mailboxSettings', {
       workingHours,
     });
 
     // Get updated settings
     const updated = await callGraphAPI(
       accessToken,
-      '/me/mailboxSettings/workingHours',
-      'GET'
+      'GET',
+      'me/mailboxSettings/workingHours'
     );
 
     let output = [];
@@ -451,8 +451,8 @@ async function handleGetAutomaticReplies() {
     const accessToken = await ensureAuthenticated();
     const settings = await callGraphAPI(
       accessToken,
-      '/me/mailboxSettings/automaticRepliesSetting',
-      'GET'
+      'GET',
+      'me/mailboxSettings/automaticRepliesSetting'
     );
 
     let output = [];
@@ -493,8 +493,8 @@ async function handleGetWorkingHours() {
     const accessToken = await ensureAuthenticated();
     const settings = await callGraphAPI(
       accessToken,
-      '/me/mailboxSettings/workingHours',
-      'GET'
+      'GET',
+      'me/mailboxSettings/workingHours'
     );
 
     let output = [];

@@ -196,23 +196,53 @@ async function handleSearchContacts(args) {
       verbosity === 'full' ? CONTACT_FIELDS.full : CONTACT_FIELDS.list;
     const endpoint = 'me/contacts';
 
-    // Build filter for name or email
-    const filter = `contains(displayName,'${query}') or emailAddresses/any(e:contains(e/address,'${query}'))`;
+    // Build filter for name — emailAddresses/any() lambda is unreliable on personal accounts
+    // and $orderby is incompatible with $filter on the contacts endpoint
+    const escapedQuery = query.replace(/'/g, "''");
+    const filter = `contains(displayName,'${escapedQuery}')`;
 
-    const queryParams = {
-      $select: fields.join(','),
-      $filter: filter,
-      $top: count,
-      $orderby: 'displayName',
-    };
+    let response;
+    try {
+      const queryParams = {
+        $select: fields.join(','),
+        $filter: filter,
+        $top: count,
+      };
 
-    const response = await callGraphAPI(
-      accessToken,
-      'GET',
-      endpoint,
-      null,
-      queryParams
-    );
+      response = await callGraphAPI(
+        accessToken,
+        'GET',
+        endpoint,
+        null,
+        queryParams
+      );
+    } catch (filterError) {
+      // Fallback: fetch all contacts and filter client-side if $filter is unsupported
+      console.error(
+        `Contact $filter failed (${filterError.message}), falling back to client-side filter`
+      );
+      const allParams = {
+        $select: fields.join(','),
+        $top: 100,
+        $orderby: 'displayName',
+      };
+      const allResponse = await callGraphAPI(
+        accessToken,
+        'GET',
+        endpoint,
+        null,
+        allParams
+      );
+      const q = query.toLowerCase();
+      response = {
+        value: (allResponse.value || []).filter(
+          (c) =>
+            c.displayName?.toLowerCase().includes(q) ||
+            c.emailAddresses?.some((e) => e.address?.toLowerCase().includes(q))
+        ),
+      };
+      response.value = response.value.slice(0, count);
+    }
     const contacts = response.value || [];
 
     let output = [];
@@ -261,7 +291,7 @@ async function handleGetContact(args) {
   try {
     const accessToken = await ensureAuthenticated();
 
-    const endpoint = `me/contacts/${encodeURIComponent(contactId)}`;
+    const endpoint = `me/contacts/${contactId}`;
     const queryParams = {
       $select: CONTACT_FIELDS.full.join(','),
     };
@@ -404,7 +434,7 @@ async function handleUpdateContact(args) {
     if (jobTitle !== undefined) contactData.jobTitle = jobTitle;
     if (notes !== undefined) contactData.personalNotes = notes;
 
-    const endpoint = `me/contacts/${encodeURIComponent(id)}`;
+    const endpoint = `me/contacts/${id}`;
     const contact = await callGraphAPI(
       accessToken,
       'PATCH',
@@ -453,7 +483,7 @@ async function handleDeleteContact(args) {
   try {
     const accessToken = await ensureAuthenticated();
 
-    const endpoint = `me/contacts/${encodeURIComponent(contactId)}`;
+    const endpoint = `me/contacts/${contactId}`;
     await callGraphAPI(accessToken, 'DELETE', endpoint);
 
     return {
@@ -503,7 +533,7 @@ async function handleSearchPeople(args) {
       $search: `"${query}"`,
       $top: count,
       $select:
-        'id,displayName,emailAddresses,phones,companyName,jobTitle,department,userPrincipalName,personType',
+        'id,displayName,scoredEmailAddresses,phones,companyName,jobTitle,department,userPrincipalName,personType',
     };
 
     const response = await callGraphAPI(
@@ -529,8 +559,8 @@ async function handleSearchPeople(args) {
       output.push(`**Type**: ${personType}`);
 
       // Email
-      if (person.emailAddresses?.length > 0) {
-        output.push(`**Email**: ${person.emailAddresses[0].address}`);
+      if (person.scoredEmailAddresses?.length > 0) {
+        output.push(`**Email**: ${person.scoredEmailAddresses[0].address}`);
       } else if (person.userPrincipalName) {
         output.push(`**Email**: ${person.userPrincipalName}`);
       }

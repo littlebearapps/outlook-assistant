@@ -1,6 +1,6 @@
 {
   "name": "@littlebearapps/outlook-mcp",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "MCP server for Claude to access Outlook data via Microsoft Graph API",
   "main": "index.js",
   "bin": {

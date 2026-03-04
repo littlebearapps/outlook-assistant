@@ -35,6 +35,8 @@ Quick reference for all 20 consolidated MCP tools across 9 modules. Each tool in
 | Conversation get | `conversationId` | All messages in a thread |
 | Message-ID lookup | `internetMessageId` | Find by RFC Message-ID header |
 
+> **Personal accounts**: The `query` and `kqlQuery` parameters use Microsoft's `$search` API which may not work on personal Outlook.com accounts. Use structured filters (`from`, `subject`, `to`, `receivedAfter`, `hasAttachments`, `unreadOnly`) for reliable searching on all account types.
+
 ### update-email actions
 
 | Action | Description | Params |
@@ -60,7 +62,7 @@ Quick reference for all 20 consolidated MCP tools across 9 modules. Each tool in
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
 | `list-events` | List upcoming events | read-only | `count` |
-| `create-event` | Create new event | moderate write | `subject`, `start`, `end`, `attendees`, `body` |
+| `create-event` | Create new event | moderate write | `subject`, `start`, `end`, `attendees`, `body`. Times use configured timezone (default: Australia/Melbourne) — omit `Z` suffix for local time |
 | `manage-event` | Decline, cancel, or delete | **destructive** | `action` (`decline`/`cancel`/`delete`), `eventId`, `comment` |
 
 ## Folder (1 tool)

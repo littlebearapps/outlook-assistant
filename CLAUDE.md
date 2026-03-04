@@ -77,8 +77,9 @@ OUTLOOK_ALLOWED_RECIPIENTS=example.com     # Optional: restrict recipients
 ```
 
 > The server reads `OUTLOOK_CLIENT_ID`/`OUTLOOK_CLIENT_SECRET` from `config.js`.
-> `MS_CLIENT_ID`/`MS_CLIENT_SECRET` are also accepted for backwards compatibility
-> (the auth server maps both).
+> `MS_CLIENT_ID`/`MS_CLIENT_SECRET` are also accepted for backwards compatibility.
+> The auth server imports scopes from `config.js` (single source of truth since v3.1.0).
+> **Auth server env vars**: The auth server needs the same `OUTLOOK_CLIENT_ID`/`OUTLOOK_CLIENT_SECRET` — these are passed automatically when running via Claude Desktop/Code MCP config.
 
 **Tokens stored at**: `~/.outlook-mcp-tokens.json`
 
@@ -112,6 +113,9 @@ OUTLOOK_ALLOWED_RECIPIENTS=example.com     # Optional: restrict recipients
 | Module not found | Run `npm install` |
 | Auth URL doesn't work | Start auth server first: `npm run auth-server` |
 | Empty API response | Check auth status with `auth` tool (action=status) |
+| `search-emails` returns no results | On personal accounts, `query`/`kqlQuery` may not work. Use `subject`, `from`, `to`, `receivedAfter` filters instead |
+| `create-event` wrong timezone | Omit the `Z` suffix on times for local timezone. `Z` suffix = UTC, which may be hours off |
+| Auth server "missing client ID" | Ensure `OUTLOOK_CLIENT_ID`/`OUTLOOK_CLIENT_SECRET` are set as env vars for the auth server process |
 
 ## Testing
 

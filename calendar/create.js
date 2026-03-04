@@ -50,20 +50,44 @@ async function handleCreateEvent(args) {
     };
 
     // Make API call
-    const _response = await callGraphAPI(
+    const response = await callGraphAPI(
       accessToken,
       'POST',
       endpoint,
       bodyContent
     );
 
+    const output = [`Event '${subject}' has been successfully created.`];
+    if (response.id) {
+      output.push(`**ID**: \`${response.id}\``);
+    }
+    if (response.start) {
+      output.push(
+        `**Start**: ${response.start.dateTime} (${response.start.timeZone})`
+      );
+    }
+    if (response.end) {
+      output.push(
+        `**End**: ${response.end.dateTime} (${response.end.timeZone})`
+      );
+    }
+    if (response.webLink) {
+      output.push(`**Link**: ${response.webLink}`);
+    }
+
     return {
       content: [
         {
           type: 'text',
-          text: `Event '${subject}' has been successfully created.`,
+          text: output.join('\n'),
         },
       ],
+      _meta: {
+        eventId: response.id,
+        subject: response.subject,
+        start: response.start,
+        end: response.end,
+      },
     };
   } catch (error) {
     if (error.message === 'Authentication required') {

@@ -88,8 +88,8 @@ async function handleListCategories(args) {
 
     const response = await callGraphAPI(
       accessToken,
-      '/me/outlook/masterCategories',
-      'GET'
+      'GET',
+      'me/outlook/masterCategories'
     );
 
     const categories = response.value || [];
@@ -199,8 +199,8 @@ async function handleCreateCategory(args) {
 
     const response = await callGraphAPI(
       accessToken,
-      '/me/outlook/masterCategories',
       'POST',
+      'me/outlook/masterCategories',
       categoryData
     );
 
@@ -300,8 +300,8 @@ async function handleUpdateCategory(args) {
 
     const response = await callGraphAPI(
       accessToken,
-      `/me/outlook/masterCategories/${encodeURIComponent(id)}`,
       'PATCH',
+      `me/outlook/masterCategories/${id}`,
       updateData
     );
 
@@ -362,8 +362,8 @@ async function handleDeleteCategory(args) {
 
     await callGraphAPI(
       accessToken,
-      `/me/outlook/masterCategories/${encodeURIComponent(id)}`,
-      'DELETE'
+      'DELETE',
+      `me/outlook/masterCategories/${id}`
     );
 
     return {
@@ -455,8 +455,10 @@ async function handleApplyCategory(args) {
         if (applyAction === 'add' || applyAction === 'remove') {
           const current = await callGraphAPI(
             accessToken,
-            `/me/messages/${id}?$select=categories`,
-            'GET'
+            'GET',
+            `me/messages/${id}`,
+            null,
+            { $select: 'categories' }
           );
 
           const currentCategories = current.categories || [];
@@ -470,7 +472,7 @@ async function handleApplyCategory(args) {
           }
         }
 
-        await callGraphAPI(accessToken, `/me/messages/${id}`, 'PATCH', {
+        await callGraphAPI(accessToken, 'PATCH', `me/messages/${id}`, {
           categories: newCategories,
         });
 
@@ -551,8 +553,8 @@ async function handleGetFocusedInboxOverrides(args) {
 
     const response = await callGraphAPI(
       accessToken,
-      '/me/inferenceClassification/overrides',
-      'GET'
+      'GET',
+      'me/inferenceClassification/overrides'
     );
 
     const overrides = response.value || [];
@@ -679,8 +681,8 @@ async function handleSetFocusedInboxOverride(args) {
     // Check if override already exists
     const existingResponse = await callGraphAPI(
       accessToken,
-      '/me/inferenceClassification/overrides',
-      'GET'
+      'GET',
+      'me/inferenceClassification/overrides'
     );
 
     const existing = (existingResponse.value || []).find(
@@ -704,8 +706,8 @@ async function handleSetFocusedInboxOverride(args) {
 
       await callGraphAPI(
         accessToken,
-        `/me/inferenceClassification/overrides/${existing.id}`,
-        'DELETE'
+        'DELETE',
+        `me/inferenceClassification/overrides/${existing.id}`
       );
 
       return {
@@ -732,16 +734,16 @@ async function handleSetFocusedInboxOverride(args) {
       // Update existing
       response = await callGraphAPI(
         accessToken,
-        `/me/inferenceClassification/overrides/${existing.id}`,
         'PATCH',
+        `me/inferenceClassification/overrides/${existing.id}`,
         overrideData
       );
     } else {
       // Create new
       response = await callGraphAPI(
         accessToken,
-        '/me/inferenceClassification/overrides',
         'POST',
+        'me/inferenceClassification/overrides',
         overrideData
       );
     }

@@ -187,7 +187,7 @@ async function handleGetEmailHeaders(args) {
       'sentDateTime',
     ].join(',');
 
-    const endpoint = `me/messages/${encodeURIComponent(emailId)}`;
+    const endpoint = `me/messages/${emailId}`;
     const queryParams = {
       $select: selectFields,
     };

@@ -22,7 +22,7 @@ const homeDir =
 module.exports = {
   // Server information
   SERVER_NAME: 'outlook-assistant',
-  SERVER_VERSION: '2.1.0',
+  SERVER_VERSION: '3.1.0',
 
   // Test mode setting
   USE_TEST_MODE: process.env.USE_TEST_MODE === 'true',
@@ -33,12 +33,20 @@ module.exports = {
     clientSecret: process.env.OUTLOOK_CLIENT_SECRET || '',
     redirectUri: 'http://localhost:3333/auth/callback',
     scopes: [
+      'offline_access',
+      'User.Read',
       'Mail.Read',
       'Mail.ReadWrite',
       'Mail.Send',
-      'User.Read',
       'Calendars.Read',
       'Calendars.ReadWrite',
+      'Contacts.Read',
+      'Contacts.ReadWrite',
+      'People.Read',
+      'MailboxSettings.ReadWrite',
+      // Org-dependent scopes (work/school accounts only):
+      // 'Mail.Read.Shared',   // access-shared-mailbox tool
+      // 'Place.Read.All',     // find-meeting-rooms tool
     ],
     tokenStorePath: path.join(homeDir, '.outlook-mcp-tokens.json'),
     authServerUrl: 'http://localhost:3333',

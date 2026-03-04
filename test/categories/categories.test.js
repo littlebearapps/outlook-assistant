@@ -105,8 +105,8 @@ describe('handleCreateCategory', () => {
 
     expect(callGraphAPI).toHaveBeenCalledWith(
       mockAccessToken,
-      '/me/outlook/masterCategories',
       'POST',
+      'me/outlook/masterCategories',
       expect.objectContaining({ color: 'preset0' })
     );
   });

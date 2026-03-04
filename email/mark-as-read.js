@@ -30,7 +30,7 @@ async function handleMarkAsRead(args) {
     const accessToken = await ensureAuthenticated();
 
     // Make API call to update email read status
-    const endpoint = `me/messages/${encodeURIComponent(emailId)}`;
+    const endpoint = `me/messages/${emailId}`;
     const updateData = {
       isRead: isRead,
     };

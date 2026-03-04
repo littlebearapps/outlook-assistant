@@ -188,7 +188,8 @@ async function progressiveSearch(
           $select: selectFields,
         };
 
-        // Use $filter for from/to (more reliable), $search for subject/query
+        // Use $filter for from/to/subject (more reliable on personal accounts),
+        // $search for free-text query only.
         // NOTE: $filter and $orderby cannot be used together on mailbox - Graph API limitation
         if (term === 'from') {
           if (searchTerms[term].includes('@')) {
@@ -203,8 +204,8 @@ async function progressiveSearch(
             simplifiedParams.$filter = `toRecipients/any(r: contains(r/emailAddress/name, '${searchTerms[term]}'))`;
           }
         } else if (term === 'subject') {
-          simplifiedParams.$orderby = 'receivedDateTime desc';
-          simplifiedParams.$search = `"subject:${searchTerms[term]}"`;
+          // Use $filter with contains() — $search silently fails on personal MS accounts
+          simplifiedParams.$filter = `contains(subject, '${searchTerms[term].replace(/'/g, "''")}')`;
         } else if (term === 'query') {
           simplifiedParams.$orderby = 'receivedDateTime desc';
           simplifiedParams.$search = `"${searchTerms[term]}"`;
@@ -314,24 +315,20 @@ function buildSearchParams(searchTerms, filterTerms, count, selectFields) {
   // Track if we're using email address filters (which are incompatible with $orderby)
   let usesEmailFilter = false;
 
-  // Handle search terms - use $search for text searches
-  const kqlTerms = [];
-
+  // Handle search terms - use $search only for free-text query
   if (searchTerms.query) {
-    kqlTerms.push(searchTerms.query);
+    params.$search = `"${searchTerms.query}"`;
   }
 
-  if (searchTerms.subject) {
-    kqlTerms.push(`subject:"${searchTerms.subject}"`);
-  }
-
-  // Add $search if we have any text search terms
-  if (kqlTerms.length > 0) {
-    params.$search = `"${kqlTerms.join(' ')}"`;
-  }
-
-  // Build filter conditions array - use $filter for email addresses (more reliable)
+  // Build filter conditions array - use $filter for structured fields (more reliable)
   const filterConditions = [];
+
+  // Use $filter for subject — $search silently fails on personal MS accounts
+  if (searchTerms.subject) {
+    filterConditions.push(
+      `contains(subject, '${searchTerms.subject.replace(/'/g, "''")}')`
+    );
+  }
 
   // Use $filter for from/to email addresses (much more reliable than $search)
   // NOTE: $filter on email addresses is incompatible with $orderby - Graph API limitation
@@ -481,7 +478,14 @@ function formatSearchResults(response, folder, verbosity) {
       response._searchInfo.strategies[
         response._searchInfo.strategies.length - 1
       ];
-    searchNote = `\n\n_Search strategy: ${strategy}_`;
+    if (strategy === 'recent-emails') {
+      searchNote =
+        '\n\n**Note**: Your search query could not be applied — showing recent emails instead. ' +
+        'On personal Microsoft accounts, free-text `query` search may not work. ' +
+        'Try using `subject`, `from`, `to`, or `kqlQuery` parameters for more reliable filtering.';
+    } else {
+      searchNote = `\n\n_Search strategy: ${strategy}_`;
+    }
   }
 
   // Format results using shared formatter

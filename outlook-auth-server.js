@@ -4,33 +4,24 @@ const url = require('url');
 const querystring = require('querystring');
 const https = require('https');
 const fs = require('fs');
-const path = require('path');
 
 // Load environment variables from .env file
 require('dotenv').config();
 
+// Import scopes and token path from central config to stay in sync
+const { AUTH_CONFIG: centralAuth } = require('./config');
+
 // Log to console
 console.log('Starting Outlook Authentication Server');
 
-// Authentication configuration
+// Authentication configuration — scopes and tokenStorePath from config.js (single source of truth)
 const AUTH_CONFIG = {
-  clientId: process.env.MS_CLIENT_ID || process.env.OUTLOOK_CLIENT_ID || '', // Set your client ID as an environment variable
+  clientId: process.env.MS_CLIENT_ID || process.env.OUTLOOK_CLIENT_ID || '',
   clientSecret:
-    process.env.MS_CLIENT_SECRET || process.env.OUTLOOK_CLIENT_SECRET || '', // Set your client secret as an environment variable
-  redirectUri: 'http://localhost:3333/auth/callback',
-  scopes: [
-    'offline_access',
-    'User.Read',
-    'Mail.Read',
-    'Mail.Send',
-    'Calendars.Read',
-    'Calendars.ReadWrite',
-    'Contacts.Read',
-  ],
-  tokenStorePath: path.join(
-    process.env.HOME || process.env.USERPROFILE,
-    '.outlook-mcp-tokens.json'
-  ),
+    process.env.MS_CLIENT_SECRET || process.env.OUTLOOK_CLIENT_SECRET || '',
+  redirectUri: centralAuth.redirectUri,
+  scopes: centralAuth.scopes,
+  tokenStorePath: centralAuth.tokenStorePath,
 };
 
 // Create HTTP server

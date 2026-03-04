@@ -10,7 +10,7 @@
  */
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
-const { EMAIL_FIELDS } = require('../utils/field-presets');
+const { FIELD_PRESETS } = require('../utils/field-presets');
 
 /**
  * Format an email for display (simplified)
@@ -66,17 +66,20 @@ async function handleAccessSharedMailbox(args) {
     const accessToken = await ensureAuthenticated();
 
     // Build endpoint for shared mailbox
-    const endpoint = `/users/${encodeURIComponent(sharedMailbox)}/mailFolders/${mailFolder}/messages`;
-    const params = new URLSearchParams({
+    const endpoint = `users/${sharedMailbox}/mailFolders/${mailFolder}/messages`;
+    const fieldSet = verbosity === 'full' ? 'read' : 'list';
+    const queryParams = {
       $top: pageSize.toString(),
       $orderby: 'receivedDateTime desc',
-      $select: EMAIL_FIELDS[verbosity === 'full' ? 'full' : 'list'].join(','),
-    });
+      $select: FIELD_PRESETS[fieldSet].join(','),
+    };
 
     const response = await callGraphAPI(
       accessToken,
-      `${endpoint}?${params.toString()}`,
-      'GET'
+      'GET',
+      endpoint,
+      null,
+      queryParams
     );
 
     const messages = response.value || [];
@@ -240,7 +243,7 @@ async function handleSetMessageFlag(args) {
 
     for (const id of ids) {
       try {
-        await callGraphAPI(accessToken, `/me/messages/${id}`, 'PATCH', {
+        await callGraphAPI(accessToken, 'PATCH', `me/messages/${id}`, {
           flag,
         });
         results.push({ id, success: true });
@@ -347,7 +350,7 @@ async function handleClearMessageFlag(args) {
 
     for (const id of ids) {
       try {
-        await callGraphAPI(accessToken, `/me/messages/${id}`, 'PATCH', {
+        await callGraphAPI(accessToken, 'PATCH', `me/messages/${id}`, {
           flag,
         });
         results.push({ id, success: true });
@@ -424,8 +427,8 @@ async function handleFindMeetingRooms(args) {
       // Try /places endpoint for room lists
       const placesResponse = await callGraphAPI(
         accessToken,
-        '/places/microsoft.graph.room',
-        'GET'
+        'GET',
+        'places/microsoft.graph.room'
       );
       rooms = placesResponse.value || [];
     } catch (_placesError) {
@@ -433,8 +436,8 @@ async function handleFindMeetingRooms(args) {
       try {
         const roomsResponse = await callGraphAPI(
           accessToken,
-          '/me/findRooms',
-          'GET'
+          'GET',
+          'me/findRooms'
         );
         rooms = roomsResponse.value || [];
       } catch (findRoomsError) {

@@ -41,7 +41,7 @@ Each event shows:
 - **Status** — accepted, tentative, declined
 - **Online meeting URL** — Teams/Zoom link if applicable
 
-<!-- SCREENSHOT: Event list output showing formatted calendar entries -->
+![Event list output showing formatted calendar entries](../../assets/screenshots/view-upcoming-events-01.png)
 
 ## Tips
 

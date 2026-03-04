@@ -88,7 +88,7 @@ params:
 
 This shows whether auto-replies are enabled, the schedule, and the current messages.
 
-<!-- SCREENSHOT: mailbox-settings output showing active auto-reply with dates -->
+![Mailbox settings output showing active auto-reply with dates](../../assets/screenshots/set-out-of-office-01.png)
 
 ## Parameter Reference
 

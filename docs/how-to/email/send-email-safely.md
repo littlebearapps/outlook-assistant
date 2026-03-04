@@ -25,7 +25,7 @@ params:
 
 The dry run shows exactly what will be sent — recipients, subject, body — without actually sending. Review it, then ask Claude to send.
 
-<!-- SCREENSHOT: Claude showing dry-run preview with "Send this email?" confirmation -->
+![Claude showing dry-run preview with send confirmation](../../assets/screenshots/send-email-safely-01.png)
 
 ## Send an Email
 
@@ -99,7 +99,7 @@ OUTLOOK_ALLOWED_RECIPIENTS=company.com,partner.org
 
 With this set, Claude can only send to addresses ending in `@company.com` or `@partner.org`. Sends to any other domain are blocked.
 
-<!-- SCREENSHOT: OUTLOOK_ALLOWED_RECIPIENTS env var in Claude Desktop config -->
+![Safety configuration with allowed recipients and rate limiting](../../assets/screenshots/send-email-safely-02.png)
 
 ### Save to Sent Items
 

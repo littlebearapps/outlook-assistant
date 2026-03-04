@@ -152,7 +152,7 @@ params:
 | List (no query) | 25 | 50 |
 | Search | 10 | 50 |
 
-<!-- SCREENSHOT: Claude returning search results in chat with email list -->
+![Claude returning search results with email list](../../assets/screenshots/find-emails-01.png)
 
 ## Parameter Reference
 

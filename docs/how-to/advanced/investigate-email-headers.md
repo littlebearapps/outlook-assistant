@@ -47,7 +47,7 @@ params:
 
 Headers are grouped into categories: routing, authentication, Microsoft Exchange, and other.
 
-<!-- SCREENSHOT: Forensic headers output showing DKIM pass/fail and Received chain -->
+![Forensic headers output showing DKIM/SPF results and delivery chain](../../assets/screenshots/investigate-email-headers-01.png)
 
 ## What to Look For
 

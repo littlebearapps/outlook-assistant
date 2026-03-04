@@ -39,7 +39,7 @@ params:
   outputVerbosity: "minimal"
 ```
 
-<!-- SCREENSHOT: Shared mailbox email list with mailbox name in header -->
+![Shared mailbox email list with mailbox name in header](../../assets/screenshots/access-shared-mailboxes-01.png)
 
 ## Required Permissions
 

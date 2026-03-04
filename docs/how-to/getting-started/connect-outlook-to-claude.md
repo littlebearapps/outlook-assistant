@@ -70,7 +70,7 @@ Add to your `claude_desktop_config.json`:
 }
 ```
 
-<!-- SCREENSHOT: Claude Desktop config file with outlook MCP entry highlighted -->
+![Claude Desktop config file with Outlook MCP entry highlighted](../../assets/screenshots/connect-outlook-to-claude-01.png)
 
 ### Claude Code
 
@@ -113,7 +113,7 @@ Claude will call the `auth` tool with `action: authenticate` and return a URL.
 
 3. Open the URL in your browser, sign in with your Microsoft account, and grant permissions.
 
-<!-- SCREENSHOT: Microsoft permissions consent screen during OAuth -->
+![Microsoft permissions consent screen during OAuth](../../assets/screenshots/connect-outlook-to-claude-02.png)
 
 4. After granting access, the browser redirects to `localhost:3333` and tokens are saved automatically to `~/.outlook-mcp-tokens.json`.
 
@@ -125,7 +125,7 @@ Ask Claude:
 
 Claude calls the `auth` tool with `action: status`. You should see your email address and token expiry time.
 
-<!-- SCREENSHOT: Claude showing auth tool success message -->
+![Claude showing auth tool success message](../../assets/screenshots/connect-outlook-to-claude-03.png)
 
 Then try a simple read:
 

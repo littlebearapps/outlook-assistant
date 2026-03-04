@@ -36,7 +36,7 @@ params:
   includeChildren: true
 ```
 
-<!-- SCREENSHOT: Folder list output showing folder hierarchy -->
+![Folder list output showing folder hierarchy](../../assets/screenshots/organise-with-folders-01.png)
 
 ## Create a New Folder
 

@@ -31,7 +31,7 @@ A healthy response shows:
 
 If the token has expired, the tool will report it and suggest re-authenticating.
 
-<!-- SCREENSHOT: auth tool status output showing authenticated user -->
+![Auth tool status output showing authenticated user](../../assets/screenshots/verify-your-connection-01.png)
 
 ## Re-authenticate After Token Expiry
 

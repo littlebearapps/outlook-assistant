@@ -1,5 +1,88 @@
 # Outlook MCP Tool Testing Notes
 
+## v3.1.0 Comprehensive Retest #2 — COMPLETE
+
+**Date**: 2026-03-05
+**Server Version**: 3.1.0
+**Tester**: Claude Code (via live MCP calls)
+**Account**: Personal Microsoft account (nathanschram@live.com)
+**Purpose**: Fresh comprehensive retest of all 20 tools — happy paths, edge cases, and cross-cutting concerns
+
+### Result: 20/20 tools PASS — 7 bugs, 6 enhancements filed
+
+All 20 tools tested with multiple scenarios each. No crashes or regressions. 13 GitHub issues created (#46-#58).
+
+### Pre-test Fixes Applied
+- Auth server env var priority: `OUTLOOK_*` now checked before `MS_*` (3 source files, 2 test files)
+- Auth pages and 16 documentation files made agent-agnostic ("your AI assistant" not "Claude")
+
+### Results by Module
+
+| Module | Tool | Status | Issues |
+|--------|------|--------|--------|
+| Auth | `auth` | PASS | #53 (enhancement) |
+| Email | `search-emails` | PASS | #46 (bug), #47 (bug) |
+| Email | `read-email` | PASS | #48 (bug) |
+| Email | `send-email` | PASS | #49 (bug) |
+| Email | `update-email` | PASS | — |
+| Email | `attachments` | PASS | — |
+| Email | `export` | PASS | #50 (bug) |
+| Calendar | `list-events` | PASS | #51 (bug) |
+| Calendar | `create-event` | PASS | — |
+| Calendar | `manage-event` | PASS | — |
+| Folder | `folders` | PASS | #54 (enhancement) |
+| Rules | `manage-rules` | PASS | #52 (bug), #55 (enhancement) |
+| Contacts | `manage-contact` | PASS | #56 (enhancement) |
+| Contacts | `search-people` | PASS | — |
+| Categories | `manage-category` | PASS | — |
+| Categories | `apply-category` | PASS | — |
+| Categories | `manage-focused-inbox` | PASS | — |
+| Settings | `mailbox-settings` | PASS | #57 (enhancement), #58 (enhancement) |
+| Advanced | `access-shared-mailbox` | PASS (graceful error) | — |
+| Advanced | `find-meeting-rooms` | PASS (graceful error) | — |
+
+### Bugs Found (#46-#52)
+
+| Issue | Tool | Summary |
+|-------|------|---------|
+| #46 | `search-emails` | Nonexistent folder silently falls back to inbox |
+| #47 | `search-emails` | `count=0` returns all emails instead of error |
+| #48 | `read-email` | Minimal verbosity shows "No content" and blank To |
+| #49 | `send-email` | HTML body Content-Type shows "text" not "HTML" |
+| #50 | `export` | Conversation export raw API error on personal accounts |
+| #51 | `list-events` | Times displayed in UTC not configured local timezone |
+| #52 | `manage-rules` | Sequence display shows positional number not actual value |
+
+### Enhancements Filed (#53-#58)
+
+| Issue | Tool | Summary |
+|-------|------|---------|
+| #53 | `auth` | `about` action could show tool count, scopes, capabilities |
+| #54 | `folders` | Add `action=delete` for folder removal |
+| #55 | `manage-rules` | Add `action=delete` for rule removal |
+| #56 | `manage-contact` | Minimal verbosity identical to standard |
+| #57 | `mailbox-settings` | Section-specific `get` returns raw JSON vs formatted markdown |
+| #58 | `mailbox-settings` | `set-auto-replies` without message reuses previous silently |
+
+### Test Coverage Notes
+
+- **send-email**: Tested with `dryRun=true` only (no live sends)
+- **access-shared-mailbox**: Graceful error — requires org shared mailbox
+- **find-meeting-rooms**: Graceful error — requires org-configured rooms + Places.Read.All
+- **manage-event decline/cancel**: Tested delete only; decline/cancel need events from other organiser
+- All test data cleaned up (calendar events, contacts, categories, focused inbox overrides, folders, rules)
+- `set-auto-replies` and `set-working-hours` tested and restored to original values
+
+### Cross-Cutting Observations
+
+1. **Response formatting**: Generally excellent markdown. Inconsistency in `mailbox-settings` section-specific views (raw JSON vs formatted)
+2. **Error messages**: Most tools return helpful errors. `search-emails` silently falls back on invalid folder (worst case). `export` conversation shows raw API error on personal accounts
+3. **Parameter validation**: `count=0` not validated. Invalid section name passes through to API. Most required params validated well
+4. **Destructive tools**: Properly marked and confirmation-gated
+5. **Verbosity levels**: Work well for `search-emails` and `read-email`; `manage-contact` minimal = standard (no differentiation)
+
+---
+
 ## v3.1.0 Retest — COMPLETE
 
 **Date**: 2026-03-04

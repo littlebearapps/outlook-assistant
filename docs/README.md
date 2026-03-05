@@ -4,7 +4,7 @@
 
 New to Outlook MCP? Start here:
 
-- [Connect Outlook to Claude](how-to/getting-started/connect-outlook-to-claude.md) — Install, configure, and authenticate
+- [Connect Outlook to Your AI Assistant](how-to/getting-started/connect-outlook-to-claude.md) — Install, configure, and authenticate
 - [Azure Setup Guide](guides/azure-setup.md) — Create an Azure app registration and connect your Microsoft account
 - [README](../README.md) — Full feature overview, quick start, and configuration
 

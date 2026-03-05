@@ -49,17 +49,28 @@ async function handleListEvents(args) {
     }
 
     // Format results
+    const tz = config.DEFAULT_TIMEZONE;
     const eventList = response.value
       .map((event, index) => {
-        const startDate = new Date(event.start.dateTime).toLocaleString(
-          event.start.timeZone
-        );
-        const endDate = new Date(event.end.dateTime).toLocaleString(
-          event.end.timeZone
-        );
+        const startDt = event.start.dateTime.endsWith('Z')
+          ? event.start.dateTime
+          : event.start.dateTime + 'Z';
+        const endDt = event.end.dateTime.endsWith('Z')
+          ? event.end.dateTime
+          : event.end.dateTime + 'Z';
+        const startDate = new Date(startDt).toLocaleString('en-AU', {
+          timeZone: tz,
+          dateStyle: 'medium',
+          timeStyle: 'short',
+        });
+        const endDate = new Date(endDt).toLocaleString('en-AU', {
+          timeZone: tz,
+          dateStyle: 'medium',
+          timeStyle: 'short',
+        });
         const location = event.location.displayName || 'No location';
 
-        return `${index + 1}. ${event.subject} - Location: ${location}\nStart: ${startDate}\nEnd: ${endDate}\nSubject: ${event.subject}\nSummary: ${event.bodyPreview}\nID: ${event.id}\n`;
+        return `${index + 1}. ${event.subject} - Location: ${location}\nStart: ${startDate}\nEnd: ${endDate}\nSummary: ${event.bodyPreview}\nID: ${event.id}\n`;
       })
       .join('\n');
 

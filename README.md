@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Let Claude read, search, send, and manage your Outlook email, calendar, and contacts — all from the conversation.</strong>
+  <strong>Let your AI assistant read, search, send, and manage your Outlook email, calendar, and contacts — all from the conversation.</strong>
 </p>
 
 <p align="center">
@@ -14,7 +14,7 @@
   <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen" alt="Node.js" /></a>
 </p>
 
-Outlook MCP connects Claude and other AI assistants to your Microsoft Outlook account through the [Model Context Protocol](https://modelcontextprotocol.io/). Ask Claude to search your inbox, send emails, schedule meetings, manage contacts, and configure mailbox settings — without leaving the conversation.
+Outlook MCP connects AI assistants to your Microsoft Outlook account through the [Model Context Protocol](https://modelcontextprotocol.io/). Ask your AI assistant to search your inbox, send emails, schedule meetings, manage contacts, and configure mailbox settings — without leaving the conversation. Works with Claude, Cursor, Windsurf, and any MCP-compatible client.
 
 **Works with personal Outlook.com and work/school Microsoft 365 accounts.**
 
@@ -35,10 +35,10 @@ Outlook MCP connects Claude and other AI assistants to your Microsoft Outlook ac
 
 | Without Outlook MCP | With Outlook MCP |
 |---------------------|------------------|
-| Switch between Claude and Outlook to manage email | Read, search, send, and export emails directly from Claude |
+| Switch between your AI tool and Outlook to manage email | Read, search, send, and export emails directly from your AI assistant |
 | Manually search and export email threads | Full email tools including search, threading, and bulk export |
 | Context-switch for calendar and contacts | Manage calendar events, contacts, and settings in one place |
-| Copy-paste email content into conversations | Claude reads your emails natively with full context |
+| Copy-paste email content into conversations | Your AI assistant reads your emails natively with full context |
 | No programmatic access to mailbox rules or categories | Create inbox rules, manage categories, configure auto-replies |
 
 ## Features
@@ -50,8 +50,8 @@ Outlook MCP connects Claude and other AI assistants to your Microsoft Outlook ac
 | **Contacts** | 2 | `manage-contact` (list/search/get/create/update/delete), `search-people` |
 | **Categories** | 3 | `manage-category` (CRUD), `apply-category`, `manage-focused-inbox` |
 | **Settings** | 1 | `mailbox-settings` (get/set auto-replies/set working hours) |
-| **Folder** | 1 | `folders` (list/create/move/stats) |
-| **Rules** | 1 | `manage-rules` (list/create/reorder) |
+| **Folder** | 1 | `folders` (list/create/move/stats/delete) |
+| **Rules** | 1 | `manage-rules` (list/create/reorder/delete) |
 | **Advanced** | 2 | `access-shared-mailbox`, `find-meeting-rooms` |
 | **Auth** | 1 | `auth` (status/authenticate/about) |
 
@@ -125,9 +125,9 @@ You need a Microsoft Azure app registration to authenticate. See the **[Azure Se
 3. Add Microsoft Graph delegated permissions (Mail, Calendar, Contacts)
 4. Create a client secret and copy the **Value** (not the Secret ID)
 
-### 3. Configure Claude Desktop
+### 3. Configure Your MCP Client
 
-Add to your Claude Desktop config (`claude_desktop_config.json`):
+Add to your MCP client config. For Claude Desktop (`claude_desktop_config.json`):
 
 ```json
 {
@@ -147,11 +147,11 @@ Add to your Claude Desktop config (`claude_desktop_config.json`):
 ### 4. Authenticate
 
 1. Start the auth server: `outlook-mcp-auth` (or `npx @littlebearapps/outlook-mcp-auth`)
-2. In Claude, use the `auth` tool with `action=authenticate` to get an OAuth URL
+2. In your AI assistant, use the `auth` tool with `action=authenticate` to get an OAuth URL
 3. Open the URL, sign in with your Microsoft account, and grant permissions
 4. Tokens are saved locally and refresh automatically
 
-> **Note**: The auth server needs `OUTLOOK_CLIENT_ID` and `OUTLOOK_CLIENT_SECRET` environment variables. The Claude Desktop/Code `"env"` config only applies to the MCP server process — when running the auth server separately, ensure these are set in a `.env` file or exported in your shell.
+> **Note**: The auth server needs `OUTLOOK_CLIENT_ID` and `OUTLOOK_CLIENT_SECRET` environment variables. Your MCP client's `"env"` config only applies to the MCP server process — when running the auth server separately, ensure these are set in a `.env` file or exported in your shell.
 
 ## Installation
 
@@ -233,9 +233,9 @@ USE_TEST_MODE=false
 
 > **Note:** The server also accepts `MS_CLIENT_ID` and `MS_CLIENT_SECRET` for backwards compatibility.
 
-### Claude Desktop Configuration
+### MCP Client Configuration
 
-Add to your Claude Desktop config:
+Add to your MCP client config (example for Claude Desktop):
 
 ```json
 {
@@ -279,11 +279,11 @@ npm run auth-server
 
 This starts a local server on port 3333 to handle the OAuth callback.
 
-> **Note**: The auth server reads `OUTLOOK_CLIENT_ID` and `OUTLOOK_CLIENT_SECRET` from environment variables (or `MS_CLIENT_ID`/`MS_CLIENT_SECRET`). When running the auth server separately, ensure your `.env` file is in the project root or export the variables in your shell. The Claude Desktop/Code `"env"` config only applies to the MCP server process, not a separately-started auth server.
+> **Note**: The auth server reads `OUTLOOK_CLIENT_ID` and `OUTLOOK_CLIENT_SECRET` from environment variables (or `MS_CLIENT_ID`/`MS_CLIENT_SECRET`). When running the auth server separately, ensure your `.env` file is in the project root or export the variables in your shell. Your MCP client's `"env"` config only applies to the MCP server process, not a separately-started auth server.
 
 ### Step 2: Authenticate
 
-1. In Claude, use the `auth` tool with `action=authenticate`
+1. In your AI assistant, use the `auth` tool with `action=authenticate`
 2. Open the provided URL in your browser
 3. Sign in with your Microsoft account and grant permissions
 4. Tokens are saved to `~/.outlook-mcp-tokens.json` and refresh automatically

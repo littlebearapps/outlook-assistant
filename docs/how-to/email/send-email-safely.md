@@ -1,12 +1,12 @@
 ---
 title: "How to Send Email Safely"
-description: "Compose and send emails from Claude with dry-run preview, and understand the safety controls that prevent accidental sends."
+description: "Compose and send emails with dry-run preview, and understand the safety controls that prevent accidental sends."
 tags: [outlook-mcp, email, how-to]
 ---
 
 # How to Send Email Safely
 
-Compose and send emails through Claude with built-in safety controls: dry-run preview, rate limiting, and an optional recipient allowlist.
+Compose and send emails through your AI assistant with built-in safety controls: dry-run preview, rate limiting, and an optional recipient allowlist.
 
 ## Preview Before Sending (Dry Run)
 
@@ -23,9 +23,9 @@ params:
   dryRun: true
 ```
 
-The dry run shows exactly what will be sent — recipients, subject, body — without actually sending. Review it, then ask Claude to send.
+The dry run shows exactly what will be sent — recipients, subject, body — without actually sending. Review it, then ask your AI assistant to send.
 
-![Claude showing dry-run preview with send confirmation](../../assets/screenshots/send-email-safely-01.png)
+![Dry-run preview with send confirmation](../../assets/screenshots/send-email-safely-01.png)
 
 ## Send an Email
 
@@ -39,7 +39,7 @@ params:
   body: "Hi Sarah,\n\nJust confirming our meeting tomorrow at 10am.\n\nCheers"
 ```
 
-Because `send-email` is marked as destructive, Claude will always ask for your confirmation before sending — even without dry run.
+Because `send-email` is marked as destructive, your AI assistant will always ask for your confirmation before sending — even without dry run.
 
 ## Send to Multiple Recipients
 
@@ -77,7 +77,7 @@ Options: `normal` (default), `high`, `low`.
 
 ### Confirmation Prompt
 
-Every send triggers a confirmation prompt in Claude. You must explicitly approve before the email leaves your outbox. This is enforced by the MCP `destructiveHint` annotation — it cannot be bypassed.
+Every send triggers a confirmation prompt in your AI assistant. You must explicitly approve before the email leaves your outbox. This is enforced by the MCP `destructiveHint` annotation — it cannot be bypassed.
 
 ### Rate Limiting
 
@@ -91,13 +91,13 @@ Add this to your MCP server environment variables. Once the limit is reached, fu
 
 ### Recipient Allowlist
 
-Restrict who Claude can send to:
+Restrict who your AI assistant can send to:
 
 ```
 OUTLOOK_ALLOWED_RECIPIENTS=company.com,partner.org
 ```
 
-With this set, Claude can only send to addresses ending in `@company.com` or `@partner.org`. Sends to any other domain are blocked.
+With this set, emails can only be sent to addresses ending in `@company.com` or `@partner.org`. Sends to any other domain are blocked.
 
 ![Safety configuration with allowed recipients and rate limiting](../../assets/screenshots/send-email-safely-02.png)
 

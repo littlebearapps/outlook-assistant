@@ -10,8 +10,9 @@ class TokenStorage {
         process.env.HOME || process.env.USERPROFILE,
         '.outlook-mcp-tokens.json'
       ),
-      clientId: process.env.MS_CLIENT_ID,
-      clientSecret: process.env.MS_CLIENT_SECRET,
+      clientId: process.env.OUTLOOK_CLIENT_ID || process.env.MS_CLIENT_ID,
+      clientSecret:
+        process.env.OUTLOOK_CLIENT_SECRET || process.env.MS_CLIENT_SECRET,
       redirectUri:
         process.env.MS_REDIRECT_URI || 'http://localhost:3333/auth/callback',
       scopes: (
@@ -29,7 +30,7 @@ class TokenStorage {
 
     if (!this.config.clientId || !this.config.clientSecret) {
       console.warn(
-        'TokenStorage: MS_CLIENT_ID or MS_CLIENT_SECRET is not configured. Token operations might fail.'
+        'TokenStorage: OUTLOOK_CLIENT_ID or OUTLOOK_CLIENT_SECRET is not configured. Token operations might fail.'
       );
     }
   }

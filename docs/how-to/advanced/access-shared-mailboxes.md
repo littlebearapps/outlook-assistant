@@ -72,7 +72,7 @@ Your Microsoft account must also have been granted access to the shared mailbox 
 
 - This tool is read-only — you can't send from a shared mailbox through Outlook MCP
 - Use `outputVerbosity: "minimal"` for quick checks on high-volume shared inboxes
-- Auto-approved by Claude Code (read-only tool)
+- Auto-approved by MCP clients that support annotations (read-only tool)
 
 ## Related
 

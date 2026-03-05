@@ -93,9 +93,9 @@ function formatRulesList(rules, includeDetails) {
   // Format rules based on detail level
   if (includeDetails) {
     // Detailed format
-    const detailedRules = sortedRules.map((rule, index) => {
+    const detailedRules = sortedRules.map((rule) => {
       // Format rule header with sequence
-      let ruleText = `${index + 1}. ${rule.displayName}${rule.isEnabled ? '' : ' (Disabled)'} - Sequence: ${rule.sequence || 'N/A'}`;
+      let ruleText = `[${rule.sequence || 'N/A'}] ${rule.displayName}${rule.isEnabled ? '' : ' (Disabled)'}`;
 
       // Format conditions
       const conditions = formatRuleConditions(rule);
@@ -115,8 +115,8 @@ function formatRulesList(rules, includeDetails) {
     return `Found ${rules.length} inbox rules (sorted by execution order):\n\n${detailedRules.join('\n\n')}\n\nRules are processed in order of their sequence number. You can change rule order using manage-rules with action=reorder.`;
   } else {
     // Simple format
-    const simpleRules = sortedRules.map((rule, index) => {
-      return `${index + 1}. ${rule.displayName}${rule.isEnabled ? '' : ' (Disabled)'} - Sequence: ${rule.sequence || 'N/A'}`;
+    const simpleRules = sortedRules.map((rule) => {
+      return `[${rule.sequence || 'N/A'}] ${rule.displayName}${rule.isEnabled ? '' : ' (Disabled)'}`;
     });
 
     return `Found ${rules.length} inbox rules (sorted by execution order):\n\n${simpleRules.join('\n')}\n\nTip: Use 'list-rules with includeDetails=true' to see more information about each rule.`;

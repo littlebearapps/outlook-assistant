@@ -54,7 +54,7 @@ describe('TokenStorage', () => {
       const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
       new TokenStorage({ ...baseConfig, clientId: null });
       expect(consoleWarnSpy).toHaveBeenCalledWith(
-        'TokenStorage: MS_CLIENT_ID or MS_CLIENT_SECRET is not configured. Token operations might fail.'
+        'TokenStorage: OUTLOOK_CLIENT_ID or OUTLOOK_CLIENT_SECRET is not configured. Token operations might fail.'
       );
       consoleWarnSpy.mockRestore();
     });

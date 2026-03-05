@@ -37,9 +37,9 @@ This guide helps AI agents and their developers make effective use of Outlook MC
 
 Every tool includes MCP annotations that indicate its safety profile:
 
-| Annotation | Meaning | Effect in Claude |
-|------------|---------|-----------------|
-| `readOnlyHint: true` | No side effects | Auto-approved |
+| Annotation | Meaning | Effect in MCP clients |
+|------------|---------|----------------------|
+| `readOnlyHint: true` | No side effects | Auto-approved (in clients that support it) |
 | `destructiveHint: true` | Can cause irreversible changes | Requires user confirmation |
 | `idempotentHint: true` | Safe to retry | No special handling |
 | `openWorldHint: true` | Communicates externally | Requires user confirmation |

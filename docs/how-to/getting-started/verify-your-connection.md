@@ -10,11 +10,11 @@ Check whether Outlook MCP is authenticated, see which account is connected, and 
 
 ## Check Authentication Status
 
-Ask Claude:
+Ask your AI assistant:
 
 > "Check my Outlook auth status"
 
-Claude calls the `auth` tool:
+The `auth` tool is called:
 
 ```
 tool: auth
@@ -43,7 +43,7 @@ Tokens expire periodically (typically after 1 hour, with automatic refresh). If 
 npx @littlebearapps/outlook-mcp auth-server
 ```
 
-2. Ask Claude:
+2. Ask your AI assistant:
 
 > "Re-authenticate my Outlook account"
 
@@ -119,6 +119,6 @@ See [When Your Secret Expires](../../guides/azure-setup.md#when-your-secret-expi
 
 ## Related
 
-- [Connect Outlook to Claude](connect-outlook-to-claude.md) — initial setup walkthrough
+- [Connect Outlook to Your AI Assistant](connect-outlook-to-claude.md) — initial setup walkthrough
 - [Azure Setup Guide](../../guides/azure-setup.md) — app registration and permissions
 - [Tools Reference — auth](../../quickrefs/tools-reference.md#auth-1-tool) — full parameter reference

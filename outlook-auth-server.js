@@ -16,9 +16,9 @@ console.log('Starting Outlook Authentication Server');
 
 // Authentication configuration — scopes and tokenStorePath from config.js (single source of truth)
 const AUTH_CONFIG = {
-  clientId: process.env.MS_CLIENT_ID || process.env.OUTLOOK_CLIENT_ID || '',
+  clientId: process.env.OUTLOOK_CLIENT_ID || process.env.MS_CLIENT_ID || '',
   clientSecret:
-    process.env.MS_CLIENT_SECRET || process.env.OUTLOOK_CLIENT_SECRET || '',
+    process.env.OUTLOOK_CLIENT_SECRET || process.env.MS_CLIENT_SECRET || '',
   redirectUri: centralAuth.redirectUri,
   scopes: centralAuth.scopes,
   tokenStorePath: centralAuth.tokenStorePath,
@@ -86,7 +86,7 @@ const server = http.createServer((req, res) => {
                   <p>You have successfully authenticated with Microsoft Graph API.</p>
                   <p>The access token has been saved securely.</p>
                 </div>
-                <p>You can now close this window and return to Claude.</p>
+                <p>You can now close this window and return to your AI assistant.</p>
               </body>
             </html>
           `);
@@ -160,9 +160,10 @@ const server = http.createServer((req, res) => {
             <div class="error-box">
               <p>Microsoft Graph API credentials are not set. Please set the following environment variables:</p>
               <ul>
-                <li><code>MS_CLIENT_ID</code></li>
-                <li><code>MS_CLIENT_SECRET</code></li>
+                <li><code>OUTLOOK_CLIENT_ID</code></li>
+                <li><code>OUTLOOK_CLIENT_SECRET</code></li>
               </ul>
+              <p style="margin-top: 10px; font-size: 0.9em; color: #666;">Legacy names <code>MS_CLIENT_ID</code> / <code>MS_CLIENT_SECRET</code> are also accepted.</p>
             </div>
           </body>
         </html>
@@ -208,8 +209,8 @@ const server = http.createServer((req, res) => {
           <h1>Outlook Authentication Server</h1>
           <div class="info-box">
             <p>This server is running to handle Microsoft Graph API authentication callbacks.</p>
-            <p>Don't navigate here directly. Instead, use the <code>authenticate</code> tool in Claude to start the authentication process.</p>
-            <p>Make sure you've set the <code>MS_CLIENT_ID</code> and <code>MS_CLIENT_SECRET</code> environment variables.</p>
+            <p>Don't navigate here directly. Instead, use the <code>auth</code> tool (with <code>action=authenticate</code>) in your AI assistant to start the authentication process.</p>
+            <p>Make sure you've set the <code>OUTLOOK_CLIENT_ID</code> and <code>OUTLOOK_CLIENT_SECRET</code> environment variables.</p>
           </div>
           <p>Server is running at http://localhost:3333</p>
         </body>
@@ -304,7 +305,7 @@ server.listen(PORT, '127.0.0.1', () => {
   if (!AUTH_CONFIG.clientId || !AUTH_CONFIG.clientSecret) {
     console.log('\n⚠️  WARNING: Microsoft Graph API credentials are not set.');
     console.log(
-      '   Please set the MS_CLIENT_ID and MS_CLIENT_SECRET environment variables.'
+      '   Please set the OUTLOOK_CLIENT_ID and OUTLOOK_CLIENT_SECRET environment variables.'
     );
   }
 });

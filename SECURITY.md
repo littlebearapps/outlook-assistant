@@ -67,8 +67,8 @@ Every tool carries [MCP annotations](https://modelcontextprotocol.io/docs/concep
 
 | Annotation | Meaning | Effect |
 |------------|---------|--------|
-| `readOnlyHint: true` | Tool only reads data | Claude Code auto-approves (no prompt) |
-| `destructiveHint: true` | Tool can cause irreversible changes | Claude prompts for explicit confirmation |
+| `readOnlyHint: true` | Tool only reads data | MCP clients auto-approve (no prompt) |
+| `destructiveHint: true` | Tool can cause irreversible changes | Client prompts for explicit confirmation |
 | `idempotentHint: true` | Safe to retry without side effects | Client may auto-retry on failure |
 
 - **6 read-only tools** are auto-approved (search, read, list operations)

@@ -1,12 +1,12 @@
 ---
 title: "How to Create Calendar Events"
-description: "Schedule meetings and events from Claude, including adding attendees and event descriptions."
+description: "Schedule meetings and events through your AI assistant, including adding attendees and event descriptions."
 tags: [outlook-mcp, calendar, how-to]
 ---
 
 # How to Create Calendar Events
 
-Schedule meetings, appointments, and events directly from Claude with attendees, descriptions, and locations.
+Schedule meetings, appointments, and events directly from your AI assistant with attendees, descriptions, and locations.
 
 ## Create a Simple Event
 
@@ -73,7 +73,7 @@ Times are interpreted using the server's configured timezone (default: `Australi
 
 ## Tips
 
-- Use plain language with Claude — it will convert your request into the right parameters and times
+- Use plain language — your AI assistant will convert your request into the right parameters and times
 - The body field supports plain text — add agendas, links, or preparation notes
 - Check your calendar first with `list-events` to avoid double-booking
 - Omit the `Z` suffix on times unless you specifically mean UTC

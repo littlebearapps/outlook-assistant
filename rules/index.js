@@ -7,6 +7,85 @@ const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 
 /**
+ * Delete rule handler
+ * @param {object} args - Tool arguments
+ * @returns {object} - MCP response
+ */
+async function handleDeleteRule(args) {
+  const { ruleName, ruleId } = args;
+
+  if (!ruleName && !ruleId) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: 'Either ruleName or ruleId is required.',
+        },
+      ],
+    };
+  }
+
+  try {
+    const accessToken = await ensureAuthenticated();
+
+    let resolvedId = ruleId;
+    let displayName = ruleId;
+
+    // Resolve name to ID if needed
+    if (!resolvedId && ruleName) {
+      const rules = await getInboxRules(accessToken);
+      const rule = rules.find((r) => r.displayName === ruleName);
+      if (!rule) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Rule with name "${ruleName}" not found.`,
+            },
+          ],
+        };
+      }
+      resolvedId = rule.id;
+      displayName = ruleName;
+    }
+
+    await callGraphAPI(
+      accessToken,
+      'DELETE',
+      `me/mailFolders/inbox/messageRules/${resolvedId}`
+    );
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Successfully deleted rule "${displayName}".`,
+        },
+      ],
+    };
+  } catch (error) {
+    if (error.message === 'Authentication required') {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
+          },
+        ],
+      };
+    }
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error deleting rule: ${error.message}`,
+        },
+      ],
+    };
+  }
+}
+
+/**
  * Edit rule sequence handler
  * @param {object} args - Tool arguments
  * @returns {object} - MCP response
@@ -102,11 +181,11 @@ const rulesTools = [
   {
     name: 'manage-rules',
     description:
-      'Manage inbox rules. action=list (default) lists rules. action=create creates a new rule. action=reorder changes rule execution priority.',
+      'Manage inbox rules. action=list (default) lists rules. action=create creates a new rule. action=reorder changes rule execution priority. action=delete removes a rule.',
     annotations: {
       title: 'Inbox Rules',
       readOnlyHint: false,
-      destructiveHint: false,
+      destructiveHint: true,
       openWorldHint: false,
     },
     inputSchema: {
@@ -114,7 +193,7 @@ const rulesTools = [
       properties: {
         action: {
           type: 'string',
-          enum: ['list', 'create', 'reorder'],
+          enum: ['list', 'create', 'reorder', 'delete'],
           description: 'Action to perform (default: list)',
         },
         // list params
@@ -161,7 +240,12 @@ const rulesTools = [
         // reorder params
         ruleName: {
           type: 'string',
-          description: 'Name of the rule to reorder (action=reorder, required)',
+          description:
+            'Name of the rule (action=reorder required, action=delete alternative to ruleId)',
+        },
+        ruleId: {
+          type: 'string',
+          description: 'ID of the rule to delete (action=delete)',
         },
       },
       required: [],
@@ -173,6 +257,8 @@ const rulesTools = [
           return handleCreateRule(args);
         case 'reorder':
           return handleEditRuleSequence(args);
+        case 'delete':
+          return handleDeleteRule(args);
         case 'list':
         default:
           return handleListRules(args);
@@ -186,4 +272,5 @@ module.exports = {
   handleListRules,
   handleCreateRule,
   handleEditRuleSequence,
+  handleDeleteRule,
 };

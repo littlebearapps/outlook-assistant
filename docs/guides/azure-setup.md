@@ -176,9 +176,9 @@ You now have two values:
 - **Application (client) ID** → `OUTLOOK_CLIENT_ID`
 - **Client secret Value** → `OUTLOOK_CLIENT_SECRET`
 
-### Option A: Claude Desktop Config (Recommended)
+### Option A: MCP Client Config (Recommended)
 
-Add to your Claude Desktop `claude_desktop_config.json`:
+Add to your MCP client config (example for Claude Desktop `claude_desktop_config.json`):
 
 ```json
 {
@@ -215,7 +215,7 @@ USE_TEST_MODE=false
 npm run auth-server
 ```
 
-> **Note**: The auth server reads `OUTLOOK_CLIENT_ID` and `OUTLOOK_CLIENT_SECRET` from environment variables (or the legacy `MS_CLIENT_ID`/`MS_CLIENT_SECRET` aliases). When running from source, ensure your `.env` file is in the project root. When using Claude Desktop/Code, the env vars from your MCP config are passed automatically to the server process.
+> **Note**: The auth server reads `OUTLOOK_CLIENT_ID` and `OUTLOOK_CLIENT_SECRET` from environment variables (or the legacy `MS_CLIENT_ID`/`MS_CLIENT_SECRET` aliases). When running from source, ensure your `.env` file is in the project root. When using an MCP client, the env vars from your MCP config are passed automatically to the server process.
 
 You should see:
 
@@ -225,7 +225,7 @@ Auth server listening on http://localhost:3333
 
 ### 2. Authenticate
 
-In Claude, use the `auth` tool with `action=authenticate`. It returns a Microsoft login URL.
+In your AI assistant, use the `auth` tool with `action=authenticate`. It returns a Microsoft login URL.
 
 1. Open the URL in your browser
 2. Sign in with your Microsoft account
@@ -236,7 +236,7 @@ Tokens are saved to `~/.outlook-mcp-tokens.json` and refresh automatically.
 
 ### 3. Verify Access
 
-In Claude, use the `auth` tool with `action=status`. You should see:
+In your AI assistant, use the `auth` tool with `action=status`. You should see:
 
 ```
 Authenticated as: your.email@outlook.com
@@ -291,7 +291,7 @@ Then try `search-emails` to confirm email access is working.
 ```bash
 rm ~/.outlook-mcp-tokens.json
 npm run auth-server
-# Then use the auth tool with action=authenticate in Claude
+# Then use the auth tool with action=authenticate in your AI assistant
 ```
 
 ---
@@ -318,14 +318,14 @@ npm run auth-server
 ```bash
 rm ~/.outlook-mcp-tokens.json
 npm run auth-server
-# Then use the auth tool with action=authenticate in Claude
+# Then use the auth tool with action=authenticate in your AI assistant
 ```
 
 After re-authenticating, use the `auth` tool with `action=status` to verify the new scopes appear in the token.
 
 ## What's Next?
 
-- [Connect Outlook to Claude](../how-to/getting-started/connect-outlook-to-claude.md) — Install, configure your MCP client, and authenticate
+- [Connect Outlook to Your AI Assistant](../how-to/getting-started/connect-outlook-to-claude.md) — Install, configure your MCP client, and authenticate
 - [README](../../README.md) — Full feature overview and configuration
 - [Tools Reference](../quickrefs/tools-reference.md) — All 20 tools with parameters
 - [Back to Docs](../README.md)

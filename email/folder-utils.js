@@ -49,14 +49,17 @@ async function resolveFolderPath(accessToken, folderName) {
       return path;
     }
 
-    // If not found, fall back to inbox
-    console.error(
-      `Couldn't find folder "${folderName}", falling back to inbox`
+    // If not found, throw error instead of silently falling back
+    throw new Error(
+      `Folder "${folderName}" not found. Use the folders tool (action=list) to see available folders.`
     );
-    return WELL_KNOWN_FOLDERS['inbox'];
   } catch (error) {
-    console.error(`Error resolving folder "${folderName}": ${error.message}`);
-    return WELL_KNOWN_FOLDERS['inbox'];
+    if (error.message.includes('not found')) {
+      throw error;
+    }
+    throw new Error(
+      `Error resolving folder "${folderName}": ${error.message}. Use the folders tool (action=list) to see available folders.`
+    );
   }
 }
 

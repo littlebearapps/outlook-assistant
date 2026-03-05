@@ -50,11 +50,11 @@ The file is saved with its original filename to the specified directory.
 
 ## Download All Attachments
 
-List the attachments first, then download each one. Ask Claude:
+List the attachments first, then download each one:
 
 > "Download all attachments from that email to /tmp/attachments/"
 
-Claude will list the attachments, then download each one sequentially.
+The attachments will be listed, then downloaded sequentially.
 
 ## Parameter Reference
 

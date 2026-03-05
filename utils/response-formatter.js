@@ -223,9 +223,11 @@ function formatEmailContent(
 
   let output = `# ${email.subject || '(no subject)'}
 
-**From:** ${from}
-**To:** ${to}
-**Date:** ${date}`;
+**From:** ${from}`;
+
+  if (to) output += `\n**To:** ${to}`;
+
+  output += `\n**Date:** ${date}`;
 
   if (cc) output += `\n**CC:** ${cc}`;
   if (bcc) output += `\n**BCC:** ${bcc}`;
@@ -245,7 +247,10 @@ function formatEmailContent(
 
   // Body content
   let body = '';
-  if (email.body) {
+  if (verbosity === VERBOSITY.MINIMAL) {
+    // At minimal verbosity, show bodyPreview only
+    body = email.bodyPreview || '_(Body omitted at minimal verbosity)_';
+  } else if (email.body) {
     body =
       email.body.contentType === 'html'
         ? stripHtml(email.body.content)

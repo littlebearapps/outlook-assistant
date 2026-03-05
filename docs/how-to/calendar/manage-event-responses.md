@@ -65,7 +65,7 @@ Delete removes the event from your calendar without notifying anyone. Use this f
 | `eventId` | The event ID (from `list-events`) | Yes |
 | `comment` | Message sent with decline/cancel | No |
 
-> **Note**: This tool is marked as destructive. Claude will ask for your confirmation before declining, cancelling, or deleting any event.
+> **Note**: This tool is marked as destructive. Your AI assistant will ask for your confirmation before declining, cancelling, or deleting any event.
 
 ## Tips
 

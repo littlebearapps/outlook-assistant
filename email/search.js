@@ -25,7 +25,15 @@ const { getEmailFields } = require('../utils/field-presets');
  */
 async function handleSearchEmails(args) {
   const folder = args.folder || 'inbox';
-  const requestedCount = args.count || DEFAULT_LIMITS.searchEmails; // Default 10
+
+  // Validate count
+  if (args.count !== undefined && args.count < 1) {
+    return {
+      content: [{ type: 'text', text: 'count must be at least 1.' }],
+    };
+  }
+
+  const requestedCount = args.count ?? DEFAULT_LIMITS.searchEmails; // Default 10
   const verbosity = args.outputVerbosity || VERBOSITY.STANDARD;
   const query = args.query || '';
   const from = args.from || '';

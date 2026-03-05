@@ -290,9 +290,16 @@ describe('OAuth Server Routes', () => {
       expect(config.authEndpoint).toBe('http://env.auth/endpoint');
     });
 
-    it('should use default "MS_" prefix if none provided', () => {
+    it('should use default "OUTLOOK_" prefix if none provided', () => {
+      process.env.OUTLOOK_CLIENT_ID = 'outlook_client_id_val';
+      const config = createAuthConfig(); // No prefix, defaults to OUTLOOK_
+      expect(config.clientId).toBe('outlook_client_id_val');
+    });
+
+    it('should fall back to MS_ prefix for backwards compatibility', () => {
+      delete process.env.OUTLOOK_CLIENT_ID;
       process.env.MS_CLIENT_ID = 'ms_client_id_val';
-      const config = createAuthConfig(); // No prefix, defaults to MS_
+      const config = createAuthConfig(); // Should fall back to MS_CLIENT_ID
       expect(config.clientId).toBe('ms_client_id_val');
     });
   });

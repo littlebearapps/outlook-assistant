@@ -1,6 +1,6 @@
 const { handleListRules } = require('../../rules/list');
 const handleCreateRule = require('../../rules/create');
-const { handleEditRuleSequence } = require('../../rules');
+const { handleEditRuleSequence, handleDeleteRule } = require('../../rules');
 const { callGraphAPI } = require('../../utils/graph-api');
 const { ensureAuthenticated } = require('../../auth');
 const { getFolderIdByName } = require('../../email/folder-utils');
@@ -292,5 +292,58 @@ describe('handleEditRuleSequence', () => {
     expect(result.content[0].text).toBe(
       'Error updating rule sequence: Update failed'
     );
+  });
+});
+
+describe('handleDeleteRule', () => {
+  it('should delete a rule by name', async () => {
+    // getInboxRules call
+    callGraphAPI.mockResolvedValueOnce({ value: mockRules });
+    // DELETE call
+    callGraphAPI.mockResolvedValueOnce({});
+
+    const result = await handleDeleteRule({ ruleName: 'Move newsletters' });
+
+    expect(result.content[0].text).toContain('Successfully deleted');
+    expect(result.content[0].text).toContain('Move newsletters');
+  });
+
+  it('should delete a rule by ID', async () => {
+    callGraphAPI.mockResolvedValueOnce({});
+
+    const result = await handleDeleteRule({ ruleId: 'rule-1' });
+
+    expect(result.content[0].text).toContain('Successfully deleted');
+  });
+
+  it('should require ruleName or ruleId', async () => {
+    const result = await handleDeleteRule({});
+
+    expect(result.content[0].text).toContain('Either ruleName or ruleId');
+  });
+
+  it('should handle rule not found', async () => {
+    callGraphAPI.mockResolvedValue({ value: mockRules });
+
+    const result = await handleDeleteRule({ ruleName: 'NonExistent' });
+
+    expect(result.content[0].text).toContain('not found');
+  });
+
+  it('should handle auth error', async () => {
+    ensureAuthenticated.mockRejectedValue(new Error('Authentication required'));
+
+    const result = await handleDeleteRule({ ruleName: 'Test' });
+
+    expect(result.content[0].text).toContain('Authentication required');
+  });
+
+  it('should handle API error', async () => {
+    callGraphAPI.mockResolvedValueOnce({ value: mockRules });
+    callGraphAPI.mockRejectedValueOnce(new Error('Delete failed'));
+
+    const result = await handleDeleteRule({ ruleName: 'Move newsletters' });
+
+    expect(result.content[0].text).toBe('Error deleting rule: Delete failed');
   });
 });

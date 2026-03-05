@@ -55,12 +55,56 @@ describe('handleGetMailboxSettings', () => {
   });
 
   it('should return specific section when requested', async () => {
-    callGraphAPI.mockResolvedValue({ locale: 'en-AU' });
+    callGraphAPI.mockResolvedValue({
+      locale: 'en-AU',
+      displayName: 'English (Australia)',
+    });
 
     const result = await handleGetMailboxSettings({ section: 'language' });
 
     expect(result.content[0].text).toContain('Language');
     expect(result.content[0].text).toContain('en-AU');
+    // Should be formatted, not raw JSON
+    expect(result.content[0].text).not.toContain('```json');
+  });
+
+  it('should format workingHours section', async () => {
+    callGraphAPI.mockResolvedValue({
+      startTime: '09:00:00.0000000',
+      endTime: '17:00:00.0000000',
+      daysOfWeek: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
+      timeZone: { name: 'AUS Eastern Standard Time' },
+    });
+
+    const result = await handleGetMailboxSettings({
+      section: 'workingHours',
+    });
+
+    expect(result.content[0].text).toContain('09:00');
+    expect(result.content[0].text).toContain('17:00');
+    expect(result.content[0].text).not.toContain('```json');
+  });
+
+  it('should format automaticRepliesSetting section', async () => {
+    callGraphAPI.mockResolvedValue({
+      status: 'disabled',
+    });
+
+    const result = await handleGetMailboxSettings({
+      section: 'automaticRepliesSetting',
+    });
+
+    expect(result.content[0].text).toContain('Disabled');
+    expect(result.content[0].text).not.toContain('```json');
+  });
+
+  it('should format timeZone section', async () => {
+    callGraphAPI.mockResolvedValue('AUS Eastern Standard Time');
+
+    const result = await handleGetMailboxSettings({ section: 'timeZone' });
+
+    expect(result.content[0].text).toContain('AUS Eastern Standard Time');
+    expect(result.content[0].text).not.toContain('```json');
   });
 
   it('should treat section "all" same as no section', async () => {
@@ -232,6 +276,51 @@ describe('handleSetAutomaticReplies', () => {
 
     expect(result.content[0].text).toContain('updated');
     expect(result.content[0].text).toContain('Scheduled');
+  });
+
+  it('should warn when enabling without messages and no existing messages', async () => {
+    callGraphAPI
+      .mockResolvedValueOnce({}) // PATCH
+      .mockResolvedValueOnce({
+        status: 'alwaysEnabled',
+      }); // GET updated — no messages
+
+    const result = await handleSetAutomaticReplies({ enabled: true });
+
+    expect(result.content[0].text).toContain('Warning');
+    expect(result.content[0].text).toContain('no message configured');
+  });
+
+  it('should note when reusing previously configured message', async () => {
+    callGraphAPI
+      .mockResolvedValueOnce({}) // PATCH
+      .mockResolvedValueOnce({
+        status: 'alwaysEnabled',
+        internalReplyMessage: 'I am out of office until Monday',
+      }); // GET updated — has existing message
+
+    const result = await handleSetAutomaticReplies({ enabled: true });
+
+    expect(result.content[0].text).toContain('Note');
+    expect(result.content[0].text).toContain('previously configured');
+    expect(result.content[0].text).toContain('I am out of office');
+  });
+
+  it('should not warn when messages are provided', async () => {
+    callGraphAPI
+      .mockResolvedValueOnce({}) // PATCH
+      .mockResolvedValueOnce({
+        status: 'alwaysEnabled',
+        internalReplyMessage: 'New message',
+      }); // GET updated
+
+    const result = await handleSetAutomaticReplies({
+      enabled: true,
+      internalReplyMessage: 'New message',
+    });
+
+    expect(result.content[0].text).not.toContain('Warning');
+    expect(result.content[0].text).not.toContain('Note');
   });
 
   it('should reject invalid externalAudience', async () => {

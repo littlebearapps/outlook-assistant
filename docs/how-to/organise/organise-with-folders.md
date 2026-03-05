@@ -95,11 +95,33 @@ params:
 
 This returns total items, unread count, and folder size — useful for planning pagination or understanding email volume.
 
+## Delete a Folder
+
+> "Delete the old Project Alpha folder"
+
+```
+tool: folders
+params:
+  action: "delete"
+  folderName: "Project Alpha"
+```
+
+You can also delete by ID:
+
+```
+tool: folders
+params:
+  action: "delete"
+  folderId: "AAMkAGR..."
+```
+
+Protected folders (Inbox, Drafts, Sent Items, Deleted Items, Junk Email, Archive, Outbox) cannot be deleted.
+
 ## Parameter Reference
 
 | Parameter | What it does | Used with |
 |-----------|-------------|-----------|
-| `action` | `list`, `create`, `move`, or `stats` | All |
+| `action` | `list`, `create`, `move`, `stats`, or `delete` | All |
 | `includeItemCounts` | Show total/unread counts | `list` |
 | `includeChildren` | Show nested subfolders | `list` |
 | `name` | New folder name | `create` |
@@ -108,6 +130,8 @@ This returns total items, unread count, and folder size — useful for planning 
 | `targetFolder` | Destination folder name | `move` |
 | `sourceFolder` | Source folder (default: inbox) | `move` |
 | `folder` | Folder to get stats for | `stats` |
+| `folderId` | Folder ID to delete | `delete` |
+| `folderName` | Folder name to delete (resolved to ID) | `delete` |
 
 ## Tips
 

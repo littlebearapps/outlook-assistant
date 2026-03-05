@@ -1,12 +1,12 @@
 ---
-title: "How to Connect Outlook to Claude"
-description: "Set up Outlook MCP so Claude can read and manage your email, calendar, and contacts."
+title: "How to Connect Outlook to Your AI Assistant"
+description: "Set up Outlook MCP so your AI assistant can read and manage your email, calendar, and contacts."
 tags: [outlook-mcp, getting-started, how-to]
 ---
 
-# How to Connect Outlook to Claude
+# How to Connect Outlook to Your AI Assistant
 
-Connect your Microsoft 365 or Outlook.com account so Claude can search emails, manage your calendar, and work with contacts on your behalf.
+Connect your Microsoft 365 or Outlook.com account so your AI assistant can search emails, manage your calendar, and work with contacts on your behalf.
 
 ## Install Outlook MCP
 
@@ -101,11 +101,11 @@ Outlook MCP has two separate processes that serve different purposes:
 
 | Process | Purpose | When to run | How it runs |
 |---------|---------|-------------|-------------|
-| **MCP server** (`index.js`) | Handles all 20 Outlook tools — searching emails, reading calendar, etc. | Always (runs automatically) | Claude Desktop/Code starts it from your MCP config |
+| **MCP server** (`index.js`) | Handles all 20 Outlook tools — searching emails, reading calendar, etc. | Always (runs automatically) | Your MCP client starts it from your MCP config |
 | **Auth server** (`outlook-auth-server.js`) | Handles OAuth login — the one-time browser authentication flow | Only during initial setup or re-authentication | You start it manually with `npx @littlebearapps/outlook-mcp auth-server` |
 
 **Key points:**
-- The **MCP server** is what Claude talks to. It starts automatically when Claude Desktop or Claude Code launches.
+- The **MCP server** is what your AI assistant talks to. It starts automatically when your MCP client launches.
 - The **auth server** is a temporary helper that runs on port 3333 to receive the OAuth callback from Microsoft. You only need it when authenticating or re-authenticating.
 - After authentication succeeds, you can stop the auth server. The MCP server handles token refresh on its own.
 - Both processes need `OUTLOOK_CLIENT_ID` and `OUTLOOK_CLIENT_SECRET`. The MCP config `"env"` block provides these to the MCP server automatically. For the auth server, you need to either set them as shell environment variables or have a `.env` file in the project root.
@@ -118,15 +118,15 @@ Outlook MCP has two separate processes that serve different purposes:
 npx @littlebearapps/outlook-mcp auth-server
 ```
 
-> **Important**: The auth server needs `OUTLOOK_CLIENT_ID` and `OUTLOOK_CLIENT_SECRET` environment variables. These are **not** automatically inherited from your Claude Desktop/Code MCP config — that config only applies to the MCP server process. Either:
+> **Important**: The auth server needs `OUTLOOK_CLIENT_ID` and `OUTLOOK_CLIENT_SECRET` environment variables. These are **not** automatically inherited from your MCP client's config — that config only applies to the MCP server process. Either:
 > - Create a `.env` file in the project root (copy from `.env.example`), or
 > - Export the variables in your shell before running the command
 
-2. Ask Claude to authenticate:
+2. Ask your AI assistant to authenticate:
 
 > "Connect to my Outlook account"
 
-Claude will call the `auth` tool with `action: authenticate` and return a URL.
+Your AI assistant will call the `auth` tool with `action: authenticate` and return a URL.
 
 3. Open the URL in your browser, sign in with your Microsoft account, and grant permissions.
 
@@ -136,13 +136,13 @@ Claude will call the `auth` tool with `action: authenticate` and return a URL.
 
 ## Verify It's Working
 
-Ask Claude:
+Ask your AI assistant:
 
 > "Check my Outlook connection status"
 
-Claude calls the `auth` tool with `action: status`. You should see your email address and token expiry time.
+The `auth` tool is called with `action: status`. You should see your email address and token expiry time.
 
-![Claude showing auth tool success message](../../assets/screenshots/connect-outlook-to-claude-03.png)
+![Auth tool success message showing authenticated status](../../assets/screenshots/connect-outlook-to-claude-03.png)
 
 Then try a simple read:
 

@@ -80,11 +80,31 @@ params:
   sequence: 1
 ```
 
+## Delete a Rule
+
+> "Delete the GitHub Notifications rule"
+
+```
+tool: manage-rules
+params:
+  action: "delete"
+  ruleName: "GitHub Notifications"
+```
+
+You can also delete by ID:
+
+```
+tool: manage-rules
+params:
+  action: "delete"
+  ruleId: "rule-id..."
+```
+
 ## Parameter Reference
 
 | Parameter | What it does | Used with |
 |-----------|-------------|-----------|
-| `action` | `list`, `create`, or `reorder` | All |
+| `action` | `list`, `create`, `reorder`, or `delete` | All |
 | `includeDetails` | Show full conditions/actions | `list` |
 | `name` | Rule name | `create` |
 | `fromAddresses` | Sender email addresses (comma-separated) | `create` |
@@ -94,7 +114,8 @@ params:
 | `markAsRead` | Auto-mark as read | `create` |
 | `isEnabled` | Enable rule after creation (default: true) | `create` |
 | `sequence` | Execution order — lower runs first (default: 100) | `create`, `reorder` |
-| `ruleName` | Rule to reorder | `reorder` |
+| `ruleName` | Rule name | `reorder`, `delete` |
+| `ruleId` | Rule ID | `delete` |
 
 ## Tips
 

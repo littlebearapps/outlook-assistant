@@ -1,12 +1,12 @@
 ---
 title: "How to View Upcoming Calendar Events"
-description: "List your scheduled events so Claude can help with scheduling, reminders, and meeting preparation."
+description: "List your scheduled events so your AI assistant can help with scheduling, reminders, and meeting preparation."
 tags: [outlook-mcp, calendar, how-to]
 ---
 
 # How to View Upcoming Calendar Events
 
-Check what's coming up on your calendar so Claude can help with scheduling, preparation, or summarising your day.
+Check what's coming up on your calendar so your AI assistant can help with scheduling, preparation, or summarising your day.
 
 ## List Your Next Events
 
@@ -47,7 +47,7 @@ Each event shows:
 
 - `list-events` is read-only and auto-approved — no confirmation needed
 - Events are sorted chronologically (soonest first)
-- Ask Claude to summarise your day: "What meetings do I have today?"
+- Ask your AI assistant to summarise your day: "What meetings do I have today?"
 - Combine with email search: "Find any emails from people I'm meeting today"
 
 ## Related

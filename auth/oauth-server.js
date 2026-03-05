@@ -28,9 +28,9 @@ const templates = {
   authSuccess: `
     <html>
       <body style="font-family: Arial, sans-serif; text-align: center; margin-top: 50px;">
-        <h1 style="color: #2ecc71;">✅ Authentication Successful</h1>
+        <h1 style="color: #2ecc71;">&#10003; Authentication Successful</h1>
         <p>You have successfully authenticated with Microsoft Graph API.</p>
-        <p>You can close this window.</p>
+        <p>You can close this window and return to your AI assistant.</p>
       </body>
     </html>`,
   tokenExchangeError: (error) => `
@@ -51,10 +51,14 @@ const templates = {
     </html>`,
 };
 
-function createAuthConfig(envPrefix = 'MS_') {
+function createAuthConfig(envPrefix = 'OUTLOOK_') {
   return {
-    clientId: process.env[`${envPrefix}CLIENT_ID`] || '',
-    clientSecret: process.env[`${envPrefix}CLIENT_SECRET`] || '',
+    clientId:
+      process.env[`${envPrefix}CLIENT_ID`] || process.env.MS_CLIENT_ID || '',
+    clientSecret:
+      process.env[`${envPrefix}CLIENT_SECRET`] ||
+      process.env.MS_CLIENT_SECRET ||
+      '',
     redirectUri:
       process.env[`${envPrefix}REDIRECT_URI`] ||
       'http://localhost:3333/auth/callback',
@@ -70,7 +74,12 @@ function createAuthConfig(envPrefix = 'MS_') {
   };
 }
 
-function setupOAuthRoutes(app, tokenStorage, authConfig, envPrefix = 'MS_') {
+function setupOAuthRoutes(
+  app,
+  tokenStorage,
+  authConfig,
+  envPrefix = 'OUTLOOK_'
+) {
   if (!authConfig) {
     authConfig = createAuthConfig(envPrefix);
   }

@@ -117,11 +117,25 @@ async function handleGetMailboxSettings(args) {
     output.push('# Mailbox Settings\n');
 
     if (section && section !== 'all') {
-      // Single section
-      output.push(`## ${section.charAt(0).toUpperCase() + section.slice(1)}\n`);
-      output.push('```json');
-      output.push(JSON.stringify(settings, null, 2));
-      output.push('```');
+      // Single section — format based on section type
+      const sectionTitle = section.charAt(0).toUpperCase() + section.slice(1);
+      output.push(`## ${sectionTitle}\n`);
+
+      if (section === 'workingHours') {
+        output.push(formatWorkingHours(settings));
+      } else if (section === 'automaticRepliesSetting') {
+        output.push(formatAutomaticReplies(settings));
+      } else if (section === 'language') {
+        output.push(`**Locale**: ${settings.locale || 'Not set'}`);
+        output.push(`**Display Name**: ${settings.displayName || 'Not set'}`);
+      } else if (section === 'timeZone') {
+        output.push(`**Zone**: ${settings}`);
+      } else {
+        // Fallback for unknown sections
+        output.push('```json');
+        output.push(JSON.stringify(settings, null, 2));
+        output.push('```');
+      }
     } else {
       // All settings
       if (settings.language) {
@@ -274,6 +288,26 @@ async function handleSetAutomaticReplies(args) {
     let output = [];
     output.push('Automatic replies updated!\n');
     output.push(formatAutomaticReplies(updated));
+
+    // Warn if enabling without messages
+    if (
+      updated.status !== 'disabled' &&
+      !internalReplyMessage &&
+      !externalReplyMessage
+    ) {
+      if (updated.internalReplyMessage || updated.externalReplyMessage) {
+        const preview = (
+          updated.internalReplyMessage || updated.externalReplyMessage
+        ).substring(0, 100);
+        output.push(
+          `\n**Note**: Using previously configured message: "${preview}${preview.length >= 100 ? '...' : ''}"`
+        );
+      } else {
+        output.push(
+          '\n**Warning**: Auto-replies enabled with no message configured. Recipients will receive a blank reply.'
+        );
+      }
+    }
 
     return {
       content: [

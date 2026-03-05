@@ -9,11 +9,37 @@ const tokenManager = require('./token-manager');
  * @returns {object} - MCP response
  */
 async function handleAbout() {
+  const scopes = config.AUTH_CONFIG.scopes.filter(
+    (s) => s !== 'offline_access'
+  );
+  const testMode = config.USE_TEST_MODE ? 'Enabled' : 'Disabled';
+  const rateLimit =
+    process.env.OUTLOOK_MAX_EMAILS_PER_SESSION || 'Unlimited (no limit set)';
+  const allowlist =
+    process.env.OUTLOOK_ALLOWED_RECIPIENTS || 'None (all recipients allowed)';
+
+  const lines = [
+    `# Outlook MCP Server v${config.SERVER_VERSION}\n`,
+    `Provides access to Microsoft Outlook email, calendar, and contacts through Microsoft Graph API.\n`,
+    `## Diagnostics\n`,
+    `| Setting | Value |`,
+    `|---------|-------|`,
+    `| Tools | 20 across 9 modules |`,
+    `| Modules | auth, email, calendar, folder, rules, contacts, categories, settings, advanced |`,
+    `| Timezone | ${config.DEFAULT_TIMEZONE} |`,
+    `| Test Mode | ${testMode} |`,
+    `| Rate Limit | ${rateLimit} |`,
+    `| Recipient Allowlist | ${allowlist} |`,
+    `| Scopes | ${scopes.length} configured |`,
+    ``,
+    `**Scopes**: ${scopes.join(', ')}`,
+  ];
+
   return {
     content: [
       {
         type: 'text',
-        text: `📧 MODULAR Outlook Assistant MCP Server v${config.SERVER_VERSION} 📧\n\nProvides access to Microsoft Outlook email, calendar, and contacts through Microsoft Graph API.\nImplemented with a modular architecture for improved maintainability.`,
+        text: lines.join('\n'),
       },
     ],
   };

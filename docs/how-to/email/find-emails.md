@@ -10,7 +10,7 @@ Search and filter your emails to find exactly what you need. With no search term
 
 ## List Recent Emails
 
-Ask Claude to show your latest emails:
+Ask your AI assistant to show your latest emails:
 
 > "Show me my recent emails"
 
@@ -152,7 +152,7 @@ params:
 | List (no query) | 25 | 50 |
 | Search | 10 | 50 |
 
-![Claude returning search results with email list](../../assets/screenshots/find-emails-01.png)
+![Search results with email list](../../assets/screenshots/find-emails-01.png)
 
 ## Parameter Reference
 

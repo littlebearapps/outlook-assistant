@@ -24,7 +24,7 @@ function getReadFieldPreset(verbosity, includeHeaders) {
   }
   switch (verbosity) {
     case VERBOSITY.MINIMAL:
-      return 'list'; // Basic fields only
+      return 'read-minimal'; // Includes bodyPreview + toRecipients
     case VERBOSITY.FULL:
       return 'read'; // Full read fields
     case VERBOSITY.STANDARD:

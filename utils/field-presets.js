@@ -16,6 +16,22 @@ const FIELD_PRESETS = {
   list: ['id', 'subject', 'from', 'receivedDateTime', 'isRead'],
 
   /**
+   * Minimal fields for reading a single email
+   * Use case: Quick read at minimal verbosity (includes bodyPreview + toRecipients)
+   */
+  'read-minimal': [
+    'id',
+    'subject',
+    'from',
+    'toRecipients',
+    'receivedDateTime',
+    'bodyPreview',
+    'hasAttachments',
+    'importance',
+    'isRead',
+  ],
+
+  /**
    * Standard fields for reading email content
    * Use case: Viewing email details with body
    */

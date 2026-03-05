@@ -5,17 +5,18 @@ const handleListFolders = require('./list');
 const handleCreateFolder = require('./create');
 const handleMoveEmails = require('./move');
 const handleGetFolderStats = require('./stats');
+const handleDeleteFolder = require('./delete');
 
 // Consolidated folder tool definition
 const folderTools = [
   {
     name: 'folders',
     description:
-      'Manage mail folders. action=list (default) lists folders. action=create creates a folder. action=move moves emails between folders. action=stats gets folder counts for pagination planning.',
+      'Manage mail folders. action=list (default) lists folders. action=create creates a folder. action=move moves emails between folders. action=stats gets folder counts for pagination planning. action=delete removes a folder.',
     annotations: {
       title: 'Mail Folders',
       readOnlyHint: false,
-      destructiveHint: false,
+      destructiveHint: true,
       openWorldHint: false,
     },
     inputSchema: {
@@ -23,7 +24,7 @@ const folderTools = [
       properties: {
         action: {
           type: 'string',
-          enum: ['list', 'create', 'move', 'stats'],
+          enum: ['list', 'create', 'move', 'stats', 'delete'],
           description: 'Action to perform (default: list)',
         },
         // list params
@@ -69,6 +70,16 @@ const folderTools = [
           enum: ['minimal', 'standard', 'full'],
           description: 'Output detail level (action=stats, default: standard)',
         },
+        // delete params
+        folderId: {
+          type: 'string',
+          description: 'Folder ID to delete (action=delete)',
+        },
+        folderName: {
+          type: 'string',
+          description:
+            'Folder name to delete — resolved to ID (action=delete). Cannot delete protected folders (Inbox, Drafts, Sent, etc.)',
+        },
       },
       required: [],
     },
@@ -81,6 +92,8 @@ const folderTools = [
           return handleMoveEmails(args);
         case 'stats':
           return handleGetFolderStats(args);
+        case 'delete':
+          return handleDeleteFolder(args);
         case 'list':
         default:
           return handleListFolders(args);
@@ -95,4 +108,5 @@ module.exports = {
   handleCreateFolder,
   handleMoveEmails,
   handleGetFolderStats,
+  handleDeleteFolder,
 };

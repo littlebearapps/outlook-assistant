@@ -1,18 +1,18 @@
 ---
 title: "Outlook MCP How-To Guides"
-description: "Practical guides for managing Outlook email, calendar, contacts, and settings through Claude and other AI tools."
+description: "Practical guides for managing Outlook email, calendar, contacts, and settings through AI assistants."
 tags: [outlook-mcp, how-to, index]
 ---
 
 # Outlook MCP How-To Guides
 
-Practical guides for managing your Microsoft 365 email, calendar, contacts, and settings through Claude and other MCP-compatible AI tools.
+Practical guides for managing your Microsoft 365 email, calendar, contacts, and settings through MCP-compatible AI assistants.
 
 ## Getting Started
 
 | Guide | What it covers |
 |-------|---------------|
-| [Connect Outlook to Claude](getting-started/connect-outlook-to-claude.md) | Install, Azure app setup, Claude Desktop/Code config, first authentication |
+| [Connect Outlook to Your AI Assistant](getting-started/connect-outlook-to-claude.md) | Install, Azure app setup, MCP client config, first authentication |
 | [Verify Your Connection](getting-started/verify-your-connection.md) | Check auth status, re-authenticate, troubleshoot connection issues, FAQ |
 
 ## Email

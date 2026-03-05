@@ -13,6 +13,7 @@ const { ensureAuthenticated } = require('../auth');
  * Contact field presets for different use cases
  */
 const CONTACT_FIELDS = {
+  minimal: ['id', 'displayName', 'emailAddresses'],
   list: [
     'id',
     'displayName',
@@ -60,23 +61,26 @@ function formatContact(contact, verbosity = 'standard') {
     lines.push(`**Email**: ${emails}`);
   }
 
-  // Phone numbers
-  const phones = [];
-  if (contact.mobilePhone) phones.push(`Mobile: ${contact.mobilePhone}`);
-  if (contact.businessPhones?.length > 0)
-    phones.push(`Work: ${contact.businessPhones[0]}`);
-  if (contact.homePhones?.length > 0)
-    phones.push(`Home: ${contact.homePhones[0]}`);
-  if (phones.length > 0) {
-    lines.push(`**Phone**: ${phones.join(' | ')}`);
-  }
+  // Skip phone/company/ID at minimal verbosity
+  if (verbosity !== 'minimal') {
+    // Phone numbers
+    const phones = [];
+    if (contact.mobilePhone) phones.push(`Mobile: ${contact.mobilePhone}`);
+    if (contact.businessPhones?.length > 0)
+      phones.push(`Work: ${contact.businessPhones[0]}`);
+    if (contact.homePhones?.length > 0)
+      phones.push(`Home: ${contact.homePhones[0]}`);
+    if (phones.length > 0) {
+      lines.push(`**Phone**: ${phones.join(' | ')}`);
+    }
 
-  // Company info
-  if (contact.companyName || contact.jobTitle) {
-    const company = [contact.jobTitle, contact.companyName]
-      .filter(Boolean)
-      .join(' at ');
-    lines.push(`**Company**: ${company}`);
+    // Company info
+    if (contact.companyName || contact.jobTitle) {
+      const company = [contact.jobTitle, contact.companyName]
+        .filter(Boolean)
+        .join(' at ');
+      lines.push(`**Company**: ${company}`);
+    }
   }
 
   // Full verbosity extras
@@ -107,7 +111,9 @@ function formatContact(contact, verbosity = 'standard') {
     }
   }
 
-  lines.push(`*ID: \`${contact.id}\`*`);
+  if (verbosity !== 'minimal') {
+    lines.push(`*ID: \`${contact.id}\`*`);
+  }
   lines.push('');
 
   return lines.join('\n');
@@ -125,7 +131,11 @@ async function handleListContacts(args) {
     const accessToken = await ensureAuthenticated();
 
     const fields =
-      verbosity === 'full' ? CONTACT_FIELDS.full : CONTACT_FIELDS.list;
+      verbosity === 'full'
+        ? CONTACT_FIELDS.full
+        : verbosity === 'minimal'
+          ? CONTACT_FIELDS.minimal
+          : CONTACT_FIELDS.list;
     const endpoint = folder
       ? `me/contactFolders/${folder}/contacts`
       : 'me/contacts';
@@ -193,7 +203,11 @@ async function handleSearchContacts(args) {
     const accessToken = await ensureAuthenticated();
 
     const fields =
-      verbosity === 'full' ? CONTACT_FIELDS.full : CONTACT_FIELDS.list;
+      verbosity === 'full'
+        ? CONTACT_FIELDS.full
+        : verbosity === 'minimal'
+          ? CONTACT_FIELDS.minimal
+          : CONTACT_FIELDS.list;
     const endpoint = 'me/contacts';
 
     // Build filter for name — emailAddresses/any() lambda is unreliable on personal accounts

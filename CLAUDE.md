@@ -1,6 +1,6 @@
 # CLAUDE.md - outlook-mcp
 
-MCP server for Microsoft Outlook via Graph API. 20 consolidated tools across 9 modules (reduced from 55 for token efficiency).
+MCP server for Microsoft Outlook via Graph API (v3.2.0). 20 consolidated tools across 9 modules.
 
 ## Commands
 
@@ -153,10 +153,20 @@ Mock data defined in `utils/mock-data.js`.
 | list/create-rule, edit-rule-sequence | `manage-rules` | `action` param |
 | about, authenticate, check-auth-status | `auth` | `action` param |
 
+## Promotion & Directory Listings
+
+The project has been submitted to major MCP directories (2026-03-05). Tracker with PR/issue links, manual submission drafts, and Reddit post drafts:
+
+→ `docs/promotion/directory-submissions.md`
+
+**Submitted (automated):** punkpeye, appcypher, TensorBlock, YuzeHao2023 awesome-mcp-servers (PRs); Cline MCP Marketplace, mcp.so (issues)
+**Manual required:** PulseMCP, Smithery.ai, Glama.ai (web forms — drafts in tracker)
+
 ## See Also
 
 - `README.md` - Full documentation, Azure setup, tool reference
 - `docs/quickrefs/tools-reference.md` - Tools quick reference
+- `docs/promotion/directory-submissions.md` - Directory submission tracker
 - `.env.example` - Environment template
 
 # currentDate

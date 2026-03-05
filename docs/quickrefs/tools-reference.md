@@ -69,13 +69,13 @@ Quick reference for all 20 consolidated MCP tools across 9 modules. Each tool in
 
 | Tool | Actions | Safety | Key Parameters |
 |------|---------|--------|----------------|
-| `folders` | `list` (default), `create`, `move`, `stats` | moderate write | `name`, `emailIds`, `targetFolder`, `folder`, `outputVerbosity` |
+| `folders` | `list` (default), `create`, `move`, `stats`, `delete` | **destructive** | `name`, `emailIds`, `targetFolder`, `folder`, `folderId`, `folderName`, `outputVerbosity` |
 
 ## Rules (1 tool)
 
 | Tool | Actions | Safety | Key Parameters |
 |------|---------|--------|----------------|
-| `manage-rules` | `list` (default), `create`, `reorder` | moderate write | `name`, `fromAddresses`, `moveToFolder`, `ruleName`, `sequence` |
+| `manage-rules` | `list` (default), `create`, `reorder`, `delete` | **destructive** | `name`, `fromAddresses`, `moveToFolder`, `ruleName`, `ruleId`, `sequence` |
 
 ## Contacts (2 tools)
 
@@ -113,10 +113,10 @@ Quick reference for all 20 consolidated MCP tools across 9 modules. Each tool in
 
 | Category | Tools | Client Behaviour |
 |----------|-------|------------------|
-| **Read-only** (6) | `search-emails`, `read-email`, `list-events`, `search-people`, `access-shared-mailbox`, `find-meeting-rooms` | Auto-approved by Claude Code |
-| **Destructive** (2) | `send-email`, `manage-event` | Claude prompts for confirmation |
+| **Read-only** (6) | `search-emails`, `read-email`, `list-events`, `search-people`, `access-shared-mailbox`, `find-meeting-rooms` | Auto-approved by MCP clients that support annotations |
+| **Destructive** (4) | `send-email`, `manage-event`, `folders`, `manage-rules` | Client prompts for confirmation |
 | **Idempotent** (2) | `update-email`, `mailbox-settings` | Safe to retry |
-| **Moderate write** (9) | All others | Normal approval flow |
+| **Moderate write** (7) | All others | Normal approval flow |
 
 ## send-email Safety Controls
 

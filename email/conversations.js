@@ -215,13 +215,32 @@ async function handleGetConversation(args) {
       $top: 100,
     };
 
-    const response = await callGraphAPI(
-      accessToken,
-      'GET',
-      endpoint,
-      null,
-      queryParams
-    );
+    let response;
+    try {
+      response = await callGraphAPI(
+        accessToken,
+        'GET',
+        endpoint,
+        null,
+        queryParams
+      );
+    } catch (apiError) {
+      if (
+        apiError.message.includes('ErrorInvalidUrlQueryFilter') ||
+        apiError.message.includes('InefficientFilter') ||
+        apiError.message.includes('filter')
+      ) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Conversation retrieval by conversationId is not supported on personal Microsoft accounts. Use read-email with individual message IDs instead.`,
+            },
+          ],
+        };
+      }
+      throw apiError;
+    }
     const messages = response.value || [];
 
     if (messages.length === 0) {
@@ -335,13 +354,32 @@ async function handleExportConversation(args) {
       $top: 100,
     };
 
-    const response = await callGraphAPI(
-      accessToken,
-      'GET',
-      endpoint,
-      null,
-      queryParams
-    );
+    let response;
+    try {
+      response = await callGraphAPI(
+        accessToken,
+        'GET',
+        endpoint,
+        null,
+        queryParams
+      );
+    } catch (apiError) {
+      if (
+        apiError.message.includes('ErrorInvalidUrlQueryFilter') ||
+        apiError.message.includes('InefficientFilter') ||
+        apiError.message.includes('filter')
+      ) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Conversation export is not supported on personal Microsoft accounts. Use export with target=message and individual message IDs instead.`,
+            },
+          ],
+        };
+      }
+      throw apiError;
+    }
     const messages = response.value || [];
 
     if (messages.length === 0) {

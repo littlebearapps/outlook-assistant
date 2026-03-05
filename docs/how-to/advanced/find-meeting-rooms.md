@@ -62,7 +62,14 @@ params:
   outputVerbosity: "full"
 ```
 
-Full details may include AV equipment, accessibility features, and display name.
+With `outputVerbosity: "full"`, the response includes equipment and accessibility information when your organisation has configured it:
+
+- **Audio**: conference phone or speaker system name
+- **Video**: camera or video conferencing device
+- **Display**: screen or projector details
+- **Wheelchair Accessible**: yes/no
+
+This is particularly useful when booking rooms for presentations (need a display), remote meetings (need video/audio), or when attendees have accessibility requirements.
 
 ## Required Permissions
 

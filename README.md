@@ -20,16 +20,17 @@ Outlook MCP connects AI assistants to your Microsoft Outlook account through the
 
 ### What you can do
 
-- **Search and read emails** — find messages by sender, subject, date, or keywords; read full threads with conversation grouping
+- **Search and read emails** — find messages by sender, subject, date, or keywords; read full threads with conversation grouping; batch flag, move, export, or categorise multiple emails at once
 - **Send emails with safety controls** — dry-run preview, session rate limiting, and recipient allowlist to prevent mistakes
 - **Manage your calendar** — view upcoming events, schedule meetings with attendees, decline or cancel invitations
-- **Export emails** — save to Markdown, EML, MBOX, JSON, or HTML for archiving, analysis, or migration
-- **Investigate email headers** — check DKIM, SPF, and DMARC authentication; trace delivery chains; analyse spam scores
-- **Organise your inbox** — create folders, set up inbox rules, colour-code with categories, manage Focused Inbox
+- **Export emails** — save to Markdown, EML, MBOX, JSON, or HTML for archiving, analysis, or migration; export search results or entire threads in one call
+- **Investigate email headers** — check DKIM, SPF, and DMARC authentication; trace delivery chains; analyse spam scores — useful for phishing investigation and compliance
+- **Organise your inbox** — create folders, set up inbox rules, colour-code with categories, manage Focused Inbox — all work together for complete inbox automation
+- **Track inbox changes** — delta sync detects new, modified, and deleted emails since your last check, with tokens for incremental polling
 - **Manage contacts** — search your contact book and organisational directory, create and update contact records
 - **Configure settings** — set out-of-office auto-replies, working hours, and time zone
 - **Access shared mailboxes** — read team inboxes and service accounts (Microsoft 365)
-- **Find meeting rooms** — search by building, floor, or capacity (Microsoft 365)
+- **Find meeting rooms** — search by building, floor, capacity, AV equipment, and wheelchair accessibility (Microsoft 365)
 
 ### Why Outlook MCP?
 
@@ -40,6 +41,8 @@ Outlook MCP connects AI assistants to your Microsoft Outlook account through the
 | Context-switch for calendar and contacts | Manage calendar events, contacts, and settings in one place |
 | Copy-paste email content into conversations | Your AI assistant reads your emails natively with full context |
 | No programmatic access to mailbox rules or categories | Create inbox rules, manage categories, configure auto-replies |
+| Manually check each email for phishing red flags | Forensic header analysis — DKIM, SPF, DMARC, spam scores, and delivery chain in one call |
+| Poll your inbox to check for new mail | Delta sync returns only changes since your last check, with tokens for continuous polling |
 
 ## Features
 
@@ -59,13 +62,15 @@ Outlook MCP connects AI assistants to your Microsoft Outlook account through the
 
 ### Export Formats
 
-| Format | Use Case |
-|--------|----------|
-| `mime` / `eml` | Full MIME with headers — archival and forensics |
-| `mbox` | Unix MBOX archive — batch export conversations |
-| `markdown` | Human-readable — paste into documents |
-| `json` | Structured data — programmatic processing |
-| `html` | Formatted — visual archival of threads |
+| Format | Extension | When to Use It |
+|--------|-----------|----------------|
+| `mime` / `eml` | `.eml` | Legal holds, forensic preservation, importing into other mail clients |
+| `mbox` | `.mbox` | Archiving entire conversation threads, migrating between systems |
+| `markdown` | `.md` | Pasting into documents, feeding into AI workflows |
+| `json` | `.json` | Data analysis, pipeline processing, compliance reporting |
+| `html` | `.html` | Visual archival with formatting intact |
+
+Export individual emails, search results, or entire conversation threads — use `target=messages` with a search query to batch-export without manually collecting IDs.
 
 ## Account Compatibility
 
@@ -85,7 +90,15 @@ Outlook MCP works with both personal and work/school Microsoft accounts, but som
 | Shared mailboxes | Not available | Requires `Mail.Read.Shared` |
 | Meeting room search | Not available | Requires `Place.Read.All` + admin consent |
 
-> **Note**: On personal accounts, the `query` and `kqlQuery` parameters in `search-emails` may silently return no results. Use structured filters (`from`, `subject`, `to`, `receivedAfter`) for reliable searching.
+> **Note**: On personal accounts, Microsoft's `$search` API has limited support for free-text queries. Outlook MCP handles this automatically with progressive search — if your query returns no results, it falls back through OData filters, boolean filters, and recent message listing to find your emails. For the most direct results on personal accounts, use the structured filter parameters (`from`, `subject`, `to`, `receivedAfter`).
+
+### What Makes This Different
+
+- **Progressive search** — on accounts where Microsoft's `$search` API is limited, Outlook MCP automatically falls back through up to 4 search strategies to find your emails. Most Graph API wrappers fail silently; this one adapts.
+- **Email forensics** — full header analysis (DKIM, SPF, DMARC, delivery chain, spam scores) built in as a first-class feature — useful for phishing investigation, compliance, and security review.
+- **Delta sync** — incremental inbox monitoring returns only what changed since your last check, with tokens for continuous polling. Designed for agent workflows that need to watch a mailbox.
+- **Batch operations** — flag, move, export, or categorise multiple emails in a single call. Search-driven export lets you batch-export results without collecting IDs manually.
+- **Compound automation** — rules, categories, folders, and Focused Inbox work together. Set up complete inbox management through your AI assistant in one conversation.
 
 ## Safety & Token Efficiency
 
@@ -377,7 +390,7 @@ USE_TEST_MODE=true npm start
 |-------|-------------|
 | [Getting Started](docs/how-to/getting-started/connect-outlook-to-claude.md) | Install, configure, and authenticate — start here |
 | [Azure Setup Guide](docs/guides/azure-setup.md) | Azure account creation, app registration, permissions, and secrets |
-| [How-To Guides](docs/how-to/index.md) | 25 practical guides for email, calendar, contacts, and settings |
+| [How-To Guides](docs/how-to/index.md) | 27 practical guides for email, calendar, contacts, and settings |
 | [Troubleshooting & FAQ](docs/how-to/getting-started/verify-your-connection.md#common-connection-problems) | Common problems, re-authentication, and frequently asked questions |
 | [Tools Reference](docs/quickrefs/tools-reference.md) | All 20 tools with parameters |
 | [AI Agent Guide](docs/how-to/ai-agents/using-outlook-mcp-in-agents.md) | Tool selection and workflow patterns for AI agents |
@@ -386,7 +399,7 @@ Full documentation: [docs/](docs/README.md)
 
 ## Known Limitations
 
-- **Personal account search**: Free-text `query` and `kqlQuery` parameters may not work on personal Outlook.com accounts (Microsoft's `$search` API limitation). Use structured filters (`from`, `subject`, `to`, `receivedAfter`) instead.
+- **Personal account search**: Free-text `query` and `kqlQuery` rely on Microsoft's `$search` API, which has limited support on personal Outlook.com accounts. Outlook MCP mitigates this with progressive search fallback (trying OData filters automatically), but for the most direct results, use structured filters (`from`, `subject`, `to`, `receivedAfter`).
 - **Focused Inbox**: Only available on work/school Microsoft 365 accounts.
 - **Shared mailboxes**: Require `Mail.Read.Shared` permission and a work/school account.
 - **Meeting room search**: Requires `Place.Read.All` permission with admin consent (work/school accounts only).

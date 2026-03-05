@@ -8,6 +8,8 @@ tags: [outlook-mcp, advanced, how-to]
 
 Examine email headers to verify whether a message is legitimate, trace how it was delivered, and check authentication results like DKIM and SPF.
 
+**When you need this**: a colleague reports a suspicious email claiming to be from your CEO; your security team is investigating a potential business email compromise; compliance requires you to verify the origin of a message before acting on it; or you're building an automated phishing detection workflow. Email header forensics answer the question: "Is this email actually from who it claims to be?"
+
 ## Get All Headers
 
 > "Show me the headers for that suspicious email"

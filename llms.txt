@@ -20,6 +20,14 @@ Built by [Little Bear Apps](https://littlebearapps.com).
 - Manage calendar events, contacts, rules, categories, and mailbox settings in one place
 - Export to multiple formats: MIME/EML, MBOX, Markdown, JSON, HTML
 
+## Key Differentiators
+
+- **Progressive search**: Automatically falls back through 4 search strategies when Microsoft's `$search` API is unavailable (personal accounts) — most Graph API wrappers fail silently
+- **Email forensics**: Built-in header analysis for DKIM, SPF, DMARC authentication, delivery chains, and spam scores — useful for phishing investigation and compliance
+- **Delta sync**: Incremental inbox monitoring — returns only new, modified, and deleted emails since last check, with tokens for continuous polling
+- **Batch operations**: Flag, move, export, or categorise multiple emails in a single tool call; search-driven export for batch archiving without collecting IDs
+- **Compound automation**: Rules + categories + folders + Focused Inbox for complete inbox management in one conversation
+
 ## Safety & Token Efficiency
 
 - **MCP safety annotations** on all 20 tools — AI clients auto-approve reads and prompt for destructive operations

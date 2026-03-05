@@ -62,7 +62,7 @@ params:
 
 The `query` parameter searches across subject, body, and other fields.
 
-> **Personal accounts**: Free-text `query` search uses Microsoft's `$search` API, which may not work on personal Outlook.com accounts. If you get no results, use the structured filter parameters (`subject`, `from`, `to`, `receivedAfter`) instead. See [Account Compatibility](../../../README.md#account-compatibility) for details.
+> **Personal accounts**: Free-text `query` search uses Microsoft's `$search` API, which has limited support on personal Outlook.com accounts. Outlook MCP handles this automatically — if `$search` returns no results, it progressively falls back to OData filters (`from`, `subject`, `to`), then boolean filters, then recent message listing. For the most direct results on personal accounts, use the structured filter parameters below. See [Account Compatibility](../../../README.md#account-compatibility) for details.
 
 ## Filter by Date Range
 
@@ -154,6 +154,29 @@ params:
 
 ![Search results with email list](../../assets/screenshots/find-emails-01.png)
 
+## Track Inbox Changes (Delta Sync)
+
+Monitor your inbox for new, modified, or deleted emails since your last check:
+
+> "Check for new emails since my last sync"
+
+```
+tool: search-emails
+params:
+  deltaMode: true
+```
+
+On the first call, this returns current emails and a `deltaToken`. Pass that token on subsequent calls to get only changes:
+
+```
+tool: search-emails
+params:
+  deltaMode: true
+  deltaToken: "previous-token-here"
+```
+
+Delta sync is useful for inbox monitoring workflows, audit trails, and notification triggers. See [Monitor Your Inbox with Delta Sync](../ai-agents/monitor-inbox-with-delta-sync.md) for agent integration patterns.
+
 ## Parameter Reference
 
 | Parameter | What it does | Example |
@@ -178,7 +201,7 @@ params:
 - Use `outputVerbosity: "minimal"` when you just need subject lines and dates
 - For advanced queries, see the [KQL Search Reference](../advanced/kql-search-reference.md)
 - Combine `from` + `receivedAfter` for the most targeted searches
-- **Personal accounts (Outlook.com)**: Free-text `query` and `kqlQuery` may not work. Prefer `subject`, `from`, `to`, and date range filters for reliable results. See [Account Compatibility](../../../README.md#account-compatibility)
+- **Personal accounts (Outlook.com)**: Outlook MCP automatically tries multiple search strategies if `$search` is unavailable, but `subject`, `from`, `to`, and date range filters give the most direct results. See [Account Compatibility](../../../README.md#account-compatibility)
 
 ## Related
 

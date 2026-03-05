@@ -35,7 +35,9 @@ Quick reference for all 20 consolidated MCP tools across 9 modules. Each tool in
 | Conversation get | `conversationId` | All messages in a thread |
 | Message-ID lookup | `internetMessageId` | Find by RFC Message-ID header |
 
-> **Personal accounts**: The `query` and `kqlQuery` parameters use Microsoft's `$search` API which may not work on personal Outlook.com accounts. Use structured filters (`from`, `subject`, `to`, `receivedAfter`, `hasAttachments`, `unreadOnly`) for reliable searching on all account types.
+> **Personal accounts**: The `query` and `kqlQuery` parameters use Microsoft's `$search` API which has limited support on personal Outlook.com accounts. Outlook MCP handles this automatically with progressive search fallback — if `$search` returns no results, it tries OData filters, boolean filters, and recent message listing. For the most direct results on personal accounts, use structured filters (`from`, `subject`, `to`, `receivedAfter`, `hasAttachments`, `unreadOnly`).
+
+> **Delta sync** is designed for inbox monitoring workflows. The first call returns current emails and a `deltaToken`; subsequent calls with that token return only new, modified, and deleted messages. See [Monitor Inbox with Delta Sync](../how-to/ai-agents/monitor-inbox-with-delta-sync.md).
 
 ### update-email actions
 
@@ -56,6 +58,8 @@ Quick reference for all 20 consolidated MCP tools across 9 modules. Each tool in
 | `markdown` | Human-readable — paste into documents |
 | `json` | Structured data — programmatic processing |
 | `html` | Formatted — visual archival of threads |
+
+> **Content-type handling**: The `attachments` tool handles text and binary content types. Text attachments (text/\*, application/json, application/xml) are displayed inline; binary attachments require download. The `contentType` field is included in attachment listings.
 
 ## Calendar (3 tools)
 
@@ -160,4 +164,10 @@ update-email(action: "flag", id: "...", dueDateTime: "2026-03-01T09:00:00Z")
 
 // Access shared mailbox
 access-shared-mailbox(sharedMailbox: "team@company.com", folder: "inbox")
+
+// Delta sync (initial — returns emails + deltaToken)
+search-emails(deltaMode: true)
+
+// Delta sync (incremental — returns only changes)
+search-emails(deltaMode: true, deltaToken: "previous-token...")
 ```

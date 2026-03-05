@@ -42,6 +42,7 @@ Practical guides for managing your Microsoft 365 email, calendar, contacts, and 
 | [Create Inbox Rules](organise/create-inbox-rules.md) | Auto-sort by sender, subject, or attachments |
 | [Use Categories](organise/use-categories.md) | Colour-coded labels, apply to single or multiple emails |
 | [Manage Focused Inbox](organise/manage-focused-inbox.md) | Force senders into Focused or Other |
+| [Automate Your Inbox](organise/automate-your-inbox.md) | Compound automation: rules + categories + folders + Focused Inbox working together |
 
 ## Contacts
 
@@ -62,7 +63,7 @@ Practical guides for managing your Microsoft 365 email, calendar, contacts, and 
 | Guide | What it covers |
 |-------|---------------|
 | [KQL Search Reference](advanced/kql-search-reference.md) | Advanced search queries with Keyword Query Language |
-| [Investigate Email Headers](advanced/investigate-email-headers.md) | DKIM, SPF, delivery chain, spam scores |
+| [Investigate Email Headers](advanced/investigate-email-headers.md) | Phishing investigation, DKIM, SPF, DMARC authentication, delivery chain, spam scores |
 | [Access Shared Mailboxes](advanced/access-shared-mailboxes.md) | Read from team inboxes and service accounts |
 | [Find Meeting Rooms](advanced/find-meeting-rooms.md) | Search by building, floor, or capacity |
 | [Batch Operations](advanced/batch-operations.md) | Bulk flag, move, export, and categorise |
@@ -72,3 +73,4 @@ Practical guides for managing your Microsoft 365 email, calendar, contacts, and 
 | Guide | What it covers |
 |-------|---------------|
 | [Using Outlook MCP in Agents](ai-agents/using-outlook-mcp-in-agents.md) | Tool selection, safety annotations, token efficiency, workflow patterns |
+| [Monitor Inbox with Delta Sync](ai-agents/monitor-inbox-with-delta-sync.md) | Incremental sync, deltaToken workflow, audit trails, notification triggers |

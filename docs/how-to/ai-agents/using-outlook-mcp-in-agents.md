@@ -110,6 +110,30 @@ Common error patterns:
 1. `list-events` → see existing calendar
 2. `create-event` → schedule avoiding conflicts
 
+### Monitor Inbox with Delta Sync
+
+1. `search-emails` with `deltaMode: true` (no token) → initial sync + deltaToken
+2. Store the deltaToken
+3. On next check: `search-emails` with `deltaMode: true` and `deltaToken` → only changes
+4. Process new/modified emails, note deleted IDs
+5. Store new deltaToken for next iteration
+
+Delta tokens expire after extended periods. If you receive a 410 error, start a fresh initial sync.
+
+Use cases: inbox monitoring agents, audit trail logging, notification triggers, change tracking dashboards.
+
+See [Monitor Your Inbox with Delta Sync](monitor-inbox-with-delta-sync.md) for a complete walkthrough.
+
+### Automated Phishing Detection
+
+1. `search-emails` with filters → find suspicious messages
+2. `read-email` with `headersMode: true, importantOnly: true` → DKIM, SPF, DMARC results
+3. Analyse authentication results and spam scores
+4. `update-email` to flag or `apply-category` to tag suspicious messages
+5. `folders` with `action: "move"` to quarantine folder
+
+See [Investigate Email Headers](../advanced/investigate-email-headers.md) for header interpretation.
+
 ## Tips
 
 - Always check `auth` status before multi-step workflows
@@ -121,5 +145,7 @@ Common error patterns:
 ## Related
 
 - [Tools Reference](../../quickrefs/tools-reference.md) — complete parameter reference for all 20 tools
+- [Monitor Inbox with Delta Sync](monitor-inbox-with-delta-sync.md) — incremental inbox monitoring for agents
+- [Investigate Email Headers](../advanced/investigate-email-headers.md) — forensic header analysis for phishing detection
 - [KQL Search Reference](../advanced/kql-search-reference.md) — advanced query patterns
 - [Batch Operations](../advanced/batch-operations.md) — bulk processing patterns

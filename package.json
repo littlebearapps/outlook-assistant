@@ -1,8 +1,8 @@
 {
   "name": "@littlebearapps/outlook-mcp",
-  "version": "3.2.1",
+  "version": "3.3.0",
   "mcpName": "io.github.littlebearapps/outlook-mcp",
-  "description": "MCP server for Claude to access Outlook data via Microsoft Graph API",
+  "description": "Outlook Assistant — MCP server with 20 tools for email, calendar, contacts, and settings via Microsoft Graph API",
   "main": "index.js",
   "bin": {
     "outlook-mcp": "./index.js"
@@ -16,7 +16,17 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.js": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{md,json,yml,yaml}": [
+      "prettier --write"
+    ]
   },
   "keywords": [
     "claude",
@@ -62,18 +72,20 @@
     "llms.txt"
   ],
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.1.0",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "dotenv": "^17.3.1"
   },
   "devDependencies": {
-    "@commitlint/cli": "^20.3.1",
-    "@commitlint/config-conventional": "^20.3.1",
+    "@commitlint/cli": "^20.4.3",
+    "@commitlint/config-conventional": "^20.4.3",
+    "@eslint/js": "^10.0.1",
     "@modelcontextprotocol/inspector": "^0.21.1",
-    "@eslint/js": "^9.39.3",
-    "eslint": "^9.39.3",
-    "globals": "^16.2.0",
+    "eslint": "^10.0.2",
+    "globals": "^17.4.0",
+    "husky": "^9.1.7",
     "jest": "^30.2.0",
-    "prettier": "^3.4.2",
+    "lint-staged": "^16.3.2",
+    "prettier": "^3.8.1",
     "supertest": "^7.2.2"
   },
   "engines": {

@@ -1,4 +1,4 @@
-# Outlook MCP Server
+# Outlook Assistant Server
 
 > Give Claude full access to your Outlook email, calendar, and contacts through the Microsoft Graph API.
 
@@ -13,7 +13,7 @@ Built by [Little Bear Apps](https://littlebearapps.com).
 - **Authentication**: OAuth 2.0 with Microsoft Graph API (requires Azure app registration)
 - **Tools**: 20 consolidated tools across 9 modules (reduced from 55 for optimal AI performance)
 
-## Why Outlook MCP?
+## Why Outlook Assistant?
 
 - Read, search, send, and export emails directly from Claude instead of switching apps
 - 6 email tools covering search, conversations, attachments, and bulk export

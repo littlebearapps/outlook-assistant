@@ -6,7 +6,7 @@ tags: [outlook-mcp, organise, how-to, automation]
 
 # How to Automate Your Inbox
 
-Outlook MCP's organisation tools work together — rules sort incoming mail, categories add visual labels, folders provide structure, and Focused Inbox controls what surfaces first. This guide shows how to combine them for complete inbox automation.
+Outlook Assistant's organisation tools work together — rules sort incoming mail, categories add visual labels, folders provide structure, and Focused Inbox controls what surfaces first. This guide shows how to combine them for complete inbox automation.
 
 ## The Building Blocks
 

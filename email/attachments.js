@@ -1,5 +1,5 @@
 /**
- * Attachment handling for Outlook MCP server
+ * Attachment handling for Outlook Assistant server
  * Provides tools to list and download email attachments via Microsoft Graph API
  */
 const _https = require('https'); // Reserved for future use

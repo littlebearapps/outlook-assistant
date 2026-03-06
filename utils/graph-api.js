@@ -103,9 +103,11 @@ async function callGraphAPI(
             // Token expired or invalid
             reject(new Error('UNAUTHORIZED'));
           } else {
+            // Truncate response to avoid leaking sensitive data in error messages
+            const safeResponse = responseData.substring(0, 200);
             reject(
               new Error(
-                `API call failed with status ${res.statusCode}: ${responseData}`
+                `API call failed with status ${res.statusCode}: ${safeResponse}`
               )
             );
           }
@@ -152,9 +154,9 @@ async function callGraphAPIPaginated(
   }
 
   const allItems = [];
-  let nextLink = null;
+  let nextLink;
   let currentUrl = path;
-  let currentParams = queryParams;
+  let currentParams = { ...queryParams };
 
   try {
     do {

@@ -1,5 +1,5 @@
 /**
- * Authentication module for Outlook MCP server
+ * Authentication module for Outlook Assistant server
  */
 const tokenManager = require('./token-manager');
 const { authTools } = require('./tools');

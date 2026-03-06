@@ -1,12 +1,12 @@
 ---
-title: "How to Use Outlook MCP in AI Agents"
-description: "Reference guide for AI agents using Outlook MCP — tool selection, parameter patterns, output formats, and safety considerations."
+title: "How to Use Outlook Assistant in AI Agents"
+description: "Reference guide for AI agents using Outlook Assistant — tool selection, parameter patterns, output formats, and safety considerations."
 tags: [outlook-mcp, ai-agents, how-to, reference]
 ---
 
-# How to Use Outlook MCP in AI Agents
+# How to Use Outlook Assistant in AI Agents
 
-This guide helps AI agents and their developers make effective use of Outlook MCP's 20 tools. It covers tool selection, safety annotations, output handling, and token efficiency.
+This guide helps AI agents and their developers make effective use of Outlook Assistant's 20 tools. It covers tool selection, safety annotations, output handling, and token efficiency.
 
 ## Tool Selection Guide
 

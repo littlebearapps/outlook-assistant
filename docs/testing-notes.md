@@ -1,4 +1,4 @@
-# Outlook MCP Tool Testing Notes
+# Outlook Assistant Tool Testing Notes
 
 ## v3.1.0 Comprehensive Retest #2 — COMPLETE
 

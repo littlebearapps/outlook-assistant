@@ -1,5 +1,5 @@
 /**
- * Folder management module for Outlook MCP server
+ * Folder management module for Outlook Assistant server
  */
 const handleListFolders = require('./list');
 const handleCreateFolder = require('./create');

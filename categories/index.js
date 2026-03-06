@@ -1,5 +1,5 @@
 /**
- * Categories module for Outlook MCP server
+ * Categories module for Outlook Assistant server
  *
  * Manages Outlook master categories and Focused Inbox overrides.
  */

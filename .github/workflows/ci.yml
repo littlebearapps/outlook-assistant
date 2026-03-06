@@ -59,6 +59,16 @@ jobs:
       - name: Run security audit (production deps)
         run: npm audit --omit=dev --audit-level=high
 
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+
   commitlint:
     name: Commit Lint
     runs-on: ubuntu-latest

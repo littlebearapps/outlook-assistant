@@ -1,10 +1,10 @@
 ---
-title: "Outlook MCP How-To Guides"
+title: "Outlook Assistant How-To Guides"
 description: "Practical guides for managing Outlook email, calendar, contacts, and settings through AI assistants."
 tags: [outlook-mcp, how-to, index]
 ---
 
-# Outlook MCP How-To Guides
+# Outlook Assistant How-To Guides
 
 Practical guides for managing your Microsoft 365 email, calendar, contacts, and settings through MCP-compatible AI assistants.
 
@@ -72,5 +72,5 @@ Practical guides for managing your Microsoft 365 email, calendar, contacts, and 
 
 | Guide | What it covers |
 |-------|---------------|
-| [Using Outlook MCP in Agents](ai-agents/using-outlook-mcp-in-agents.md) | Tool selection, safety annotations, token efficiency, workflow patterns |
+| [Using Outlook Assistant in Agents](ai-agents/using-outlook-mcp-in-agents.md) | Tool selection, safety annotations, token efficiency, workflow patterns |
 | [Monitor Inbox with Delta Sync](ai-agents/monitor-inbox-with-delta-sync.md) | Incremental sync, deltaToken workflow, audit trails, notification triggers |

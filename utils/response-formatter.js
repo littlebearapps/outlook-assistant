@@ -246,7 +246,7 @@ function formatEmailContent(
   output += '\n\n---\n\n';
 
   // Body content
-  let body = '';
+  let body;
   if (verbosity === VERBOSITY.MINIMAL) {
     // At minimal verbosity, show bodyPreview only
     body = email.bodyPreview || '_(Body omitted at minimal verbosity)_';

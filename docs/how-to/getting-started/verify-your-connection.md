@@ -6,7 +6,7 @@ tags: [outlook-mcp, getting-started, how-to]
 
 # How to Verify Your Outlook Connection
 
-Check whether Outlook MCP is authenticated, see which account is connected, and re-authenticate when tokens expire.
+Check whether Outlook Assistant is authenticated, see which account is connected, and re-authenticate when tokens expire.
 
 ## Check Authentication Status
 
@@ -62,7 +62,7 @@ The `force: true` parameter bypasses the existing (expired) token and starts a f
 
 To see the server version and capabilities:
 
-> "Show Outlook MCP server info"
+> "Show Outlook Assistant server info"
 
 ```
 tool: auth
@@ -98,12 +98,12 @@ This returns the server version, available tools, and configuration details.
 
 Rarely. Access tokens expire after about 1 hour, but the MCP server automatically refreshes them using the refresh token stored in `~/.outlook-mcp-tokens.json`. Refresh tokens last up to 90 days of inactivity. You only need to manually re-authenticate if:
 
-- You have not used Outlook MCP for more than 90 days
+- You have not used Outlook Assistant for more than 90 days
 - You changed your Microsoft account password
 - Your client secret expired (check the expiration date in Azure Portal)
 - An admin revoked your app's consent
 
-### Can I use Outlook MCP on multiple computers?
+### Can I use Outlook Assistant on multiple computers?
 
 Yes, but each computer needs its own authentication. The token file (`~/.outlook-mcp-tokens.json`) is stored locally and is not shared between machines. Run through the [authentication steps](connect-outlook-to-claude.md#authenticate-for-the-first-time) on each computer.
 

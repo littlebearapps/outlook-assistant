@@ -45,7 +45,7 @@ params:
 
 Your Azure app registration needs the `Mail.Read.Shared` permission:
 
-1. Go to [Azure Portal → App registrations](https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade) → your Outlook MCP app
+1. Go to [Azure Portal → App registrations](https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade) → your Outlook Assistant app
 2. Under **API permissions**, add Microsoft Graph delegated permission: `Mail.Read.Shared`
 3. Grant admin consent if required by your organisation
 
@@ -70,7 +70,7 @@ Your Microsoft account must also have been granted access to the shared mailbox 
 
 ## Tips
 
-- This tool is read-only — you can't send from a shared mailbox through Outlook MCP
+- This tool is read-only — you can't send from a shared mailbox through Outlook Assistant
 - Use `outputVerbosity: "minimal"` for quick checks on high-volume shared inboxes
 - Auto-approved by MCP clients that support annotations (read-only tool)
 

@@ -1,5 +1,5 @@
 /**
- * Calendar module for Outlook MCP server
+ * Calendar module for Outlook Assistant server
  */
 const handleListEvents = require('./list');
 const handleDeclineEvent = require('./decline');

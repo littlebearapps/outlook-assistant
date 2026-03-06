@@ -58,7 +58,8 @@ async function resolveFolderPath(accessToken, folderName) {
       throw error;
     }
     throw new Error(
-      `Error resolving folder "${folderName}": ${error.message}. Use the folders tool (action=list) to see available folders.`
+      `Error resolving folder "${folderName}": ${error.message}. Use the folders tool (action=list) to see available folders.`,
+      { cause: error }
     );
   }
 }

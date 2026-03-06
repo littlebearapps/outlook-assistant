@@ -1,6 +1,7 @@
-# Outlook MCP — Directory Submission Tracker
+# Outlook Assistant — Directory Submission Tracker
 
 Generated: 2026-03-05
+Last updated: 2026-02-27 (Official MCP Registry published, Glama submitted)
 
 ## Completed Submissions (Automated)
 
@@ -8,17 +9,17 @@ Generated: 2026-03-05
 
 | # | Directory | PR URL | Status |
 |---|-----------|--------|--------|
-| 1 | punkpeye/awesome-mcp-servers (82k stars) | https://github.com/punkpeye/awesome-mcp-servers/pull/2742 | Pending review |
-| 2 | appcypher/awesome-mcp-servers (5.2k stars) | https://github.com/appcypher/awesome-mcp-servers/pull/492 | Pending review |
-| 3 | TensorBlock/awesome-mcp-servers (557 stars) | https://github.com/TensorBlock/awesome-mcp-servers/pull/136 | Pending review |
-| 4 | YuzeHao2023/Awesome-MCP-Servers (1k stars) | https://github.com/YuzeHao2023/Awesome-MCP-Servers/pull/46 | Pending review |
+| 1 | punkpeye/awesome-mcp-servers (82k stars) | https://github.com/punkpeye/awesome-mcp-servers/pull/2742 | **Action needed** — requires Glama.ai link |
+| 2 | appcypher/awesome-mcp-servers (5.2k stars) | https://github.com/appcypher/awesome-mcp-servers/pull/492 | Pending review (no response) |
+| 3 | TensorBlock/awesome-mcp-servers (557 stars) | https://github.com/TensorBlock/awesome-mcp-servers/pull/136 | **Merged** (2026-03-05 by wilsonccccc) |
+| 4 | YuzeHao2023/Awesome-MCP-Servers (1k stars) | https://github.com/YuzeHao2023/Awesome-MCP-Servers/pull/46 | Pending review (no response) |
 
 ### Directory Issues
 
 | # | Directory | Issue URL | Status |
 |---|-----------|-----------|--------|
-| 5 | Cline MCP Marketplace | https://github.com/cline/mcp-marketplace/issues/792 | Pending review |
-| 6 | mcp.so (via chatmcp/mcpso) | https://github.com/chatmcp/mcpso/issues/679 | Pending review |
+| 5 | Cline MCP Marketplace | https://github.com/cline/mcp-marketplace/issues/792 | Pending review (no response) |
+| 6 | mcp.so (via chatmcp/mcpso) | https://github.com/chatmcp/mcpso/issues/679 | Submitted (issue + web form 2026-02-27) |
 
 ### Not Submitted (PRs disabled)
 
@@ -30,28 +31,53 @@ Generated: 2026-03-05
 
 ## Manual Submissions Required
 
-### PulseMCP
+### Glama.ai (CRITICAL PATH) — Submitted 2026-02-27
+
+**URL:** https://glama.ai/mcp/servers (click "Add Server")
+
+**Status:** Submitted as "Outlook-MCP" Server type, pending Glama review/indexing. Once live, expected URL: `https://glama.ai/mcp/servers/littlebearapps/outlook-mcp`
+
+**Why critical:** The punkpeye/awesome-mcp-servers PR (#2742, 82k stars) **requires a Glama link before merge**. The maintainer replied requesting it. This also gates mcpservers.org auto-indexing.
+
+**Steps:**
+1. Go to https://glama.ai/mcp/servers and click "Add Server"
+2. Link the GitHub repo: `https://github.com/littlebearapps/outlook-mcp`
+3. Once listed, expected URL: `https://glama.ai/mcp/servers/@littlebearapps/outlook-mcp`
+4. Update punkpeye PR #2742 to add the Glama link (see Step 2 below)
+
+**After Glama listing is live**, update the PR's README line on fork `nathanschram/awesome-mcp-servers` branch `add-outlook-mcp`. Change from:
+
+```markdown
+- [littlebearapps/outlook-mcp](https://github.com/littlebearapps/outlook-mcp) 📇 ☁️ - MCP server for Microsoft Outlook with 20 consolidated tools...
+```
+
+To:
+
+```markdown
+- [littlebearapps/outlook-mcp](https://github.com/littlebearapps/outlook-mcp) [glama](https://glama.ai/mcp/servers/@littlebearapps/outlook-mcp) 📇 ☁️ - MCP server for Microsoft Outlook with 20 consolidated tools...
+```
+
+### PulseMCP — Pending (auto-ingest)
 
 **URL:** https://www.pulsemcp.com/submit
 
-**Suggested content:**
-- **Name:** Outlook MCP
-- **GitHub URL:** https://github.com/littlebearapps/outlook-mcp
-- **Description:** MCP server for Microsoft Outlook via Graph API. 20 consolidated tools across 9 modules for email, calendar, contacts, folders, rules, categories, settings, and advanced features. Key differentiators: progressive search that adapts to personal vs work accounts, built-in email forensics (DKIM/SPF/DMARC analysis), delta sync for inbox monitoring, batch operations, and safety controls (dry-run preview, rate limiting, recipient allowlists). Works with personal Outlook.com and work/school Microsoft 365 accounts. MIT licensed.
+**Status:** No manual submission needed. PulseMCP auto-ingests from the Official MCP Registry weekly. Our registry listing went live 2026-02-27, so expect PulseMCP indexing within ~1 week.
 
-### mcp.so (web form backup)
+### mcp.so (web form) — Submitted 2026-02-27
 
 **URL:** https://mcp.so/submit
 
-If the GitHub issue (#679) doesn't get picked up, submit manually via the web form with the same details as above.
+Submitted via web form (GitHub issue #679 also open as backup). Pending review/indexing.
 
-### Smithery.ai
+### Smithery.ai (DEFERRED)
 
 **URL:** https://smithery.ai/new (requires sign-in)
 
-Two options:
+**Status:** Deferred — Smithery now requires a hosted HTTP endpoint for publishing. Our server is stdio-based. `smithery.yaml` is in the repo for future compatibility.
+
+Previously two options:
 1. Sign in and link the GitHub repo via the web UI
-2. Create a `smithery.yaml` in the repo root:
+2. Create a `smithery.yaml` in the repo root (done):
 
 ```yaml
 runtime: "container"
@@ -80,12 +106,6 @@ startCommand:
     })
 ```
 
-### Glama.ai
-
-**URL:** https://glama.ai/mcp/servers (click "Add Server")
-
-Should auto-index once the punkpeye PR is merged, since mcpservers.org is the web frontend for that repo.
-
 ### mcpservers.org
 
 **URL:** https://mcpservers.org/submit
@@ -113,7 +133,7 @@ Hey r/mcp! I've been building an MCP server that connects Claude (and other AI a
 - Email header forensics — check DKIM, SPF, DMARC authentication
 - Access shared mailboxes and find meeting rooms (Microsoft 365)
 
-**What makes it different from other Outlook MCPs:**
+**What makes it different from other Outlook Assistants:**
 - **20 consolidated tools** (reduced from 55) — designed for token efficiency so Claude doesn't waste context on tool descriptions
 - **Safety controls**: dry-run preview before sending, session rate limiting, recipient allowlists
 - **MCP annotations** on every tool — `readOnlyHint`, `destructiveHint`, `idempotentHint` so Claude knows which tools are safe to auto-approve
@@ -142,7 +162,7 @@ Happy to answer questions or take feature requests!
 
 **Body:**
 
-I built [Outlook MCP](https://github.com/littlebearapps/outlook-mcp), an MCP server that lets Claude read, search, send, and manage your Outlook email, calendar, and contacts — all from the conversation.
+I built [Outlook Assistant](https://github.com/littlebearapps/outlook-mcp), an MCP server that lets Claude read, search, send, and manage your Outlook email, calendar, and contacts — all from the conversation.
 
 A few things I'm proud of with the design:
 - **Token efficiency**: 20 consolidated tools (down from 55) so Claude's context window isn't eaten up by tool descriptions
@@ -159,11 +179,17 @@ Install: `npm install -g @littlebearapps/outlook-mcp`
 
 ---
 
-## Later: Formal Registries
+## Completed: Formal Registries
 
-### Official MCP Registry (registry.modelcontextprotocol.io)
+### Official MCP Registry (registry.modelcontextprotocol.io) — PUBLISHED
 
-Use `mcp-publisher` CLI tool to publish a `server.json` manifest. Most impactful long-term since all aggregators scrape from here.
+**Status:** Published 2026-02-27 as `io.github.littlebearapps/outlook-mcp` v3.3.0. `server.json` in repo root, `mcpName` in `package.json`.
+
+**API URL:** `https://registry.modelcontextprotocol.io/v0.1/servers/io.github.littlebearapps%2Foutlook-mcp/versions`
+
+No web UI — the registry is API-only. Consumed by Claude Desktop, VS Code, PulseMCP, LobeHub, and other aggregators.
+
+## Later: Additional Registries
 
 ### GitHub MCP Registry (github.com/mcp)
 
@@ -175,9 +201,15 @@ Submit via PR following their CONTRIBUTING guide.
 
 ---
 
-## Verification Checklist (check back in 1-2 weeks)
+## Verification Checklist
 
+Last checked: 2026-02-27
+
+- [x] TensorBlock/awesome-mcp-servers — **Merged** (2026-03-05)
+- [x] Submit to Glama.ai (submitted 2026-02-27, pending review)
+- [x] Official MCP Registry — **Published** (2026-02-27, v3.3.0)
+- [ ] Update punkpeye PR #2742 with Glama link once listed
 - [ ] Search each directory for "littlebearapps" or "outlook-mcp"
 - [ ] Monitor GitHub star/fork count
-- [ ] Check PulseMCP's "Est Visitors" metric once listed
-- [ ] Verify Glama.ai auto-indexed after punkpeye PR merge
+- [ ] Check PulseMCP's "Est Visitors" metric once listed (auto-ingests from MCP Registry)
+- [ ] Verify mcpservers.org indexes after punkpeye PR merge

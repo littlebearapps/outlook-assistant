@@ -6,7 +6,7 @@ tags: [outlook-mcp, email, how-to]
 
 # How to Find Emails
 
-Search and filter your emails to find exactly what you need. With no search terms, Outlook MCP lists your most recent messages.
+Search and filter your emails to find exactly what you need. With no search terms, Outlook Assistant lists your most recent messages.
 
 ## List Recent Emails
 
@@ -62,7 +62,7 @@ params:
 
 The `query` parameter searches across subject, body, and other fields.
 
-> **Personal accounts**: Free-text `query` search uses Microsoft's `$search` API, which has limited support on personal Outlook.com accounts. Outlook MCP handles this automatically — if `$search` returns no results, it progressively falls back to OData filters (`from`, `subject`, `to`), then boolean filters, then recent message listing. For the most direct results on personal accounts, use the structured filter parameters below. See [Account Compatibility](../../../README.md#account-compatibility) for details.
+> **Personal accounts**: Free-text `query` search uses Microsoft's `$search` API, which has limited support on personal Outlook.com accounts. Outlook Assistant handles this automatically — if `$search` returns no results, it progressively falls back to OData filters (`from`, `subject`, `to`), then boolean filters, then recent message listing. For the most direct results on personal accounts, use the structured filter parameters below. See [Account Compatibility](../../../README.md#account-compatibility) for details.
 
 ## Filter by Date Range
 
@@ -201,7 +201,7 @@ Delta sync is useful for inbox monitoring workflows, audit trails, and notificat
 - Use `outputVerbosity: "minimal"` when you just need subject lines and dates
 - For advanced queries, see the [KQL Search Reference](../advanced/kql-search-reference.md)
 - Combine `from` + `receivedAfter` for the most targeted searches
-- **Personal accounts (Outlook.com)**: Outlook MCP automatically tries multiple search strategies if `$search` is unavailable, but `subject`, `from`, `to`, and date range filters give the most direct results. See [Account Compatibility](../../../README.md#account-compatibility)
+- **Personal accounts (Outlook.com)**: Outlook Assistant automatically tries multiple search strategies if `$search` is unavailable, but `subject`, `from`, `to`, and date range filters give the most direct results. See [Account Compatibility](../../../README.md#account-compatibility)
 
 ## Related
 

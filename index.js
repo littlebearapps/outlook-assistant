@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Outlook MCP Server - Main entry point
+ * Outlook Assistant Server - Main entry point
  *
  * A Model Context Protocol server that provides access to
  * Microsoft Outlook through the Microsoft Graph API.

@@ -59,7 +59,7 @@ Only grant permissions that are necessary for your use case.
 
 ## MCP Safety Controls
 
-Outlook MCP includes multiple layers of safety controls for AI-driven access. These are defence-in-depth measures that reduce risk, but **they are not foolproof**. You should always exercise caution and review actions before approving them.
+Outlook Assistant includes multiple layers of safety controls for AI-driven access. These are defence-in-depth measures that reduce risk, but **they are not foolproof**. You should always exercise caution and review actions before approving them.
 
 ### Tool Annotations
 

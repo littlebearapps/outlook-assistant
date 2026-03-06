@@ -1,4 +1,4 @@
-# Contributing to Outlook MCP Server
+# Contributing to Outlook Assistant Server
 
 Thank you for your interest in contributing! This document provides guidelines and instructions.
 

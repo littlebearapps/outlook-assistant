@@ -1,5 +1,5 @@
 /**
- * Settings module for Outlook MCP server
+ * Settings module for Outlook Assistant server
  *
  * Manages mailbox settings, automatic replies (out-of-office),
  * and working hours configuration.

@@ -1,5 +1,5 @@
 /**
- * Email module for Outlook MCP server
+ * Email module for Outlook Assistant server
  *
  * Consolidated from 17 tools to 6 for token efficiency.
  */

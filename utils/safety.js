@@ -1,5 +1,5 @@
 /**
- * Safety controls for Outlook MCP Server
+ * Safety controls for Outlook Assistant Server
  *
  * Provides rate limiting, recipient allowlists, and content safety markers
  * to protect against unintended destructive actions.

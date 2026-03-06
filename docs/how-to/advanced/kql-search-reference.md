@@ -1,5 +1,5 @@
 ---
-title: "KQL Search Reference for Outlook MCP"
+title: "KQL Search Reference for Outlook Assistant"
 description: "Use Keyword Query Language to write precise search queries for emails by date, sender, subject, and message properties."
 tags: [outlook-mcp, advanced, how-to, reference]
 ---
@@ -8,7 +8,7 @@ tags: [outlook-mcp, advanced, how-to, reference]
 
 KQL (Keyword Query Language) lets you write precise search queries when the standard filter parameters aren't enough.
 
-## Using KQL in Outlook MCP
+## Using KQL in Outlook Assistant
 
 Pass raw KQL queries through the `kqlQuery` parameter:
 

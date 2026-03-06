@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/outlook-mcp-logo-full.svg" height="200" alt="Outlook MCP" />
+  <img src="docs/assets/outlook-mcp-logo-full.svg" height="200" alt="Outlook Assistant" />
 </p>
 
 <p align="center">
@@ -14,7 +14,7 @@
   <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen" alt="Node.js" /></a>
 </p>
 
-Outlook MCP connects AI assistants to your Microsoft Outlook account through the [Model Context Protocol](https://modelcontextprotocol.io/). Ask your AI assistant to search your inbox, send emails, schedule meetings, manage contacts, and configure mailbox settings — without leaving the conversation. Works with Claude, Cursor, Windsurf, and any MCP-compatible client.
+Outlook Assistant connects AI assistants to your Microsoft Outlook account through the [Model Context Protocol](https://modelcontextprotocol.io/). Ask your AI assistant to search your inbox, send emails, schedule meetings, manage contacts, and configure mailbox settings — without leaving the conversation. Works with Claude, Cursor, Windsurf, and any MCP-compatible client.
 
 **Works with personal Outlook.com and work/school Microsoft 365 accounts.**
 
@@ -32,9 +32,9 @@ Outlook MCP connects AI assistants to your Microsoft Outlook account through the
 - **Access shared mailboxes** — read team inboxes and service accounts (Microsoft 365)
 - **Find meeting rooms** — search by building, floor, capacity, AV equipment, and wheelchair accessibility (Microsoft 365)
 
-### Why Outlook MCP?
+### Why Outlook Assistant?
 
-| Without Outlook MCP | With Outlook MCP |
+| Without Outlook Assistant | With Outlook Assistant |
 |---------------------|------------------|
 | Switch between your AI tool and Outlook to manage email | Read, search, send, and export emails directly from your AI assistant |
 | Manually search and export email threads | Full email tools including search, threading, and bulk export |
@@ -74,7 +74,7 @@ Export individual emails, search results, or entire conversation threads — use
 
 ## Account Compatibility
 
-Outlook MCP works with both personal and work/school Microsoft accounts, but some features behave differently:
+Outlook Assistant works with both personal and work/school Microsoft accounts, but some features behave differently:
 
 | Feature | Personal (Outlook.com) | Work/School (Microsoft 365) |
 |---------|----------------------|---------------------------|
@@ -90,11 +90,11 @@ Outlook MCP works with both personal and work/school Microsoft accounts, but som
 | Shared mailboxes | Not available | Requires `Mail.Read.Shared` |
 | Meeting room search | Not available | Requires `Place.Read.All` + admin consent |
 
-> **Note**: On personal accounts, Microsoft's `$search` API has limited support for free-text queries. Outlook MCP handles this automatically with progressive search — if your query returns no results, it falls back through OData filters, boolean filters, and recent message listing to find your emails. For the most direct results on personal accounts, use the structured filter parameters (`from`, `subject`, `to`, `receivedAfter`).
+> **Note**: On personal accounts, Microsoft's `$search` API has limited support for free-text queries. Outlook Assistant handles this automatically with progressive search — if your query returns no results, it falls back through OData filters, boolean filters, and recent message listing to find your emails. For the most direct results on personal accounts, use the structured filter parameters (`from`, `subject`, `to`, `receivedAfter`).
 
 ### What Makes This Different
 
-- **Progressive search** — on accounts where Microsoft's `$search` API is limited, Outlook MCP automatically falls back through up to 4 search strategies to find your emails. Most Graph API wrappers fail silently; this one adapts.
+- **Progressive search** — on accounts where Microsoft's `$search` API is limited, Outlook Assistant automatically falls back through up to 4 search strategies to find your emails. Most Graph API wrappers fail silently; this one adapts.
 - **Email forensics** — full header analysis (DKIM, SPF, DMARC, delivery chain, spam scores) built in as a first-class feature — useful for phishing investigation, compliance, and security review.
 - **Delta sync** — incremental inbox monitoring returns only what changed since your last check, with tokens for continuous polling. Designed for agent workflows that need to watch a mailbox.
 - **Batch operations** — flag, move, export, or categorise multiple emails in a single call. Search-driven export lets you batch-export results without collecting IDs manually.
@@ -102,7 +102,7 @@ Outlook MCP works with both personal and work/school Microsoft accounts, but som
 
 ## Safety & Token Efficiency
 
-Outlook MCP is designed with safety-first principles for AI-driven email access:
+Outlook Assistant is designed with safety-first principles for AI-driven email access:
 
 **Destructive action safeguards** — Every tool carries [MCP annotations](https://modelcontextprotocol.io/docs/concepts/tools#annotations) (`readOnlyHint`, `destructiveHint`, `idempotentHint`) so AI clients can auto-approve safe reads and prompt for confirmation on destructive operations like sending email or deleting events.
 
@@ -197,7 +197,7 @@ npm install
 1. Open [Azure Portal](https://portal.azure.com/)
 2. Sign in with a Microsoft Work or Personal account
 3. Search for **App registrations** and click **New registration**
-4. Enter a name (e.g. "Outlook MCP Server")
+4. Enter a name (e.g. "Outlook Assistant Server")
 5. Select **Accounts in any organizational directory and personal Microsoft accounts**
 6. Set redirect URI: platform **Web**, URI `http://localhost:3333/auth/callback`
 7. Click **Register**
@@ -399,7 +399,7 @@ Full documentation: [docs/](docs/README.md)
 
 ## Known Limitations
 
-- **Personal account search**: Free-text `query` and `kqlQuery` rely on Microsoft's `$search` API, which has limited support on personal Outlook.com accounts. Outlook MCP mitigates this with progressive search fallback (trying OData filters automatically), but for the most direct results, use structured filters (`from`, `subject`, `to`, `receivedAfter`).
+- **Personal account search**: Free-text `query` and `kqlQuery` rely on Microsoft's `$search` API, which has limited support on personal Outlook.com accounts. Outlook Assistant mitigates this with progressive search fallback (trying OData filters automatically), but for the most direct results, use structured filters (`from`, `subject`, `to`, `receivedAfter`).
 - **Focused Inbox**: Only available on work/school Microsoft 365 accounts.
 - **Shared mailboxes**: Require `Mail.Read.Shared` permission and a work/school account.
 - **Meeting room search**: Requires `Place.Read.All` permission with admin consent (work/school accounts only).
@@ -419,4 +419,4 @@ See [CHANGELOG.md](CHANGELOG.md) for version history.
 
 ## About
 
-Built and maintained by [Little Bear Apps](https://littlebearapps.com). Outlook MCP is open source under the [MIT License](LICENSE).
+Built and maintained by [Little Bear Apps](https://littlebearapps.com). Outlook Assistant is open source under the [MIT License](LICENSE).

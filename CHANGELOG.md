@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.0] - 2026-03
+
+### Security
+
+- **XSS prevention** — OAuth callback server now escapes all user-controlled values in HTML responses (`escapeHtml()` utility) (#60)
+- **CSRF protection** — OAuth flow uses cryptographic state parameter (`crypto.randomUUID()`) with 10-minute expiry (#61)
+- **HTTP security headers** — All auth server responses include `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Content-Security-Policy: default-src 'none'` (#62)
+- **Error sanitisation** — Graph API errors truncated to 200 chars; token exchange errors show generic message instead of raw `error.message` (#63)
+- **Removed insecure fallback** — Token storage no longer falls back to `/tmp` (world-readable); throws if no home directory found (#64)
+
+### Added
+
+- **CodeQL scanning** — GitHub Actions SAST workflow (`.github/workflows/codeql.yml`) runs on push, PR, and weekly schedule (#65)
+- **Dependency review** — CI blocks PRs introducing high-severity dependency vulnerabilities (#66)
+- **Pre-commit hooks** — Husky + lint-staged for automatic linting and formatting on commit (#67)
+- **Commit message linting** — commitlint enforces conventional commits via commit-msg hook (#67)
+
+### Changed
+
+- **Renamed** from "Outlook MCP" to "Outlook Assistant" across all code, docs, and configuration (34 files)
+- Bumped `@modelcontextprotocol/sdk` minimum from `^1.1.0` to `^1.27.1`
+
+### Fixed
+
+- ESLint 10 compatibility: `preserve-caught-error` in `email/folder-utils.js`, `no-useless-assignment` in `utils/graph-api.js` and `utils/response-formatter.js`
+
+### Dependencies
+
+- `@modelcontextprotocol/sdk` ^1.27.1 (was ^1.1.0)
+- `husky` ^9.1.7 (new)
+- `lint-staged` ^16.3.2 (new)
+- `@commitlint/cli` ^20.4.3, `@commitlint/config-conventional` ^20.4.3 (new)
+- `eslint` ^10.0.2, `@eslint/js` ^10.0.1, `globals` ^17.4.0 (major bumps)
+
 ## [3.2.0] - 2026-02
 
 ### Fixed

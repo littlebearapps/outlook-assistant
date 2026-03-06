@@ -1,5 +1,5 @@
 /**
- * Authentication-related tools for the Outlook MCP server
+ * Authentication-related tools for the Outlook Assistant server
  */
 const config = require('../config');
 const tokenManager = require('./token-manager');
@@ -19,7 +19,7 @@ async function handleAbout() {
     process.env.OUTLOOK_ALLOWED_RECIPIENTS || 'None (all recipients allowed)';
 
   const lines = [
-    `# Outlook MCP Server v${config.SERVER_VERSION}\n`,
+    `# Outlook Assistant Server v${config.SERVER_VERSION}\n`,
     `Provides access to Microsoft Outlook email, calendar, and contacts through Microsoft Graph API.\n`,
     `## Diagnostics\n`,
     `| Setting | Value |`,

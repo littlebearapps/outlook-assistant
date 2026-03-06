@@ -1,5 +1,5 @@
 /**
- * Configuration for Outlook MCP Server
+ * Configuration for Outlook Assistant Server
  *
  * Token-efficient configuration with field presets and response limits.
  */
@@ -15,14 +15,18 @@ const {
 } = require('./utils/field-presets');
 const { VERBOSITY, DEFAULT_LIMITS } = require('./utils/response-formatter');
 
-// Ensure we have a home directory path even if process.env.HOME is undefined
-const homeDir =
-  process.env.HOME || process.env.USERPROFILE || os.homedir() || '/tmp';
+// Ensure we have a home directory path — never fall back to /tmp (world-readable)
+const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
+if (!homeDir) {
+  throw new Error(
+    'Cannot determine home directory. Set HOME or USERPROFILE environment variable.'
+  );
+}
 
 module.exports = {
   // Server information
   SERVER_NAME: 'outlook-assistant',
-  SERVER_VERSION: '3.2.0',
+  SERVER_VERSION: '3.3.0',
 
   // Test mode setting
   USE_TEST_MODE: process.env.USE_TEST_MODE === 'true',

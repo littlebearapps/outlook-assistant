@@ -1,6 +1,6 @@
 ---
 title: "How to Connect Outlook to Your AI Assistant"
-description: "Set up Outlook MCP so your AI assistant can read and manage your email, calendar, and contacts."
+description: "Set up Outlook Assistant so your AI assistant can read and manage your email, calendar, and contacts."
 tags: [outlook-mcp, getting-started, how-to]
 ---
 
@@ -8,7 +8,7 @@ tags: [outlook-mcp, getting-started, how-to]
 
 Connect your Microsoft 365 or Outlook.com account so your AI assistant can search emails, manage your calendar, and work with contacts on your behalf.
 
-## Install Outlook MCP
+## Install Outlook Assistant
 
 Install the package globally:
 
@@ -26,7 +26,7 @@ npm install
 
 ## Register an Azure App
 
-Outlook MCP needs an Azure app registration to access the Microsoft Graph API. This is free and takes about 10 minutes.
+Outlook Assistant needs an Azure app registration to access the Microsoft Graph API. This is free and takes about 10 minutes.
 
 Follow the full walkthrough in the [Azure Setup Guide](../../guides/azure-setup.md), or the short version:
 
@@ -70,7 +70,7 @@ Add to your `claude_desktop_config.json`:
 }
 ```
 
-![Claude Desktop config file with Outlook MCP entry highlighted](../../assets/screenshots/connect-outlook-to-claude-01.png)
+![Claude Desktop config file with Outlook Assistant entry highlighted](../../assets/screenshots/connect-outlook-to-claude-01.png)
 
 ### Claude Code
 
@@ -93,11 +93,11 @@ Add to your `.mcp.json` or project settings:
 
 ### Other MCP Clients
 
-Any MCP-compatible client can use Outlook MCP. Set the command to `npx -y @littlebearapps/outlook-mcp` and pass the two environment variables.
+Any MCP-compatible client can use Outlook Assistant. Set the command to `npx -y @littlebearapps/outlook-mcp` and pass the two environment variables.
 
 ## Understanding the Two Processes
 
-Outlook MCP has two separate processes that serve different purposes:
+Outlook Assistant has two separate processes that serve different purposes:
 
 | Process | Purpose | When to run | How it runs |
 |---------|---------|-------------|-------------|

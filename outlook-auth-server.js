@@ -1,9 +1,34 @@
 #!/usr/bin/env node
 const http = require('http');
+const crypto = require('crypto');
 const url = require('url');
 const querystring = require('querystring');
 const https = require('https');
 const fs = require('fs');
+
+/**
+ * Escapes HTML special characters to prevent XSS in rendered responses.
+ */
+function escapeHtml(str) {
+  if (typeof str !== 'string') return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Security headers for all HTML responses
+const SECURITY_HEADERS = {
+  'Content-Type': 'text/html',
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'",
+};
+
+// Pending OAuth state tokens for CSRF validation
+const pendingStates = new Map();
 
 // Load environment variables from .env file
 require('dotenv').config();
@@ -38,7 +63,7 @@ const server = http.createServer((req, res) => {
       console.error(
         `Authentication error: ${query.error} - ${query.error_description}`
       );
-      res.writeHead(400, { 'Content-Type': 'text/html' });
+      res.writeHead(400, SECURITY_HEADERS);
       res.end(`
         <html>
           <head>
@@ -52,8 +77,8 @@ const server = http.createServer((req, res) => {
           <body>
             <h1>Authentication Error</h1>
             <div class="error-box">
-              <p><strong>Error:</strong> ${query.error}</p>
-              <p><strong>Description:</strong> ${query.error_description || 'No description provided'}</p>
+              <p><strong>Error:</strong> ${escapeHtml(query.error)}</p>
+              <p><strong>Description:</strong> ${escapeHtml(query.error_description || 'No description provided')}</p>
             </div>
             <p>Please close this window and try again.</p>
           </body>
@@ -63,13 +88,40 @@ const server = http.createServer((req, res) => {
     }
 
     if (query.code) {
+      // Validate OAuth state parameter for CSRF protection
+      if (!query.state || !pendingStates.has(query.state)) {
+        console.error('Invalid or missing OAuth state parameter');
+        res.writeHead(403, SECURITY_HEADERS);
+        res.end(`
+            <html>
+              <head>
+                <title>Invalid State</title>
+                <style>
+                  body { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; }
+                  h1 { color: #d9534f; }
+                  .error-box { background-color: #f8d7da; border: 1px solid #f5c6cb; padding: 15px; border-radius: 4px; }
+                </style>
+              </head>
+              <body>
+                <h1>Invalid Request</h1>
+                <div class="error-box">
+                  <p>The OAuth state parameter is invalid or expired. This may indicate a CSRF attempt.</p>
+                </div>
+                <p>Please close this window and try authenticating again.</p>
+              </body>
+            </html>
+          `);
+        return;
+      }
+      pendingStates.delete(query.state);
+
       console.log('Authorization code received, exchanging for tokens...');
 
       // Exchange code for tokens
       exchangeCodeForTokens(query.code)
         .then((_tokens) => {
           console.log('Token exchange successful');
-          res.writeHead(200, { 'Content-Type': 'text/html' });
+          res.writeHead(200, SECURITY_HEADERS);
           res.end(`
             <html>
               <head>
@@ -93,7 +145,7 @@ const server = http.createServer((req, res) => {
         })
         .catch((error) => {
           console.error(`Token exchange error: ${error.message}`);
-          res.writeHead(500, { 'Content-Type': 'text/html' });
+          res.writeHead(500, SECURITY_HEADERS);
           res.end(`
             <html>
               <head>
@@ -107,7 +159,7 @@ const server = http.createServer((req, res) => {
               <body>
                 <h1>Token Exchange Error</h1>
                 <div class="error-box">
-                  <p>${error.message}</p>
+                  <p>Token exchange failed. Please try authenticating again.</p>
                 </div>
                 <p>Please close this window and try again.</p>
               </body>
@@ -116,7 +168,7 @@ const server = http.createServer((req, res) => {
         });
     } else {
       console.error('No authorization code provided');
-      res.writeHead(400, { 'Content-Type': 'text/html' });
+      res.writeHead(400, SECURITY_HEADERS);
       res.end(`
         <html>
           <head>
@@ -143,7 +195,7 @@ const server = http.createServer((req, res) => {
 
     // Verify credentials are set
     if (!AUTH_CONFIG.clientId || !AUTH_CONFIG.clientSecret) {
-      res.writeHead(500, { 'Content-Type': 'text/html' });
+      res.writeHead(500, SECURITY_HEADERS);
       res.end(`
         <html>
           <head>
@@ -175,6 +227,16 @@ const server = http.createServer((req, res) => {
     const query = parsedUrl.query;
     const clientId = query.client_id || AUTH_CONFIG.clientId;
 
+    // Generate cryptographically secure state for CSRF protection
+    const state = crypto.randomUUID();
+    pendingStates.set(state, Date.now());
+
+    // Clean up expired states (older than 10 minutes)
+    const TEN_MINUTES = 10 * 60 * 1000;
+    for (const [key, timestamp] of pendingStates) {
+      if (Date.now() - timestamp > TEN_MINUTES) pendingStates.delete(key);
+    }
+
     // Build the authorization URL
     const authParams = {
       client_id: clientId,
@@ -182,7 +244,7 @@ const server = http.createServer((req, res) => {
       redirect_uri: AUTH_CONFIG.redirectUri,
       scope: AUTH_CONFIG.scopes.join(' '),
       response_mode: 'query',
-      state: Date.now().toString(), // Simple state parameter for security
+      state,
     };
 
     const authUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?${querystring.stringify(authParams)}`;
@@ -193,7 +255,7 @@ const server = http.createServer((req, res) => {
     res.end();
   } else if (pathname === '/') {
     // Root path - provide instructions
-    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.writeHead(200, SECURITY_HEADERS);
     res.end(`
       <html>
         <head>

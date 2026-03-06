@@ -1,5 +1,5 @@
 #!/bin/bash
-# Test the modular Outlook MCP server directly
+# Test the modular Outlook Assistant server directly
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 node "$SCRIPT_DIR/index.js" > /dev/null 2>&1 &
 SERVER_PID=$!
 
-echo "Started modular Outlook MCP server with PID: $SERVER_PID"
+echo "Started modular Outlook Assistant server with PID: $SERVER_PID"
 echo "Using the about tool..."
 
 # Send a tools/list request to the server

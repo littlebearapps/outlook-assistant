@@ -1,5 +1,5 @@
 /**
- * Advanced module for Outlook MCP server
+ * Advanced module for Outlook Assistant server
  *
  * Provides:
  * - Shared mailbox access

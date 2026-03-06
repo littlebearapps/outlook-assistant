@@ -1,5 +1,5 @@
 /**
- * Email rules management module for Outlook MCP server
+ * Email rules management module for Outlook Assistant server
  */
 const { handleListRules, getInboxRules } = require('./list');
 const handleCreateRule = require('./create');

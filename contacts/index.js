@@ -1,5 +1,5 @@
 /**
- * Contacts module for Outlook MCP server
+ * Contacts module for Outlook Assistant server
  *
  * Provides access to personal contacts and people search via Microsoft Graph API.
  */

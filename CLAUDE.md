@@ -1,6 +1,6 @@
-# CLAUDE.md - outlook-mcp
+# CLAUDE.md - Outlook Assistant
 
-MCP server for Microsoft Outlook via Graph API (v3.2.0). 20 consolidated tools across 9 modules.
+MCP server for Microsoft Outlook via Graph API (v3.3.0). 20 consolidated tools across 9 modules.
 
 ## Commands
 

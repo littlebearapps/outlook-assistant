@@ -1,6 +1,6 @@
 # Azure Setup Guide
 
-> **Summary**: Register a Microsoft Azure app so Outlook MCP can access your email, calendar, and contacts through the Microsoft Graph API.
+> **Summary**: Register a Microsoft Azure app so Outlook Assistant can access your email, calendar, and contacts through the Microsoft Graph API.
 
 This guide walks through the full Azure setup from scratch, including creating an account if you don't have one. The whole process takes about 10 minutes.
 
@@ -8,7 +8,7 @@ This guide walks through the full Azure setup from scratch, including creating a
 
 - A web browser
 - A Microsoft account (personal Outlook.com/Hotmail, or work/school)
-- Node.js 18+ and Outlook MCP installed ([see README](../../README.md#quick-start))
+- Node.js 18+ and Outlook Assistant installed ([see README](../../README.md#quick-start))
 
 ## 1. Create an Azure Account
 
@@ -27,13 +27,13 @@ However, **if you don't add a payment method**, Microsoft will deactivate your a
 
 ### What About Costs?
 
-App registration is part of **Microsoft Entra ID Free tier** and costs nothing. You don't need to pay anything to use Outlook MCP. The free tier includes:
+App registration is part of **Microsoft Entra ID Free tier** and costs nothing. You don't need to pay anything to use Outlook Assistant. The free tier includes:
 
 | What | Cost |
 |------|------|
 | App registration | Free (always) |
 | Microsoft Graph API calls (delegated) | Free (always) |
-| $200 Azure credit | First 30 days (not needed for Outlook MCP) |
+| $200 Azure credit | First 30 days (not needed for Outlook Assistant) |
 
 > **Gotcha**: After 30 days, Azure disables "pay-as-you-go" subscriptions that haven't been upgraded. Your app registration still works because it's part of the always-free Entra ID tier — but you must have a valid payment method on file to keep your account active.
 
@@ -53,7 +53,7 @@ App registration is part of **Microsoft Entra ID Free tier** and costs nothing. 
 
 | Field | What to Enter |
 |-------|---------------|
-| **Name** | `Outlook MCP Server` (or any name you like — you can change it later) |
+| **Name** | `Outlook Assistant Server` (or any name you like — you can change it later) |
 | **Supported account types** | Select **Accounts in any organizational directory and personal Microsoft accounts** |
 | **Redirect URI — Platform** | Select **Web** |
 | **Redirect URI — URI** | `http://localhost:3333/auth/callback` |
@@ -66,7 +66,7 @@ After registration, you'll see the app's **Overview** page. Copy the **Applicati
 
 This becomes your `OUTLOOK_CLIENT_ID`.
 
-> **What about Directory (tenant) ID?** You don't need it. Outlook MCP uses the `/common/` endpoint which supports all account types automatically.
+> **What about Directory (tenant) ID?** You don't need it. Outlook Assistant uses the `/common/` endpoint which supports all account types automatically.
 
 ### Account Type Explained
 
@@ -82,7 +82,7 @@ If you only use a personal Outlook.com account, you could select "Personal Micro
 
 ## 3. Add API Permissions
 
-Outlook MCP needs permission to access your mailbox data. These are **delegated permissions** — the app acts on your behalf and can only access what you can access.
+Outlook Assistant needs permission to access your mailbox data. These are **delegated permissions** — the app acts on your behalf and can only access what you can access.
 
 ### Add the Permissions
 
@@ -136,7 +136,7 @@ The client secret proves your app's identity when requesting tokens.
 1. From your app registration, click **Certificates & secrets** in the left sidebar
 2. Click the **Client secrets** tab
 3. Click **New client secret**
-4. Enter a description (e.g. `Outlook MCP`)
+4. Enter a description (e.g. `Outlook Assistant`)
 5. Select an expiration:
 
 | Option | When to Use |
@@ -170,7 +170,7 @@ Set a calendar reminder before your secret expires. To rotate:
 3. Verify authentication works
 4. Delete the old secret
 
-## 5. Configure Outlook MCP
+## 5. Configure Outlook Assistant
 
 You now have two values:
 - **Application (client) ID** → `OUTLOOK_CLIENT_ID`

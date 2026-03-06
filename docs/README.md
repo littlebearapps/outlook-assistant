@@ -1,8 +1,8 @@
-# Outlook MCP Documentation
+# Outlook Assistant Documentation
 
 ## Getting Started
 
-New to Outlook MCP? Start here:
+New to Outlook Assistant? Start here:
 
 - [Connect Outlook to Your AI Assistant](how-to/getting-started/connect-outlook-to-claude.md) — Install, configure, and authenticate
 - [Azure Setup Guide](guides/azure-setup.md) — Create an Azure app registration and connect your Microsoft account
@@ -26,7 +26,7 @@ Popular guides:
 | Document | Description |
 |----------|-------------|
 | [Tools Reference](quickrefs/tools-reference.md) | All 20 tools with parameters |
-| [Using Outlook MCP in AI Agents](how-to/ai-agents/using-outlook-mcp-in-agents.md) | Tool selection, safety, and workflow patterns for AI agents |
+| [Using Outlook Assistant in AI Agents](how-to/ai-agents/using-outlook-mcp-in-agents.md) | Tool selection, safety, and workflow patterns for AI agents |
 | [CLAUDE.md](../CLAUDE.md) | Quick reference for development |
 
 ## Contributing

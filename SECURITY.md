@@ -21,8 +21,8 @@ If you discover a security vulnerability, please report it responsibly:
 
 ### Token Storage
 
-- OAuth tokens are stored locally at `~/.outlook-mcp-tokens.json`
-- Ensure this file has appropriate permissions (readable only by owner): `chmod 600 ~/.outlook-mcp-tokens.json`
+- OAuth tokens are stored locally at `~/.outlook-assistant-tokens.json`
+- Ensure this file has appropriate permissions (readable only by owner): `chmod 600 ~/.outlook-assistant-tokens.json`
 - Never commit token files to version control
 
 ### Environment Variables

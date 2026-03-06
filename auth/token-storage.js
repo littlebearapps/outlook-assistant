@@ -1,4 +1,5 @@
 const fs = require('fs').promises;
+const fsSync = require('fs');
 const path = require('path');
 const https = require('https');
 const querystring = require('querystring');
@@ -8,7 +9,7 @@ class TokenStorage {
     this.config = {
       tokenStorePath: path.join(
         process.env.HOME || process.env.USERPROFILE,
-        '.outlook-mcp-tokens.json'
+        '.outlook-assistant-tokens.json'
       ),
       clientId: process.env.OUTLOOK_CLIENT_ID || process.env.MS_CLIENT_ID,
       clientSecret:
@@ -27,6 +28,26 @@ class TokenStorage {
     this.tokens = null;
     this._loadPromise = null;
     this._refreshPromise = null;
+
+    // Migrate tokens from old path (.outlook-mcp-tokens.json) if present
+    const homeDir = process.env.HOME || process.env.USERPROFILE;
+    if (homeDir) {
+      const oldTokenPath = path.join(homeDir, '.outlook-mcp-tokens.json');
+      if (
+        oldTokenPath !== this.config.tokenStorePath &&
+        fsSync.existsSync(oldTokenPath) &&
+        !fsSync.existsSync(this.config.tokenStorePath)
+      ) {
+        try {
+          fsSync.renameSync(oldTokenPath, this.config.tokenStorePath);
+          console.error(
+            '[auth] Migrated tokens: .outlook-mcp-tokens.json → .outlook-assistant-tokens.json'
+          );
+        } catch {
+          // Ignore migration errors — user can re-authenticate
+        }
+      }
+    }
 
     if (!this.config.clientId || !this.config.clientSecret) {
       console.warn(

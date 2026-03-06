@@ -8,6 +8,6 @@ console.log('tokenStorePath:', config.AUTH_CONFIG.tokenStorePath);
 console.log(
   'Calculated path:',
   process.env.HOME
-    ? path.join(process.env.HOME, '.outlook-mcp-tokens.json')
-    : path.join(process.env.USERPROFILE, '.outlook-mcp-tokens.json')
+    ? path.join(process.env.HOME, '.outlook-assistant-tokens.json')
+    : path.join(process.env.USERPROFILE, '.outlook-assistant-tokens.json')
 );

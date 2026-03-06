@@ -35,26 +35,26 @@ Last updated: 2026-02-27 (Official MCP Registry published, Glama submitted)
 
 **URL:** https://glama.ai/mcp/servers (click "Add Server")
 
-**Status:** Submitted as "Outlook-MCP" Server type, pending Glama review/indexing. Once live, expected URL: `https://glama.ai/mcp/servers/littlebearapps/outlook-mcp`
+**Status:** Submitted as "Outlook-MCP" Server type, pending Glama review/indexing. Once live, expected URL: `https://glama.ai/mcp/servers/littlebearapps/outlook-assistant`
 
 **Why critical:** The punkpeye/awesome-mcp-servers PR (#2742, 82k stars) **requires a Glama link before merge**. The maintainer replied requesting it. This also gates mcpservers.org auto-indexing.
 
 **Steps:**
 1. Go to https://glama.ai/mcp/servers and click "Add Server"
-2. Link the GitHub repo: `https://github.com/littlebearapps/outlook-mcp`
-3. Once listed, expected URL: `https://glama.ai/mcp/servers/@littlebearapps/outlook-mcp`
+2. Link the GitHub repo: `https://github.com/littlebearapps/outlook-assistant`
+3. Once listed, expected URL: `https://glama.ai/mcp/servers/@littlebearapps/outlook-assistant`
 4. Update punkpeye PR #2742 to add the Glama link (see Step 2 below)
 
-**After Glama listing is live**, update the PR's README line on fork `nathanschram/awesome-mcp-servers` branch `add-outlook-mcp`. Change from:
+**After Glama listing is live**, update the PR's README line on fork `nathanschram/awesome-mcp-servers` branch `add-outlook-assistant`. Change from:
 
 ```markdown
-- [littlebearapps/outlook-mcp](https://github.com/littlebearapps/outlook-mcp) 📇 ☁️ - MCP server for Microsoft Outlook with 20 consolidated tools...
+- [littlebearapps/outlook-assistant](https://github.com/littlebearapps/outlook-assistant) 📇 ☁️ - MCP server for Microsoft Outlook with 20 consolidated tools...
 ```
 
 To:
 
 ```markdown
-- [littlebearapps/outlook-mcp](https://github.com/littlebearapps/outlook-mcp) [glama](https://glama.ai/mcp/servers/@littlebearapps/outlook-mcp) 📇 ☁️ - MCP server for Microsoft Outlook with 20 consolidated tools...
+- [littlebearapps/outlook-assistant](https://github.com/littlebearapps/outlook-assistant) [glama](https://glama.ai/mcp/servers/@littlebearapps/outlook-assistant) 📇 ☁️ - MCP server for Microsoft Outlook with 20 consolidated tools...
 ```
 
 ### PulseMCP — Pending (auto-ingest)
@@ -98,7 +98,7 @@ startCommand:
   commandFunction: |
     (config) => ({
       command: "npx",
-      args: ["@littlebearapps/outlook-mcp"],
+      args: ["@littlebearapps/outlook-assistant"],
       env: {
         OUTLOOK_CLIENT_ID: config.OUTLOOK_CLIENT_ID,
         OUTLOOK_CLIENT_SECRET: config.OUTLOOK_CLIENT_SECRET
@@ -144,11 +144,11 @@ Hey r/mcp! I've been building an MCP server that connects Claude (and other AI a
 
 **Install:**
 ```
-npm install -g @littlebearapps/outlook-mcp
+npm install -g @littlebearapps/outlook-assistant
 ```
 
-GitHub: https://github.com/littlebearapps/outlook-mcp
-npm: https://www.npmjs.com/package/@littlebearapps/outlook-mcp
+GitHub: https://github.com/littlebearapps/outlook-assistant
+npm: https://www.npmjs.com/package/@littlebearapps/outlook-assistant
 
 Happy to answer questions or take feature requests!
 
@@ -162,7 +162,7 @@ Happy to answer questions or take feature requests!
 
 **Body:**
 
-I built [Outlook Assistant](https://github.com/littlebearapps/outlook-mcp), an MCP server that lets Claude read, search, send, and manage your Outlook email, calendar, and contacts — all from the conversation.
+I built [Outlook Assistant](https://github.com/littlebearapps/outlook-assistant), an MCP server that lets Claude read, search, send, and manage your Outlook email, calendar, and contacts — all from the conversation.
 
 A few things I'm proud of with the design:
 - **Token efficiency**: 20 consolidated tools (down from 55) so Claude's context window isn't eaten up by tool descriptions
@@ -173,7 +173,7 @@ A few things I'm proud of with the design:
 
 Works with personal Outlook.com and Microsoft 365 accounts. MIT licensed, published on npm.
 
-Install: `npm install -g @littlebearapps/outlook-mcp`
+Install: `npm install -g @littlebearapps/outlook-assistant`
 
 **Flair:** Built with Claude
 
@@ -183,9 +183,9 @@ Install: `npm install -g @littlebearapps/outlook-mcp`
 
 ### Official MCP Registry (registry.modelcontextprotocol.io) — PUBLISHED
 
-**Status:** Published 2026-02-27 as `io.github.littlebearapps/outlook-mcp` v3.3.0. `server.json` in repo root, `mcpName` in `package.json`.
+**Status:** Published 2026-02-27 as `io.github.littlebearapps/outlook-assistant` v3.3.0. `server.json` in repo root, `mcpName` in `package.json`.
 
-**API URL:** `https://registry.modelcontextprotocol.io/v0.1/servers/io.github.littlebearapps%2Foutlook-mcp/versions`
+**API URL:** `https://registry.modelcontextprotocol.io/v0.1/servers/io.github.littlebearapps%2Foutlook-assistant/versions`
 
 No web UI — the registry is API-only. Consumed by Claude Desktop, VS Code, PulseMCP, LobeHub, and other aggregators.
 
@@ -209,7 +209,7 @@ Last checked: 2026-02-27
 - [x] Submit to Glama.ai (submitted 2026-02-27, pending review)
 - [x] Official MCP Registry — **Published** (2026-02-27, v3.3.0)
 - [ ] Update punkpeye PR #2742 with Glama link once listed
-- [ ] Search each directory for "littlebearapps" or "outlook-mcp"
+- [ ] Search each directory for "littlebearapps" or "outlook-assistant"
 - [ ] Monitor GitHub star/fork count
 - [ ] Check PulseMCP's "Est Visitors" metric once listed (auto-ingests from MCP Registry)
 - [ ] Verify mcpservers.org indexes after punkpeye PR merge

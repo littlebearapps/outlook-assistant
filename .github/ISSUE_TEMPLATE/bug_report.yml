@@ -49,7 +49,7 @@ body:
     id: version
     attributes:
       label: Outlook Assistant version
-      description: Run `outlook-mcp --version` or check package.json
+      description: Run `outlook-assistant --version` or check package.json
       placeholder: '3.0.0'
     validations:
       required: true

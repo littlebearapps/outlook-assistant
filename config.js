@@ -52,7 +52,7 @@ module.exports = {
       // 'Mail.Read.Shared',   // access-shared-mailbox tool
       // 'Place.Read.All',     // find-meeting-rooms tool
     ],
-    tokenStorePath: path.join(homeDir, '.outlook-mcp-tokens.json'),
+    tokenStorePath: path.join(homeDir, '.outlook-assistant-tokens.json'),
     authServerUrl: 'http://localhost:3333',
   },
 

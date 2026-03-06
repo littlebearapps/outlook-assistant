@@ -1,11 +1,11 @@
 {
-  "name": "@littlebearapps/outlook-mcp",
+  "name": "@littlebearapps/outlook-assistant",
   "version": "3.3.0",
-  "mcpName": "io.github.littlebearapps/outlook-mcp",
+  "mcpName": "io.github.littlebearapps/outlook-assistant",
   "description": "Outlook Assistant — MCP server with 20 tools for email, calendar, contacts, and settings via Microsoft Graph API",
   "main": "index.js",
   "bin": {
-    "outlook-mcp": "./index.js"
+    "outlook-assistant": "./index.js"
   },
   "scripts": {
     "start": "node index.js",
@@ -43,11 +43,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/littlebearapps/outlook-mcp.git"
+    "url": "https://github.com/littlebearapps/outlook-assistant.git"
   },
-  "homepage": "https://littlebearapps.com/builds/outlook-mcp",
+  "homepage": "https://littlebearapps.com/builds/outlook-assistant",
   "bugs": {
-    "url": "https://github.com/littlebearapps/outlook-mcp/issues"
+    "url": "https://github.com/littlebearapps/outlook-assistant/issues"
   },
   "publishConfig": {
     "access": "public"

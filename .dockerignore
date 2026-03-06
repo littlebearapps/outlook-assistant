@@ -5,7 +5,7 @@ node_modules/
 *.key
 *.cert
 *.token.json
-.outlook-mcp-tokens.json
+.outlook-assistant-tokens.json
 .git/
 .github/
 .claude/

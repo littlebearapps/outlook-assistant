@@ -10,6 +10,8 @@ jest.mock('fs', () => ({
     writeFile: jest.fn(),
     unlink: jest.fn(),
   },
+  existsSync: jest.fn().mockReturnValue(false),
+  renameSync: jest.fn(),
 }));
 jest.mock('https');
 
@@ -27,7 +29,10 @@ const baseConfig = {
 
 describe('TokenStorage', () => {
   let tokenStorage;
-  const tokenStorePath = path.join(mockHomeDir, '.outlook-mcp-tokens.json');
+  const tokenStorePath = path.join(
+    mockHomeDir,
+    '.outlook-assistant-tokens.json'
+  );
 
   beforeEach(() => {
     jest.clearAllMocks();

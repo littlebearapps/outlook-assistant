@@ -26,7 +26,7 @@ Popular guides:
 | Document | Description |
 |----------|-------------|
 | [Tools Reference](quickrefs/tools-reference.md) | All 20 tools with parameters |
-| [Using Outlook Assistant in AI Agents](how-to/ai-agents/using-outlook-mcp-in-agents.md) | Tool selection, safety, and workflow patterns for AI agents |
+| [Using Outlook Assistant in AI Agents](how-to/ai-agents/using-outlook-assistant-in-agents.md) | Tool selection, safety, and workflow patterns for AI agents |
 | [CLAUDE.md](../CLAUDE.md) | Quick reference for development |
 
 ## Contributing
@@ -40,4 +40,4 @@ Popular guides:
 
 - [Azure Troubleshooting](guides/azure-setup.md#troubleshooting) — App registration, secrets, and permission errors
 - [Connection Troubleshooting & FAQ](how-to/getting-started/verify-your-connection.md#common-connection-problems) — Auth failures, token issues, re-authentication, and FAQ
-- [Open an Issue](https://github.com/littlebearapps/outlook-mcp/issues/new/choose) — Report bugs or request features
+- [Open an Issue](https://github.com/littlebearapps/outlook-assistant/issues/new/choose) — Report bugs or request features

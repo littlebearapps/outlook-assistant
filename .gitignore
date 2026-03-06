@@ -16,7 +16,7 @@ yarn-error.log*
 *.key
 *.cert
 *.token.json
-.outlook-mcp-tokens.json
+.outlook-assistant-tokens.json
 
 # Editor directories and files
 .idea/

@@ -99,5 +99,5 @@ Detect emails from specific senders or matching patterns:
 ## Related
 
 - [Find Emails](../email/find-emails.md) — search and filter emails
-- [Using Outlook Assistant in Agents](using-outlook-mcp-in-agents.md) — agent workflow patterns
+- [Using Outlook Assistant in Agents](using-outlook-assistant-in-agents.md) — agent workflow patterns
 - [Tools Reference — search-emails](../../quickrefs/tools-reference.md#email-6-tools)

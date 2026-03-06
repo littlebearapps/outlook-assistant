@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/outlook-mcp-logo-full.svg" height="200" alt="Outlook Assistant" />
+  <img src="docs/assets/outlook-assistant-logo-full.svg" height="200" alt="Outlook Assistant" />
 </p>
 
 <p align="center">
@@ -7,9 +7,9 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/@littlebearapps/outlook-mcp"><img src="https://img.shields.io/npm/v/@littlebearapps/outlook-mcp" alt="npm version" /></a>
-  <a href="https://www.npmjs.com/package/@littlebearapps/outlook-mcp"><img src="https://img.shields.io/npm/dm/@littlebearapps/outlook-mcp" alt="npm downloads" /></a>
-  <a href="https://github.com/littlebearapps/outlook-mcp/actions/workflows/ci.yml"><img src="https://github.com/littlebearapps/outlook-mcp/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://www.npmjs.com/package/@littlebearapps/outlook-assistant"><img src="https://img.shields.io/npm/v/@littlebearapps/outlook-assistant" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/@littlebearapps/outlook-assistant"><img src="https://img.shields.io/npm/dm/@littlebearapps/outlook-assistant" alt="npm downloads" /></a>
+  <a href="https://github.com/littlebearapps/outlook-assistant/actions/workflows/ci.yml"><img src="https://github.com/littlebearapps/outlook-assistant/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
   <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen" alt="Node.js" /></a>
 </p>
@@ -120,13 +120,13 @@ Outlook Assistant is designed with safety-first principles for AI-driven email a
 ### 1. Install
 
 ```bash
-npm install -g @littlebearapps/outlook-mcp
+npm install -g @littlebearapps/outlook-assistant
 ```
 
 Or run directly without installing:
 
 ```bash
-npx @littlebearapps/outlook-mcp
+npx @littlebearapps/outlook-assistant
 ```
 
 ### 2. Register an Azure App
@@ -147,7 +147,7 @@ Add to your MCP client config. For Claude Desktop (`claude_desktop_config.json`)
   "mcpServers": {
     "outlook": {
       "command": "npx",
-      "args": ["@littlebearapps/outlook-mcp"],
+      "args": ["@littlebearapps/outlook-assistant"],
       "env": {
         "OUTLOOK_CLIENT_ID": "your-application-client-id",
         "OUTLOOK_CLIENT_SECRET": "your-client-secret-VALUE"
@@ -159,7 +159,7 @@ Add to your MCP client config. For Claude Desktop (`claude_desktop_config.json`)
 
 ### 4. Authenticate
 
-1. Start the auth server: `outlook-mcp-auth` (or `npx @littlebearapps/outlook-mcp-auth`)
+1. Start the auth server: `outlook-assistant-auth` (or `npx @littlebearapps/outlook-assistant-auth`)
 2. In your AI assistant, use the `auth` tool with `action=authenticate` to get an OAuth URL
 3. Open the URL, sign in with your Microsoft account, and grant permissions
 4. Tokens are saved locally and refresh automatically
@@ -177,14 +177,14 @@ Add to your MCP client config. For Claude Desktop (`claude_desktop_config.json`)
 ### From npm (recommended)
 
 ```bash
-npm install -g @littlebearapps/outlook-mcp
+npm install -g @littlebearapps/outlook-assistant
 ```
 
 ### From source
 
 ```bash
-git clone https://github.com/littlebearapps/outlook-mcp.git
-cd outlook-mcp
+git clone https://github.com/littlebearapps/outlook-assistant.git
+cd outlook-assistant
 npm install
 ```
 
@@ -255,7 +255,7 @@ Add to your MCP client config (example for Claude Desktop):
   "mcpServers": {
     "outlook": {
       "command": "npx",
-      "args": ["@littlebearapps/outlook-mcp"],
+      "args": ["@littlebearapps/outlook-assistant"],
       "env": {
         "OUTLOOK_CLIENT_ID": "your-application-client-id",
         "OUTLOOK_CLIENT_SECRET": "your-client-secret-VALUE"
@@ -272,7 +272,7 @@ Or if installed from source:
   "mcpServers": {
     "outlook": {
       "command": "node",
-      "args": ["/path/to/outlook-mcp/index.js"],
+      "args": ["/path/to/outlook-assistant/index.js"],
       "env": {
         "OUTLOOK_CLIENT_ID": "your-application-client-id",
         "OUTLOOK_CLIENT_SECRET": "your-client-secret-VALUE"
@@ -299,12 +299,12 @@ This starts a local server on port 3333 to handle the OAuth callback.
 1. In your AI assistant, use the `auth` tool with `action=authenticate`
 2. Open the provided URL in your browser
 3. Sign in with your Microsoft account and grant permissions
-4. Tokens are saved to `~/.outlook-mcp-tokens.json` and refresh automatically
+4. Tokens are saved to `~/.outlook-assistant-tokens.json` and refresh automatically
 
 ## Directory Structure
 
 ```
-outlook-mcp/
+outlook-assistant/
 ├── index.js                 # Main entry point (20 tools)
 ├── config.js                # Configuration settings
 ├── outlook-auth-server.js   # OAuth server (port 3333)
@@ -393,7 +393,7 @@ USE_TEST_MODE=true npm start
 | [How-To Guides](docs/how-to/index.md) | 27 practical guides for email, calendar, contacts, and settings |
 | [Troubleshooting & FAQ](docs/how-to/getting-started/verify-your-connection.md#common-connection-problems) | Common problems, re-authentication, and frequently asked questions |
 | [Tools Reference](docs/quickrefs/tools-reference.md) | All 20 tools with parameters |
-| [AI Agent Guide](docs/how-to/ai-agents/using-outlook-mcp-in-agents.md) | Tool selection and workflow patterns for AI agents |
+| [AI Agent Guide](docs/how-to/ai-agents/using-outlook-assistant-in-agents.md) | Tool selection and workflow patterns for AI agents |
 
 Full documentation: [docs/](docs/README.md)
 

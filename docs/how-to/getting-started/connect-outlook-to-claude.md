@@ -13,14 +13,14 @@ Connect your Microsoft 365 or Outlook.com account so your AI assistant can searc
 Install the package globally:
 
 ```bash
-npm install -g @littlebearapps/outlook-mcp
+npm install -g @littlebearapps/outlook-assistant
 ```
 
 Or clone and install locally:
 
 ```bash
-git clone https://github.com/littlebearapps/outlook-mcp.git
-cd outlook-mcp
+git clone https://github.com/littlebearapps/outlook-assistant.git
+cd outlook-assistant
 npm install
 ```
 
@@ -60,7 +60,7 @@ Add to your `claude_desktop_config.json`:
   "mcpServers": {
     "outlook": {
       "command": "npx",
-      "args": ["-y", "@littlebearapps/outlook-mcp"],
+      "args": ["-y", "@littlebearapps/outlook-assistant"],
       "env": {
         "OUTLOOK_CLIENT_ID": "your-client-id",
         "OUTLOOK_CLIENT_SECRET": "your-secret-value"
@@ -81,7 +81,7 @@ Add to your `.mcp.json` or project settings:
   "mcpServers": {
     "outlook": {
       "command": "npx",
-      "args": ["-y", "@littlebearapps/outlook-mcp"],
+      "args": ["-y", "@littlebearapps/outlook-assistant"],
       "env": {
         "OUTLOOK_CLIENT_ID": "your-client-id",
         "OUTLOOK_CLIENT_SECRET": "your-secret-value"
@@ -93,7 +93,7 @@ Add to your `.mcp.json` or project settings:
 
 ### Other MCP Clients
 
-Any MCP-compatible client can use Outlook Assistant. Set the command to `npx -y @littlebearapps/outlook-mcp` and pass the two environment variables.
+Any MCP-compatible client can use Outlook Assistant. Set the command to `npx -y @littlebearapps/outlook-assistant` and pass the two environment variables.
 
 ## Understanding the Two Processes
 
@@ -102,7 +102,7 @@ Outlook Assistant has two separate processes that serve different purposes:
 | Process | Purpose | When to run | How it runs |
 |---------|---------|-------------|-------------|
 | **MCP server** (`index.js`) | Handles all 20 Outlook tools — searching emails, reading calendar, etc. | Always (runs automatically) | Your MCP client starts it from your MCP config |
-| **Auth server** (`outlook-auth-server.js`) | Handles OAuth login — the one-time browser authentication flow | Only during initial setup or re-authentication | You start it manually with `npx @littlebearapps/outlook-mcp auth-server` |
+| **Auth server** (`outlook-auth-server.js`) | Handles OAuth login — the one-time browser authentication flow | Only during initial setup or re-authentication | You start it manually with `npx @littlebearapps/outlook-assistant auth-server` |
 
 **Key points:**
 - The **MCP server** is what your AI assistant talks to. It starts automatically when your MCP client launches.
@@ -115,7 +115,7 @@ Outlook Assistant has two separate processes that serve different purposes:
 1. Start the OAuth server:
 
 ```bash
-npx @littlebearapps/outlook-mcp auth-server
+npx @littlebearapps/outlook-assistant auth-server
 ```
 
 > **Important**: The auth server needs `OUTLOOK_CLIENT_ID` and `OUTLOOK_CLIENT_SECRET` environment variables. These are **not** automatically inherited from your MCP client's config — that config only applies to the MCP server process. Either:
@@ -132,7 +132,7 @@ Your AI assistant will call the `auth` tool with `action: authenticate` and retu
 
 ![Microsoft permissions consent screen during OAuth](../../assets/screenshots/connect-outlook-to-claude-02.png)
 
-4. After granting access, the browser redirects to `localhost:3333` and tokens are saved automatically to `~/.outlook-mcp-tokens.json`.
+4. After granting access, the browser redirects to `localhost:3333` and tokens are saved automatically to `~/.outlook-assistant-tokens.json`.
 
 ## Verify It's Working
 
@@ -156,9 +156,9 @@ If you see your recent emails, everything is connected.
 |---------|----------|
 | `AADSTS7000215` (invalid secret) | Use the secret **Value**, not the Secret ID |
 | `EADDRINUSE :3333` | Run `npx kill-port 3333` then restart the auth server |
-| Auth URL doesn't open | Start the auth server first with `npx @littlebearapps/outlook-mcp auth-server` |
+| Auth URL doesn't open | Start the auth server first with `npx @littlebearapps/outlook-assistant auth-server` |
 | Permissions error after login | Check API permissions in Azure Portal and grant admin consent if required |
-| Token file not found | Tokens are stored at `~/.outlook-mcp-tokens.json` — check the file exists after auth |
+| Token file not found | Tokens are stored at `~/.outlook-assistant-tokens.json` — check the file exists after auth |
 
 ## Related
 

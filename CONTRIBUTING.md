@@ -19,11 +19,11 @@ When creating a bug report, include:
 - Expected vs actual behaviour
 - Relevant error messages or logs
 
-Use the [bug report template](https://github.com/littlebearapps/outlook-mcp/issues/new?template=bug_report.yml) when opening an issue.
+Use the [bug report template](https://github.com/littlebearapps/outlook-assistant/issues/new?template=bug_report.yml) when opening an issue.
 
 ### Suggesting Features
 
-Feature requests are welcome! Use the [feature request template](https://github.com/littlebearapps/outlook-mcp/issues/new?template=feature_request.yml) and include:
+Feature requests are welcome! Use the [feature request template](https://github.com/littlebearapps/outlook-assistant/issues/new?template=feature_request.yml) and include:
 - Clear description of the feature
 - Use case / problem it solves
 - Proposed implementation (if any)
@@ -44,8 +44,8 @@ Feature requests are welcome! Use the [feature request template](https://github.
 
 ```bash
 # Clone your fork
-git clone https://github.com/YOUR_USERNAME/outlook-mcp.git
-cd outlook-mcp
+git clone https://github.com/YOUR_USERNAME/outlook-assistant.git
+cd outlook-assistant
 
 # Install dependencies
 npm install
@@ -99,7 +99,7 @@ test: add tests for contacts module
 
 ## Questions?
 
-If you have questions, feel free to [open a discussion](https://github.com/littlebearapps/outlook-mcp/issues).
+If you have questions, feel free to [open a discussion](https://github.com/littlebearapps/outlook-assistant/issues).
 
 ## License
 

@@ -6,8 +6,8 @@ Built by [Little Bear Apps](https://littlebearapps.com).
 
 ## Key Information
 
-- **Package**: `@littlebearapps/outlook-mcp` on npm
-- **Install**: `npm install -g @littlebearapps/outlook-mcp` or `npx @littlebearapps/outlook-mcp`
+- **Package**: `@littlebearapps/outlook-assistant` on npm
+- **Install**: `npm install -g @littlebearapps/outlook-assistant` or `npx @littlebearapps/outlook-assistant`
 - **License**: MIT
 - **Node.js**: >= 18.0.0
 - **Authentication**: OAuth 2.0 with Microsoft Graph API (requires Azure app registration)
@@ -42,7 +42,7 @@ Built by [Little Bear Apps](https://littlebearapps.com).
   "mcpServers": {
     "outlook": {
       "command": "npx",
-      "args": ["@littlebearapps/outlook-mcp"],
+      "args": ["@littlebearapps/outlook-assistant"],
       "env": {
         "OUTLOOK_CLIENT_ID": "your-application-client-id",
         "OUTLOOK_CLIENT_SECRET": "your-client-secret-VALUE"
@@ -68,9 +68,9 @@ Requires an Azure app registration with Microsoft Graph delegated permissions. S
 
 ## Documentation
 
-- [README](https://raw.githubusercontent.com/littlebearapps/outlook-mcp/main/README.md): Full documentation including setup, Azure configuration, and usage
-- [Tools Reference](https://raw.githubusercontent.com/littlebearapps/outlook-mcp/main/docs/quickrefs/tools-reference.md): All 20 tools with parameters and safety annotations
-- [CLAUDE.md](https://raw.githubusercontent.com/littlebearapps/outlook-mcp/main/CLAUDE.md): Quick reference for development
-- [CONTRIBUTING](https://raw.githubusercontent.com/littlebearapps/outlook-mcp/main/CONTRIBUTING.md): Contribution guidelines
-- [CHANGELOG](https://raw.githubusercontent.com/littlebearapps/outlook-mcp/main/CHANGELOG.md): Version history
-- [SECURITY](https://raw.githubusercontent.com/littlebearapps/outlook-mcp/main/SECURITY.md): Security policy, token handling, and MCP safety controls
+- [README](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/README.md): Full documentation including setup, Azure configuration, and usage
+- [Tools Reference](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/quickrefs/tools-reference.md): All 20 tools with parameters and safety annotations
+- [CLAUDE.md](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CLAUDE.md): Quick reference for development
+- [CONTRIBUTING](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CONTRIBUTING.md): Contribution guidelines
+- [CHANGELOG](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CHANGELOG.md): Version history
+- [SECURITY](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/SECURITY.md): Security policy, token handling, and MCP safety controls

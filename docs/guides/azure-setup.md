@@ -185,7 +185,7 @@ Add to your MCP client config (example for Claude Desktop `claude_desktop_config
   "mcpServers": {
     "outlook": {
       "command": "npx",
-      "args": ["@littlebearapps/outlook-mcp"],
+      "args": ["@littlebearapps/outlook-assistant"],
       "env": {
         "OUTLOOK_CLIENT_ID": "your-application-client-id",
         "OUTLOOK_CLIENT_SECRET": "your-client-secret-VALUE"
@@ -232,7 +232,7 @@ In your AI assistant, use the `auth` tool with `action=authenticate`. It returns
 3. Review and accept the requested permissions
 4. You'll see a success message in the browser
 
-Tokens are saved to `~/.outlook-mcp-tokens.json` and refresh automatically.
+Tokens are saved to `~/.outlook-assistant-tokens.json` and refresh automatically.
 
 ### 3. Verify Access
 
@@ -278,7 +278,7 @@ Then try `search-emails` to confirm email access is working.
 **Fix**:
 1. Check that all required permissions are added (see [Step 3](#3-add-api-permissions))
 2. For work accounts: admin consent may be required — ask your IT admin
-3. Delete `~/.outlook-mcp-tokens.json` and re-authenticate to pick up new permissions
+3. Delete `~/.outlook-assistant-tokens.json` and re-authenticate to pick up new permissions
 
 ---
 
@@ -286,10 +286,10 @@ Then try `search-emails` to confirm email access is working.
 
 **Cause**: Refresh tokens can expire after extended inactivity (90+ days) or when passwords change.
 
-**Fix**: Delete `~/.outlook-mcp-tokens.json` and re-authenticate:
+**Fix**: Delete `~/.outlook-assistant-tokens.json` and re-authenticate:
 
 ```bash
-rm ~/.outlook-mcp-tokens.json
+rm ~/.outlook-assistant-tokens.json
 npm run auth-server
 # Then use the auth tool with action=authenticate in your AI assistant
 ```
@@ -316,7 +316,7 @@ npm run auth-server
 **Fix**: Delete your token file and re-authenticate to pick up the new permissions:
 
 ```bash
-rm ~/.outlook-mcp-tokens.json
+rm ~/.outlook-assistant-tokens.json
 npm run auth-server
 # Then use the auth tool with action=authenticate in your AI assistant
 ```

@@ -17,4 +17,4 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{ secrets.WEBSITE_DISPATCH_TOKEN }}" \
             https://api.github.com/repos/littlebearapps/littlebearapps.com/dispatches \
-            -d '{"event_type":"release-published","client_payload":{"repo":"outlook-mcp","tag":"${{ github.event.release.tag_name }}"}}'
+            -d '{"event_type":"release-published","client_payload":{"repo":"outlook-assistant","tag":"${{ github.event.release.tag_name }}"}}'

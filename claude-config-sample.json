@@ -2,7 +2,7 @@
   "mcpServers": {
     "outlook-assistant": {
       "command": "node",
-      "args": ["/path/to/outlook-mcp/index.js"],
+      "args": ["/path/to/outlook-assistant/index.js"],
       "env": {
         "USE_TEST_MODE": "false",
         "OUTLOOK_CLIENT_ID": "your-client-id-here",

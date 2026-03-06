@@ -9,7 +9,7 @@ const path = require('path');
 
 // Configuration
 const homePath = process.env.HOME || require('os').homedir();
-const tokenPath = path.join(homePath, '.outlook-mcp-tokens.json');
+const tokenPath = path.join(homePath, '.outlook-assistant-tokens.json');
 const notificationsFolderId =
   'AAMkAGQ0NzYwMTdmLTYzMWUtNDE1ZS04ZDYyLTZjZmQ5YjkyNWM0OQAuAAAAAAAMiw_uRKMyQ4cvWGcmDNGZAQD-pkus0juzTK_ueB_BlgMCAAGKmpqpAAA=';
 

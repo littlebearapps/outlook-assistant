@@ -4,5 +4,5 @@ contact_links:
     url: mailto:hello@littlebearapps.com
     about: Report security vulnerabilities privately via email. Do not open a public issue.
   - name: Documentation
-    url: https://github.com/littlebearapps/outlook-mcp/blob/main/README.md
+    url: https://github.com/littlebearapps/outlook-assistant/blob/main/README.md
     about: Check the README and docs before opening an issue.

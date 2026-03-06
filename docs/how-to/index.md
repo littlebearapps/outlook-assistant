@@ -72,5 +72,5 @@ Practical guides for managing your Microsoft 365 email, calendar, contacts, and 
 
 | Guide | What it covers |
 |-------|---------------|
-| [Using Outlook Assistant in Agents](ai-agents/using-outlook-mcp-in-agents.md) | Tool selection, safety annotations, token efficiency, workflow patterns |
+| [Using Outlook Assistant in Agents](ai-agents/using-outlook-assistant-in-agents.md) | Tool selection, safety annotations, token efficiency, workflow patterns |
 | [Monitor Inbox with Delta Sync](ai-agents/monitor-inbox-with-delta-sync.md) | Incremental sync, deltaToken workflow, audit trails, notification triggers |

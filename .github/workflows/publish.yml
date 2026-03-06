@@ -11,7 +11,7 @@
 #   git push origin main --tags
 #
 # Future: migrate to OIDC trusted publishing when npmjs.com trusted publisher
-# is configured (org=littlebearapps, repo=outlook-mcp, workflow=publish.yml)
+# is configured (org=littlebearapps, repo=outlook-assistant, workflow=publish.yml)
 # and Node 24+ (npm 11.5.1+) is used. See OIDC migration notes below.
 #
 # Note: This workflow uses no untrusted input in run commands.
@@ -63,4 +63,4 @@ jobs:
       - name: Verify publication
         run: |
           sleep 10
-          npm view @littlebearapps/outlook-mcp version
+          npm view @littlebearapps/outlook-assistant version

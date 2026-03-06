@@ -60,7 +60,7 @@ utils/
 |------|---------|
 | `index.js` | MCP protocol handler, combines all tools |
 | `config.js` | API endpoint, auth settings, defaults |
-| `auth/token-manager.js` | Token storage at `~/.outlook-mcp-tokens.json` |
+| `auth/token-manager.js` | Token storage at `~/.outlook-assistant-tokens.json` |
 | `utils/graph-api.js` | All Graph API calls go through here |
 | `utils/safety.js` | Rate limiter, allowlist, dry-run preview |
 | `utils/field-presets.js` | Optimised field selections per operation |
@@ -81,7 +81,7 @@ OUTLOOK_ALLOWED_RECIPIENTS=example.com     # Optional: restrict recipients
 > The auth server imports scopes from `config.js` (single source of truth since v3.1.0).
 > **Auth server env vars**: The auth server needs the same `OUTLOOK_CLIENT_ID`/`OUTLOOK_CLIENT_SECRET` — these are passed automatically when running via Claude Desktop/Code MCP config.
 
-**Tokens stored at**: `~/.outlook-mcp-tokens.json`
+**Tokens stored at**: `~/.outlook-assistant-tokens.json`
 
 **Defaults**:
 - Timezone: `Australia/Melbourne`

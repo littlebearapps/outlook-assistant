@@ -1,7 +1,7 @@
 ---
 title: "How to Manage Your Contacts"
 description: "Create, view, update, and delete contact records in your Outlook contacts book."
-tags: [outlook-mcp, contacts, how-to]
+tags: [outlook-assistant, contacts, how-to]
 ---
 
 # How to Manage Your Contacts

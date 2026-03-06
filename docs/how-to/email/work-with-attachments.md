@@ -1,7 +1,7 @@
 ---
 title: "How to Work with Attachments"
 description: "List, view, and download email attachments to your local machine."
-tags: [outlook-mcp, email, how-to]
+tags: [outlook-assistant, email, how-to]
 ---
 
 # How to Work with Attachments

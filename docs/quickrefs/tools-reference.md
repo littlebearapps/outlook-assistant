@@ -3,7 +3,7 @@ tags:
   - mcp
 ---
 
-# Tools Reference - outlook-mcp
+# Tools Reference - Outlook Assistant
 
 Quick reference for all 20 consolidated MCP tools across 9 modules. Each tool includes MCP safety annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`).
 

@@ -1,7 +1,7 @@
 ---
 title: "KQL Search Reference for Outlook Assistant"
 description: "Use Keyword Query Language to write precise search queries for emails by date, sender, subject, and message properties."
-tags: [outlook-mcp, advanced, how-to, reference]
+tags: [outlook-assistant, advanced, how-to, reference]
 ---
 
 # KQL Search Reference

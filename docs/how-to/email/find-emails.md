@@ -1,7 +1,7 @@
 ---
 title: "How to Find Emails"
 description: "Search your inbox by sender, subject, date range, or keywords — including across all folders."
-tags: [outlook-mcp, email, how-to]
+tags: [outlook-assistant, email, how-to]
 ---
 
 # How to Find Emails

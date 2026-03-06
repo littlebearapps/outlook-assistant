@@ -1,7 +1,7 @@
 ---
 title: "How to Use Categories to Colour-Code Emails"
 description: "Create colour-coded category labels and apply them to emails for visual organisation and filtering."
-tags: [outlook-mcp, organise, how-to]
+tags: [outlook-assistant, organise, how-to]
 ---
 
 # How to Use Categories to Colour-Code Emails

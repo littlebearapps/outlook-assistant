@@ -1,7 +1,7 @@
 ---
 title: "How to Create Calendar Events"
 description: "Schedule meetings and events through your AI assistant, including adding attendees and event descriptions."
-tags: [outlook-mcp, calendar, how-to]
+tags: [outlook-assistant, calendar, how-to]
 ---
 
 # How to Create Calendar Events

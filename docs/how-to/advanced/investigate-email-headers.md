@@ -1,7 +1,7 @@
 ---
 title: "How to Investigate Email Headers"
 description: "Read forensic email headers to verify sender authenticity, trace delivery paths, check DKIM/SPF results, and analyse spam scores."
-tags: [outlook-mcp, advanced, how-to]
+tags: [outlook-assistant, advanced, how-to]
 ---
 
 # How to Investigate Email Headers

@@ -1,7 +1,7 @@
 ---
 title: "How to Set an Out-of-Office Reply"
 description: "Enable automatic replies when you're away, with separate messages for internal and external senders."
-tags: [outlook-mcp, settings, how-to]
+tags: [outlook-assistant, settings, how-to]
 ---
 
 # How to Set an Out-of-Office Reply

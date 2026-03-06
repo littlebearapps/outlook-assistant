@@ -1,7 +1,7 @@
 ---
 title: "Outlook Assistant How-To Guides"
 description: "Practical guides for managing Outlook email, calendar, contacts, and settings through AI assistants."
-tags: [outlook-mcp, how-to, index]
+tags: [outlook-assistant, how-to, index]
 ---
 
 # Outlook Assistant How-To Guides

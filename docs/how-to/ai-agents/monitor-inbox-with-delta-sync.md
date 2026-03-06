@@ -1,7 +1,7 @@
 ---
 title: "How to Monitor Your Inbox with Delta Sync"
 description: "Use delta sync for incremental inbox monitoring — track new, modified, and deleted emails with deltaToken."
-tags: [outlook-mcp, ai-agents, how-to, delta-sync]
+tags: [outlook-assistant, ai-agents, how-to, delta-sync]
 ---
 
 # How to Monitor Your Inbox with Delta Sync

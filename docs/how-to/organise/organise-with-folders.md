@@ -1,7 +1,7 @@
 ---
 title: "How to Organise Your Inbox with Folders"
 description: "List, create, and manage mail folders, move emails between folders, and check folder statistics."
-tags: [outlook-mcp, organise, how-to]
+tags: [outlook-assistant, organise, how-to]
 ---
 
 # How to Organise Your Inbox with Folders

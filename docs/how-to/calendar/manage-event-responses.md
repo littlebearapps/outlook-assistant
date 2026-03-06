@@ -1,7 +1,7 @@
 ---
 title: "How to Manage Event Responses"
 description: "Decline, cancel, or delete calendar events, with an optional message to organisers or attendees."
-tags: [outlook-mcp, calendar, how-to]
+tags: [outlook-assistant, calendar, how-to]
 ---
 
 # How to Manage Event Responses

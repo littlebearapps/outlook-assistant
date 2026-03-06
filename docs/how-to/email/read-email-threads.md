@@ -1,7 +1,7 @@
 ---
 title: "How to Read Email Threads"
 description: "Read individual emails and full conversation threads, with options for body content, previews, and forensic headers."
-tags: [outlook-mcp, email, how-to]
+tags: [outlook-assistant, email, how-to]
 ---
 
 # How to Read Email Threads

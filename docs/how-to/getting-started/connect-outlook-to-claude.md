@@ -1,7 +1,7 @@
 ---
 title: "How to Connect Outlook to Your AI Assistant"
 description: "Set up Outlook Assistant so your AI assistant can read and manage your email, calendar, and contacts."
-tags: [outlook-mcp, getting-started, how-to]
+tags: [outlook-assistant, getting-started, how-to]
 ---
 
 # How to Connect Outlook to Your AI Assistant

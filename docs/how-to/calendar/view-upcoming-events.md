@@ -1,7 +1,7 @@
 ---
 title: "How to View Upcoming Calendar Events"
 description: "List your scheduled events so your AI assistant can help with scheduling, reminders, and meeting preparation."
-tags: [outlook-mcp, calendar, how-to]
+tags: [outlook-assistant, calendar, how-to]
 ---
 
 # How to View Upcoming Calendar Events

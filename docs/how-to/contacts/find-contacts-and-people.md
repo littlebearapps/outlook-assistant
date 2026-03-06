@@ -1,7 +1,7 @@
 ---
 title: "How to Find Contacts and People"
 description: "Search your contacts, organisational directory, and recent communications to find people quickly."
-tags: [outlook-mcp, contacts, how-to]
+tags: [outlook-assistant, contacts, how-to]
 ---
 
 # How to Find Contacts and People

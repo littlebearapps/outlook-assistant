@@ -48,7 +48,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: outlook-mcp version
+      label: Outlook Assistant version
       description: Run `outlook-mcp --version` or check package.json
       placeholder: '3.0.0'
     validations:

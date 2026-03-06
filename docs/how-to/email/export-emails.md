@@ -1,7 +1,7 @@
 ---
 title: "How to Export Emails"
 description: "Save emails and conversation threads to your local machine in Markdown, EML, MBOX, JSON, or HTML formats."
-tags: [outlook-mcp, email, how-to]
+tags: [outlook-assistant, email, how-to]
 ---
 
 # How to Export Emails

@@ -1,7 +1,7 @@
 ---
 title: "How to Create and Manage Inbox Rules"
 description: "Automate email organisation with rules that move, mark, or filter incoming mail based on sender, subject, or attachments."
-tags: [outlook-mcp, organise, how-to]
+tags: [outlook-assistant, organise, how-to]
 ---
 
 # How to Create and Manage Inbox Rules

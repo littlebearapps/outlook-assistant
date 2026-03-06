@@ -1,7 +1,7 @@
 ---
 title: "How to Configure Working Hours"
 description: "Set your working hours and time zone so Outlook knows when you're available for scheduling."
-tags: [outlook-mcp, settings, how-to]
+tags: [outlook-assistant, settings, how-to]
 ---
 
 # How to Configure Working Hours

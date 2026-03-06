@@ -1,7 +1,7 @@
 ---
 title: "How to Find Meeting Rooms"
 description: "Search your organisation's meeting room directory by building, floor, capacity, or name."
-tags: [outlook-mcp, advanced, how-to]
+tags: [outlook-assistant, advanced, how-to]
 ---
 
 # How to Find Meeting Rooms

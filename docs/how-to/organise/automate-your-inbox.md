@@ -1,7 +1,7 @@
 ---
 title: "How to Automate Your Inbox"
 description: "Combine rules, categories, folders, and Focused Inbox to build a complete inbox management system through your AI assistant."
-tags: [outlook-mcp, organise, how-to, automation]
+tags: [outlook-assistant, organise, how-to, automation]
 ---
 
 # How to Automate Your Inbox

@@ -1,7 +1,7 @@
 ---
 title: "How to Manage Focused Inbox"
 description: "Force specific senders into Focused or Other to control which emails surface by default."
-tags: [outlook-mcp, organise, how-to]
+tags: [outlook-assistant, organise, how-to]
 ---
 
 # How to Manage Focused Inbox

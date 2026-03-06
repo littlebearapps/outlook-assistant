@@ -1,7 +1,7 @@
 ---
 title: "How to Perform Batch Email Operations"
 description: "Flag, export, move, or categorise multiple emails at once using batch parameters."
-tags: [outlook-mcp, advanced, how-to]
+tags: [outlook-assistant, advanced, how-to]
 ---
 
 # How to Perform Batch Email Operations

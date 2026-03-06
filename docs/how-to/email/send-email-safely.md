@@ -1,7 +1,7 @@
 ---
 title: "How to Send Email Safely"
 description: "Compose and send emails with dry-run preview, and understand the safety controls that prevent accidental sends."
-tags: [outlook-mcp, email, how-to]
+tags: [outlook-assistant, email, how-to]
 ---
 
 # How to Send Email Safely

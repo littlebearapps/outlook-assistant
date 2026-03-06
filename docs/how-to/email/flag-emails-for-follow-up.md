@@ -1,7 +1,7 @@
 ---
 title: "How to Flag Emails for Follow-Up"
 description: "Mark emails as read or unread, flag them for follow-up with due dates, and bulk-flag multiple messages."
-tags: [outlook-mcp, email, how-to]
+tags: [outlook-assistant, email, how-to]
 ---
 
 # How to Flag Emails for Follow-Up

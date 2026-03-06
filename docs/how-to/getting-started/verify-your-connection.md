@@ -1,7 +1,7 @@
 ---
 title: "How to Verify Your Outlook Connection"
 description: "Check your authentication status, re-authenticate after token expiry, and confirm which account is connected."
-tags: [outlook-mcp, getting-started, how-to]
+tags: [outlook-assistant, getting-started, how-to]
 ---
 
 # How to Verify Your Outlook Connection

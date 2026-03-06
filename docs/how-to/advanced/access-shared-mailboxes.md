@@ -1,7 +1,7 @@
 ---
 title: "How to Access Shared Mailboxes"
 description: "Read emails from shared mailboxes your account has been granted access to, such as team inboxes or service accounts."
-tags: [outlook-mcp, advanced, how-to]
+tags: [outlook-assistant, advanced, how-to]
 ---
 
 # How to Access Shared Mailboxes

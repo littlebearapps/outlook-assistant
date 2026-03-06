@@ -1,0 +1,23 @@
+startCommand:
+  type: "stdio"
+  configSchema:
+    type: "object"
+    properties:
+      OUTLOOK_CLIENT_ID:
+        type: "string"
+        description: "Azure AD application client ID"
+      OUTLOOK_CLIENT_SECRET:
+        type: "string"
+        description: "Azure AD application client secret"
+    required:
+      - OUTLOOK_CLIENT_ID
+      - OUTLOOK_CLIENT_SECRET
+  commandFunction: |
+    (config) => ({
+      command: "npx",
+      args: ["-y", "@littlebearapps/outlook-mcp"],
+      env: {
+        OUTLOOK_CLIENT_ID: config.OUTLOOK_CLIENT_ID,
+        OUTLOOK_CLIENT_SECRET: config.OUTLOOK_CLIENT_SECRET
+      }
+    })

@@ -18,19 +18,29 @@ Outlook Assistant connects AI assistants to your Microsoft Outlook account throu
 
 **Works with personal Outlook.com and work/school Microsoft 365 accounts.**
 
+<div align="center">
+  <br />
+  <a href="docs/demo/outlook-assistant-demo.mp4">
+    <img src="docs/demo/outlook-assistant-demo.gif" alt="Outlook Assistant Demo — searching emails, reading, and drafting a reply" width="720" style="border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.12);" />
+  </a>
+  <br />
+  <sub>Search inbox → read &amp; summarise → draft a reply — all from the conversation</sub>
+  <br /><br />
+</div>
+
 ### What you can do
 
-- **Search and read emails** — find messages by sender, subject, date, or keywords; read full threads with conversation grouping; batch flag, move, export, or categorise multiple emails at once
-- **Send emails with safety controls** — dry-run preview, session rate limiting, and recipient allowlist to prevent mistakes
-- **Manage your calendar** — view upcoming events, schedule meetings with attendees, decline or cancel invitations
-- **Export emails** — save to Markdown, EML, MBOX, JSON, or HTML for archiving, analysis, or migration; export search results or entire threads in one call
-- **Investigate email headers** — check DKIM, SPF, and DMARC authentication; trace delivery chains; analyse spam scores — useful for phishing investigation and compliance
-- **Organise your inbox** — create folders, set up inbox rules, colour-code with categories, manage Focused Inbox — all work together for complete inbox automation
-- **Track inbox changes** — delta sync detects new, modified, and deleted emails since your last check, with tokens for incremental polling
-- **Manage contacts** — search your contact book and organisational directory, create and update contact records
-- **Configure settings** — set out-of-office auto-replies, working hours, and time zone
-- **Access shared mailboxes** — read team inboxes and service accounts (Microsoft 365)
-- **Find meeting rooms** — search by building, floor, capacity, AV equipment, and wheelchair accessibility (Microsoft 365)
+- 📨 **Search and read emails** — find messages by sender, subject, date, or keywords; read full threads with conversation grouping; batch flag, move, export, or categorise multiple emails at once
+- 🛡️ **Send emails with safety controls** — dry-run preview, session rate limiting, and recipient allowlist to prevent mistakes
+- 📅 **Manage your calendar** — view upcoming events, schedule meetings with attendees, decline or cancel invitations
+- 📦 **Export emails** — save to Markdown, EML, MBOX, JSON, or HTML for archiving, analysis, or migration; export search results or entire threads in one call
+- 🔍 **Investigate email headers** — check DKIM, SPF, and DMARC authentication; trace delivery chains; analyse spam scores — useful for phishing investigation and compliance
+- 🗂️ **Organise your inbox** — create folders, set up inbox rules, colour-code with categories, manage Focused Inbox — all work together for complete inbox automation
+- 🔄 **Track inbox changes** — delta sync detects new, modified, and deleted emails since your last check, with tokens for incremental polling
+- 👥 **Manage contacts** — search your contact book and organisational directory, create and update contact records
+- ⚙️ **Configure settings** — set out-of-office auto-replies, working hours, and time zone
+- 📬 **Access shared mailboxes** — read team inboxes and service accounts (Microsoft 365)
+- 🏢 **Find meeting rooms** — search by building, floor, capacity, AV equipment, and wheelchair accessibility (Microsoft 365)
 
 ### Why Outlook Assistant?
 

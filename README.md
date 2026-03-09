@@ -12,6 +12,7 @@
   <a href="https://github.com/littlebearapps/outlook-assistant/actions/workflows/ci.yml"><img src="https://github.com/littlebearapps/outlook-assistant/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
   <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen" alt="Node.js" /></a>
+  <a href="https://glama.ai/mcp/servers/littlebearapps/outlook-assistant"><img width="380" height="200" src="https://glama.ai/mcp/servers/littlebearapps/outlook-assistant/badge" alt="Outlook Assistant on Glama" /></a>
 </p>
 
 Outlook Assistant connects AI assistants to your Microsoft Outlook account through the [Model Context Protocol](https://modelcontextprotocol.io/). Ask your AI assistant to search your inbox, send emails, schedule meetings, manage contacts, and configure mailbox settings — without leaving the conversation. Works with Claude, Cursor, Windsurf, and any MCP-compatible client.

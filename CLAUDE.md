@@ -169,6 +169,10 @@ The project has been submitted to major MCP directories (2026-03-05). Tracker wi
 - `docs/promotion/directory-submissions.md` - Directory submission tracker
 - `.env.example` - Environment template
 
+## History
+
+- **v3.3.0**: Renamed from `outlook-mcp` / `@littlebearapps/outlook-mcp` to `outlook-assistant` / `@littlebearapps/outlook-assistant`. Old npm package deprecated with redirect. Token files auto-migrate from `.outlook-mcp-tokens.json`.
+
 # currentDate
 Today's date is 2026-02-27.
 

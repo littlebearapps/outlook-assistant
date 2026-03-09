@@ -2,14 +2,20 @@
   <img src="docs/assets/outlook-assistant-logo-full.svg" height="200" alt="Outlook Assistant" />
 </p>
 
+<h1 align="center">Outlook Assistant</h1>
+
 <p align="center">
-  <strong>Let your AI assistant read, search, send, and manage your Outlook email, calendar, and contacts — all from the conversation.</strong>
+  <strong>MCP server for Outlook email, calendar, and contacts — let your AI assistant manage your inbox directly from the conversation.</strong>
 </p>
 
 <p align="center">
   <a href="https://www.npmjs.com/package/@littlebearapps/outlook-assistant"><img src="https://img.shields.io/npm/v/@littlebearapps/outlook-assistant" alt="npm version" /></a>
   <a href="https://www.npmjs.com/package/@littlebearapps/outlook-assistant"><img src="https://img.shields.io/npm/dm/@littlebearapps/outlook-assistant" alt="npm downloads" /></a>
+  <a href="https://github.com/littlebearapps/outlook-assistant/stargazers"><img src="https://img.shields.io/github/stars/littlebearapps/outlook-assistant" alt="GitHub stars" /></a>
+  <a href="https://github.com/littlebearapps/outlook-assistant/commits/main"><img src="https://img.shields.io/github/last-commit/littlebearapps/outlook-assistant" alt="Last commit" /></a>
   <a href="https://github.com/littlebearapps/outlook-assistant/actions/workflows/ci.yml"><img src="https://github.com/littlebearapps/outlook-assistant/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/littlebearapps/outlook-assistant/actions/workflows/codeql.yml"><img src="https://github.com/littlebearapps/outlook-assistant/actions/workflows/codeql.yml/badge.svg" alt="CodeQL" /></a>
+  <a href="https://github.com/littlebearapps/outlook-assistant/issues"><img src="https://img.shields.io/github/issues/littlebearapps/outlook-assistant" alt="Open issues" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
   <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen" alt="Node.js" /></a>
   <a href="https://glama.ai/mcp/servers/littlebearapps/outlook-assistant"><img width="380" height="200" src="https://glama.ai/mcp/servers/littlebearapps/outlook-assistant/badge" alt="Outlook Assistant on Glama" /></a>
@@ -151,7 +157,10 @@ You need a Microsoft Azure app registration to authenticate. See the **[Azure Se
 
 ### 3. Configure Your MCP Client
 
-Add to your MCP client config. For Claude Desktop (`claude_desktop_config.json`):
+Add to your MCP client config:
+
+<details>
+<summary><strong>Claude Desktop</strong> (<code>claude_desktop_config.json</code>)</summary>
 
 ```json
 {
@@ -167,6 +176,55 @@ Add to your MCP client config. For Claude Desktop (`claude_desktop_config.json`)
   }
 }
 ```
+</details>
+
+<details>
+<summary><strong>Claude Code</strong> (CLI)</summary>
+
+```bash
+claude mcp add outlook -- npx @littlebearapps/outlook-assistant
+```
+
+Then set environment variables in your `.env` or shell.
+</details>
+
+<details>
+<summary><strong>Cursor</strong> (<code>.cursor/mcp.json</code>)</summary>
+
+```json
+{
+  "mcpServers": {
+    "outlook": {
+      "command": "npx",
+      "args": ["@littlebearapps/outlook-assistant"],
+      "env": {
+        "OUTLOOK_CLIENT_ID": "your-application-client-id",
+        "OUTLOOK_CLIENT_SECRET": "your-client-secret-VALUE"
+      }
+    }
+  }
+}
+```
+</details>
+
+<details>
+<summary><strong>Windsurf</strong> (<code>~/.codeium/windsurf/mcp_config.json</code>)</summary>
+
+```json
+{
+  "mcpServers": {
+    "outlook": {
+      "command": "npx",
+      "args": ["@littlebearapps/outlook-assistant"],
+      "env": {
+        "OUTLOOK_CLIENT_ID": "your-application-client-id",
+        "OUTLOOK_CLIENT_SECRET": "your-client-secret-VALUE"
+      }
+    }
+  }
+}
+```
+</details>
 
 ### 4. Authenticate
 
@@ -259,24 +317,9 @@ USE_TEST_MODE=false
 
 ### MCP Client Configuration
 
-Add to your MCP client config (example for Claude Desktop):
+See [Quick Start — Configure Your MCP Client](#3-configure-your-mcp-client) above for Claude Desktop, Claude Code, Cursor, and Windsurf configs.
 
-```json
-{
-  "mcpServers": {
-    "outlook": {
-      "command": "npx",
-      "args": ["@littlebearapps/outlook-assistant"],
-      "env": {
-        "OUTLOOK_CLIENT_ID": "your-application-client-id",
-        "OUTLOOK_CLIENT_SECRET": "your-client-secret-VALUE"
-      }
-    }
-  }
-}
-```
-
-Or if installed from source:
+If installed from source, use `node` instead of `npx`:
 
 ```json
 {

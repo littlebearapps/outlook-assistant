@@ -1,7 +1,7 @@
 # Outlook Assistant — Directory Submission Tracker
 
 Generated: 2026-03-05
-Last updated: 2026-02-27 (Official MCP Registry published, Glama submitted)
+Last updated: 2026-03-08 (Renamed listings from outlook-mcp → outlook-assistant)
 
 ## Completed Submissions (Automated)
 
@@ -11,15 +11,15 @@ Last updated: 2026-02-27 (Official MCP Registry published, Glama submitted)
 |---|-----------|--------|--------|
 | 1 | punkpeye/awesome-mcp-servers (82k stars) | https://github.com/punkpeye/awesome-mcp-servers/pull/2742 | **Action needed** — requires Glama.ai link |
 | 2 | appcypher/awesome-mcp-servers (5.2k stars) | https://github.com/appcypher/awesome-mcp-servers/pull/492 | Pending review (no response) |
-| 3 | TensorBlock/awesome-mcp-servers (557 stars) | https://github.com/TensorBlock/awesome-mcp-servers/pull/136 | **Merged** (2026-03-05 by wilsonccccc) |
+| 3 | TensorBlock/awesome-mcp-servers (557 stars) | https://github.com/TensorBlock/awesome-mcp-servers/pull/136 | **Merged** (2026-03-05) — used old name `outlook-mcp`. Rename PR: [#149](https://github.com/TensorBlock/awesome-mcp-servers/pull/149) |
 | 4 | YuzeHao2023/Awesome-MCP-Servers (1k stars) | https://github.com/YuzeHao2023/Awesome-MCP-Servers/pull/46 | Pending review (no response) |
 
 ### Directory Issues
 
 | # | Directory | Issue URL | Status |
 |---|-----------|-----------|--------|
-| 5 | Cline MCP Marketplace | https://github.com/cline/mcp-marketplace/issues/792 | Pending review (no response) |
-| 6 | mcp.so (via chatmcp/mcpso) | https://github.com/chatmcp/mcpso/issues/679 | Submitted (issue + web form 2026-02-27) |
+| 5 | Cline MCP Marketplace | https://github.com/cline/mcp-marketplace/issues/792 | Pending review — title/body updated to `outlook-assistant` (2026-03-08) |
+| 6 | mcp.so (via chatmcp/mcpso) | https://github.com/chatmcp/mcpso/issues/679 | Pending review — title/body updated to `outlook-assistant` (2026-03-08) |
 
 ### Not Submitted (PRs disabled)
 
@@ -31,19 +31,24 @@ Last updated: 2026-02-27 (Official MCP Registry published, Glama submitted)
 
 ## Manual Submissions Required
 
-### Glama.ai (CRITICAL PATH) — Submitted 2026-02-27
+### Glama.ai (CRITICAL PATH) — Listed under old name, needs claim
 
 **URL:** https://glama.ai/mcp/servers (click "Add Server")
 
-**Status:** Submitted as "Outlook-MCP" Server type, pending Glama review/indexing. Once live, expected URL: `https://glama.ai/mcp/servers/littlebearapps/outlook-assistant`
+**Status:** Listed as `@littlebearapps/outlook-mcp` (old name). Live at: `https://glama.ai/mcp/servers/littlebearapps/outlook-mcp`. Multiple issues flagged: no release (fixed — v3.3.0 release created 2026-03-08), missing `glama.json` (fixed — added 2026-03-08), server not claimed, author not verified.
 
-**Why critical:** The punkpeye/awesome-mcp-servers PR (#2742, 82k stars) **requires a Glama link before merge**. The maintainer replied requesting it. This also gates mcpservers.org auto-indexing.
+**Next steps (manual):**
+1. Go to `https://glama.ai/mcp/servers/littlebearapps/outlook-mcp`
+2. Click "Claim this server" → authenticate with GitHub as `nathanschram`
+3. GitHub redirects old repo URL → new one, so claim may work if Glama follows redirects
+4. Once claimed, rename to `outlook-assistant` via admin UI
 
-**Steps:**
-1. Go to https://glama.ai/mcp/servers and click "Add Server"
-2. Link the GitHub repo: `https://github.com/littlebearapps/outlook-assistant`
-3. Once listed, expected URL: `https://glama.ai/mcp/servers/@littlebearapps/outlook-assistant`
-4. Update punkpeye PR #2742 to add the Glama link (see Step 2 below)
+**If claim fails** — contact Glama support (do NOT re-submit via "Add Server" as it may create duplicates):
+- Discord (fastest): `discord.com/invite/C3eCXhYWtJ`
+- Email: `support@glama.ai` (24hr response)
+- Twitter/X: `@punkpeye` — he is both the **Glama founder** and the awesome-mcp-servers maintainer
+
+**Why critical:** The punkpeye/awesome-mcp-servers PR (#2742, 82k stars) **requires a Glama link before merge**. The maintainer (punkpeye = Glama founder) replied requesting it. This also gates mcpservers.org auto-indexing.
 
 **After Glama listing is live**, update the PR's README line on fork `nathanschram/awesome-mcp-servers` branch `add-outlook-assistant`. Change from:
 
@@ -57,11 +62,11 @@ To:
 - [littlebearapps/outlook-assistant](https://github.com/littlebearapps/outlook-assistant) [glama](https://glama.ai/mcp/servers/@littlebearapps/outlook-assistant) 📇 ☁️ - MCP server for Microsoft Outlook with 20 consolidated tools...
 ```
 
-### PulseMCP — Pending (auto-ingest)
+### PulseMCP — Not listed
 
 **URL:** https://www.pulsemcp.com/submit
 
-**Status:** No manual submission needed. PulseMCP auto-ingests from the Official MCP Registry weekly. Our registry listing went live 2026-02-27, so expect PulseMCP indexing within ~1 week.
+**Status:** Not yet indexed despite MCP Registry listing going live 2026-02-27. Auto-ingest may not have picked it up. Manual submission via web form may be needed.
 
 ### mcp.so (web form) — Submitted 2026-02-27
 
@@ -203,13 +208,16 @@ Submit via PR following their CONTRIBUTING guide.
 
 ## Verification Checklist
 
-Last checked: 2026-02-27
+Last checked: 2026-03-08
 
-- [x] TensorBlock/awesome-mcp-servers — **Merged** (2026-03-05)
-- [x] Submit to Glama.ai (submitted 2026-02-27, pending review)
+- [x] TensorBlock/awesome-mcp-servers — **Merged** (2026-03-05), rename PR [#149](https://github.com/TensorBlock/awesome-mcp-servers/pull/149) submitted
+- [x] Submit to Glama.ai — listed under old name `outlook-mcp`. `glama.json` added, v3.3.0 release created. Needs claim + rename
 - [x] Official MCP Registry — **Published** (2026-02-27, v3.3.0)
-- [ ] Update punkpeye PR #2742 with Glama link once listed
-- [ ] Search each directory for "littlebearapps" or "outlook-assistant"
+- [x] Update cline/mcp-marketplace #792 — title/body renamed to `outlook-assistant` (2026-03-08)
+- [x] Update chatmcp/mcpso #679 — title/body renamed to `outlook-assistant` (2026-03-08)
+- [x] GitHub repo homepage URL — updated to `littlebearapps.com/builds/outlook-assistant` (2026-03-08)
+- [ ] Claim Glama server + rename to `outlook-assistant` (blocks punkpeye PR). `glama.json` and v3.3.0 release now in place
+- [ ] Update punkpeye PR #2742 with Glama link once name is corrected
+- [ ] Submit to PulseMCP (not auto-ingested)
 - [ ] Monitor GitHub star/fork count
-- [ ] Check PulseMCP's "Est Visitors" metric once listed (auto-ingests from MCP Registry)
 - [ ] Verify mcpservers.org indexes after punkpeye PR merge

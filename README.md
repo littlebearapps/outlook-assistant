@@ -191,6 +191,10 @@ Then set environment variables in your `.env` or shell.
 <details>
 <summary><strong>Cursor</strong> (<code>.cursor/mcp.json</code>)</summary>
 
+[![Install in Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](cursor://anysphere.cursor-deeplink/mcp/install?name=Outlook%20Assistant&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBsaXR0bGViZWFyYXBwcy9vdXRsb29rLWFzc2lzdGFudCJdLCJlbnYiOnsiT1VUTE9PS19DTElFTlRfSUQiOiIiLCJPVVRMT09LX0NMSUVOVF9TRUNSRVQiOiIifX0=)
+
+Or add manually to `.cursor/mcp.json`:
+
 ```json
 {
   "mcpServers": {

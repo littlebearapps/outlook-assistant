@@ -14,6 +14,7 @@ const { ensureAuthenticated } = require('../auth');
 const { getEmailFields } = require('../utils/field-presets');
 const {
   formatEmailContent,
+  formatEmailsAsCSV,
   VERBOSITY,
 } = require('../utils/response-formatter');
 
@@ -329,7 +330,7 @@ async function handleExportConversation(args) {
     };
   }
 
-  const validFormats = ['eml', 'mbox', 'markdown', 'json', 'html'];
+  const validFormats = ['eml', 'mbox', 'markdown', 'json', 'html', 'csv'];
   if (!validFormats.includes(format)) {
     return {
       content: [
@@ -600,6 +601,16 @@ async function handleExportConversation(args) {
         fs.writeFileSync(htmlPath, content, 'utf8');
         exportStats.bytes = Buffer.byteLength(content, 'utf8');
         exportedFiles.push(htmlPath);
+        break;
+      }
+
+      case 'csv': {
+        // Export as CSV
+        const csvPath = path.join(resolvedDir, `${filenameBase}.csv`);
+        const csvContent = formatEmailsAsCSV(messages);
+        fs.writeFileSync(csvPath, csvContent, 'utf8');
+        exportStats.bytes = Buffer.byteLength(csvContent, 'utf8');
+        exportedFiles.push(csvPath);
         break;
       }
     }

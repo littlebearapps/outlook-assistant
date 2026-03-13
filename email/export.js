@@ -11,6 +11,7 @@ const { callGraphAPI, callGraphAPIRaw } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const {
   formatEmailContent,
+  formatEmailsAsCSV,
   VERBOSITY,
 } = require('../utils/response-formatter');
 const { getEmailFields } = require('../utils/field-presets');
@@ -21,6 +22,7 @@ const EXPORT_FORMATS = {
   EML: 'eml', // Alias for MIME
   MARKDOWN: 'markdown',
   JSON: 'json',
+  CSV: 'csv',
 };
 
 /**
@@ -111,12 +113,15 @@ async function handleExportEmail(args) {
     } else if (format === EXPORT_FORMATS.JSON) {
       // JSON export - full email object
       content = JSON.stringify(email, null, 2);
+    } else if (format === EXPORT_FORMATS.CSV) {
+      // CSV export - email metadata
+      content = formatEmailsAsCSV(email);
     } else {
       return {
         content: [
           {
             type: 'text',
-            text: `Unknown format: ${format}. Supported: mime, eml, markdown, json`,
+            text: `Unknown format: ${format}. Supported: mime, eml, markdown, json, csv`,
           },
         ],
       };
@@ -465,6 +470,8 @@ async function exportSingleForBatch(
       content = formatEmailContent(email, VERBOSITY.FULL, {
         includeHeaders: true,
       });
+    } else if (format === EXPORT_FORMATS.CSV) {
+      content = formatEmailsAsCSV(email);
     } else {
       content = JSON.stringify(email, null, 2);
     }
@@ -559,6 +566,8 @@ function getExtension(format) {
       return 'eml';
     case EXPORT_FORMATS.JSON:
       return 'json';
+    case EXPORT_FORMATS.CSV:
+      return 'csv';
     case EXPORT_FORMATS.MARKDOWN:
     default:
       return 'md';

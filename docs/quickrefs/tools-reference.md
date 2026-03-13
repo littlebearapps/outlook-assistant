@@ -58,6 +58,7 @@ Quick reference for all 20 consolidated MCP tools across 9 modules. Each tool in
 | `markdown` | Human-readable — paste into documents |
 | `json` | Structured data — programmatic processing |
 | `html` | Formatted — visual archival of threads |
+| `csv` | Spreadsheet-friendly metadata export |
 
 > **Content-type handling**: The `attachments` tool handles text and binary content types. Text attachments (text/\*, application/json, application/xml) are displayed inline; binary attachments require download. The `contentType` field is included in attachment listings.
 

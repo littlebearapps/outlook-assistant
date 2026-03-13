@@ -284,6 +284,49 @@ function formatEmailContent(
 }
 
 /**
+ * Formats one or more emails as a CSV string with a header row.
+ * Accepts a single email object or an array of email objects.
+ * Only exports metadata columns - no body content.
+ * @param {object|object[]} emails - Single email or array of emails from Graph API
+ * @returns {string} - CSV string with header row and one row per email
+ */
+function formatEmailsAsCSV(emails) {
+  const CSV_HEADERS = [
+    'id',
+    'subject',
+    'from',
+    'to',
+    'cc',
+    'receivedDateTime',
+    'isRead',
+    'importance',
+    'hasAttachments',
+  ];
+
+  const emailList = Array.isArray(emails) ? emails : [emails];
+
+  const rows = emailList.map((email) => {
+    const from = formatEmailAddress(email.from?.emailAddress);
+    const to = formatRecipients(email.toRecipients);
+    const cc = formatRecipients(email.ccRecipients);
+
+    return [
+      email.id || '',
+      email.subject || '',
+      from,
+      to,
+      cc,
+      email.receivedDateTime || '',
+      email.isRead != null ? String(email.isRead) : '',
+      email.importance || '',
+      email.hasAttachments != null ? String(email.hasAttachments) : '',
+    ].map(escapeCSV);
+  });
+
+  return [CSV_HEADERS.join(','), ...rows.map((r) => r.join(','))].join('\n');
+}
+
+/**
  * Formats email headers for legal/forensic use
  * @param {Array} headers - Array of header objects
  * @param {boolean} includeAll - Include all headers (not just important ones)
@@ -435,6 +478,26 @@ function stripHtml(html) {
     .trim();
 }
 
+function escapeCSV(value) {
+  if (value === null || value === undefined) return '';
+  const str = String(value);
+  const needsQuoting =
+    str.includes(',') ||
+    str.includes('"') ||
+    str.includes('\n') ||
+    str.includes('\r');
+  const formulaChars = ['=', '+', '-', '@', '\t', '\r', '\n'];
+  const isFormula = formulaChars.some((ch) => str.startsWith(ch));
+
+  if (isFormula) {
+    return '"' + "'" + str.replace(/"/g, '""') + '"';
+  }
+  if (needsQuoting) {
+    return '"' + str.replace(/"/g, '""') + '"';
+  }
+  return str;
+}
+
 module.exports = {
   VERBOSITY,
   DEFAULT_LIMITS,
@@ -445,6 +508,7 @@ module.exports = {
   formatEmailList,
   formatEmailListAsTable,
   formatEmailContent,
+  formatEmailsAsCSV,
   formatEmailHeaders,
   createResponseMeta,
   wrapMcpResponse,
@@ -454,4 +518,5 @@ module.exports = {
   formatRecipients,
   truncateText,
   stripHtml,
+  escapeCSV,
 };

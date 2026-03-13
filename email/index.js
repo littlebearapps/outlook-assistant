@@ -434,9 +434,9 @@ const emailTools = [
         },
         format: {
           type: 'string',
-          enum: ['mime', 'eml', 'markdown', 'json', 'mbox', 'html'],
+          enum: ['mime', 'eml', 'markdown', 'json', 'mbox', 'html', 'csv'],
           description:
-            'Export format (target=message: mime/eml/markdown/json, target=conversation: eml/mbox/markdown/json/html)',
+            'Export format (target=message: mime/eml/markdown/json/csv, target=conversation: eml/mbox/markdown/json/html/csv)',
         },
         savePath: {
           type: 'string',

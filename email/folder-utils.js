@@ -10,15 +10,39 @@ const { callGraphAPI } = require('../utils/graph-api');
 const _folderCache = {};
 
 /**
- * Well-known folder names and their endpoints
+ * Well-known folder names and their endpoints.
+ * Includes Graph API well-known names (sentitems, deleteditems, junkemail),
+ * common display names (Sent Items, Deleted Items, Junk Email), and
+ * short aliases (sent, deleted, junk) for consistent resolution across tools.
  */
 const WELL_KNOWN_FOLDERS = {
+  // Inbox
   inbox: 'me/mailFolders/inbox/messages',
+
+  // Drafts
   drafts: 'me/mailFolders/drafts/messages',
+
+  // Sent Items - alias, Graph API name, display name
   sent: 'me/mailFolders/sentItems/messages',
+  sentitems: 'me/mailFolders/sentItems/messages',
+  'sent items': 'me/mailFolders/sentItems/messages',
+
+  // Deleted Items - alias, Graph API name, display name
   deleted: 'me/mailFolders/deletedItems/messages',
+  deleteditems: 'me/mailFolders/deletedItems/messages',
+  'deleted items': 'me/mailFolders/deletedItems/messages',
+
+  // Junk Email - alias, Graph API name, display name, common alias
   junk: 'me/mailFolders/junkemail/messages',
+  junkemail: 'me/mailFolders/junkemail/messages',
+  'junk email': 'me/mailFolders/junkemail/messages',
+  spam: 'me/mailFolders/junkemail/messages',
+
+  // Archive
   archive: 'me/mailFolders/archive/messages',
+
+  // Outbox
+  outbox: 'me/mailFolders/outbox/messages',
 };
 
 /**

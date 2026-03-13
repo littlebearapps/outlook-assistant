@@ -281,10 +281,8 @@ async function handleBatchExportEmails(args) {
       }
 
       const csvContent = formatEmailsAsCSV(emails);
-      const csvPath = path.join(
-        outputDir,
-        `batch_export_${new Date().toISOString().slice(0, 10)}.csv`
-      );
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const csvPath = path.join(outputDir, `batch_export_${timestamp}.csv`);
       fs.writeFileSync(csvPath, csvContent, 'utf8');
       const totalBytes = Buffer.byteLength(csvContent, 'utf8');
 

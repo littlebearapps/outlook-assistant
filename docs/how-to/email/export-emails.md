@@ -1,6 +1,6 @@
 ---
 title: "How to Export Emails"
-description: "Save emails and conversation threads to your local machine in Markdown, EML, MBOX, JSON, or HTML formats."
+description: "Save emails and conversation threads to your local machine in Markdown, EML, MBOX, JSON, HTML, or CSV formats."
 tags: [outlook-assistant, email, how-to]
 ---
 
@@ -86,6 +86,23 @@ params:
   outputDir: "/tmp/finance-export/"
 ```
 
+## Export as CSV (For Spreadsheets)
+
+CSV exports email metadata (subject, from, to, dates) without body content — ideal for importing into Excel or Google Sheets:
+
+```
+tool: export
+params:
+  target: "messages"
+  searchQuery:
+    from: "finance@company.com"
+    receivedAfter: "2026-01-01"
+  format: "csv"
+  outputDir: "/tmp/finance-audit/"
+```
+
+Batch CSV exports produce a single aggregated file with one row per email. CSV values are protected against formula injection (OWASP mitigation).
+
 ## Get Raw MIME Content
 
 For developers or forensic analysis:
@@ -106,6 +123,7 @@ params:
 | `mbox` | Bulk archiving (one file, many messages) | `.mbox` |
 | `json` | Programmatic processing, data analysis | `.json` |
 | `html` | Viewing in a browser with formatting | `.html` |
+| `csv` | Spreadsheet import, bulk metadata analysis | `.csv` |
 | `mime` | Raw email content, forensics | raw output |
 
 ## Parameter Reference
@@ -126,6 +144,7 @@ params:
 ## Tips
 
 - Use `markdown` format for AI-readable exports
+- Use `csv` format to get email metadata into a spreadsheet for analysis
 - Use `mbox` for archiving entire conversations in a single file
 - Combine with `search-emails` to find emails first, then export the IDs
 - The `searchQuery` option in batch mode saves a step — no need to search first

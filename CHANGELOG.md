@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.0] - 2026-03
+
+### Added
+
+- **CSV export format** — export email metadata to spreadsheet-friendly CSV for data analysis, compliance reporting, and bulk operations (#71, PR #75 by @Chizaram-Igolo)
+  - Metadata-only columns: id, subject, from, to, cc, receivedDateTime, isRead, importance, hasAttachments
+  - CSV injection protection following OWASP guidelines (single-quote prefix for formula characters)
+  - Batch export aggregates into a single CSV file with one row per email
+  - Works with all export targets: `message`, `messages`, and `conversation`
+
 ## [3.3.0] - 2026-03
 
 ### Security

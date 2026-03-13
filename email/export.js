@@ -121,7 +121,7 @@ async function handleExportEmail(args) {
         content: [
           {
             type: 'text',
-            text: `Unknown format: ${format}. Supported: mime, eml, markdown, json, csv`,
+            text: `Unknown format: ${format}. Supported: ${Object.values(EXPORT_FORMATS).join(', ')}`,
           },
         ],
       };
@@ -257,6 +257,68 @@ async function handleBatchExportEmails(args) {
     if (idsToExport.length > maxBatch) {
       idsToExport = idsToExport.slice(0, maxBatch);
       console.error(`Batch export limited to ${maxBatch} emails`);
+    }
+
+    // CSV batch export: aggregate all emails into a single CSV file
+    if (format === EXPORT_FORMATS.CSV) {
+      const selectFields = getEmailFields('export');
+      const emails = [];
+      const failed = [];
+
+      for (const emailId of idsToExport) {
+        try {
+          const email = await callGraphAPI(
+            accessToken,
+            'GET',
+            `me/messages/${emailId}`,
+            null,
+            { $select: selectFields }
+          );
+          emails.push(email);
+        } catch (error) {
+          failed.push({ emailId, error: error.message });
+        }
+      }
+
+      const csvContent = formatEmailsAsCSV(emails);
+      const csvPath = path.join(
+        outputDir,
+        `batch_export_${new Date().toISOString().slice(0, 10)}.csv`
+      );
+      fs.writeFileSync(csvPath, csvContent, 'utf8');
+      const totalBytes = Buffer.byteLength(csvContent, 'utf8');
+
+      let resultText = `## Batch Export Complete\n\n`;
+      resultText += `| Metric | Value |\n`;
+      resultText += `|--------|-------|\n`;
+      resultText += `| Total | ${idsToExport.length} |\n`;
+      resultText += `| Successful | ${emails.length} |\n`;
+      resultText += `| Failed | ${failed.length} |\n`;
+      resultText += `| Output File | \`${csvPath}\` |\n`;
+      resultText += `| Format | CSV |\n`;
+      resultText += `| Total Size | ${(totalBytes / 1024).toFixed(1)} KB |\n`;
+
+      if (failed.length > 0) {
+        resultText += `\n### Failed Exports\n\n`;
+        for (const f of failed.slice(0, 10)) {
+          resultText += `- ID \`${f.emailId}\`: ${f.error}\n`;
+        }
+        if (failed.length > 10) {
+          resultText += `- ... and ${failed.length - 10} more\n`;
+        }
+      }
+
+      return {
+        content: [{ type: 'text', text: resultText }],
+        _meta: {
+          outputDir,
+          format,
+          total: idsToExport.length,
+          successful: emails.length,
+          failed: failed.length,
+          totalBytes,
+        },
+      };
     }
 
     // Export emails with concurrency limit (4 concurrent per Graph API limits)
@@ -470,8 +532,6 @@ async function exportSingleForBatch(
       content = formatEmailContent(email, VERBOSITY.FULL, {
         includeHeaders: true,
       });
-    } else if (format === EXPORT_FORMATS.CSV) {
-      content = formatEmailsAsCSV(email);
     } else {
       content = JSON.stringify(email, null, 2);
     }

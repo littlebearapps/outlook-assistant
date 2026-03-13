@@ -86,6 +86,7 @@ Outlook Assistant connects AI assistants to your Microsoft Outlook account throu
 | `markdown` | `.md` | Pasting into documents, feeding into AI workflows |
 | `json` | `.json` | Data analysis, pipeline processing, compliance reporting |
 | `html` | `.html` | Visual archival with formatting intact |
+| `csv` | `.csv` | Spreadsheet import, bulk metadata analysis, compliance audits |
 
 Export individual emails, search results, or entire conversation threads — use `target=messages` with a search query to batch-export without manually collecting IDs.
 

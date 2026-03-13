@@ -1,13 +1,13 @@
-# Auto-tag on version bump
+# Auto-tag and release on version bump
 #
 # When a push to main changes the version in package.json,
-# automatically creates and pushes a git tag (e.g. v3.4.0).
-# This triggers the publish.yml workflow to publish to npm.
+# automatically creates a git tag (e.g. v3.4.0) and GitHub Release.
+# The tag triggers the publish.yml workflow to publish to npm.
 #
-# This eliminates the manual step of running:
-#   git tag v3.4.0 && git push origin v3.4.0
+# This eliminates the manual steps of running:
+#   git tag v3.4.0 && git push origin v3.4.0 && gh release create v3.4.0
 
-name: Auto-tag on version bump
+name: Auto-tag and release on version bump
 
 on:
   push:
@@ -67,3 +67,12 @@ jobs:
           git tag -a "$TAG" -m "Release $TAG"
           git push origin "$TAG"
           echo "Created and pushed tag: $TAG"
+
+      - name: Create GitHub Release
+        if: steps.version.outputs.changed == 'true' && steps.check-tag.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v${{ steps.version.outputs.current }}"
+          gh release create "$TAG" --generate-notes --title "$TAG"
+          echo "Created GitHub Release: $TAG"

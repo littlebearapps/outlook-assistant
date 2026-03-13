@@ -98,7 +98,23 @@ describe('handleGetMailboxSettings', () => {
     expect(result.content[0].text).not.toContain('```json');
   });
 
-  it('should format timeZone section', async () => {
+  it('should format timeZone section from Graph API object response', async () => {
+    // Graph API returns { value: "timezone string" } for scalar properties
+    callGraphAPI.mockResolvedValue({
+      '@odata.context':
+        "https://graph.microsoft.com/v1.0/$metadata#users('user-id')/mailboxSettings/timeZone",
+      value: 'AUS Eastern Standard Time',
+    });
+
+    const result = await handleGetMailboxSettings({ section: 'timeZone' });
+
+    expect(result.content[0].text).toContain('AUS Eastern Standard Time');
+    expect(result.content[0].text).not.toContain('[object Object]');
+    expect(result.content[0].text).not.toContain('```json');
+  });
+
+  it('should format timeZone section from plain string response', async () => {
+    // Backwards compatibility: handle plain string response
     callGraphAPI.mockResolvedValue('AUS Eastern Standard Time');
 
     const result = await handleGetMailboxSettings({ section: 'timeZone' });

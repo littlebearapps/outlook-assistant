@@ -129,7 +129,9 @@ async function handleGetMailboxSettings(args) {
         output.push(`**Locale**: ${settings.locale || 'Not set'}`);
         output.push(`**Display Name**: ${settings.displayName || 'Not set'}`);
       } else if (section === 'timeZone') {
-        output.push(`**Zone**: ${settings}`);
+        // Graph API returns { value: "timezone string" } for scalar properties
+        const tz = typeof settings === 'string' ? settings : settings.value;
+        output.push(`**Zone**: ${tz || 'Not set'}`);
       } else {
         // Fallback for unknown sections
         output.push('```json');

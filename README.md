@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/outlook-assistant-logo-full.svg" height="200" alt="Outlook Assistant" />
+  <img src="https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/assets/outlook-assistant-logo-full.png" height="200" alt="Outlook Assistant" />
 </p>
 
 <h1 align="center">Outlook Assistant</h1>

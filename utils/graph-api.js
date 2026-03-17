@@ -7,12 +7,15 @@ const mockData = require('./mock-data');
 
 /**
  * Makes a request to the Microsoft Graph API
+ * In test mode (USE_TEST_MODE=true), routes to mock data instead of the real API.
  * @param {string} accessToken - The access token for authentication
  * @param {string} method - HTTP method (GET, POST, etc.)
  * @param {string} path - API endpoint path
  * @param {object} data - Data to send for POST/PUT requests
  * @param {object} queryParams - Query parameters
  * @returns {Promise<object>} - The API response
+ * @throws {Error} 'UNAUTHORIZED' if the server returns HTTP 401 (token expired or invalid)
+ * @throws {Error} If the HTTP status is outside 2xx, or if JSON parsing or network fails
  */
 async function callGraphAPI(
   accessToken,
@@ -141,6 +144,8 @@ async function callGraphAPI(
  * @param {object} queryParams - Initial query parameters
  * @param {number} maxCount - Maximum number of items to retrieve (0 = all)
  * @returns {Promise<object>} - Combined API response with all items
+ * @throws {Error} If method is not 'GET'
+ * @throws {Error} If any page request fails for any other reason
  */
 async function callGraphAPIPaginated(
   accessToken,
@@ -204,9 +209,12 @@ async function callGraphAPIPaginated(
 
 /**
  * Calls Graph API to get raw MIME content (for email export)
+ * In test mode (USE_TEST_MODE=true), returns mock MIME content instead of calling the real API.
  * @param {string} accessToken - The access token for authentication
  * @param {string} emailId - The email ID to export
  * @returns {Promise<string>} - Raw MIME content as string
+ * @throws {Error} 'UNAUTHORIZED' if the server returns HTTP 401 (token expired or invalid)
+ * @throws {Error} If the HTTP status is outside 2xx or a network error occurs
  */
 async function callGraphAPIRaw(accessToken, emailId) {
   // Test mode: return mock MIME content

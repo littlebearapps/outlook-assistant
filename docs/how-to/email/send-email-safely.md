@@ -8,6 +8,32 @@ tags: [outlook-assistant, email, how-to]
 
 Compose and send emails through your AI assistant with built-in safety controls: dry-run preview, rate limiting, and an optional recipient allowlist.
 
+## Check Recipients Before Sending
+
+Before sending to unfamiliar recipients or large groups, check for potential issues:
+
+> "Check if sarah@company.com and team@company.com are available before I send"
+
+```
+tool: get-mail-tips
+params:
+  recipients: ["sarah@company.com", "team@company.com"]
+```
+
+This checks for out-of-office, full mailboxes, delivery restrictions, moderation, external recipients, and group sizes. See [Check Recipients Before Sending](check-recipients-before-sending.md) for the full guide.
+
+You can also combine this with dry-run for a complete pre-send review:
+
+```
+tool: send-email
+params:
+  to: "sarah@company.com"
+  subject: "Project Update"
+  body: "Hi Sarah..."
+  dryRun: true
+  checkRecipients: true
+```
+
 ## Preview Before Sending (Dry Run)
 
 Always preview first to check the email looks right:
@@ -125,10 +151,12 @@ params:
 | `bcc` | BCC addresses (comma-separated) | — |
 | `importance` | `normal`, `high`, or `low` | `normal` |
 | `dryRun` | Preview without sending | `false` |
+| `checkRecipients` | Check recipients for issues before sending | `false` |
 | `saveToSentItems` | Save to Sent Items folder | `true` |
 
 ## Tips
 
+- Use `checkRecipients: true` with `dryRun: true` for a complete pre-send review
 - Always use `dryRun: true` for important emails to review before sending
 - Set `OUTLOOK_MAX_EMAILS_PER_SESSION` to prevent accidental bulk sends
 - Use `OUTLOOK_ALLOWED_RECIPIENTS` in shared or automated environments
@@ -136,7 +164,8 @@ params:
 
 ## Related
 
+- [Check Recipients Before Sending](check-recipients-before-sending.md) — full mail tips guide
 - [Find Emails](find-emails.md) — search for emails to reply to
 - [Read Email Threads](read-email-threads.md) — read a thread before replying
 - [Batch Operations](../advanced/batch-operations.md) — bulk email operations
-- [Tools Reference — send-email](../../quickrefs/tools-reference.md#email-6-tools)
+- [Tools Reference — send-email](../../quickrefs/tools-reference.md#email-7-tools)

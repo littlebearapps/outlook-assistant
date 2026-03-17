@@ -12,6 +12,7 @@ const mockData = require('./mock-data');
  * @param {string} path - API endpoint path
  * @param {object} data - Data to send for POST/PUT requests
  * @param {object} queryParams - Query parameters
+ * @param {object} extraHeaders - Additional headers (e.g. Prefer for immutable IDs)
  * @returns {Promise<object>} - The API response
  */
 async function callGraphAPI(
@@ -19,7 +20,8 @@ async function callGraphAPI(
   method,
   path,
   data = null,
-  queryParams = {}
+  queryParams = {},
+  extraHeaders = {}
 ) {
   // For test tokens, we'll simulate the API call
   if (config.USE_TEST_MODE && accessToken.startsWith('test_access_token_')) {
@@ -75,12 +77,22 @@ async function callGraphAPI(
     }
 
     return new Promise((resolve, reject) => {
+      const headers = {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      };
+
+      // Add immutable IDs header when enabled globally
+      if (config.USE_IMMUTABLE_IDS) {
+        headers.Prefer = 'IdType="ImmutableId"';
+      }
+
+      // Merge any extra headers (caller overrides take precedence)
+      Object.assign(headers, extraHeaders);
+
       const options = {
         method: method,
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
+        headers,
       };
 
       const req = https.request(finalUrl, options, (res) => {
@@ -203,6 +215,58 @@ async function callGraphAPIPaginated(
 }
 
 /**
+ * Sends multiple Graph API requests in a single batch call ($batch).
+ * Supports up to 20 requests per batch (Graph API limit).
+ * @param {string} accessToken - The access token for authentication
+ * @param {Array<{id: string, method: string, url: string, body?: object, headers?: object}>} requests - Batch requests
+ * @returns {Promise<Array<{id: string, status: number, body: object}>>} - Array of responses
+ */
+async function callGraphAPIBatch(accessToken, requests) {
+  if (!Array.isArray(requests) || requests.length === 0) {
+    throw new Error('Batch requests must be a non-empty array');
+  }
+
+  if (requests.length > 20) {
+    throw new Error('Batch requests cannot exceed 20 (Graph API limit)');
+  }
+
+  // Test mode
+  if (config.USE_TEST_MODE && accessToken.startsWith('test_access_token_')) {
+    return requests.map((req) => ({
+      id: req.id,
+      status: 200,
+      body: mockData.simulateGraphAPIResponse(
+        req.method,
+        req.url,
+        req.body || null,
+        {}
+      ),
+    }));
+  }
+
+  const batchPayload = {
+    requests: requests.map((req) => ({
+      id: req.id,
+      method: req.method,
+      url: req.url.startsWith('/') ? req.url : `/${req.url}`,
+      ...(req.body && { body: req.body }),
+      ...(req.headers && { headers: req.headers }),
+    })),
+  };
+
+  const response = await callGraphAPI(
+    accessToken,
+    'POST',
+    '$batch',
+    batchPayload
+  );
+
+  return (response.responses || []).sort(
+    (a, b) => parseInt(a.id) - parseInt(b.id)
+  );
+}
+
+/**
  * Calls Graph API to get raw MIME content (for email export)
  * @param {string} accessToken - The access token for authentication
  * @param {string} emailId - The email ID to export
@@ -264,5 +328,6 @@ async function callGraphAPIRaw(accessToken, emailId) {
 module.exports = {
   callGraphAPI,
   callGraphAPIPaginated,
+  callGraphAPIBatch,
   callGraphAPIRaw,
 };

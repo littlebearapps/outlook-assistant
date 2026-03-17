@@ -9,6 +9,7 @@ const {
   checkRecipientAllowlist,
   formatDryRunPreview,
 } = require('../utils/safety');
+const { handleGetMailTips } = require('./mail-tips');
 
 /**
  * Send email handler
@@ -25,6 +26,7 @@ async function handleSendEmail(args) {
     importance = 'normal',
     saveToSentItems = true,
     dryRun = false,
+    checkRecipients = false,
   } = args;
 
   // Validate required parameters
@@ -98,6 +100,48 @@ async function handleSendEmail(args) {
     const allRecipients = [...toRecipients, ...ccRecipients, ...bccRecipients];
     const allowlistError = checkRecipientAllowlist(allRecipients);
     if (allowlistError) return allowlistError;
+
+    // Pre-send mail tips check
+    if (checkRecipients) {
+      const allAddresses = allRecipients.map((r) => r.emailAddress.address);
+      const tipsResult = await handleGetMailTips({
+        recipients: allAddresses,
+      });
+
+      // If there are warnings, prepend them to the response
+      if (tipsResult._meta?.warningCount > 0 && dryRun) {
+        // In dry-run mode, include mail tips in the preview
+        const tipsText = tipsResult.content[0]?.text || '';
+        const preview = formatDryRunPreview({
+          message: {
+            subject,
+            body: {
+              contentType:
+                /<(html|div|p|h[1-6]|br|table|ul|ol|li|span|a\s|img|strong|em|b|i)\b/i.test(
+                  body
+                )
+                  ? 'html'
+                  : 'text',
+              content: body,
+            },
+            toRecipients,
+            ccRecipients: ccRecipients.length > 0 ? ccRecipients : undefined,
+            bccRecipients: bccRecipients.length > 0 ? bccRecipients : undefined,
+            importance,
+          },
+          saveToSentItems,
+        });
+        return {
+          content: [
+            {
+              type: 'text',
+              text: tipsText + '\n\n---\n\n' + preview.content[0].text,
+            },
+          ],
+          _meta: { mailTips: tipsResult._meta },
+        };
+      }
+    }
 
     // Prepare email object
     const emailObject = {

@@ -1,17 +1,17 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.littlebearapps/outlook-assistant",
-  "description": "Microsoft Outlook MCP server — 20 tools for email, calendar, contacts, and mailbox management.",
+  "description": "Microsoft Outlook MCP server — 21 tools for email, calendar, contacts, and mailbox management.",
   "repository": {
     "url": "https://github.com/littlebearapps/outlook-assistant",
     "source": "github"
   },
-  "version": "3.4.1",
+  "version": "3.5.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@littlebearapps/outlook-assistant",
-      "version": "3.4.1",
+      "version": "3.5.0",
       "transport": {
         "type": "stdio"
       },

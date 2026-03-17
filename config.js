@@ -90,6 +90,9 @@ module.exports = {
   // Search defaults (reduced for token efficiency)
   DEFAULT_SEARCH_RESULTS: DEFAULT_LIMITS.searchEmails,
 
+  // Immutable IDs (opt-in: IDs persist through folder moves)
+  USE_IMMUTABLE_IDS: process.env.OUTLOOK_IMMUTABLE_IDS === 'true',
+
   // Timezone
   DEFAULT_TIMEZONE: 'Australia/Melbourne', // Updated for Nathan's timezone
 };

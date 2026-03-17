@@ -1,6 +1,6 @@
 # CLAUDE.md - Outlook Assistant
 
-MCP server for Microsoft Outlook via Graph API (v3.4.0). 20 consolidated tools across 9 modules.
+MCP server for Microsoft Outlook via Graph API (v3.5.0). 21 tools across 9 modules.
 
 ## Commands
 
@@ -43,7 +43,8 @@ auth/                 # 1 tool: auth (action: status|authenticate|about)
   ├── token-manager.js    # Token load/save/refresh
   └── tools.js            # Tool definitions
 
-email/                # 6 tools: search-emails, read-email, send-email, update-email, attachments, export
+email/                # 7 tools: search-emails, read-email, send-email, update-email, attachments, export, get-mail-tips
+  ├── mail-tips.js        # Pre-send recipient validation (out-of-office, mailbox full, etc.)
   ├── folder-utils.js     # Folder name → ID resolution
   ├── attachments.js      # List, download, view attachments
   ├── headers.js          # Email header retrieval
@@ -59,7 +60,7 @@ settings/             # 1 tool: mailbox-settings (action: get|set-auto-replies|s
 advanced/             # 2 tools: access-shared-mailbox, find-meeting-rooms
 
 utils/
-  ├── graph-api.js        # Graph API client with OData encoding
+  ├── graph-api.js        # Graph API client with OData encoding, $batch, immutable IDs
   ├── safety.js           # Rate limiting, recipient allowlist, dry-run preview
   ├── field-presets.js    # Field selections for token efficiency
   └── response-formatter.js # Verbosity levels (minimal/standard/full)
@@ -67,10 +68,11 @@ utils/
 
 ## Safety Controls
 
-- **MCP annotations** on all 20 tools (`readOnlyHint`, `destructiveHint`, `idempotentHint`)
-- **send-email**: `dryRun` param, session rate limiting (`OUTLOOK_MAX_EMAILS_PER_SESSION`), recipient allowlist (`OUTLOOK_ALLOWED_RECIPIENTS`)
+- **MCP annotations** on all 21 tools (`readOnlyHint`, `destructiveHint`, `idempotentHint`)
+- **get-mail-tips**: pre-send recipient validation (out-of-office, mailbox full, delivery restrictions)
+- **send-email**: `dryRun` param, `checkRecipients` param (mail tips), session rate limiting (`OUTLOOK_MAX_EMAILS_PER_SESSION`), recipient allowlist (`OUTLOOK_ALLOWED_RECIPIENTS`)
 - **manage-event**: marked `destructiveHint: true` (decline/cancel/delete)
-- 6 read-only tools auto-approved by Claude Code; 2 destructive tools prompt for confirmation
+- 7 read-only tools auto-approved by Claude Code; 2 destructive tools prompt for confirmation
 
 ## Key Files
 
@@ -79,7 +81,8 @@ utils/
 | `index.js` | MCP protocol handler, combines all tools |
 | `config.js` | API endpoint, auth settings, defaults |
 | `auth/token-manager.js` | Token storage at `~/.outlook-assistant-tokens.json` |
-| `utils/graph-api.js` | All Graph API calls go through here |
+| `utils/graph-api.js` | All Graph API calls go through here (includes $batch) |
+| `email/mail-tips.js` | Pre-send recipient validation |
 | `utils/safety.js` | Rate limiter, allowlist, dry-run preview |
 | `utils/field-presets.js` | Optimised field selections per operation |
 
@@ -92,6 +95,7 @@ OUTLOOK_CLIENT_SECRET=your-secret-VALUE    # NOT the Secret ID!
 USE_TEST_MODE=false
 OUTLOOK_MAX_EMAILS_PER_SESSION=10          # Optional: rate limit sends
 OUTLOOK_ALLOWED_RECIPIENTS=example.com     # Optional: restrict recipients
+OUTLOOK_IMMUTABLE_IDS=true                 # Optional: IDs persist through folder moves
 ```
 
 > The server reads `OUTLOOK_CLIENT_ID`/`OUTLOOK_CLIENT_SECRET` from `config.js`.
@@ -152,6 +156,8 @@ Mock data defined in `utils/mock-data.js`.
 - Field presets in `utils/field-presets.js` optimise token usage
 - Response verbosity: `minimal`, `standard`, `full` (controls output detail)
 - Delta sync uses `@odata.deltaLink` for incremental updates
+- Batch API: `callGraphAPIBatch()` sends up to 20 requests via `$batch` endpoint
+- Immutable IDs: opt-in via `OUTLOOK_IMMUTABLE_IDS=true` — IDs persist through folder moves
 
 ## Tool Consolidation Map
 

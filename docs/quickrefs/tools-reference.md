@@ -5,7 +5,7 @@ tags:
 
 # Tools Reference - Outlook Assistant
 
-Quick reference for all 20 consolidated MCP tools across 9 modules. Each tool includes MCP safety annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`).
+Quick reference for all 21 MCP tools across 9 modules. Each tool includes MCP safety annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`).
 
 ## Authentication (1 tool)
 
@@ -13,13 +13,14 @@ Quick reference for all 20 consolidated MCP tools across 9 modules. Each tool in
 |------|---------|--------|
 | `auth` | `status` (default), `authenticate`, `about` | moderate write |
 
-## Email (6 tools)
+## Email (7 tools)
 
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
 | `search-emails` | Search, list, delta sync, conversations | read-only | `query`, `from`, `to`, `folder`, `deltaMode`, `conversationId`, `groupByConversation`, `internetMessageId` |
 | `read-email` | Read content or forensic headers | read-only | `id`, `headersMode`, `groupByType`, `importantOnly` |
-| `send-email` | Send email with safety controls | **destructive** | `to`, `subject`, `body`, `dryRun`, `cc`, `bcc`, `importance` |
+| `send-email` | Send email with safety controls | **destructive** | `to`, `subject`, `body`, `dryRun`, `checkRecipients`, `cc`, `bcc`, `importance` |
+| `get-mail-tips` | Pre-send recipient validation | read-only | `recipients`, `tipTypes` |
 | `update-email` | Mark read/unread, flag/unflag/complete | idempotent | `action` (required), `id`, `ids`, `dueDateTime` |
 | `attachments` | List, view, or download attachments | moderate write | `action` (`list`/`view`/`download`), `messageId`, `attachmentId` |
 | `export` | Export emails to various formats | moderate write | `target` (`message`/`messages`/`conversation`/`mime`), `id`, `format`, `outputDir` |
@@ -118,7 +119,7 @@ Quick reference for all 20 consolidated MCP tools across 9 modules. Each tool in
 
 | Category | Tools | Client Behaviour |
 |----------|-------|------------------|
-| **Read-only** (6) | `search-emails`, `read-email`, `list-events`, `search-people`, `access-shared-mailbox`, `find-meeting-rooms` | Auto-approved by MCP clients that support annotations |
+| **Read-only** (7) | `search-emails`, `read-email`, `list-events`, `search-people`, `access-shared-mailbox`, `find-meeting-rooms`, `get-mail-tips` | Auto-approved by MCP clients that support annotations |
 | **Destructive** (4) | `send-email`, `manage-event`, `folders`, `manage-rules` | Client prompts for confirmation |
 | **Idempotent** (2) | `update-email`, `mailbox-settings` | Safe to retry |
 | **Moderate write** (7) | All others | Normal approval flow |
@@ -127,9 +128,25 @@ Quick reference for all 20 consolidated MCP tools across 9 modules. Each tool in
 
 | Control | Config | Default |
 |---------|--------|---------|
+| Pre-send mail tips | `checkRecipients: true` param | Disabled |
 | Dry-run preview | `dryRun: true` param | Disabled |
 | Session rate limit | `OUTLOOK_MAX_EMAILS_PER_SESSION` env | Unlimited (0) |
 | Recipient allowlist | `OUTLOOK_ALLOWED_RECIPIENTS` env | Allow all |
+
+### get-mail-tips
+
+Check recipients before sending — detects out-of-office, mailbox full, delivery restrictions, moderation, external recipients, group member counts, and max message size. Uses `POST /me/getMailTips` (existing `Mail.Read` scope).
+
+| Tip Type | What It Checks |
+|----------|---------------|
+| `automaticReplies` | Out-of-office messages and schedule |
+| `mailboxFullStatus` | Whether mailbox is full (delivery may fail) |
+| `customMailTip` | Admin-configured notices |
+| `deliveryRestriction` | Whether you're allowed to send to this recipient |
+| `moderationStatus` | Whether messages require approval |
+| `recipientScope` | Internal vs external recipient |
+| `maxMessageSize` | Maximum message size limit |
+| `totalMemberCount` | Group size (total and external members) |
 
 ## Output Verbosity
 
@@ -147,6 +164,12 @@ search-emails(folder: "inbox", count: 10)
 
 // Search with filters
 search-emails(from: "boss@company.com", receivedAfter: "2024-01-01")
+
+// Check recipients before sending
+get-mail-tips(recipients: ["sarah@company.com", "team@company.com"])
+
+// Preview email with recipient check
+send-email(to: "...", subject: "...", body: "...", dryRun: true, checkRecipients: true)
 
 // Preview email before sending
 send-email(to: "...", subject: "...", body: "...", dryRun: true)

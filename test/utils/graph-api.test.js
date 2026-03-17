@@ -10,13 +10,14 @@ const originalTestMode = config.USE_TEST_MODE;
 const originalEndpoint = config.GRAPH_API_ENDPOINT;
 
 // We need to re-require after mocking https
-let callGraphAPI, callGraphAPIPaginated, callGraphAPIRaw;
+let callGraphAPI, callGraphAPIPaginated, callGraphAPIBatch, callGraphAPIRaw;
 
 beforeAll(() => {
   config.GRAPH_API_ENDPOINT = 'https://graph.microsoft.com/v1.0/';
   ({
     callGraphAPI,
     callGraphAPIPaginated,
+    callGraphAPIBatch,
     callGraphAPIRaw,
   } = require('../../utils/graph-api'));
 });
@@ -546,5 +547,205 @@ describe('callGraphAPIRaw', () => {
         'Network error during MIME export: ETIMEDOUT'
       );
     });
+  });
+});
+
+describe('callGraphAPIBatch', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    config.USE_TEST_MODE = false;
+  });
+
+  it('should reject empty requests array', async () => {
+    await expect(callGraphAPIBatch('token', [])).rejects.toThrow(
+      'non-empty array'
+    );
+  });
+
+  it('should reject non-array requests', async () => {
+    await expect(callGraphAPIBatch('token', null)).rejects.toThrow(
+      'non-empty array'
+    );
+  });
+
+  it('should reject more than 20 requests', async () => {
+    const requests = Array.from({ length: 21 }, (_, i) => ({
+      id: String(i),
+      method: 'GET',
+      url: '/me/messages',
+    }));
+
+    await expect(callGraphAPIBatch('token', requests)).rejects.toThrow(
+      'cannot exceed 20'
+    );
+  });
+
+  it('should send batch request with correct payload', async () => {
+    const batchResponse = {
+      responses: [
+        { id: '1', status: 200, body: { value: [{ id: 'msg1' }] } },
+        { id: '2', status: 200, body: { value: [{ id: 'msg2' }] } },
+      ],
+    };
+    mockHttpsRequest(200, batchResponse);
+
+    const requests = [
+      { id: '1', method: 'GET', url: '/me/messages/msg1' },
+      { id: '2', method: 'GET', url: '/me/messages/msg2' },
+    ];
+
+    const result = await callGraphAPIBatch('token', requests);
+
+    expect(result).toHaveLength(2);
+    expect(result[0].id).toBe('1');
+    expect(result[1].id).toBe('2');
+
+    // Verify the URL targets $batch endpoint
+    const calledUrl = https.request.mock.calls[0][0];
+    expect(calledUrl).toContain('%24batch');
+  });
+
+  it('should sort responses by ID', async () => {
+    const batchResponse = {
+      responses: [
+        { id: '2', status: 200, body: {} },
+        { id: '1', status: 200, body: {} },
+      ],
+    };
+    mockHttpsRequest(200, batchResponse);
+
+    const result = await callGraphAPIBatch('token', [
+      { id: '1', method: 'GET', url: '/me/messages/1' },
+      { id: '2', method: 'GET', url: '/me/messages/2' },
+    ]);
+
+    expect(result[0].id).toBe('1');
+    expect(result[1].id).toBe('2');
+  });
+
+  it('should prepend / to urls that do not start with /', async () => {
+    mockHttpsRequest(200, { responses: [] });
+
+    const mockReq = https.request.mock;
+
+    await callGraphAPIBatch('token', [
+      { id: '1', method: 'GET', url: 'me/messages/1' },
+    ]);
+
+    // The body written should contain /me/messages/1
+    const writtenBody = mockReq.results[0].value.write.mock.calls[0][0];
+    const parsed = JSON.parse(writtenBody);
+    expect(parsed.requests[0].url).toBe('/me/messages/1');
+  });
+
+  it('should include body and headers when provided', async () => {
+    mockHttpsRequest(200, { responses: [] });
+
+    await callGraphAPIBatch('token', [
+      {
+        id: '1',
+        method: 'POST',
+        url: '/me/sendMail',
+        body: { message: { subject: 'Test' } },
+        headers: { 'Content-Type': 'application/json' },
+      },
+    ]);
+
+    const writtenBody =
+      https.request.mock.results[0].value.write.mock.calls[0][0];
+    const parsed = JSON.parse(writtenBody);
+    expect(parsed.requests[0].body).toEqual({
+      message: { subject: 'Test' },
+    });
+    expect(parsed.requests[0].headers).toEqual({
+      'Content-Type': 'application/json',
+    });
+  });
+
+  it('should return mock responses in test mode', async () => {
+    config.USE_TEST_MODE = true;
+    const spy = jest
+      .spyOn(mockData, 'simulateGraphAPIResponse')
+      .mockReturnValue({ value: [] });
+
+    const result = await callGraphAPIBatch('test_access_token_abc', [
+      { id: '1', method: 'GET', url: '/me/messages' },
+    ]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('1');
+    expect(result[0].status).toBe(200);
+    expect(spy).toHaveBeenCalled();
+
+    spy.mockRestore();
+  });
+});
+
+describe('callGraphAPI - immutable IDs', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    config.USE_TEST_MODE = false;
+    config.USE_IMMUTABLE_IDS = false;
+  });
+
+  afterEach(() => {
+    config.USE_IMMUTABLE_IDS = false;
+  });
+
+  it('should not include Prefer header when USE_IMMUTABLE_IDS is false', async () => {
+    mockHttpsRequest(200, {});
+
+    await callGraphAPI('token', 'GET', 'me/messages');
+
+    const options = https.request.mock.calls[0][1];
+    expect(options.headers.Prefer).toBeUndefined();
+  });
+
+  it('should include Prefer header when USE_IMMUTABLE_IDS is true', async () => {
+    config.USE_IMMUTABLE_IDS = true;
+    mockHttpsRequest(200, {});
+
+    await callGraphAPI('token', 'GET', 'me/messages');
+
+    const options = https.request.mock.calls[0][1];
+    expect(options.headers.Prefer).toBe('IdType="ImmutableId"');
+  });
+
+  it('should allow extraHeaders to override Prefer', async () => {
+    config.USE_IMMUTABLE_IDS = true;
+    mockHttpsRequest(200, {});
+
+    await callGraphAPI(
+      'token',
+      'GET',
+      'me/messages',
+      null,
+      {},
+      {
+        Prefer: 'outlook.body-content-type="text"',
+      }
+    );
+
+    const options = https.request.mock.calls[0][1];
+    expect(options.headers.Prefer).toBe('outlook.body-content-type="text"');
+  });
+
+  it('should merge extraHeaders with default headers', async () => {
+    mockHttpsRequest(200, {});
+
+    await callGraphAPI(
+      'token',
+      'GET',
+      'me/messages',
+      null,
+      {},
+      {
+        'X-Custom': 'value',
+      }
+    );
+
+    const options = https.request.mock.calls[0][1];
+    expect(options.headers['X-Custom']).toBe('value');
+    expect(options.headers.Authorization).toBe('Bearer token');
   });
 });

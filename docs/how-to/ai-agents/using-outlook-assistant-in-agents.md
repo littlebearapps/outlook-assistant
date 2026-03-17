@@ -6,7 +6,7 @@ tags: [outlook-assistant, ai-agents, how-to, reference]
 
 # How to Use Outlook Assistant in AI Agents
 
-This guide helps AI agents and their developers make effective use of Outlook Assistant's 20 tools. It covers tool selection, safety annotations, output handling, and token efficiency.
+This guide helps AI agents and their developers make effective use of Outlook Assistant's 21 tools. It covers tool selection, safety annotations, output handling, and token efficiency.
 
 ## Tool Selection Guide
 
@@ -144,7 +144,7 @@ See [Investigate Email Headers](../advanced/investigate-email-headers.md) for he
 
 ## Related
 
-- [Tools Reference](../../quickrefs/tools-reference.md) — complete parameter reference for all 20 tools
+- [Tools Reference](../../quickrefs/tools-reference.md) — complete parameter reference for all 21 tools
 - [Monitor Inbox with Delta Sync](monitor-inbox-with-delta-sync.md) — incremental inbox monitoring for agents
 - [Investigate Email Headers](../advanced/investigate-email-headers.md) — forensic header analysis for phishing detection
 - [KQL Search Reference](../advanced/kql-search-reference.md) — advanced query patterns

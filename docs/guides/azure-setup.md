@@ -170,7 +170,20 @@ Set a calendar reminder before your secret expires. To rotate:
 3. Verify authentication works
 4. Delete the old secret
 
-## 5. Configure Outlook Assistant
+## 5. Enable Device Code Flow (Recommended)
+
+The device code flow lets you authenticate without running the auth server — ideal for remote, headless, and container environments.
+
+1. From your app registration, click **Authentication** in the left sidebar
+2. Scroll down to **Advanced settings**
+3. Set **Allow public client flows** to **Yes**
+4. Click **Save**
+
+> **Why?** Device code flow is a "public client" flow that doesn't require the client secret during authentication. This is the default auth method in Outlook Assistant v3.5.1+.
+>
+> If you skip this step, you can still authenticate using the browser redirect flow (`method=browser`), but you'll need to run the auth server on port 3333.
+
+## 6. Configure Outlook Assistant
 
 You now have two values:
 - **Application (client) ID** → `OUTLOOK_CLIENT_ID`

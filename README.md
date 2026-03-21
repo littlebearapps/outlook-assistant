@@ -152,6 +152,7 @@ You need a Microsoft Azure app registration to authenticate. See the **[Azure Se
 2. Set redirect URI to `http://localhost:3333/auth/callback`
 3. Add Microsoft Graph delegated permissions (Mail, Calendar, Contacts)
 4. Create a client secret and copy the **Value** (not the Secret ID)
+5. Enable **"Allow public client flows"** in Authentication > Advanced settings (for device code flow)
 
 ### 3. Configure Your MCP Client
 
@@ -340,7 +341,21 @@ If installed from source, use `node` instead of `npx`:
 
 ## Authentication Flow
 
-### Step 1: Start the Auth Server
+### Device Code Flow (Default — Recommended)
+
+No auth server needed. Works everywhere, including remote/headless environments.
+
+1. Ask your AI assistant to authenticate (calls `auth` tool with `action=authenticate`)
+2. Visit the URL shown (`microsoft.com/devicelogin`) on **any** browser, **any** device
+3. Enter the code, sign in with your Microsoft account, and grant permissions
+4. Tell your AI assistant to complete authentication (calls `auth` with `action=device-code-complete`)
+5. Tokens are saved to `~/.outlook-assistant-tokens.json` and **refresh automatically**
+
+> **Prerequisite**: Enable "Allow public client flows" in Azure Portal > your app > Authentication > Advanced settings.
+
+### Browser Redirect Flow (Alternative)
+
+For localhost development or if you prefer the traditional OAuth flow:
 
 ```bash
 npm run auth-server
@@ -348,14 +363,11 @@ npm run auth-server
 
 This starts a local server on port 3333 to handle the OAuth callback.
 
-> **Note**: The auth server reads `OUTLOOK_CLIENT_ID` and `OUTLOOK_CLIENT_SECRET` from environment variables (or `MS_CLIENT_ID`/`MS_CLIENT_SECRET`). When running the auth server separately, ensure your `.env` file is in the project root or export the variables in your shell. Your MCP client's `"env"` config only applies to the MCP server process, not a separately-started auth server.
-
-### Step 2: Authenticate
-
-1. In your AI assistant, use the `auth` tool with `action=authenticate`
+1. In your AI assistant, use the `auth` tool with `action=authenticate, method=browser`
 2. Open the provided URL in your browser
-3. Sign in with your Microsoft account and grant permissions
-4. Tokens are saved to `~/.outlook-assistant-tokens.json` and refresh automatically
+3. Sign in and grant permissions — tokens are saved automatically
+
+> **Note**: The auth server reads `OUTLOOK_CLIENT_ID` and `OUTLOOK_CLIENT_SECRET` from environment variables. Your MCP client's `"env"` config only applies to the MCP server process, not a separately-started auth server.
 
 ## Directory Structure
 
@@ -409,7 +421,11 @@ You're using the Secret **ID** instead of the Secret **Value**. Go to Azure Port
 
 ### Authentication URL doesn't work
 
-Start the auth server first: `npm run auth-server`
+If using browser flow: start the auth server first with `npm run auth-server`. If using device code flow: visit `microsoft.com/devicelogin` instead.
+
+### Device code "invalid_client"
+
+Enable "Allow public client flows" in Azure Portal > App registrations > Authentication > Advanced settings.
 
 ### Empty API responses
 

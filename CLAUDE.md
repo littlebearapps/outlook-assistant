@@ -7,15 +7,24 @@ MCP server for Microsoft Outlook via Graph API (v3.5.0). 21 tools across 9 modul
 ```bash
 npm install              # Install dependencies (run first)
 npm start                # Start MCP server
-npm run auth-server      # Start OAuth server on :3333 (required for auth)
+npm run auth-server      # Start OAuth server on :3333 (browser auth only)
 npm test                 # Run Jest tests
 npm run test-mode        # Start with mock data (USE_TEST_MODE=true)
 npm run inspect          # MCP Inspector for interactive testing
 npx kill-port 3333       # Kill auth server if port blocked
 ```
 
-### Auth Server (bws/direnv)
+### Authentication
 
+**Device code flow (default, recommended for remote/headless):**
+1. Call `auth` tool with `action=authenticate` (uses device-code by default)
+2. Visit the URL shown, enter the code
+3. Call `auth` tool with `action=device-code-complete` to finish
+4. No auth server, SSH tunnel, or port forwarding needed
+
+**Azure prerequisite**: Enable "Allow public client flows" in Azure Portal > App registrations > Authentication > Advanced settings.
+
+**Browser flow (alternative, for localhost use):**
 The auth server needs `OUTLOOK_CLIENT_ID` and `OUTLOOK_CLIENT_SECRET` env vars. These are stored in Bitwarden Secrets Manager as `outlook-client-id` and `outlook-client-secret`. Claude Code shells don't inherit direnv, so start the auth server manually:
 
 ```bash
@@ -27,10 +36,12 @@ source ~/bin/kc.sh && \
 
 The MCP server itself gets credentials via `.mcp.json` inline `kc_get` calls — no manual export needed for normal operation.
 
-For remote testing (e.g. MacBook → VPS), SSH tunnel port 3333:
+For remote testing with browser flow (e.g. MacBook → VPS), SSH tunnel port 3333:
 ```bash
 ssh -fNL 3333:localhost:3333 lba-1
 ```
+
+**Token refresh**: Tokens auto-refresh when expired (via `token-storage.js`). Re-authentication only needed when the refresh token expires (~90 days).
 
 ## Architecture
 
@@ -39,8 +50,10 @@ index.js              # Main entry - combines all module tools, serves annotatio
 config.js             # Centralized config (API endpoint, defaults, timezone)
 outlook-auth-server.js # OAuth server (port 3333)
 
-auth/                 # 1 tool: auth (action: status|authenticate|about)
-  ├── token-manager.js    # Token load/save/refresh
+auth/                 # 1 tool: auth (action: status|authenticate|device-code-complete|about)
+  ├── token-manager.js    # Legacy token cache (deprecated)
+  ├── token-storage.js    # Token storage with auto-refresh
+  ├── device-code.js      # Device code flow (headless/remote auth)
   └── tools.js            # Tool definitions
 
 email/                # 7 tools: search-emails, read-email, send-email, update-email, attachments, export, get-mail-tips
@@ -80,7 +93,8 @@ utils/
 |------|---------|
 | `index.js` | MCP protocol handler, combines all tools |
 | `config.js` | API endpoint, auth settings, defaults |
-| `auth/token-manager.js` | Token storage at `~/.outlook-assistant-tokens.json` |
+| `auth/token-storage.js` | Token storage with auto-refresh at `~/.outlook-assistant-tokens.json` |
+| `auth/device-code.js` | Device code flow for headless/remote authentication |
 | `utils/graph-api.js` | All Graph API calls go through here (includes $batch) |
 | `email/mail-tips.js` | Pre-send recipient validation |
 | `utils/safety.js` | Rate limiter, allowlist, dry-run preview |
@@ -96,6 +110,7 @@ USE_TEST_MODE=false
 OUTLOOK_MAX_EMAILS_PER_SESSION=10          # Optional: rate limit sends
 OUTLOOK_ALLOWED_RECIPIENTS=example.com     # Optional: restrict recipients
 OUTLOOK_IMMUTABLE_IDS=true                 # Optional: IDs persist through folder moves
+OUTLOOK_AUTH_METHOD=device-code            # Optional: default auth method (device-code|browser)
 ```
 
 > The server reads `OUTLOOK_CLIENT_ID`/`OUTLOOK_CLIENT_SECRET` from `config.js`.
@@ -112,11 +127,18 @@ OUTLOOK_IMMUTABLE_IDS=true                 # Optional: IDs persist through folde
 
 ## Authentication Flow
 
+**Device code (default — no auth server needed):**
+1. Call `auth` tool with `action=authenticate` → get code + URL
+2. Visit URL on any device, enter the code, sign in
+3. Call `auth` tool with `action=device-code-complete` → tokens saved
+
+**Browser redirect (alternative):**
 1. Start auth server: `npm run auth-server`
-2. Call `auth` tool with `action=authenticate` → get URL
+2. Call `auth` tool with `action=authenticate, method=browser` → get URL
 3. Open URL in browser → Microsoft login
 4. Grant permissions → tokens saved automatically
-5. Tokens auto-refresh on expiration
+
+**Token refresh**: Tokens auto-refresh transparently via `token-storage.js`. Re-auth only needed when refresh token expires (~90 days).
 
 ## Adding New Tools
 
@@ -138,6 +160,7 @@ OUTLOOK_IMMUTABLE_IDS=true                 # Optional: IDs persist through folde
 | `search-emails` returns no results | On personal accounts, `query`/`kqlQuery` may not work. Use `subject`, `from`, `to`, `receivedAfter` filters instead |
 | `create-event` wrong timezone | Omit the `Z` suffix on times for local timezone. `Z` suffix = UTC, which may be hours off |
 | Auth server "missing client ID" | Ensure `OUTLOOK_CLIENT_ID`/`OUTLOOK_CLIENT_SECRET` are set as env vars for the auth server process |
+| Device code "invalid_client" | Enable "Allow public client flows" in Azure Portal > App registrations > Authentication |
 
 ## Testing
 
@@ -175,7 +198,7 @@ Mock data defined in `utils/mock-data.js`.
 | get-mailbox-settings, get/set-automatic-replies, get/set-working-hours | `mailbox-settings` | `action` param |
 | list/create-folder, move-emails, get-folder-stats | `folders` | `action` param |
 | list/create-rule, edit-rule-sequence | `manage-rules` | `action` param |
-| about, authenticate, check-auth-status | `auth` | `action` param |
+| about, authenticate, check-auth-status | `auth` | `action` param (`status`, `authenticate`, `device-code-complete`, `about`) |
 
 ## See Also
 

@@ -95,44 +95,63 @@ Add to your `.mcp.json` or project settings:
 
 Any MCP-compatible client can use Outlook Assistant. Set the command to `npx -y @littlebearapps/outlook-assistant` and pass the two environment variables.
 
-## Understanding the Two Processes
-
-Outlook Assistant has two separate processes that serve different purposes:
-
-| Process | Purpose | When to run | How it runs |
-|---------|---------|-------------|-------------|
-| **MCP server** (`index.js`) | Handles all 20 Outlook tools — searching emails, reading calendar, etc. | Always (runs automatically) | Your MCP client starts it from your MCP config |
-| **Auth server** (`outlook-auth-server.js`) | Handles OAuth login — the one-time browser authentication flow | Only during initial setup or re-authentication | You start it manually with `npx @littlebearapps/outlook-assistant auth-server` |
-
-**Key points:**
-- The **MCP server** is what your AI assistant talks to. It starts automatically when your MCP client launches.
-- The **auth server** is a temporary helper that runs on port 3333 to receive the OAuth callback from Microsoft. You only need it when authenticating or re-authenticating.
-- After authentication succeeds, you can stop the auth server. The MCP server handles token refresh on its own.
-- Both processes need `OUTLOOK_CLIENT_ID` and `OUTLOOK_CLIENT_SECRET`. The MCP config `"env"` block provides these to the MCP server automatically. For the auth server, you need to either set them as shell environment variables or have a `.env` file in the project root.
-
 ## Authenticate for the First Time
 
-1. Start the OAuth server:
+### Device Code Flow (Recommended)
+
+The device code flow works everywhere — no auth server, no SSH tunnels, no port forwarding. Ideal for remote, headless, and standard setups alike.
+
+> **Azure prerequisite**: In Azure Portal > App registrations > your app > **Authentication** > Advanced settings, set **"Allow public client flows"** to **Yes**.
+
+1. Ask your AI assistant to authenticate:
+
+> "Connect to my Outlook account"
+
+Your AI assistant will call the `auth` tool with `action: authenticate`. You'll receive a short code and a URL.
+
+2. Visit the URL (https://microsoft.com/devicelogin) on any browser, on any device — it doesn't need to be the same machine running Outlook Assistant.
+
+3. Enter the code, sign in with your Microsoft account, and grant permissions.
+
+![Microsoft permissions consent screen during OAuth](../../assets/screenshots/connect-outlook-to-claude-02.png)
+
+4. Tell your AI assistant you've completed sign-in. It will call `auth` with `action: device-code-complete` to finish authentication. Tokens are saved to `~/.outlook-assistant-tokens.json`.
+
+### Browser Redirect Flow (Alternative)
+
+If you prefer the traditional OAuth browser redirect (e.g. for localhost development):
+
+1. Start the auth server:
 
 ```bash
 npx @littlebearapps/outlook-assistant auth-server
 ```
 
-> **Important**: The auth server needs `OUTLOOK_CLIENT_ID` and `OUTLOOK_CLIENT_SECRET` environment variables. These are **not** automatically inherited from your MCP client's config — that config only applies to the MCP server process. Either:
+> **Important**: The auth server needs `OUTLOOK_CLIENT_ID` and `OUTLOOK_CLIENT_SECRET` environment variables. Either:
 > - Create a `.env` file in the project root (copy from `.env.example`), or
 > - Export the variables in your shell before running the command
 
-2. Ask your AI assistant to authenticate:
+2. Ask your AI assistant:
 
-> "Connect to my Outlook account"
+> "Connect to my Outlook account using browser auth"
 
-Your AI assistant will call the `auth` tool with `action: authenticate` and return a URL.
+Your AI assistant will call the `auth` tool with `action: authenticate, method: browser` and return a URL.
 
-3. Open the URL in your browser, sign in with your Microsoft account, and grant permissions.
+3. Open the URL in your browser, sign in, and grant permissions. After granting access, the browser redirects to `localhost:3333` and tokens are saved automatically to `~/.outlook-assistant-tokens.json`.
 
-![Microsoft permissions consent screen during OAuth](../../assets/screenshots/connect-outlook-to-claude-02.png)
+4. You can stop the auth server after authentication succeeds.
 
-4. After granting access, the browser redirects to `localhost:3333` and tokens are saved automatically to `~/.outlook-assistant-tokens.json`.
+## Understanding the Processes
+
+| Process | Purpose | When to run |
+|---------|---------|-------------|
+| **MCP server** (`index.js`) | Handles all 21 Outlook tools | Always — your MCP client starts it automatically |
+| **Auth server** (`outlook-auth-server.js`) | Handles browser OAuth redirect flow | Only if using `method=browser` during authentication |
+
+**Key points:**
+- With **device code flow** (default), you only need the MCP server — no auth server needed at all.
+- The **auth server** is only required for the browser redirect flow. It runs on port 3333 to receive the OAuth callback.
+- **Tokens auto-refresh** in the background. You rarely need to re-authenticate (only after ~90 days of inactivity).
 
 ## Verify It's Working
 

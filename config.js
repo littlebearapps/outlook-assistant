@@ -54,6 +54,10 @@ module.exports = {
     ],
     tokenStorePath: path.join(homeDir, '.outlook-assistant-tokens.json'),
     authServerUrl: 'http://localhost:3333',
+    deviceCodeEndpoint:
+      'https://login.microsoftonline.com/common/oauth2/v2.0/devicecode',
+    tokenEndpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+    defaultAuthMethod: process.env.OUTLOOK_AUTH_METHOD || 'device-code',
   },
 
   // Microsoft Graph API

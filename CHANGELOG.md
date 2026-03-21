@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.5.1] - 2026-03
+
+### Added
+
+- **Device code flow** — headless/remote authentication without the auth server, SSH tunnels, or port forwarding. Visit `microsoft.com/devicelogin`, enter a short code, done. Default auth method for new users (#95)
+- **`action=device-code-complete`** on `auth` tool — two-step device code flow: `authenticate` returns code + URL, `device-code-complete` polls until the user signs in
+- **`method` parameter** on `auth` tool — choose `device-code` (default) or `browser` (traditional OAuth redirect via port 3333)
+- **Token auto-refresh** — `ensureAuthenticated()` now uses `token-storage.js` with proactive refresh (5-minute buffer before expiry). Re-authentication drops from hourly to ~quarterly
+- **`callGraphAPIWithAuth()`** — Graph API wrapper with automatic 401 retry after token refresh (`utils/graph-api.js`)
+- **`OUTLOOK_AUTH_METHOD`** env var — set default auth method (`device-code` or `browser`)
+
+### Changed
+
+- **Default auth method** changed from `browser` to `device-code` — no auth server needed for first-time setup
+- **`ensureAuthenticated()`** now uses modern `token-storage.js` instead of legacy `token-manager.js` — all 21 tools get auto-refresh for free
+- **Auth status** now reports token expiry time (e.g. "token expires in ~45 minutes")
+- Auth tool description updated to document new actions and parameters
+
 ## [3.5.0] - 2026-03
 
 ### Added

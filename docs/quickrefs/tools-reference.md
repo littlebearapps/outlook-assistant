@@ -9,9 +9,9 @@ Quick reference for all 21 MCP tools across 9 modules. Each tool includes MCP sa
 
 ## Authentication (1 tool)
 
-| Tool | Actions | Safety |
-|------|---------|--------|
-| `auth` | `status` (default), `authenticate`, `about` | moderate write |
+| Tool | Actions | Safety | Key Parameters |
+|------|---------|--------|----------------|
+| `auth` | `status` (default), `authenticate`, `device-code-complete`, `about` | moderate write | `method` (`device-code` default, `browser`), `force` |
 
 ## Email (7 tools)
 

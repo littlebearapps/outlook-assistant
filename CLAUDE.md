@@ -22,7 +22,10 @@ npx kill-port 3333       # Kill auth server if port blocked
 3. Call `auth` tool with `action=device-code-complete` to finish
 4. No auth server, SSH tunnel, or port forwarding needed
 
-**Azure prerequisite**: Enable "Allow public client flows" in Azure Portal > App registrations > Authentication > Advanced settings.
+**Azure prerequisites**:
+- Add platform: Authentication > Add a platform > Mobile and desktop applications > check `nativeclient` URI
+- Enable "Allow public client flows" in Authentication > Advanced settings
+- Use a **private/incognito browser** for `microsoft.com/devicelogin` (avoids cached session interference)
 
 **Browser flow (alternative, for localhost use):**
 The auth server needs `OUTLOOK_CLIENT_ID` and `OUTLOOK_CLIENT_SECRET` env vars. These are stored in Bitwarden Secrets Manager as `outlook-client-id` and `outlook-client-secret`. Claude Code shells don't inherit direnv, so start the auth server manually:
@@ -161,6 +164,10 @@ OUTLOOK_AUTH_METHOD=device-code            # Optional: default auth method (devi
 | `create-event` wrong timezone | Omit the `Z` suffix on times for local timezone. `Z` suffix = UTC, which may be hours off |
 | Auth server "missing client ID" | Ensure `OUTLOOK_CLIENT_ID`/`OUTLOOK_CLIENT_SECRET` are set as env vars for the auth server process |
 | Device code "invalid_client" | Enable "Allow public client flows" in Azure Portal > App registrations > Authentication |
+| Device code sign-in shows "wrongplace" | Normal — sign-in completed. Close the browser, call `device-code-complete` |
+| Device code sign-in redirects to localhost | Use incognito/private browser for `microsoft.com/devicelogin` |
+| `device-code-complete` hangs | Tool is polling (not a permission prompt). Wait 10-15s. If still hanging, sign-in didn't complete — get new code, use incognito browser |
+| `search-emails` returns 503 error | On personal accounts, `query` triggers `$search` which fails. Use `from`, `subject`, `to`, `receivedAfter` filters instead (#98) |
 
 ## Testing
 

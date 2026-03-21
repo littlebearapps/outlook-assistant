@@ -31,10 +31,11 @@ Outlook Assistant needs an Azure app registration to access the Microsoft Graph 
 Follow the full walkthrough in the [Azure Setup Guide](../../guides/azure-setup.md), or the short version:
 
 1. Go to [Azure Portal → App registrations](https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade)
-2. Click **New registration**
-3. Set the redirect URI to `http://localhost:3333/auth/callback` (platform: **Web**)
-4. Under **Certificates & secrets**, create a new client secret — copy the **Value** (not the Secret ID)
-5. Under **API permissions**, add these Microsoft Graph **delegated** permissions:
+2. Click **New registration** (no redirect URI needed at this stage)
+3. Under **Certificates & secrets**, create a new client secret — copy the **Value** (not the Secret ID)
+4. Under **Authentication** > **Add a platform** > **Mobile and desktop applications** — check `https://login.microsoftonline.com/common/oauth2/nativeclient`
+5. Under **Authentication** > **Advanced settings** — set **"Allow public client flows"** to **Yes**
+6. Under **API permissions**, add these Microsoft Graph **delegated** permissions:
    - `offline_access` — refresh tokens between sessions
    - `User.Read` — basic profile
    - `Mail.Read`, `Mail.ReadWrite`, `Mail.Send` — email operations
@@ -109,7 +110,9 @@ The device code flow works everywhere — no auth server, no SSH tunnels, no por
 
 Your AI assistant will call the `auth` tool with `action: authenticate`. You'll receive a short code and a URL.
 
-2. Visit the URL (https://microsoft.com/devicelogin) on any browser, on any device — it doesn't need to be the same machine running Outlook Assistant.
+2. Visit the URL (https://microsoft.com/devicelogin) in a **private/incognito browser window**, on any device — it doesn't need to be the same machine running Outlook Assistant.
+
+> **Tip**: Use incognito/private browsing to avoid cached sessions from previous OAuth flows interfering with device code sign-in.
 
 3. Enter the code, sign in with your Microsoft account, and grant permissions.
 

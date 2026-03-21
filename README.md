@@ -149,10 +149,11 @@ npx @littlebearapps/outlook-assistant
 You need a Microsoft Azure app registration to authenticate. See the **[Azure Setup Guide](docs/guides/azure-setup.md)** for a detailed walkthrough (including first-time Azure account creation), or if you've done this before:
 
 1. Create a new app registration at [portal.azure.com](https://portal.azure.com/)
-2. Set redirect URI to `http://localhost:3333/auth/callback`
-3. Add Microsoft Graph delegated permissions (Mail, Calendar, Contacts)
-4. Create a client secret and copy the **Value** (not the Secret ID)
-5. Enable **"Allow public client flows"** in Authentication > Advanced settings (for device code flow)
+2. Add Microsoft Graph delegated permissions (Mail, Calendar, Contacts)
+3. Create a client secret and copy the **Value** (not the Secret ID)
+4. Under Authentication > **Add a platform** > **Mobile and desktop applications** — check `nativeclient` URI
+5. Enable **"Allow public client flows"** in Authentication > Advanced settings
+6. _(Optional)_ Set redirect URI to `http://localhost:3333/auth/callback` — only needed for browser auth flow
 
 ### 3. Configure Your MCP Client
 

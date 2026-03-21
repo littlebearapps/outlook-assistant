@@ -175,13 +175,19 @@ Set a calendar reminder before your secret expires. To rotate:
 The device code flow lets you authenticate without running the auth server — ideal for remote, headless, and container environments.
 
 1. From your app registration, click **Authentication** in the left sidebar
-2. Scroll down to **Advanced settings**
-3. Set **Allow public client flows** to **Yes**
-4. Click **Save**
+2. Click **Add a platform**
+3. Select **Mobile and desktop applications**
+4. Check the box for `https://login.microsoftonline.com/common/oauth2/nativeclient`
+5. Click **Configure**
+6. Scroll down to **Advanced settings**
+7. Set **Allow public client flows** to **Yes**
+8. Click **Save**
 
-> **Why?** Device code flow is a "public client" flow that doesn't require the client secret during authentication. This is the default auth method in Outlook Assistant v3.5.1+.
+> **Why?** Device code flow is a "public client" flow that doesn't require the client secret during authentication. This is the default auth method in Outlook Assistant v3.5.1+. The native client redirect URI tells Microsoft to handle device code sign-in correctly.
 >
 > If you skip this step, you can still authenticate using the browser redirect flow (`method=browser`), but you'll need to run the auth server on port 3333.
+
+> **Tip**: When signing in at `microsoft.com/devicelogin`, use a **private/incognito browser window**. Cached sessions from previous OAuth flows can interfere with device code authentication.
 
 ## 6. Configure Outlook Assistant
 

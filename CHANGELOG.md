@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.5.2] - 2026-03
+
+### Fixed
+
+- **`search-emails` query fallback** — `query` parameter now falls back to `contains(subject)` instead of `$search` on personal accounts, returning partial results instead of failing with 503 (#98)
+- **`search-emails` conversation filters** — `groupByConversation=true` with `subject`, `from`, or `to` filters now applies them via client-side filtering, fixing silent filter drops on personal accounts (#99)
+- **`search-emails` domain filters** — domain-based `from` filters (e.g. `from="souliv.com.au"`) now use `contains()` instead of `eq`, matching all emails from that domain (#100)
+- **`search-emails` hasAttachments** — `hasAttachments=true` filter now skips redundant combined search and removes `$orderby` conflict that caused fallback on personal accounts (#103)
+- **`get-mail-tips` array parsing** — recipients passed as JSON array strings (e.g. `["a@b.com","c@d.com"]`) are now parsed correctly instead of including brackets in output (#104)
+- **`auth` about tool count** — `action=about` now reports dynamic tool count (21) instead of hardcoded 20 (#105)
+- **`manage-category` update response** — update action now shows the new `displayName` in the response instead of the old value (#106)
+- **`send-email` dryRun + checkRecipients** — dry run with `checkRecipients=true` now always includes mail tips in the preview, even when no warnings are found (#107)
+- **`apply-category` clear all** — `action=set` with an empty `categories` array now clears all categories from a message instead of returning an error (#108)
+
 ## [3.5.1] - 2026-03
 
 ### Added

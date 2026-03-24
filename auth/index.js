@@ -4,7 +4,7 @@
 const tokenManager = require('./token-manager');
 const TokenStorage = require('./token-storage');
 const config = require('../config');
-const { authTools } = require('./tools');
+const { authTools, setToolCount } = require('./tools');
 
 // Singleton TokenStorage instance with auto-refresh support
 const tokenStorage = new TokenStorage({
@@ -39,5 +39,6 @@ module.exports = {
   tokenManager, // deprecated: use tokenStorage
   tokenStorage,
   authTools,
+  setToolCount,
   ensureAuthenticated,
 };

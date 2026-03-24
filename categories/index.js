@@ -305,17 +305,26 @@ async function handleUpdateCategory(args) {
       updateData
     );
 
-    const colorName = COLOR_NAMES[response.color] || response.color;
+    // Prefer input values over response (PATCH may return partial data)
+    const updatedName = displayName || response.displayName;
+    const updatedColor = color || response.color;
+    const colorName = COLOR_NAMES[updatedColor] || updatedColor;
+
+    const updatedCategory = {
+      ...response,
+      displayName: updatedName,
+      color: updatedColor,
+    };
 
     return {
       content: [
         {
           type: 'text',
-          text: `Category updated!\n\n**Name**: ${response.displayName}\n**Color**: ${colorName} (${response.color})\n**ID**: ${response.id}`,
+          text: `Category updated!\n\n**Name**: ${updatedName}\n**Color**: ${colorName} (${updatedColor})\n**ID**: ${response.id || id}`,
         },
       ],
       _meta: {
-        category: formatCategory(response),
+        category: formatCategory(updatedCategory),
       },
     };
   } catch (error) {
@@ -428,7 +437,9 @@ async function handleApplyCategory(args) {
     };
   }
 
-  if (!categories || !Array.isArray(categories) || categories.length === 0) {
+  const applyAction = action || 'set'; // 'set', 'add', 'remove'
+
+  if (!categories || !Array.isArray(categories)) {
     return {
       content: [
         {
@@ -439,7 +450,17 @@ async function handleApplyCategory(args) {
     };
   }
 
-  const applyAction = action || 'set'; // 'set', 'add', 'remove'
+  // Empty array is only valid for action=set (clears all categories)
+  if (categories.length === 0 && applyAction !== 'set') {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: 'Categories array cannot be empty for add/remove. Use action=set with an empty array to clear all categories.',
+        },
+      ],
+    };
+  }
 
   try {
     const accessToken = await ensureAuthenticated();

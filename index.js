@@ -12,7 +12,7 @@ const {
 const config = require('./config');
 
 // Import module tools
-const { authTools } = require('./auth');
+const { authTools, setToolCount } = require('./auth');
 const { calendarTools } = require('./calendar');
 const { emailTools } = require('./email');
 const { folderTools } = require('./folder');
@@ -38,6 +38,9 @@ const TOOLS = [
   ...settingsTools,
   ...advancedTools,
 ];
+
+// Set dynamic tool count for auth about handler
+setToolCount(TOOLS.length);
 
 // Create server with tools capabilities
 const server = new Server(

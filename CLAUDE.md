@@ -1,6 +1,6 @@
 # CLAUDE.md - Outlook Assistant
 
-MCP server for Microsoft Outlook via Graph API (v3.5.0). 21 tools across 9 modules.
+MCP server for Microsoft Outlook via Graph API (v3.5.2). 21 tools across 9 modules.
 
 ## Commands
 
@@ -160,14 +160,14 @@ OUTLOOK_AUTH_METHOD=device-code            # Optional: default auth method (devi
 | Module not found | Run `npm install` |
 | Auth URL doesn't work | Start auth server first: `npm run auth-server` |
 | Empty API response | Check auth status with `auth` tool (action=status) |
-| `search-emails` returns no results | On personal accounts, `query`/`kqlQuery` may not work. Use `subject`, `from`, `to`, `receivedAfter` filters instead |
+| `search-emails` returns no results | On personal accounts, `query` auto-falls back to subject search (v3.5.2). Use `subject`, `from`, `to`, `receivedAfter` filters for best results |
 | `create-event` wrong timezone | Omit the `Z` suffix on times for local timezone. `Z` suffix = UTC, which may be hours off |
 | Auth server "missing client ID" | Ensure `OUTLOOK_CLIENT_ID`/`OUTLOOK_CLIENT_SECRET` are set as env vars for the auth server process |
 | Device code "invalid_client" | Enable "Allow public client flows" in Azure Portal > App registrations > Authentication |
 | Device code sign-in shows "wrongplace" | Normal — sign-in completed. Close the browser, call `device-code-complete` |
 | Device code sign-in redirects to localhost | Use incognito/private browser for `microsoft.com/devicelogin` |
 | `device-code-complete` hangs | Tool is polling (not a permission prompt). Wait 10-15s. If still hanging, sign-in didn't complete — get new code, use incognito browser |
-| `search-emails` returns 503 error | On personal accounts, `query` triggers `$search` which fails. Use `from`, `subject`, `to`, `receivedAfter` filters instead (#98) |
+| `search-emails` returns 503 error | Fixed in v3.5.2 — `query` now falls back to `contains(subject)` on personal accounts. For body search, use `kqlQuery` (#98) |
 
 ## Testing
 

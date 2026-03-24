@@ -146,13 +146,46 @@ async function handleGetMailTips(args) {
     };
   }
 
+  // Normalise recipients to a clean array of email strings
+  let recipientList;
+  if (Array.isArray(recipients)) {
+    recipientList = recipients.map((e) => String(e).trim());
+  } else if (typeof recipients === 'string') {
+    // Handle JSON array strings like '["a@b.com","c@d.com"]' from MCP clients
+    const trimmed = recipients.trim();
+    if (trimmed.startsWith('[')) {
+      try {
+        recipientList = JSON.parse(trimmed).map((e) => String(e).trim());
+      } catch (_e) {
+        // Fall through to comma-split
+      }
+    }
+    if (!recipientList) {
+      recipientList = trimmed.split(',').map((e) => e.trim());
+    }
+  } else {
+    recipientList = [String(recipients).trim()];
+  }
+
+  // Filter out empty strings
+  recipientList = recipientList.filter((e) => e.length > 0);
+
+  if (recipientList.length === 0) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: 'At least one valid recipient email address is required.',
+        },
+      ],
+    };
+  }
+
   try {
     const accessToken = await ensureAuthenticated();
 
     const requestBody = {
-      EmailAddresses: Array.isArray(recipients)
-        ? recipients
-        : recipients.split(',').map((e) => e.trim()),
+      EmailAddresses: recipientList,
       MailTipsOptions: tipTypes || MAIL_TIP_TYPES.join(','),
     };
 

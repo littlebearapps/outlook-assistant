@@ -5,6 +5,12 @@ const config = require('../config');
 const tokenManager = require('./token-manager');
 const { initiateDeviceCodeFlow, pollForToken } = require('./device-code');
 
+// Dynamic tool count — set by index.js after TOOLS array is built
+let _toolCount = 0;
+function setToolCount(count) {
+  _toolCount = count;
+}
+
 /**
  * About tool handler
  * @returns {object} - MCP response
@@ -25,7 +31,7 @@ async function handleAbout() {
     `## Diagnostics\n`,
     `| Setting | Value |`,
     `|---------|-------|`,
-    `| Tools | 20 across 9 modules |`,
+    `| Tools | ${_toolCount} across 9 modules |`,
     `| Modules | auth, email, calendar, folder, rules, contacts, categories, settings, advanced |`,
     `| Timezone | ${config.DEFAULT_TIMEZONE} |`,
     `| Test Mode | ${testMode} |`,
@@ -320,6 +326,7 @@ const authTools = [
 
 module.exports = {
   authTools,
+  setToolCount,
   handleAbout,
   handleAuthenticate,
   handleDeviceCodeAuth,

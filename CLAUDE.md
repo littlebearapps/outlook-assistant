@@ -1,18 +1,50 @@
 # CLAUDE.md - Outlook Assistant
 
-MCP server for Microsoft Outlook via Graph API (v3.3.0). 20 consolidated tools across 9 modules.
+MCP server for Microsoft Outlook via Graph API (v3.5.2). 21 tools across 9 modules.
 
 ## Commands
 
 ```bash
 npm install              # Install dependencies (run first)
 npm start                # Start MCP server
-npm run auth-server      # Start OAuth server on :3333 (required for auth)
+npm run auth-server      # Start OAuth server on :3333 (browser auth only)
 npm test                 # Run Jest tests
 npm run test-mode        # Start with mock data (USE_TEST_MODE=true)
 npm run inspect          # MCP Inspector for interactive testing
 npx kill-port 3333       # Kill auth server if port blocked
 ```
+
+### Authentication
+
+**Device code flow (default, recommended for remote/headless):**
+1. Call `auth` tool with `action=authenticate` (uses device-code by default)
+2. Visit the URL shown, enter the code
+3. Call `auth` tool with `action=device-code-complete` to finish
+4. No auth server, SSH tunnel, or port forwarding needed
+
+**Azure prerequisites**:
+- Add platform: Authentication > Add a platform > Mobile and desktop applications > check `nativeclient` URI
+- Enable "Allow public client flows" in Authentication > Advanced settings
+- Use a **private/incognito browser** for `microsoft.com/devicelogin` (avoids cached session interference)
+
+**Browser flow (alternative, for localhost use):**
+The auth server needs `OUTLOOK_CLIENT_ID` and `OUTLOOK_CLIENT_SECRET` env vars. These are stored in Bitwarden Secrets Manager as `outlook-client-id` and `outlook-client-secret`. Claude Code shells don't inherit direnv, so start the auth server manually:
+
+```bash
+source ~/bin/kc.sh && \
+  export OUTLOOK_CLIENT_ID=$(kc_get outlook-client-id) && \
+  export OUTLOOK_CLIENT_SECRET=$(kc_get outlook-client-secret) && \
+  node outlook-auth-server.js
+```
+
+The MCP server itself gets credentials via `.mcp.json` inline `kc_get` calls — no manual export needed for normal operation.
+
+For remote testing with browser flow (e.g. MacBook → VPS), SSH tunnel port 3333:
+```bash
+ssh -fNL 3333:localhost:3333 lba-1
+```
+
+**Token refresh**: Tokens auto-refresh when expired (via `token-storage.js`). Re-authentication only needed when the refresh token expires (~90 days).
 
 ## Architecture
 
@@ -21,11 +53,14 @@ index.js              # Main entry - combines all module tools, serves annotatio
 config.js             # Centralized config (API endpoint, defaults, timezone)
 outlook-auth-server.js # OAuth server (port 3333)
 
-auth/                 # 1 tool: auth (action: status|authenticate|about)
-  ├── token-manager.js    # Token load/save/refresh
+auth/                 # 1 tool: auth (action: status|authenticate|device-code-complete|about)
+  ├── token-manager.js    # Legacy token cache (deprecated)
+  ├── token-storage.js    # Token storage with auto-refresh
+  ├── device-code.js      # Device code flow (headless/remote auth)
   └── tools.js            # Tool definitions
 
-email/                # 6 tools: search-emails, read-email, send-email, update-email, attachments, export
+email/                # 7 tools: search-emails, read-email, send-email, update-email, attachments, export, get-mail-tips
+  ├── mail-tips.js        # Pre-send recipient validation (out-of-office, mailbox full, etc.)
   ├── folder-utils.js     # Folder name → ID resolution
   ├── attachments.js      # List, download, view attachments
   ├── headers.js          # Email header retrieval
@@ -41,7 +76,7 @@ settings/             # 1 tool: mailbox-settings (action: get|set-auto-replies|s
 advanced/             # 2 tools: access-shared-mailbox, find-meeting-rooms
 
 utils/
-  ├── graph-api.js        # Graph API client with OData encoding
+  ├── graph-api.js        # Graph API client with OData encoding, $batch, immutable IDs
   ├── safety.js           # Rate limiting, recipient allowlist, dry-run preview
   ├── field-presets.js    # Field selections for token efficiency
   └── response-formatter.js # Verbosity levels (minimal/standard/full)
@@ -49,10 +84,11 @@ utils/
 
 ## Safety Controls
 
-- **MCP annotations** on all 20 tools (`readOnlyHint`, `destructiveHint`, `idempotentHint`)
-- **send-email**: `dryRun` param, session rate limiting (`OUTLOOK_MAX_EMAILS_PER_SESSION`), recipient allowlist (`OUTLOOK_ALLOWED_RECIPIENTS`)
+- **MCP annotations** on all 21 tools (`readOnlyHint`, `destructiveHint`, `idempotentHint`)
+- **get-mail-tips**: pre-send recipient validation (out-of-office, mailbox full, delivery restrictions)
+- **send-email**: `dryRun` param, `checkRecipients` param (mail tips), session rate limiting (`OUTLOOK_MAX_EMAILS_PER_SESSION`), recipient allowlist (`OUTLOOK_ALLOWED_RECIPIENTS`)
 - **manage-event**: marked `destructiveHint: true` (decline/cancel/delete)
-- 6 read-only tools auto-approved by Claude Code; 2 destructive tools prompt for confirmation
+- 7 read-only tools auto-approved by Claude Code; 2 destructive tools prompt for confirmation
 
 ## Key Files
 
@@ -60,8 +96,10 @@ utils/
 |------|---------|
 | `index.js` | MCP protocol handler, combines all tools |
 | `config.js` | API endpoint, auth settings, defaults |
-| `auth/token-manager.js` | Token storage at `~/.outlook-assistant-tokens.json` |
-| `utils/graph-api.js` | All Graph API calls go through here |
+| `auth/token-storage.js` | Token storage with auto-refresh at `~/.outlook-assistant-tokens.json` |
+| `auth/device-code.js` | Device code flow for headless/remote authentication |
+| `utils/graph-api.js` | All Graph API calls go through here (includes $batch) |
+| `email/mail-tips.js` | Pre-send recipient validation |
 | `utils/safety.js` | Rate limiter, allowlist, dry-run preview |
 | `utils/field-presets.js` | Optimised field selections per operation |
 
@@ -74,6 +112,8 @@ OUTLOOK_CLIENT_SECRET=your-secret-VALUE    # NOT the Secret ID!
 USE_TEST_MODE=false
 OUTLOOK_MAX_EMAILS_PER_SESSION=10          # Optional: rate limit sends
 OUTLOOK_ALLOWED_RECIPIENTS=example.com     # Optional: restrict recipients
+OUTLOOK_IMMUTABLE_IDS=true                 # Optional: IDs persist through folder moves
+OUTLOOK_AUTH_METHOD=device-code            # Optional: default auth method (device-code|browser)
 ```
 
 > The server reads `OUTLOOK_CLIENT_ID`/`OUTLOOK_CLIENT_SECRET` from `config.js`.
@@ -90,11 +130,18 @@ OUTLOOK_ALLOWED_RECIPIENTS=example.com     # Optional: restrict recipients
 
 ## Authentication Flow
 
+**Device code (default — no auth server needed):**
+1. Call `auth` tool with `action=authenticate` → get code + URL
+2. Visit URL on any device, enter the code, sign in
+3. Call `auth` tool with `action=device-code-complete` → tokens saved
+
+**Browser redirect (alternative):**
 1. Start auth server: `npm run auth-server`
-2. Call `auth` tool with `action=authenticate` → get URL
+2. Call `auth` tool with `action=authenticate, method=browser` → get URL
 3. Open URL in browser → Microsoft login
 4. Grant permissions → tokens saved automatically
-5. Tokens auto-refresh on expiration
+
+**Token refresh**: Tokens auto-refresh transparently via `token-storage.js`. Re-auth only needed when refresh token expires (~90 days).
 
 ## Adding New Tools
 
@@ -113,9 +160,14 @@ OUTLOOK_ALLOWED_RECIPIENTS=example.com     # Optional: restrict recipients
 | Module not found | Run `npm install` |
 | Auth URL doesn't work | Start auth server first: `npm run auth-server` |
 | Empty API response | Check auth status with `auth` tool (action=status) |
-| `search-emails` returns no results | On personal accounts, `query`/`kqlQuery` may not work. Use `subject`, `from`, `to`, `receivedAfter` filters instead |
+| `search-emails` returns no results | On personal accounts, `query` auto-falls back to subject search (v3.5.2). Use `subject`, `from`, `to`, `receivedAfter` filters for best results |
 | `create-event` wrong timezone | Omit the `Z` suffix on times for local timezone. `Z` suffix = UTC, which may be hours off |
 | Auth server "missing client ID" | Ensure `OUTLOOK_CLIENT_ID`/`OUTLOOK_CLIENT_SECRET` are set as env vars for the auth server process |
+| Device code "invalid_client" | Enable "Allow public client flows" in Azure Portal > App registrations > Authentication |
+| Device code sign-in shows "wrongplace" | Normal — sign-in completed. Close the browser, call `device-code-complete` |
+| Device code sign-in redirects to localhost | Use incognito/private browser for `microsoft.com/devicelogin` |
+| `device-code-complete` hangs | Tool is polling (not a permission prompt). Wait 10-15s. If still hanging, sign-in didn't complete — get new code, use incognito browser |
+| `search-emails` returns 503 error | Fixed in v3.5.2 — `query` now falls back to `contains(subject)` on personal accounts. For body search, use `kqlQuery` (#98) |
 
 ## Testing
 
@@ -134,6 +186,8 @@ Mock data defined in `utils/mock-data.js`.
 - Field presets in `utils/field-presets.js` optimise token usage
 - Response verbosity: `minimal`, `standard`, `full` (controls output detail)
 - Delta sync uses `@odata.deltaLink` for incremental updates
+- Batch API: `callGraphAPIBatch()` sends up to 20 requests via `$batch` endpoint
+- Immutable IDs: opt-in via `OUTLOOK_IMMUTABLE_IDS=true` — IDs persist through folder moves
 
 ## Tool Consolidation Map
 
@@ -151,22 +205,12 @@ Mock data defined in `utils/mock-data.js`.
 | get-mailbox-settings, get/set-automatic-replies, get/set-working-hours | `mailbox-settings` | `action` param |
 | list/create-folder, move-emails, get-folder-stats | `folders` | `action` param |
 | list/create-rule, edit-rule-sequence | `manage-rules` | `action` param |
-| about, authenticate, check-auth-status | `auth` | `action` param |
-
-## Promotion & Directory Listings
-
-The project has been submitted to major MCP directories (2026-03-05). Tracker with PR/issue links, manual submission drafts, and Reddit post drafts:
-
-→ `docs/promotion/directory-submissions.md`
-
-**Submitted (automated):** punkpeye, appcypher, TensorBlock, YuzeHao2023 awesome-mcp-servers (PRs); Cline MCP Marketplace, mcp.so (issues)
-**Manual required:** PulseMCP, Smithery.ai, Glama.ai (web forms — drafts in tracker)
+| about, authenticate, check-auth-status | `auth` | `action` param (`status`, `authenticate`, `device-code-complete`, `about`) |
 
 ## See Also
 
 - `README.md` - Full documentation, Azure setup, tool reference
 - `docs/quickrefs/tools-reference.md` - Tools quick reference
-- `docs/promotion/directory-submissions.md` - Directory submission tracker
 - `.env.example` - Environment template
 
 ## History

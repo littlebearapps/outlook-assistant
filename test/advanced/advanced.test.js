@@ -186,11 +186,66 @@ describe('handleSetMessageFlag', () => {
 
     const result = await handleSetMessageFlag({
       messageId: 'msg-1',
-      dueDateTime: '2024-01-20T17:00:00Z',
+      dueDateTime: '2024-01-20T17:00:00',
     });
 
     expect(result.content[0].text).toContain('Flagged 1 message(s)');
     expect(result.content[0].text).toContain('Due');
+
+    // Verify Graph API receives correct dateTime envelope
+    const patchBody = callGraphAPI.mock.calls[0][3];
+    expect(patchBody.flag.dueDateTime).toEqual({
+      dateTime: '2024-01-20T17:00:00',
+      timeZone: 'Australia/Melbourne',
+    });
+  });
+
+  it('should auto-set startDateTime when only dueDateTime is provided', async () => {
+    callGraphAPI.mockResolvedValue({});
+
+    await handleSetMessageFlag({
+      messageId: 'msg-1',
+      dueDateTime: '2024-01-20T17:00:00',
+    });
+
+    const patchBody = callGraphAPI.mock.calls[0][3];
+    expect(patchBody.flag.startDateTime).toEqual({
+      dateTime: '2024-01-20T09:00:00',
+      timeZone: 'Australia/Melbourne',
+    });
+  });
+
+  it('should strip trailing Z from dueDateTime', async () => {
+    callGraphAPI.mockResolvedValue({});
+
+    await handleSetMessageFlag({
+      messageId: 'msg-1',
+      dueDateTime: '2024-01-20T17:00:00Z',
+    });
+
+    const patchBody = callGraphAPI.mock.calls[0][3];
+    expect(patchBody.flag.dueDateTime.dateTime).toBe('2024-01-20T17:00:00');
+    expect(patchBody.flag.dueDateTime.timeZone).toBe('Australia/Melbourne');
+  });
+
+  it('should use explicit startDateTime when both dates provided', async () => {
+    callGraphAPI.mockResolvedValue({});
+
+    await handleSetMessageFlag({
+      messageId: 'msg-1',
+      dueDateTime: '2024-01-20T17:00:00',
+      startDateTime: '2024-01-19T10:00:00',
+    });
+
+    const patchBody = callGraphAPI.mock.calls[0][3];
+    expect(patchBody.flag.startDateTime).toEqual({
+      dateTime: '2024-01-19T10:00:00',
+      timeZone: 'Australia/Melbourne',
+    });
+    expect(patchBody.flag.dueDateTime).toEqual({
+      dateTime: '2024-01-20T17:00:00',
+      timeZone: 'Australia/Melbourne',
+    });
   });
 
   it('should handle partial failures', async () => {

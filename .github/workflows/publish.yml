@@ -1,43 +1,51 @@
-# Publish to npm
+# Publish to npm and MCP Registry
 #
-# Publishes the package to npm when a version tag is pushed.
-# Uses NPM_TOKEN (GitHub Actions secret) for authentication.
+# Publishes the package to npm and the Official MCP Registry when a version
+# tag is pushed. Uses NPM_TOKEN for npm auth and GitHub OIDC for MCP Registry.
+#
+# Triggers:
+# 1. Tag push (manual): git push origin v3.4.1
+# 2. workflow_dispatch (from auto-tag.yml): gh workflow run publish.yml --ref v3.4.1
+#    GitHub exempts workflow_dispatch from the GITHUB_TOKEN trigger restriction,
+#    so auto-tag can chain into publish without needing a PAT.
 #
 # Prerequisites:
 # 1. Set NPM_TOKEN as a GitHub Actions secret (granular access token from npmjs.com)
+# 2. server.json with mcpName matching io.github.littlebearapps/outlook-assistant
 #
-# Usage:
-#   npm version patch  # or minor/major
-#   git push origin main --tags
+# MCP Registry auth: Uses GitHub Actions OIDC (no secrets needed).
+# The mcp-publisher CLI exchanges the workflow's OIDC token for a registry JWT.
+# Server name must match the publishing repo's GitHub owner (littlebearapps).
 #
-# Future: migrate to OIDC trusted publishing when npmjs.com trusted publisher
+# Future: migrate npm to OIDC trusted publishing when npmjs.com trusted publisher
 # is configured (org=littlebearapps, repo=outlook-assistant, workflow=publish.yml)
-# and Node 24+ (npm 11.5.1+) is used. See OIDC migration notes below.
+# and Node 24+ (npm 11.5.1+) is used.
 #
 # Note: This workflow uses no untrusted input in run commands.
 
-name: Publish to npm
+name: Publish to npm and MCP Registry
 
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 permissions:
-  id-token: write # Required for provenance attestation
+  id-token: write # Required for npm provenance + MCP Registry OIDC
   contents: read
 
 jobs:
   publish:
-    name: Publish to npm
+    name: Publish to npm and MCP Registry
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
           node-version: 20.x
           cache: 'npm'
@@ -60,7 +68,18 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Verify publication
+      - name: Verify npm publication
         run: |
           sleep 10
           npm view @littlebearapps/outlook-assistant version
+
+      - name: Install mcp-publisher
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
+          chmod +x mcp-publisher
+
+      - name: Publish to MCP Registry
+        run: |
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish
+          echo "Published to MCP Registry"

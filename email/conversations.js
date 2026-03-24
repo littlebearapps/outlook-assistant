@@ -14,8 +14,11 @@ const { ensureAuthenticated } = require('../auth');
 const { getEmailFields } = require('../utils/field-presets');
 const {
   formatEmailContent,
+  formatEmailsAsCSV,
   VERBOSITY,
 } = require('../utils/response-formatter');
+// Note: buildFromFilter/buildToFilter from search.js use OData $filter which causes
+// InefficientFilter on personal accounts with $orderby. Client-side filtering used instead.
 
 /**
  * Format a date for filenames
@@ -64,10 +67,12 @@ async function handleListConversations(args) {
       'id',
       'subject',
       'from',
+      'toRecipients',
       'receivedDateTime',
       'conversationId',
       'conversationIndex',
       'isRead',
+      'hasAttachments',
       'bodyPreview',
     ].join(',');
 
@@ -78,6 +83,34 @@ async function handleListConversations(args) {
       $top: 200, // Get more to group
     };
 
+    // Apply simple $filter conditions that Graph API supports on personal accounts
+    // Complex filters (contains on subject, endswith on email) cause InefficientFilter
+    // errors, so those are handled client-side after fetching.
+    const serverFilterConditions = [];
+    if (args.hasAttachments === true) {
+      serverFilterConditions.push('hasAttachments eq true');
+    }
+    if (args.receivedAfter) {
+      try {
+        const afterDate = new Date(args.receivedAfter).toISOString();
+        serverFilterConditions.push(`receivedDateTime ge ${afterDate}`);
+      } catch (_e) {
+        /* ignore invalid date */
+      }
+    }
+    if (args.receivedBefore) {
+      try {
+        const beforeDate = new Date(args.receivedBefore).toISOString();
+        serverFilterConditions.push(`receivedDateTime le ${beforeDate}`);
+      } catch (_e) {
+        /* ignore invalid date */
+      }
+    }
+
+    if (serverFilterConditions.length > 0) {
+      queryParams.$filter = serverFilterConditions.join(' and ');
+    }
+
     const response = await callGraphAPI(
       accessToken,
       'GET',
@@ -85,7 +118,33 @@ async function handleListConversations(args) {
       null,
       queryParams
     );
-    const messages = response.value || [];
+    let messages = response.value || [];
+
+    // Client-side filtering for conditions that cause InefficientFilter on personal accounts
+    if (args.subject) {
+      const subjectLower = args.subject.toLowerCase();
+      messages = messages.filter((m) =>
+        (m.subject || '').toLowerCase().includes(subjectLower)
+      );
+    }
+    if (args.from) {
+      const fromLower = args.from.toLowerCase();
+      messages = messages.filter((m) => {
+        const addr = (m.from?.emailAddress?.address || '').toLowerCase();
+        const name = (m.from?.emailAddress?.name || '').toLowerCase();
+        return addr.includes(fromLower) || name.includes(fromLower);
+      });
+    }
+    if (args.to) {
+      const toLower = args.to.toLowerCase();
+      messages = messages.filter((m) =>
+        (m.toRecipients || []).some((r) => {
+          const addr = (r.emailAddress?.address || '').toLowerCase();
+          const name = (r.emailAddress?.name || '').toLowerCase();
+          return addr.includes(toLower) || name.includes(toLower);
+        })
+      );
+    }
 
     // Group by conversationId
     const conversations = new Map();
@@ -329,7 +388,7 @@ async function handleExportConversation(args) {
     };
   }
 
-  const validFormats = ['eml', 'mbox', 'markdown', 'json', 'html'];
+  const validFormats = ['eml', 'mbox', 'markdown', 'json', 'html', 'csv'];
   if (!validFormats.includes(format)) {
     return {
       content: [
@@ -600,6 +659,16 @@ async function handleExportConversation(args) {
         fs.writeFileSync(htmlPath, content, 'utf8');
         exportStats.bytes = Buffer.byteLength(content, 'utf8');
         exportedFiles.push(htmlPath);
+        break;
+      }
+
+      case 'csv': {
+        // Export as CSV
+        const csvPath = path.join(resolvedDir, `${filenameBase}.csv`);
+        const csvContent = formatEmailsAsCSV(messages);
+        fs.writeFileSync(csvPath, csvContent, 'utf8');
+        exportStats.bytes = Buffer.byteLength(csvContent, 'utf8');
+        exportedFiles.push(csvPath);
         break;
       }
     }

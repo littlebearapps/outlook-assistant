@@ -11,6 +11,7 @@
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { FIELD_PRESETS } = require('../utils/field-presets');
+const { DEFAULT_TIMEZONE } = require('../config');
 
 /**
  * Format an email for display (simplified)
@@ -224,16 +225,32 @@ async function handleSetMessageFlag(args) {
     };
 
     if (dueDateTime) {
+      // Graph API expects { dateTime, timeZone } envelope without trailing Z
+      // When timeZone is specified, the dateTime value is interpreted in that zone
+      const dueDt = dueDateTime.replace(/Z$/i, '');
       flag.dueDateTime = {
-        dateTime: new Date(dueDateTime).toISOString(),
-        timeZone: 'UTC',
+        dateTime: dueDt,
+        timeZone: DEFAULT_TIMEZONE,
       };
-    }
 
-    if (startDateTime) {
+      // Graph API requires startDateTime when dueDateTime is set
+      // Default to start of the same day if not explicitly provided
+      if (startDateTime) {
+        flag.startDateTime = {
+          dateTime: startDateTime.replace(/Z$/i, ''),
+          timeZone: DEFAULT_TIMEZONE,
+        };
+      } else {
+        const startOfDay = dueDt.split('T')[0] + 'T09:00:00';
+        flag.startDateTime = {
+          dateTime: startOfDay,
+          timeZone: DEFAULT_TIMEZONE,
+        };
+      }
+    } else if (startDateTime) {
       flag.startDateTime = {
-        dateTime: new Date(startDateTime).toISOString(),
-        timeZone: 'UTC',
+        dateTime: startDateTime.replace(/Z$/i, ''),
+        timeZone: DEFAULT_TIMEZONE,
       };
     }
 

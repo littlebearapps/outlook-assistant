@@ -22,6 +22,7 @@ const {
   handleGetConversation,
   handleExportConversation,
 } = require('./conversations');
+const { handleGetMailTips } = require('./mail-tips');
 
 // Import flag handlers from advanced module
 const { handleSetMessageFlag, handleClearMessageFlag } = require('../advanced');
@@ -278,6 +279,11 @@ const emailTools = [
           description:
             'Preview email without sending (default: false). Returns composed email for review.',
         },
+        checkRecipients: {
+          type: 'boolean',
+          description:
+            'Check recipients for out-of-office, mailbox full, delivery restrictions before sending (default: false). Combine with dryRun=true for pre-send review.',
+        },
       },
       required: ['to', 'subject', 'body'],
     },
@@ -434,9 +440,9 @@ const emailTools = [
         },
         format: {
           type: 'string',
-          enum: ['mime', 'eml', 'markdown', 'json', 'mbox', 'html'],
+          enum: ['mime', 'eml', 'markdown', 'json', 'mbox', 'html', 'csv'],
           description:
-            'Export format (target=message: mime/eml/markdown/json, target=conversation: eml/mbox/markdown/json/html)',
+            'Export format (target=message: mime/eml/markdown/json/csv, target=conversation: eml/mbox/markdown/json/html/csv)',
         },
         savePath: {
           type: 'string',
@@ -513,6 +519,42 @@ const emailTools = [
       }
     },
   },
+  {
+    name: 'get-mail-tips',
+    description:
+      'Check recipients before sending: out-of-office status, mailbox full, external recipients, delivery restrictions, moderation, group member counts, and max message size. No competitor offers this.',
+    annotations: {
+      title: 'Mail Tips',
+      readOnlyHint: true,
+      openWorldHint: false,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        recipients: {
+          oneOf: [
+            {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Array of email addresses to check',
+            },
+            {
+              type: 'string',
+              description: 'Comma-separated email addresses to check',
+            },
+          ],
+          description: 'Email addresses to check for mail tips',
+        },
+        tipTypes: {
+          type: 'string',
+          description:
+            'Comma-separated tip types to request (default: all). Options: automaticReplies, mailboxFullStatus, customMailTip, externalMemberCount, totalMemberCount, maxMessageSize, deliveryRestriction, moderationStatus, recipientScope, recipientSuggestions',
+        },
+      },
+      required: ['recipients'],
+    },
+    handler: handleGetMailTips,
+  },
 ];
 
 module.exports = {
@@ -534,4 +576,5 @@ module.exports = {
   handleListConversations,
   handleGetConversation,
   handleExportConversation,
+  handleGetMailTips,
 };

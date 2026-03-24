@@ -7,6 +7,8 @@ on:
   release:
     types: [published]
 
+permissions: {} # No GITHUB_TOKEN scopes needed — uses external WEBSITE_DISPATCH_TOKEN
+
 jobs:
   notify:
     runs-on: ubuntu-latest

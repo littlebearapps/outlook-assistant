@@ -26,7 +26,7 @@ if (!homeDir) {
 module.exports = {
   // Server information
   SERVER_NAME: 'outlook-assistant',
-  SERVER_VERSION: '3.3.0',
+  SERVER_VERSION: require('./package.json').version,
 
   // Test mode setting
   USE_TEST_MODE: process.env.USE_TEST_MODE === 'true',
@@ -54,6 +54,10 @@ module.exports = {
     ],
     tokenStorePath: path.join(homeDir, '.outlook-assistant-tokens.json'),
     authServerUrl: 'http://localhost:3333',
+    deviceCodeEndpoint:
+      'https://login.microsoftonline.com/common/oauth2/v2.0/devicecode',
+    tokenEndpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+    defaultAuthMethod: process.env.OUTLOOK_AUTH_METHOD || 'device-code',
   },
 
   // Microsoft Graph API
@@ -89,6 +93,9 @@ module.exports = {
 
   // Search defaults (reduced for token efficiency)
   DEFAULT_SEARCH_RESULTS: DEFAULT_LIMITS.searchEmails,
+
+  // Immutable IDs (opt-in: IDs persist through folder moves)
+  USE_IMMUTABLE_IDS: process.env.OUTLOOK_IMMUTABLE_IDS === 'true',
 
   // Timezone
   DEFAULT_TIMEZONE: 'Australia/Melbourne', // Updated for Nathan's timezone

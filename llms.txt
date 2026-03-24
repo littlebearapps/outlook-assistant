@@ -11,12 +11,12 @@ Built by [Little Bear Apps](https://littlebearapps.com).
 - **License**: MIT
 - **Node.js**: >= 18.0.0
 - **Authentication**: OAuth 2.0 with Microsoft Graph API (requires Azure app registration)
-- **Tools**: 20 consolidated tools across 9 modules (reduced from 55 for optimal AI performance)
+- **Tools**: 21 tools across 9 modules (reduced from 55 for optimal AI performance)
 
 ## Why Outlook Assistant?
 
 - Read, search, send, and export emails directly from Claude instead of switching apps
-- 6 email tools covering search, conversations, attachments, and bulk export
+- 7 email tools covering search, conversations, attachments, bulk export, and pre-send mail tips
 - Manage calendar events, contacts, rules, categories, and mailbox settings in one place
 - Export to multiple formats: MIME/EML, MBOX, Markdown, JSON, HTML
 
@@ -26,13 +26,14 @@ Built by [Little Bear Apps](https://littlebearapps.com).
 - **Email forensics**: Built-in header analysis for DKIM, SPF, DMARC authentication, delivery chains, and spam scores — useful for phishing investigation and compliance
 - **Delta sync**: Incremental inbox monitoring — returns only new, modified, and deleted emails since last check, with tokens for continuous polling
 - **Batch operations**: Flag, move, export, or categorise multiple emails in a single tool call; search-driven export for batch archiving without collecting IDs
+- **Pre-send intelligence**: Check recipients for out-of-office, mailbox full, delivery restrictions, and moderation before sending — no other Outlook MCP server offers this
 - **Compound automation**: Rules + categories + folders + Focused Inbox for complete inbox management in one conversation
 
 ## Safety & Token Efficiency
 
-- **MCP safety annotations** on all 20 tools — AI clients auto-approve reads and prompt for destructive operations
-- **Send-email protections**: dry-run preview, session rate limiting, recipient allowlist
-- **Token-optimised**: 20 tools instead of 55 saves ~11,000 tokens per turn (~64% reduction), improving AI accuracy and context efficiency
+- **MCP safety annotations** on all 21 tools — AI clients auto-approve reads and prompt for destructive operations
+- **Send-email protections**: pre-send mail tips, dry-run preview, session rate limiting, recipient allowlist
+- **Token-optimised**: 21 tools instead of 55 saves ~11,000 tokens per turn (~64% reduction), improving AI accuracy and context efficiency
 - These safeguards reduce risk but are not foolproof — always review actions before approving
 
 ## Quick Start
@@ -57,7 +58,7 @@ Requires an Azure app registration with Microsoft Graph delegated permissions. S
 ## Tool Categories
 
 - **Authentication (1 tool)**: `auth` — OAuth flow, status, about
-- **Email (6 tools)**: `search-emails`, `read-email`, `send-email`, `update-email`, `attachments`, `export`
+- **Email (7 tools)**: `search-emails`, `read-email`, `send-email`, `update-email`, `attachments`, `export`, `get-mail-tips`
 - **Calendar (3 tools)**: `list-events`, `create-event`, `manage-event`
 - **Contacts (2 tools)**: `manage-contact`, `search-people`
 - **Folders (1 tool)**: `folders` — list, create, move, stats
@@ -69,7 +70,7 @@ Requires an Azure app registration with Microsoft Graph delegated permissions. S
 ## Documentation
 
 - [README](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/README.md): Full documentation including setup, Azure configuration, and usage
-- [Tools Reference](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/quickrefs/tools-reference.md): All 20 tools with parameters and safety annotations
+- [Tools Reference](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/quickrefs/tools-reference.md): All 21 tools with parameters and safety annotations
 - [CLAUDE.md](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CLAUDE.md): Quick reference for development
 - [CONTRIBUTING](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CONTRIBUTING.md): Contribution guidelines
 - [CHANGELOG](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CHANGELOG.md): Version history

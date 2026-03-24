@@ -152,33 +152,47 @@ async function progressiveSearch(
     }
   }
 
-  // 1. Try combined search (most specific)
-  try {
-    const params = buildSearchParams(
-      searchTerms,
-      filterTerms,
-      Math.min(50, maxCount),
-      selectFields
-    );
-    console.error('Attempting combined search with params:', params);
-    searchAttempts.push('combined-search');
+  // Check if we have any actual search terms (not just boolean filters)
+  const hasSearchTerms =
+    searchTerms.query ||
+    searchTerms.from ||
+    searchTerms.to ||
+    searchTerms.subject;
 
-    const response = await callGraphAPIPaginated(
-      accessToken,
-      'GET',
-      endpoint,
-      params,
-      maxCount
-    );
-    if (response.value && response.value.length > 0) {
-      console.error(
-        `Combined search successful: found ${response.value.length} results`
+  // 1. Try combined search (most specific) — skip if only boolean filters
+  if (
+    !hasSearchTerms &&
+    (filterTerms.hasAttachments === true || filterTerms.unreadOnly === true)
+  ) {
+    // Skip directly to boolean-only filter (step 3) — combined search is redundant
+    console.error('Only boolean filters provided, skipping combined search');
+  } else
+    try {
+      const params = buildSearchParams(
+        searchTerms,
+        filterTerms,
+        Math.min(50, maxCount),
+        selectFields
       );
-      return response;
+      console.error('Attempting combined search with params:', params);
+      searchAttempts.push('combined-search');
+
+      const response = await callGraphAPIPaginated(
+        accessToken,
+        'GET',
+        endpoint,
+        params,
+        maxCount
+      );
+      if (response.value && response.value.length > 0) {
+        console.error(
+          `Combined search successful: found ${response.value.length} results`
+        );
+        return response;
+      }
+    } catch (error) {
+      console.error(`Combined search failed: ${error.message}`);
     }
-  } catch (error) {
-    console.error(`Combined search failed: ${error.message}`);
-  }
 
   // 2. Try each search term individually, starting with most specific
   const searchPriority = ['from', 'to', 'subject', 'query'];
@@ -200,23 +214,16 @@ async function progressiveSearch(
         // $search for free-text query only.
         // NOTE: $filter and $orderby cannot be used together on mailbox - Graph API limitation
         if (term === 'from') {
-          if (searchTerms[term].includes('@')) {
-            simplifiedParams.$filter = `from/emailAddress/address eq '${searchTerms[term]}'`;
-          } else {
-            simplifiedParams.$filter = `contains(from/emailAddress/name, '${searchTerms[term]}')`;
-          }
+          simplifiedParams.$filter = buildFromFilter(searchTerms[term]);
         } else if (term === 'to') {
-          if (searchTerms[term].includes('@')) {
-            simplifiedParams.$filter = `toRecipients/any(r: r/emailAddress/address eq '${searchTerms[term]}')`;
-          } else {
-            simplifiedParams.$filter = `toRecipients/any(r: contains(r/emailAddress/name, '${searchTerms[term]}'))`;
-          }
+          simplifiedParams.$filter = buildToFilter(searchTerms[term]);
         } else if (term === 'subject') {
           // Use $filter with contains() — $search silently fails on personal MS accounts
           simplifiedParams.$filter = `contains(subject, '${searchTerms[term].replace(/'/g, "''")}')`;
         } else if (term === 'query') {
-          simplifiedParams.$orderby = 'receivedDateTime desc';
-          simplifiedParams.$search = `"${searchTerms[term]}"`;
+          // On personal accounts, $search fails with 503. Use $filter with
+          // contains(subject) as a best-effort fallback for free-text queries.
+          simplifiedParams.$filter = `contains(subject, '${searchTerms[term].replace(/'/g, "''")}')`;
         }
 
         // Add boolean filters if applicable
@@ -241,20 +248,28 @@ async function progressiveSearch(
     }
   }
 
-  // 3. Try with only boolean filters
-  if (filterTerms.hasAttachments === true || filterTerms.unreadOnly === true) {
+  // 3. Try with only boolean filters (also date range filters)
+  const hasBooleanFilters =
+    filterTerms.hasAttachments === true || filterTerms.unreadOnly === true;
+  const hasDateFilters =
+    filterTerms.receivedAfter || filterTerms.receivedBefore;
+  if (hasBooleanFilters || hasDateFilters) {
     try {
-      console.error('Attempting search with only boolean filters');
+      console.error('Attempting search with only boolean/date filters');
       searchAttempts.push('boolean-filters-only');
 
       const filterOnlyParams = {
         $top: Math.min(50, maxCount),
         $select: selectFields,
-        $orderby: 'receivedDateTime desc',
       };
 
-      // Add the boolean filters
+      // Add the boolean + date filters
       addBooleanFilters(filterOnlyParams, filterTerms);
+
+      // Only add $orderby if no $filter (they can conflict on personal accounts)
+      if (!filterOnlyParams.$filter) {
+        filterOnlyParams.$orderby = 'receivedDateTime desc';
+      }
 
       const response = await callGraphAPIPaginated(
         accessToken,
@@ -269,6 +284,29 @@ async function progressiveSearch(
       return response;
     } catch (error) {
       console.error(`Boolean filter search failed: ${error.message}`);
+      // Retry without $orderby if it was the issue
+      if (error.message && error.message.includes('InefficientFilter')) {
+        try {
+          console.error('Retrying boolean filters without $orderby');
+          const retryParams = {
+            $top: Math.min(50, maxCount),
+            $select: selectFields,
+          };
+          addBooleanFilters(retryParams, filterTerms);
+          const response = await callGraphAPIPaginated(
+            accessToken,
+            'GET',
+            endpoint,
+            retryParams,
+            maxCount
+          );
+          return response;
+        } catch (retryError) {
+          console.error(
+            `Boolean filter retry also failed: ${retryError.message}`
+          );
+        }
+      }
     }
   }
 
@@ -302,6 +340,54 @@ async function progressiveSearch(
   };
 
   return response;
+}
+
+/**
+ * Detect if a value is a domain-only filter (e.g. "@souliv.com.au" or "souliv.com.au")
+ * vs a full email address (e.g. "user@souliv.com.au") vs a display name (e.g. "Billie")
+ * @param {string} val - The from/to filter value
+ * @returns {'domain'|'email'|'name'} - The type of filter
+ */
+function classifyEmailFilter(val) {
+  if (val.startsWith('@')) return 'domain';
+  // Has dots but no @ — likely a domain like "souliv.com.au"
+  if (!val.includes('@') && val.includes('.')) return 'domain';
+  if (val.includes('@')) return 'email';
+  return 'name';
+}
+
+/**
+ * Build a $filter condition for a from field value
+ * @param {string} val - The from filter value
+ * @returns {string} - OData $filter condition
+ */
+function buildFromFilter(val) {
+  const type = classifyEmailFilter(val);
+  if (type === 'domain') {
+    // Use contains() — endswith() not supported on personal accounts
+    const domain = val.startsWith('@') ? val : `@${val}`;
+    return `contains(from/emailAddress/address, '${domain.substring(1)}')`;
+  } else if (type === 'email') {
+    return `from/emailAddress/address eq '${val}'`;
+  }
+  return `contains(from/emailAddress/name, '${val}')`;
+}
+
+/**
+ * Build a $filter condition for a to field value
+ * @param {string} val - The to filter value
+ * @returns {string} - OData $filter condition
+ */
+function buildToFilter(val) {
+  const type = classifyEmailFilter(val);
+  if (type === 'domain') {
+    const domain = val.startsWith('@') ? val : `@${val}`;
+    // Use contains() — endswith() not supported on personal accounts
+    return `toRecipients/any(r: contains(r/emailAddress/address, '${domain.substring(1)}'))`;
+  } else if (type === 'email') {
+    return `toRecipients/any(r: r/emailAddress/address eq '${val}')`;
+  }
+  return `toRecipients/any(r: contains(r/emailAddress/name, '${val}'))`;
 }
 
 /**
@@ -342,28 +428,12 @@ function buildSearchParams(searchTerms, filterTerms, count, selectFields) {
   // NOTE: $filter on email addresses is incompatible with $orderby - Graph API limitation
   if (searchTerms.from) {
     usesEmailFilter = true;
-    if (searchTerms.from.includes('@')) {
-      filterConditions.push(
-        `from/emailAddress/address eq '${searchTerms.from}'`
-      );
-    } else {
-      filterConditions.push(
-        `contains(from/emailAddress/name, '${searchTerms.from}')`
-      );
-    }
+    filterConditions.push(buildFromFilter(searchTerms.from));
   }
 
   if (searchTerms.to) {
     usesEmailFilter = true;
-    if (searchTerms.to.includes('@')) {
-      filterConditions.push(
-        `toRecipients/any(r: r/emailAddress/address eq '${searchTerms.to}')`
-      );
-    } else {
-      filterConditions.push(
-        `toRecipients/any(r: contains(r/emailAddress/name, '${searchTerms.to}'))`
-      );
-    }
+    filterConditions.push(buildToFilter(searchTerms.to));
   }
 
   // Add boolean filters (these ARE compatible with $orderby)
@@ -625,4 +695,7 @@ async function handleSearchByMessageId(args) {
 module.exports = {
   handleSearchEmails,
   handleSearchByMessageId,
+  buildFromFilter,
+  buildToFilter,
+  classifyEmailFilter,
 };

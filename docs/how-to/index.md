@@ -24,6 +24,7 @@ Practical guides for managing your Microsoft 365 email, calendar, contacts, and 
 | [Send Email Safely](email/send-email-safely.md) | Compose emails, dry-run preview, rate limiting, recipient allowlist |
 | [Flag Emails for Follow-Up](email/flag-emails-for-follow-up.md) | Mark read/unread, set flags with due dates, bulk operations |
 | [Work with Attachments](email/work-with-attachments.md) | List, view, and download email attachments |
+| [Check Recipients Before Sending](email/check-recipients-before-sending.md) | Pre-send mail tips: out-of-office, mailbox full, delivery restrictions |
 | [Export Emails](email/export-emails.md) | Save to Markdown, EML, MBOX, JSON, or HTML |
 
 ## Calendar

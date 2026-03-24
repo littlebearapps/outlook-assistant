@@ -8,6 +8,8 @@ tags: [outlook-assistant, advanced, how-to]
 
 Process multiple emails in a single operation — flag them, move them, export them, or apply categories in bulk.
 
+> **v3.5.0**: The server now includes a `callGraphAPIBatch()` infrastructure that sends up to 20 Graph API requests in a single `$batch` call. The batch operations below use the tool-level batch parameters; the underlying `$batch` API may be used internally for improved performance in future versions.
+
 ## Batch Flag Emails
 
 Flag multiple emails for follow-up at once:

@@ -55,6 +55,32 @@ describe('resolveFolderPath', () => {
       expect(result3).toBe(WELL_KNOWN_FOLDERS['sent']);
       expect(callGraphAPI).not.toHaveBeenCalled();
     });
+
+    test('should resolve Graph API well-known folder names (sentitems, deleteditems, junkemail)', async () => {
+      const result1 = await resolveFolderPath(mockAccessToken, 'sentitems');
+      const result2 = await resolveFolderPath(mockAccessToken, 'deleteditems');
+      const result3 = await resolveFolderPath(mockAccessToken, 'junkemail');
+      const result4 = await resolveFolderPath(mockAccessToken, 'outbox');
+
+      expect(result1).toBe(WELL_KNOWN_FOLDERS['sentitems']);
+      expect(result2).toBe(WELL_KNOWN_FOLDERS['deleteditems']);
+      expect(result3).toBe(WELL_KNOWN_FOLDERS['junkemail']);
+      expect(result4).toBe(WELL_KNOWN_FOLDERS['outbox']);
+      expect(callGraphAPI).not.toHaveBeenCalled();
+    });
+
+    test('should resolve display name aliases (Sent Items, Deleted Items, Junk Email)', async () => {
+      const result1 = await resolveFolderPath(mockAccessToken, 'Sent Items');
+      const result2 = await resolveFolderPath(mockAccessToken, 'Deleted Items');
+      const result3 = await resolveFolderPath(mockAccessToken, 'Junk Email');
+      const result4 = await resolveFolderPath(mockAccessToken, 'spam');
+
+      expect(result1).toBe(WELL_KNOWN_FOLDERS['sent']);
+      expect(result2).toBe(WELL_KNOWN_FOLDERS['deleted']);
+      expect(result3).toBe(WELL_KNOWN_FOLDERS['junk']);
+      expect(result4).toBe(WELL_KNOWN_FOLDERS['junk']);
+      expect(callGraphAPI).not.toHaveBeenCalled();
+    });
   });
 
   describe('custom folders', () => {

@@ -5,6 +5,89 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [3.5.2] - 2026-03
+
+### Fixed
+
+- **`search-emails` query fallback** — `query` parameter now falls back to `contains(subject)` instead of `$search` on personal accounts, returning partial results instead of failing with 503 (#98)
+- **`search-emails` conversation filters** — `groupByConversation=true` with `subject`, `from`, or `to` filters now applies them via client-side filtering, fixing silent filter drops on personal accounts (#99)
+- **`search-emails` domain filters** — domain-based `from` filters (e.g. `from="souliv.com.au"`) now use `contains()` instead of `eq`, matching all emails from that domain (#100)
+- **`search-emails` hasAttachments** — `hasAttachments=true` filter now skips redundant combined search and removes `$orderby` conflict that caused fallback on personal accounts (#103)
+- **`get-mail-tips` array parsing** — recipients passed as JSON array strings (e.g. `["a@b.com","c@d.com"]`) are now parsed correctly instead of including brackets in output (#104)
+- **`auth` about tool count** — `action=about` now reports dynamic tool count (21) instead of hardcoded 20 (#105)
+- **`manage-category` update response** — update action now shows the new `displayName` in the response instead of the old value (#106)
+- **`send-email` dryRun + checkRecipients** — dry run with `checkRecipients=true` now always includes mail tips in the preview, even when no warnings are found (#107)
+- **`apply-category` clear all** — `action=set` with an empty `categories` array now clears all categories from a message instead of returning an error (#108)
+
+## [3.5.1] - 2026-03
+
+### Added
+
+- **Device code flow** — headless/remote authentication without the auth server, SSH tunnels, or port forwarding. Visit `microsoft.com/devicelogin`, enter a short code, done. Default auth method for new users (#95)
+- **`action=device-code-complete`** on `auth` tool — two-step device code flow: `authenticate` returns code + URL, `device-code-complete` polls until the user signs in
+- **`method` parameter** on `auth` tool — choose `device-code` (default) or `browser` (traditional OAuth redirect via port 3333)
+- **Token auto-refresh** — `ensureAuthenticated()` now uses `token-storage.js` with proactive refresh (5-minute buffer before expiry). Re-authentication drops from hourly to ~quarterly
+- **`callGraphAPIWithAuth()`** — Graph API wrapper with automatic 401 retry after token refresh (`utils/graph-api.js`)
+- **`OUTLOOK_AUTH_METHOD`** env var — set default auth method (`device-code` or `browser`)
+
+### Changed
+
+- **Default auth method** changed from `browser` to `device-code` — no auth server needed for first-time setup
+- **`ensureAuthenticated()`** now uses modern `token-storage.js` instead of legacy `token-manager.js` — all 21 tools get auto-refresh for free
+- **Auth status** now reports token expiry time (e.g. "token expires in ~45 minutes")
+- Auth tool description updated to document new actions and parameters
+
+## [3.5.0] - 2026-03
+
+### Added
+
+- **`get-mail-tips` tool** — pre-send recipient validation: check for out-of-office, mailbox full, delivery restrictions, moderation, external recipients, group member counts, and max message size before sending. No other Outlook MCP server offers this (#83)
+- **`checkRecipients` param on `send-email`** — opt-in pre-send mail tips check; combine with `dryRun=true` for full pre-send review showing warnings alongside the email preview
+- **Batch API infrastructure** — `callGraphAPIBatch()` in `utils/graph-api.js` sends up to 20 Graph API requests in a single `$batch` call, reducing round-trips for bulk operations
+- **Immutable IDs** — opt-in via `OUTLOOK_IMMUTABLE_IDS=true` env var; adds `Prefer: IdType="ImmutableId"` header so message/event IDs persist through folder moves
+- **`extraHeaders` parameter on `callGraphAPI()`** — allows callers to pass additional HTTP headers (e.g. `Prefer`) per-request
+- **New how-to guide**: [Check Recipients Before Sending](docs/how-to/email/check-recipients-before-sending.md)
+
+### Fixed
+
+- **Batch CSV export filename collision** — same-day exports no longer overwrite; filenames now use full ISO timestamp instead of date-only (#82)
+
+### Changed
+
+- **Email module**: 6 → 7 tools (added `get-mail-tips`)
+- **Total tools**: 20 → 21
+- **CI publishes to MCP Registry** — publish workflow now auto-publishes to the Official MCP Registry via `mcp-publisher` with GitHub OIDC auth (no secrets needed)
+- Added Cursor one-click install deep link to README
+
+## [3.4.1] - 2026-03
+
+### Security
+
+- **minimatch ReDoS** (CVE-2026-27903) — removed stale `yarn.lock` that pinned vulnerable `minimatch@3.1.2`; npm `overrides` already enforced `>=3.1.3` for `package-lock.json` (Dependabot #42)
+
+### Fixed
+
+- **`search-emails` folder resolution** — well-known Graph API folder names (`sentitems`, `deleteditems`, `junkemail`) and display names (`Sent Items`, `Deleted Items`, `Junk Email`) now resolve correctly (#79)
+- **`mailbox-settings` timeZone** — `section=timeZone` no longer returns `[object Object]`; extracts scalar value from Graph API response envelope (#80)
+- **`update-email` flag dueDateTime** — corrected datetime format (strip trailing Z), uses configured timezone instead of hardcoded UTC, auto-generates required `startDateTime` (#81)
+
+### Changed
+
+- **Version sync automation** — `config.js` reads version from `package.json` at runtime; npm `version` lifecycle script auto-syncs `server.json` (#78)
+- Removed stale `yarn.lock` (project uses npm/`package-lock.json`)
+
+## [3.4.0] - 2026-03
+
+### Added
+
+- **CSV export format** — export email metadata to spreadsheet-friendly CSV for data analysis, compliance reporting, and bulk operations (#71, PR #75 by @Chizaram-Igolo)
+  - Metadata-only columns: id, subject, from, to, cc, receivedDateTime, isRead, importance, hasAttachments
+  - CSV injection protection following OWASP guidelines (single-quote prefix for formula characters)
+  - Batch export aggregates into a single CSV file with one row per email
+  - Works with all export targets: `message`, `messages`, and `conversation`
+
 ## [3.3.0] - 2026-03
 
 ### Security

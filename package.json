@@ -1,8 +1,8 @@
 {
   "name": "@littlebearapps/outlook-assistant",
-  "version": "3.3.1",
+  "version": "3.5.2",
   "mcpName": "io.github.littlebearapps/outlook-assistant",
-  "description": "Outlook Assistant — MCP server with 20 tools for email, calendar, contacts, and settings via Microsoft Graph API",
+  "description": "Outlook Assistant — MCP server with 21 tools for email, calendar, contacts, and settings via Microsoft Graph API",
   "main": "index.js",
   "bin": {
     "outlook-assistant": "./index.js"
@@ -17,7 +17,8 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "prepare": "husky || true"
+    "prepare": "husky || true",
+    "version": "node -e \"const s=require('./server.json');const p=require('./package.json');s.version=p.version;s.packages[0].version=p.version;require('fs').writeFileSync('./server.json',JSON.stringify(s,null,2)+'\\n')\" && git add server.json"
   },
   "lint-staged": {
     "*.js": [
@@ -69,7 +70,8 @@
     ".env.example",
     "README.md",
     "LICENSE",
-    "llms.txt"
+    "llms.txt",
+    "llms-install.md"
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",

@@ -35,15 +35,9 @@ If the token has expired, the tool will report it and suggest re-authenticating.
 
 ## Re-authenticate After Token Expiry
 
-Tokens expire periodically (typically after 1 hour, with automatic refresh). If refresh fails, re-authenticate:
+Tokens auto-refresh in the background (proactive refresh with a 5-minute buffer before expiry). You rarely need to manually re-authenticate. If refresh fails, re-authenticate:
 
-1. Start the auth server:
-
-```bash
-npx @littlebearapps/outlook-assistant auth-server
-```
-
-2. Ask your AI assistant:
+1. Ask your AI assistant:
 
 > "Re-authenticate my Outlook account"
 
@@ -54,9 +48,17 @@ params:
   force: true
 ```
 
-The `force: true` parameter bypasses the existing (expired) token and starts a fresh OAuth flow.
+2. By default, this uses the **device code flow** — you'll get a code to enter at `microsoft.com/devicelogin`. No auth server needed.
 
-3. Open the URL, sign in, and grant permissions as before.
+3. After signing in, tell your AI assistant to complete the flow:
+
+```
+tool: auth
+params:
+  action: device-code-complete
+```
+
+> **Alternative**: For browser redirect flow, add `method: browser` to step 1 and start the auth server first.
 
 ## Check Server Information
 
@@ -84,6 +86,11 @@ This returns the server version, available tools, and configuration details.
 | "Need admin approval" during OAuth | Organisation requires admin consent | Ask your IT admin to grant consent — see [Admin Consent](../../guides/azure-setup.md#for-workschool-accounts-admin-consent) |
 | Token file exists but auth reports failure | Corrupted token file | Delete `~/.outlook-assistant-tokens.json` and re-authenticate |
 | Auth server says "missing client ID" | Auth server does not have env vars | Create a `.env` file or export `OUTLOOK_CLIENT_ID`/`OUTLOOK_CLIENT_SECRET` in your shell — see [Connect guide](connect-outlook-to-claude.md#authenticate-for-the-first-time) |
+| Device code "invalid_client" | Public client flows not enabled | Enable "Allow public client flows" in Azure Portal > App registrations > Authentication > Advanced settings |
+| "No pending device code flow" | Called `device-code-complete` before `authenticate` | Call `auth` with `action: authenticate` first to get the code, then `action: device-code-complete` |
+| "wrongplace" page after device code sign-in | Normal — means sign-in completed but Microsoft doesn't know where to redirect | Close the browser tab. The device code flow completed successfully. Call `device-code-complete` to finish. |
+| Device code sign-in redirects to localhost | Cached browser session interfering with device code flow | Use a **private/incognito browser window** for `microsoft.com/devicelogin` |
+| `device-code-complete` hangs silently | The tool is polling Microsoft (not a permission prompt) — sign-in may not have completed | Wait 10-15 seconds. If still hanging, press Escape, get a new code, sign in with incognito browser, and try again |
 | `search-emails` returns no results | Personal account `$search` limitation | Use `subject`, `from`, `to`, `receivedAfter` filters instead of `query` — see [Known Limitations](../../../README.md#known-limitations) |
 
 ## Tips
@@ -111,7 +118,7 @@ Your Azure app registration and client credentials (`OUTLOOK_CLIENT_ID`/`OUTLOOK
 
 ### What is the auth server and do I need it running all the time?
 
-No. The auth server (port 3333) is only needed during the OAuth login flow. Once you have authenticated and tokens are saved, you can stop it. See [Understanding the Two Processes](connect-outlook-to-claude.md#understanding-the-two-processes) for details.
+No. The auth server (port 3333) is only needed if you use the **browser redirect** auth flow (`method=browser`). With the default **device code flow**, you don't need the auth server at all. See [Understanding the Processes](connect-outlook-to-claude.md#understanding-the-processes) for details.
 
 ### My client secret is expiring soon — how do I rotate it?
 

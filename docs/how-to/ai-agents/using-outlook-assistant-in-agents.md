@@ -6,7 +6,7 @@ tags: [outlook-assistant, ai-agents, how-to, reference]
 
 # How to Use Outlook Assistant in AI Agents
 
-This guide helps AI agents and their developers make effective use of Outlook Assistant's 21 tools. It covers tool selection, safety annotations, output handling, and token efficiency.
+This guide helps AI agents and their developers make effective use of Outlook Assistant's 22 tools. It covers tool selection, safety annotations, output handling, and token efficiency.
 
 ## Tool Selection Guide
 
@@ -15,6 +15,7 @@ This guide helps AI agents and their developers make effective use of Outlook As
 | Find/search/list emails | `search-emails` | `query`, `from`, `subject`, `folder` |
 | Read email content | `read-email` | `id`, `outputVerbosity` |
 | Send an email | `send-email` | `to`, `subject`, `body`, `dryRun` |
+| Draft an email | `draft` | `action`, `to`, `subject`, `body`, `dryRun` |
 | Mark read/unread, flag | `update-email` | `action`, `id` or `ids` |
 | List/download attachments | `attachments` | `messageId`, `action` |
 | Export emails to files | `export` | `target`, `format`, `outputDir` |
@@ -50,7 +51,7 @@ Every tool includes MCP annotations that indicate its safety profile:
 
 ### Destructive Tools (always require confirmation)
 
-`send-email` (destructive + openWorld), `manage-event` (destructive)
+`send-email` (destructive + openWorld), `draft` (destructive + openWorld), `manage-event` (destructive)
 
 ### Other Tools
 
@@ -124,6 +125,15 @@ Use cases: inbox monitoring agents, audit trail logging, notification triggers, 
 
 See [Monitor Your Inbox with Delta Sync](monitor-inbox-with-delta-sync.md) for a complete walkthrough.
 
+### Draft, Review, Send
+
+1. `draft` with `action: "create"`, `dryRun: true` → preview
+2. `draft` with `action: "create"` → save draft, get ID
+3. Present draft to user for review
+4. `draft` with `action: "send"` → send when approved
+
+Safer than `send-email` for automated contexts — the draft exists in Outlook and can be reviewed in the app before sending.
+
 ### Automated Phishing Detection
 
 1. `search-emails` with filters → find suspicious messages
@@ -137,14 +147,15 @@ See [Investigate Email Headers](../advanced/investigate-email-headers.md) for he
 ## Tips
 
 - Always check `auth` status before multi-step workflows
-- Use `dryRun: true` on `send-email` in automated contexts for human review
+- Prefer `draft` over `send-email` in automated contexts — drafts can be reviewed in Outlook before sending
+- Use `dryRun: true` on `send-email` or `draft` in automated contexts for human review
 - Prefer `search-people` over `manage-contact` search — it searches more broadly
 - Use `kqlQuery` for complex boolean searches, standard params for simple filters
 - Batch operations (`ids`, `messageIds`, `emailIds`) reduce API calls
 
 ## Related
 
-- [Tools Reference](../../quickrefs/tools-reference.md) — complete parameter reference for all 21 tools
+- [Tools Reference](../../quickrefs/tools-reference.md) — complete parameter reference for all 22 tools
 - [Monitor Inbox with Delta Sync](monitor-inbox-with-delta-sync.md) — incremental inbox monitoring for agents
 - [Investigate Email Headers](../advanced/investigate-email-headers.md) — forensic header analysis for phishing detection
 - [KQL Search Reference](../advanced/kql-search-reference.md) — advanced query patterns

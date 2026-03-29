@@ -22,6 +22,7 @@ Practical guides for managing your Microsoft 365 email, calendar, contacts, and 
 | [Find Emails](email/find-emails.md) | Search by sender, subject, date, keywords, across folders |
 | [Read Email Threads](email/read-email-threads.md) | Read individual emails, view full conversation threads |
 | [Send Email Safely](email/send-email-safely.md) | Compose emails, dry-run preview, rate limiting, recipient allowlist |
+| [Create and Manage Email Drafts](email/create-draft-emails.md) | Save drafts for review, update and send later, reply/forward as drafts |
 | [Flag Emails for Follow-Up](email/flag-emails-for-follow-up.md) | Mark read/unread, set flags with due dates, bulk operations |
 | [Work with Attachments](email/work-with-attachments.md) | List, view, and download email attachments |
 | [Check Recipients Before Sending](email/check-recipients-before-sending.md) | Pre-send mail tips: out-of-office, mailbox full, delivery restrictions |

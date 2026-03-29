@@ -5,7 +5,7 @@ tags:
 
 # Tools Reference - Outlook Assistant
 
-Quick reference for all 21 MCP tools across 9 modules. Each tool includes MCP safety annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`).
+Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP safety annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`).
 
 ## Authentication (1 tool)
 
@@ -13,13 +13,14 @@ Quick reference for all 21 MCP tools across 9 modules. Each tool includes MCP sa
 |------|---------|--------|----------------|
 | `auth` | `status` (default), `authenticate`, `device-code-complete`, `about` | moderate write | `method` (`device-code` default, `browser`), `force` |
 
-## Email (7 tools)
+## Email (8 tools)
 
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
 | `search-emails` | Search, list, delta sync, conversations | read-only | `query`, `from`, `to`, `folder`, `deltaMode`, `conversationId`, `groupByConversation`, `internetMessageId` |
 | `read-email` | Read content or forensic headers | read-only | `id`, `headersMode`, `groupByType`, `importantOnly` |
 | `send-email` | Send email with safety controls | **destructive** | `to`, `subject`, `body`, `dryRun`, `checkRecipients`, `cc`, `bcc`, `importance` |
+| `draft` | Create, update, send, delete, reply, forward drafts | **destructive** | `action` (required), `id`, `to`, `subject`, `body`, `comment`, `dryRun`, `checkRecipients` |
 | `get-mail-tips` | Pre-send recipient validation | read-only | `recipients`, `tipTypes` |
 | `update-email` | Mark read/unread, flag/unflag/complete | idempotent | `action` (required), `id`, `ids`, `dueDateTime` |
 | `attachments` | List, view, or download attachments | moderate write | `action` (`list`/`view`/`download`), `messageId`, `attachmentId` |
@@ -49,6 +50,20 @@ Quick reference for all 21 MCP tools across 9 modules. Each tool includes MCP sa
 | `flag` | Flag for follow-up | `id` or `ids` (batch), `dueDateTime`, `startDateTime` |
 | `unflag` | Clear flag | `id` or `ids` (batch) |
 | `complete` | Mark flag as complete | `id` or `ids` (batch) |
+
+### draft actions
+
+| Action | Description | Required Params |
+|--------|-------------|-----------------|
+| `create` | Save new draft to Drafts folder | — (all optional) |
+| `update` | Edit existing draft | `id` |
+| `send` | Send an existing draft | `id` |
+| `delete` | Remove a draft | `id` |
+| `reply` | Create reply draft from message | `id` |
+| `reply-all` | Create reply-all draft from message | `id` |
+| `forward` | Create forward draft with new recipients | `id`, `to` |
+
+> **Draft safety**: `dryRun: true` previews without saving (create only). `checkRecipients: true` validates recipients via mail-tips before saving. The `send` action shares rate limits with `send-email`. Recipient allowlist applies to create, update, and forward. `comment` and `body` are mutually exclusive on reply/forward.
 
 ### Export formats
 
@@ -120,9 +135,9 @@ Quick reference for all 21 MCP tools across 9 modules. Each tool includes MCP sa
 | Category | Tools | Client Behaviour |
 |----------|-------|------------------|
 | **Read-only** (7) | `search-emails`, `read-email`, `list-events`, `search-people`, `access-shared-mailbox`, `find-meeting-rooms`, `get-mail-tips` | Auto-approved by MCP clients that support annotations |
-| **Destructive** (4) | `send-email`, `manage-event`, `folders`, `manage-rules` | Client prompts for confirmation |
+| **Destructive** (5) | `send-email`, `draft`, `manage-event`, `folders`, `manage-rules` | Client prompts for confirmation |
 | **Idempotent** (2) | `update-email`, `mailbox-settings` | Safe to retry |
-| **Moderate write** (7) | All others | Normal approval flow |
+| **Moderate write** (8) | All others | Normal approval flow |
 
 ## send-email Safety Controls
 
@@ -156,9 +171,35 @@ Check recipients before sending — detects out-of-office, mailbox full, deliver
 | `standard` | Common fields (default) |
 | `full` | All available fields |
 
+## draft Safety Controls
+
+| Control | Config | Default |
+|---------|--------|---------|
+| Dry-run preview | `dryRun: true` param (create only) | Disabled |
+| Pre-save mail tips | `checkRecipients: true` param (create only) | Disabled |
+| Session rate limit (create/update) | `OUTLOOK_MAX_DRAFT_PER_SESSION` env | Unlimited (0) |
+| Session rate limit (send) | `OUTLOOK_MAX_EMAILS_PER_SESSION` env (shared with `send-email`) | Unlimited (0) |
+| Recipient allowlist | `OUTLOOK_ALLOWED_RECIPIENTS` env | Allow all |
+
 ## Common Patterns
 
 ```
+// Create a draft for review
+draft(action: "create", to: "sarah@company.com", subject: "Project Update", body: "Hi Sarah...", dryRun: true)
+
+// Save draft, then update it
+draft(action: "create", to: "sarah@company.com", subject: "Draft", body: "...")
+draft(action: "update", id: "draft-id", subject: "Updated Subject", body: "Better content...")
+
+// Send a draft
+draft(action: "send", id: "draft-id")
+
+// Reply to an email as a draft
+draft(action: "reply", id: "message-id", comment: "Thanks for the update!")
+
+// Forward as draft with recipients
+draft(action: "forward", id: "message-id", to: "colleague@company.com", comment: "FYI")
+
 // List recent emails
 search-emails(folder: "inbox", count: 10)
 

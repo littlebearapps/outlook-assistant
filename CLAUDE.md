@@ -1,6 +1,6 @@
 # CLAUDE.md - Outlook Assistant
 
-MCP server for Microsoft Outlook via Graph API (v3.5.2). 21 tools across 9 modules.
+MCP server for Microsoft Outlook via Graph API (v3.6.0). 22 tools across 9 modules.
 
 ## Commands
 
@@ -59,7 +59,8 @@ auth/                 # 1 tool: auth (action: status|authenticate|device-code-co
   ├── device-code.js      # Device code flow (headless/remote auth)
   └── tools.js            # Tool definitions
 
-email/                # 7 tools: search-emails, read-email, send-email, update-email, attachments, export, get-mail-tips
+email/                # 8 tools: search-emails, read-email, send-email, draft, update-email, attachments, export, get-mail-tips
+  ├── draft.js            # Draft create/update/send/delete/reply/forward
   ├── mail-tips.js        # Pre-send recipient validation (out-of-office, mailbox full, etc.)
   ├── folder-utils.js     # Folder name → ID resolution
   ├── attachments.js      # List, download, view attachments
@@ -84,9 +85,10 @@ utils/
 
 ## Safety Controls
 
-- **MCP annotations** on all 21 tools (`readOnlyHint`, `destructiveHint`, `idempotentHint`)
+- **MCP annotations** on all 22 tools (`readOnlyHint`, `destructiveHint`, `idempotentHint`)
 - **get-mail-tips**: pre-send recipient validation (out-of-office, mailbox full, delivery restrictions)
 - **send-email**: `dryRun` param, `checkRecipients` param (mail tips), session rate limiting (`OUTLOOK_MAX_EMAILS_PER_SESSION`), recipient allowlist (`OUTLOOK_ALLOWED_RECIPIENTS`)
+- **draft**: `dryRun` on create, `checkRecipients` (mail tips), recipient allowlist, rate limiting. Send action shares limit with `send-email`.
 - **manage-event**: marked `destructiveHint: true` (decline/cancel/delete)
 - 7 read-only tools auto-approved by Claude Code; 2 destructive tools prompt for confirmation
 
@@ -206,6 +208,7 @@ Mock data defined in `utils/mock-data.js`.
 | list/create-folder, move-emails, get-folder-stats | `folders` | `action` param |
 | list/create-rule, edit-rule-sequence | `manage-rules` | `action` param |
 | about, authenticate, check-auth-status | `auth` | `action` param (`status`, `authenticate`, `device-code-complete`, `about`) |
+| *(new)* create-draft, update-draft, send-draft, delete-draft, create-reply-draft, create-forward-draft | `draft` | `action` param |
 
 ## See Also
 

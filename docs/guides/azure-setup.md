@@ -346,5 +346,5 @@ After re-authenticating, use the `auth` tool with `action=status` to verify the 
 
 - [Connect Outlook to Your AI Assistant](../how-to/getting-started/connect-outlook-to-claude.md) — Install, configure your MCP client, and authenticate
 - [README](../../README.md) — Full feature overview and configuration
-- [Tools Reference](../quickrefs/tools-reference.md) — All 21 tools with parameters
+- [Tools Reference](../quickrefs/tools-reference.md) — All 22 tools with parameters
 - [Back to Docs](../README.md)

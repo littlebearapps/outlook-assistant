@@ -187,4 +187,4 @@ If you see your recent emails, everything is connected.
 - [Azure Setup Guide](../../guides/azure-setup.md) — full Azure walkthrough with screenshots
 - [Verify Your Connection](verify-your-connection.md) — check auth status and re-authenticate
 - [Find Emails](../email/find-emails.md) — your first search after connecting
-- [Tools Reference](../../quickrefs/tools-reference.md) — all 21 tools with parameters
+- [Tools Reference](../../quickrefs/tools-reference.md) — all 22 tools with parameters

@@ -23,6 +23,7 @@ const {
   handleExportConversation,
 } = require('./conversations');
 const { handleGetMailTips } = require('./mail-tips');
+const handleDraft = require('./draft');
 
 // Import flag handlers from advanced module
 const { handleSetMessageFlag, handleClearMessageFlag } = require('../advanced');
@@ -288,6 +289,84 @@ const emailTools = [
       required: ['to', 'subject', 'body'],
     },
     handler: handleSendEmail,
+  },
+  {
+    name: 'draft',
+    description:
+      'Manage email drafts. action=create saves a new draft. action=update edits an existing draft. action=send sends a draft. action=delete removes a draft. action=reply/reply-all/forward creates a reply or forward draft from an existing message.',
+    annotations: {
+      title: 'Draft Operations',
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: [
+            'create',
+            'update',
+            'send',
+            'delete',
+            'reply',
+            'reply-all',
+            'forward',
+          ],
+          description: 'Action to perform (required)',
+        },
+        id: {
+          type: 'string',
+          description:
+            'Draft or message ID. Required for update/send/delete/reply/reply-all/forward.',
+        },
+        to: {
+          type: 'string',
+          description:
+            'Comma-separated recipient email addresses (optional for create/update, required for forward)',
+        },
+        cc: {
+          type: 'string',
+          description: 'Comma-separated CC email addresses',
+        },
+        bcc: {
+          type: 'string',
+          description: 'Comma-separated BCC email addresses',
+        },
+        subject: {
+          type: 'string',
+          description: 'Email subject',
+        },
+        body: {
+          type: 'string',
+          description: 'Email body (plain text or HTML)',
+        },
+        importance: {
+          type: 'string',
+          enum: ['normal', 'high', 'low'],
+          description: 'Email importance (default: normal)',
+        },
+        comment: {
+          type: 'string',
+          description:
+            'Comment text for reply/forward (prepended to original message). Cannot combine with body.',
+        },
+        dryRun: {
+          type: 'boolean',
+          description:
+            'Preview draft without saving (action=create only, default: false)',
+        },
+        checkRecipients: {
+          type: 'boolean',
+          description:
+            'Check recipients for out-of-office, delivery restrictions before saving (action=create, default: false)',
+        },
+      },
+      required: ['action'],
+    },
+    handler: handleDraft,
   },
   {
     name: 'update-email',
@@ -559,6 +638,7 @@ const emailTools = [
 
 module.exports = {
   emailTools,
+  handleDraft,
   handleListEmails,
   handleSearchEmails,
   handleSearchByMessageId,

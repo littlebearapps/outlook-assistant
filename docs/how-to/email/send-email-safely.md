@@ -154,9 +154,25 @@ params:
 | `checkRecipients` | Check recipients for issues before sending | `false` |
 | `saveToSentItems` | Save to Sent Items folder | `true` |
 
+## Draft Before Sending
+
+For important emails, consider saving as a draft first — then review in Outlook before sending:
+
+```
+tool: draft
+params:
+  action: "create"
+  to: "sarah@company.com"
+  subject: "Project Update"
+  body: "Hi Sarah..."
+```
+
+Then send when ready: `draft(action: "send", id: "draft-id")`. See [Create and Manage Email Drafts](create-draft-emails.md) for the full guide.
+
 ## Tips
 
 - Use `checkRecipients: true` with `dryRun: true` for a complete pre-send review
+- For emails that need careful review, use the `draft` tool instead — it saves a real draft in Outlook
 - Always use `dryRun: true` for important emails to review before sending
 - Set `OUTLOOK_MAX_EMAILS_PER_SESSION` to prevent accidental bulk sends
 - Use `OUTLOOK_ALLOWED_RECIPIENTS` in shared or automated environments
@@ -164,6 +180,7 @@ params:
 
 ## Related
 
+- [Create and Manage Email Drafts](create-draft-emails.md) — save drafts for review before sending
 - [Check Recipients Before Sending](check-recipients-before-sending.md) — full mail tips guide
 - [Find Emails](find-emails.md) — search for emails to reply to
 - [Read Email Threads](read-email-threads.md) — read a thread before replying

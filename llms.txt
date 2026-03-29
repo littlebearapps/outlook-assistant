@@ -11,12 +11,12 @@ Built by [Little Bear Apps](https://littlebearapps.com).
 - **License**: MIT
 - **Node.js**: >= 18.0.0
 - **Authentication**: OAuth 2.0 with Microsoft Graph API (requires Azure app registration)
-- **Tools**: 21 tools across 9 modules (reduced from 55 for optimal AI performance)
+- **Tools**: 22 tools across 9 modules (reduced from 55 for optimal AI performance)
 
 ## Why Outlook Assistant?
 
 - Read, search, send, and export emails directly from Claude instead of switching apps
-- 7 email tools covering search, conversations, attachments, bulk export, and pre-send mail tips
+- 8 email tools covering search, conversations, attachments, bulk export, pre-send mail tips, and draft management
 - Manage calendar events, contacts, rules, categories, and mailbox settings in one place
 - Export to multiple formats: MIME/EML, MBOX, Markdown, JSON, HTML
 
@@ -31,9 +31,9 @@ Built by [Little Bear Apps](https://littlebearapps.com).
 
 ## Safety & Token Efficiency
 
-- **MCP safety annotations** on all 21 tools — AI clients auto-approve reads and prompt for destructive operations
+- **MCP safety annotations** on all 22 tools — AI clients auto-approve reads and prompt for destructive operations
 - **Send-email protections**: pre-send mail tips, dry-run preview, session rate limiting, recipient allowlist
-- **Token-optimised**: 21 tools instead of 55 saves ~11,000 tokens per turn (~64% reduction), improving AI accuracy and context efficiency
+- **Token-optimised**: 22 tools instead of 55 saves ~11,000 tokens per turn (~64% reduction), improving AI accuracy and context efficiency
 - These safeguards reduce risk but are not foolproof — always review actions before approving
 
 ## Quick Start
@@ -58,7 +58,7 @@ Requires an Azure app registration with Microsoft Graph delegated permissions. S
 ## Tool Categories
 
 - **Authentication (1 tool)**: `auth` — OAuth flow, status, about
-- **Email (7 tools)**: `search-emails`, `read-email`, `send-email`, `update-email`, `attachments`, `export`, `get-mail-tips`
+- **Email (8 tools)**: `search-emails`, `read-email`, `send-email`, `draft`, `update-email`, `attachments`, `export`, `get-mail-tips`
 - **Calendar (3 tools)**: `list-events`, `create-event`, `manage-event`
 - **Contacts (2 tools)**: `manage-contact`, `search-people`
 - **Folders (1 tool)**: `folders` — list, create, move, stats
@@ -70,7 +70,7 @@ Requires an Azure app registration with Microsoft Graph delegated permissions. S
 ## Documentation
 
 - [README](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/README.md): Full documentation including setup, Azure configuration, and usage
-- [Tools Reference](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/quickrefs/tools-reference.md): All 21 tools with parameters and safety annotations
+- [Tools Reference](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/quickrefs/tools-reference.md): All 22 tools with parameters and safety annotations
 - [CLAUDE.md](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CLAUDE.md): Quick reference for development
 - [CONTRIBUTING](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CONTRIBUTING.md): Contribution guidelines
 - [CHANGELOG](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CHANGELOG.md): Version history

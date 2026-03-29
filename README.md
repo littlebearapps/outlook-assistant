@@ -34,6 +34,7 @@ Outlook Assistant connects AI assistants to your Microsoft Outlook account throu
 
 - 📨 **Search and read emails** — find messages by sender, subject, date, or keywords; read full threads with conversation grouping; batch flag, move, export, or categorise multiple emails at once
 - 🛡️ **Send emails with safety controls** — dry-run preview, pre-send mail tips (out-of-office, mailbox full, delivery restrictions), session rate limiting, and recipient allowlist to prevent mistakes
+- ✏️ **Draft emails for review** — create, update, and send drafts; reply and forward as drafts; preview before saving with dry-run mode
 - 📅 **Manage your calendar** — view upcoming events, schedule meetings with attendees, decline or cancel invitations
 - 📦 **Export emails** — save to Markdown, EML, MBOX, JSON, or HTML for archiving, analysis, or migration; export search results or entire threads in one call
 - 🔍 **Investigate email headers** — check DKIM, SPF, and DMARC authentication; trace delivery chains; analyse spam scores — useful for phishing investigation and compliance
@@ -60,7 +61,7 @@ Outlook Assistant connects AI assistants to your Microsoft Outlook account throu
 
 | Module | Tools | What You Can Do |
 |--------|------:|-----------------|
-| **Email** | 7 | `search-emails` (list/search/delta/conversations), `read-email` (content + forensic headers), `send-email` (with dry-run + mail tips), `update-email` (read status, flags), `attachments`, `export`, `get-mail-tips` |
+| **Email** | 8 | `search-emails` (list/search/delta/conversations), `read-email` (content + forensic headers), `send-email` (with dry-run + mail tips), `draft` (create/update/send/delete/reply/forward), `update-email` (read status, flags), `attachments`, `export`, `get-mail-tips` |
 | **Calendar** | 3 | `list-events`, `create-event`, `manage-event` (decline/cancel/delete) |
 | **Contacts** | 2 | `manage-contact` (list/search/get/create/update/delete), `search-people` |
 | **Categories** | 3 | `manage-category` (CRUD), `apply-category`, `manage-focused-inbox` |
@@ -70,7 +71,7 @@ Outlook Assistant connects AI assistants to your Microsoft Outlook account throu
 | **Advanced** | 2 | `access-shared-mailbox`, `find-meeting-rooms` |
 | **Auth** | 1 | `auth` (status/authenticate/about) |
 
-**21 tools total** — consolidated from 55 for optimal AI performance. See the [Tools Reference](docs/quickrefs/tools-reference.md) for complete parameter details.
+**22 tools total** — consolidated from 55 for optimal AI performance. See the [Tools Reference](docs/quickrefs/tools-reference.md) for complete parameter details.
 
 ### Export Formats
 
@@ -126,7 +127,9 @@ Outlook Assistant is designed with safety-first principles for AI-driven email a
 - **Session rate limiting** — configurable via `OUTLOOK_MAX_EMAILS_PER_SESSION` (default: unlimited)
 - **Recipient allowlist** — restrict sending to approved addresses/domains via `OUTLOOK_ALLOWED_RECIPIENTS`
 
-**Token-optimised architecture** — Tools are consolidated using the STRAP (Single Tool, Resource, Action Pattern) approach. 21 tools instead of 55 reduces per-turn overhead by ~11,000 tokens (~64%), keeping more of the AI's context window available for your actual conversation. Fewer tools also means the AI selects the right tool more accurately — research shows tool selection degrades beyond ~40 tools.
+**Draft protections** — The `draft` tool shares `send-email` safety controls: dry-run preview, recipient allowlist, mail-tips validation, and rate limiting. The `send` action shares the `send-email` rate limit counter, preventing circumvention via the draft-then-send pathway.
+
+**Token-optimised architecture** — Tools are consolidated using the STRAP (Single Tool, Resource, Action Pattern) approach. 22 tools instead of 55 reduces per-turn overhead by ~11,000 tokens (~64%), keeping more of the AI's context window available for your actual conversation. Fewer tools also means the AI selects the right tool more accurately — research shows tool selection degrades beyond ~40 tools.
 
 > **Important**: These safeguards are defence-in-depth measures that reduce risk, but they are not a guarantee against unintended actions. AI-driven access to your email is inherently sensitive — always review tool calls before approving, particularly for sends and deletes. No automated guardrail is foolproof, and you remain responsible for actions taken through your mailbox.
 
@@ -374,7 +377,7 @@ This starts a local server on port 3333 to handle the OAuth callback.
 
 ```
 outlook-assistant/
-├── index.js                 # Main entry point (21 tools)
+├── index.js                 # Main entry point (22 tools)
 ├── config.js                # Configuration settings
 ├── outlook-auth-server.js   # OAuth server (port 3333)
 ├── auth/                    # Authentication module (1 tool)
@@ -466,7 +469,7 @@ USE_TEST_MODE=true npm start
 | [Azure Setup Guide](docs/guides/azure-setup.md) | Azure account creation, app registration, permissions, and secrets |
 | [How-To Guides](docs/how-to/index.md) | 28 practical guides for email, calendar, contacts, and settings |
 | [Troubleshooting & FAQ](docs/how-to/getting-started/verify-your-connection.md#common-connection-problems) | Common problems, re-authentication, and frequently asked questions |
-| [Tools Reference](docs/quickrefs/tools-reference.md) | All 21 tools with parameters |
+| [Tools Reference](docs/quickrefs/tools-reference.md) | All 22 tools with parameters |
 | [AI Agent Guide](docs/how-to/ai-agents/using-outlook-assistant-in-agents.md) | Tool selection and workflow patterns for AI agents |
 
 Full documentation: [docs/](docs/README.md)

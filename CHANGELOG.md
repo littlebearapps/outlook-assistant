@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.6.0] - 2026-03
+
+### Added
+
+- **`draft` tool** — full draft email lifecycle: create, update, send, delete, reply, reply-all, and forward drafts via Microsoft Graph API (#110)
+  - `action=create` — save a new draft to the Drafts folder (supports `dryRun` and `checkRecipients`)
+  - `action=update` — edit subject, body, recipients, or importance on an existing draft
+  - `action=send` — send a draft (shares rate limit with `send-email`)
+  - `action=delete` — remove a draft
+  - `action=reply` / `action=reply-all` — create a reply draft from an existing message (auto-populates recipients and threading headers)
+  - `action=forward` — create a forward draft with new recipients
+  - `comment` parameter for reply/forward (prepended note, mutually exclusive with `body`)
+- **`draft` field preset** in `utils/field-presets.js` — optimised field selection for draft operations
+- **New how-to guide**: [Create and Manage Email Drafts](docs/how-to/email/create-draft-emails.md)
+
+### Changed
+
+- **Email module**: 7 → 8 tools (added `draft`)
+- **Total tools**: 21 → 22
+- **Safety annotations**: `draft` tool marked `destructiveHint: true` and `openWorldHint: true` (send/delete actions are irreversible)
+- **Safety controls**: draft create/update rate-limited via `OUTLOOK_MAX_DRAFT_PER_SESSION`; send action shares `send-email` rate limit; recipient allowlist applies to create, update, and forward
+
 ## [3.5.2] - 2026-03
 
 ### Fixed

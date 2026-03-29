@@ -108,6 +108,26 @@ const FIELD_PRESETS = {
   ],
 
   /**
+   * Draft fields for viewing/editing drafts
+   * Use case: Draft creation, update, listing
+   */
+  draft: [
+    'id',
+    'subject',
+    'from',
+    'toRecipients',
+    'ccRecipients',
+    'bccRecipients',
+    'body',
+    'bodyPreview',
+    'lastModifiedDateTime',
+    'isDraft',
+    'importance',
+    'hasAttachments',
+    'conversationId',
+  ],
+
+  /**
    * Search result fields (optimized for relevance display)
    * Use case: Search results with context
    */

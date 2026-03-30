@@ -57,6 +57,10 @@ Outlook Assistant connects AI assistants to your Microsoft Outlook account throu
 | Manually check each email for phishing red flags | Forensic header analysis — DKIM, SPF, DMARC, spam scores, and delivery chain in one call |
 | Poll your inbox to check for new mail | Delta sync returns only changes since your last check, with tokens for continuous polling |
 
+## Hosted deployment
+
+A hosted deployment is available on [Fronteir AI](https://fronteir.ai/mcp/littlebearapps-outlook-assistant).
+
 ## Features
 
 | Module | Tools | What You Can Do |

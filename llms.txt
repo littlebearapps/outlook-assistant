@@ -22,7 +22,8 @@ Built by [Little Bear Apps](https://littlebearapps.com).
 
 ## Key Differentiators
 
-- **Progressive search**: Automatically falls back through 4 search strategies when Microsoft's `$search` API is unavailable (personal accounts) — most Graph API wrappers fail silently
+- **Progressive search**: Automatically falls back through 4 search strategies when Microsoft's `$search` API is unavailable (personal accounts) — most Graph API wrappers fail silently. Explicit "no results" messaging instead of unfiltered fallback.
+- **Remote-friendly auth**: Device code flow (default) — no auth server, no port forwarding, no SSH tunnels. State persists across MCP server restarts. Works from Untether, mosh, SSH, and headless environments.
 - **Email forensics**: Built-in header analysis for DKIM, SPF, DMARC authentication, delivery chains, and spam scores — useful for phishing investigation and compliance
 - **Delta sync**: Incremental inbox monitoring — returns only new, modified, and deleted emails since last check, with tokens for continuous polling
 - **Batch operations**: Flag, move, export, or categorise multiple emails in a single tool call; search-driven export for batch archiving without collecting IDs
@@ -72,7 +73,10 @@ Requires an Azure app registration with Microsoft Graph delegated permissions. S
 
 - [README](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/README.md): Full documentation including setup, Azure configuration, and usage
 - [Tools Reference](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/quickrefs/tools-reference.md): All 22 tools with parameters and safety annotations
+- [Connect Outlook to Claude](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/how-to/getting-started/connect-outlook-to-claude.md): Step-by-step setup guide for Claude Desktop / Claude Code
+- [Verify Your Connection](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/how-to/getting-started/verify-your-connection.md): Test and troubleshoot the connection after installation
+- [Azure Setup](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/guides/azure-setup.md): Azure app registration and API permissions walkthrough
 - [CLAUDE.md](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CLAUDE.md): Quick reference for development
 - [CONTRIBUTING](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CONTRIBUTING.md): Contribution guidelines
-- [CHANGELOG](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CHANGELOG.md): Version history
+- [CHANGELOG](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CHANGELOG.md): Version history (current: v3.7.2 — auth fixes for device code on personal accounts)
 - [SECURITY](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/SECURITY.md): Security policy, token handling, and MCP safety controls

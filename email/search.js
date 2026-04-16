@@ -145,6 +145,12 @@ async function progressiveSearch(
         console.error(
           `Raw KQL search successful: found ${response.value.length} results`
         );
+        response._searchInfo = {
+          attemptsCount: searchAttempts.length,
+          strategies: searchAttempts,
+          originalTerms: searchTerms,
+          filterTerms: filterTerms,
+        };
         return response;
       }
     } catch (error) {
@@ -188,6 +194,12 @@ async function progressiveSearch(
         console.error(
           `Combined search successful: found ${response.value.length} results`
         );
+        response._searchInfo = {
+          attemptsCount: searchAttempts.length,
+          strategies: searchAttempts,
+          originalTerms: searchTerms,
+          filterTerms: filterTerms,
+        };
         return response;
       }
     } catch (error) {
@@ -241,10 +253,109 @@ async function progressiveSearch(
           console.error(
             `Search with ${term} successful: found ${response.value.length} results`
           );
+          response._searchInfo = {
+            attemptsCount: searchAttempts.length,
+            strategies: searchAttempts,
+            originalTerms: searchTerms,
+            filterTerms: filterTerms,
+          };
           return response;
+        }
+
+        // Client-side fallback for 'to' filter — toRecipients/any() lambda
+        // returns 0 results on personal accounts even when emails exist
+        if (term === 'to') {
+          console.error(
+            'to filter returned 0 results, trying client-side filtering'
+          );
+          searchAttempts.push('client-side-to');
+          const messages = await fetchForClientSideFilter(
+            accessToken,
+            endpoint,
+            maxCount
+          );
+          const matched = filterToClientSide(messages, searchTerms[term]);
+          if (matched.length > 0) {
+            console.error(
+              `Client-side to filter matched ${matched.length} of ${messages.length} messages`
+            );
+            return { value: matched.slice(0, maxCount) };
+          }
+        }
+
+        // Client-side fallback for 'query' — search bodyPreview, subject, from
+        if (term === 'query') {
+          console.error(
+            'query contains(subject) returned 0 results, trying client-side body search'
+          );
+          searchAttempts.push('client-side-query');
+          const messages = await fetchForClientSideFilter(
+            accessToken,
+            endpoint,
+            maxCount
+          );
+          const matched = filterQueryClientSide(messages, searchTerms[term]);
+          if (matched.length > 0) {
+            console.error(
+              `Client-side query matched ${matched.length} of ${messages.length} messages`
+            );
+            return { value: matched.slice(0, maxCount) };
+          }
         }
       } catch (error) {
         console.error(`Search with ${term} failed: ${error.message}`);
+
+        // Client-side fallback for 'to' when API throws (e.g. InefficientFilter)
+        if (term === 'to') {
+          try {
+            console.error(
+              'to filter threw error, trying client-side filtering'
+            );
+            searchAttempts.push('client-side-to');
+            const messages = await fetchForClientSideFilter(
+              accessToken,
+              endpoint,
+              maxCount
+            );
+            const matched = filterToClientSide(messages, searchTerms[term]);
+            if (matched.length > 0) {
+              console.error(
+                `Client-side to filter matched ${matched.length} of ${messages.length} messages`
+              );
+              return { value: matched.slice(0, maxCount) };
+            }
+          } catch (fallbackError) {
+            console.error(
+              `Client-side to fallback also failed: ${fallbackError.message}`
+            );
+          }
+        }
+
+        // Client-side fallback for 'query' when API throws
+        if (term === 'query') {
+          try {
+            console.error(
+              'query filter threw error, trying client-side body search'
+            );
+            searchAttempts.push('client-side-query');
+            const messages = await fetchForClientSideFilter(
+              accessToken,
+              endpoint,
+              maxCount
+            );
+            const matched = filterQueryClientSide(messages, searchTerms[term]);
+            if (matched.length > 0) {
+              console.error(
+                `Client-side query matched ${matched.length} of ${messages.length} messages`
+              );
+              return { value: matched.slice(0, maxCount) };
+            }
+          } catch (fallbackError) {
+            console.error(
+              `Client-side query fallback also failed: ${fallbackError.message}`
+            );
+          }
+        }
       }
     }
   }
@@ -282,6 +393,12 @@ async function progressiveSearch(
       console.error(
         `Boolean filter search found ${response.value?.length || 0} results`
       );
+      response._searchInfo = {
+        attemptsCount: searchAttempts.length,
+        strategies: searchAttempts,
+        originalTerms: searchTerms,
+        filterTerms: filterTerms,
+      };
       return response;
     } catch (error) {
       console.error(`Boolean filter search failed: ${error.message}`);
@@ -301,6 +418,12 @@ async function progressiveSearch(
             retryParams,
             maxCount
           );
+          response._searchInfo = {
+            attemptsCount: searchAttempts.length,
+            strategies: searchAttempts,
+            originalTerms: searchTerms,
+            filterTerms: filterTerms,
+          };
           return response;
         } catch (retryError) {
           console.error(
@@ -311,8 +434,35 @@ async function progressiveSearch(
     }
   }
 
-  // 4. Final fallback: just get recent emails with pagination
-  console.error('All search strategies failed, falling back to recent emails');
+  // 4. Final fallback
+  // If the user specified search filters, return 0 results with guidance
+  // instead of silently returning unfiltered recent emails.
+  const hasAnyFilters =
+    searchTerms.query ||
+    searchTerms.from ||
+    searchTerms.to ||
+    searchTerms.subject ||
+    searchTerms.kqlQuery;
+
+  if (hasAnyFilters) {
+    console.error(
+      'All search strategies exhausted with filters active — returning 0 results'
+    );
+    searchAttempts.push('no-results');
+    return {
+      value: [],
+      _searchInfo: {
+        attemptsCount: searchAttempts.length,
+        strategies: searchAttempts,
+        originalTerms: searchTerms,
+        filterTerms: filterTerms,
+        noResults: true,
+      },
+    };
+  }
+
+  // No search filters specified — return recent emails (list mode)
+  console.error('No search filters specified, returning recent emails');
   searchAttempts.push('recent-emails');
 
   const basicParams = {
@@ -328,11 +478,8 @@ async function progressiveSearch(
     basicParams,
     maxCount
   );
-  console.error(
-    `Fallback to recent emails found ${response.value?.length || 0} results`
-  );
+  console.error(`Recent emails: found ${response.value?.length || 0} results`);
 
-  // Add a note to the response about the search attempts
   response._searchInfo = {
     attemptsCount: searchAttempts.length,
     strategies: searchAttempts,
@@ -389,6 +536,74 @@ function buildToFilter(val) {
     return `toRecipients/any(r: r/emailAddress/address eq '${val}')`;
   }
   return `toRecipients/any(r: contains(r/emailAddress/name, '${val}'))`;
+}
+
+/**
+ * Client-side filter for toRecipients — used when the OData toRecipients/any()
+ * lambda expression fails on personal accounts (InefficientFilter).
+ * Mirrors the pattern from conversations.js lines 138-147.
+ * @param {Array} messages - Array of message objects with toRecipients
+ * @param {string} toValue - The to filter value (email, domain, or name)
+ * @returns {Array} - Filtered messages where at least one recipient matches
+ */
+function filterToClientSide(messages, toValue) {
+  const toLower = toValue.toLowerCase();
+  return messages.filter((m) =>
+    (m.toRecipients || []).some((r) => {
+      const addr = (r.emailAddress?.address || '').toLowerCase();
+      const name = (r.emailAddress?.name || '').toLowerCase();
+      return addr.includes(toLower) || name.includes(toLower);
+    })
+  );
+}
+
+/**
+ * Client-side filter for free-text query — used when $search and
+ * contains(subject) both fail on personal accounts.
+ * Searches subject, bodyPreview, from address, and from name.
+ * @param {Array} messages - Array of message objects
+ * @param {string} queryText - The query text to search for
+ * @returns {Array} - Filtered messages matching the query
+ */
+function filterQueryClientSide(messages, queryText) {
+  const queryLower = queryText.toLowerCase();
+  return messages.filter((m) => {
+    const subject = (m.subject || '').toLowerCase();
+    const body = (m.bodyPreview || '').toLowerCase();
+    const fromAddr = (m.from?.emailAddress?.address || '').toLowerCase();
+    const fromName = (m.from?.emailAddress?.name || '').toLowerCase();
+    return (
+      subject.includes(queryLower) ||
+      body.includes(queryLower) ||
+      fromAddr.includes(queryLower) ||
+      fromName.includes(queryLower)
+    );
+  });
+}
+
+/**
+ * Fetch recent messages for client-side filtering fallback.
+ * Uses the 'search' field preset which includes toRecipients and bodyPreview.
+ * @param {string} accessToken - Access token
+ * @param {string} endpoint - API endpoint
+ * @param {number} maxCount - Maximum results to fetch
+ * @returns {Promise<Array>} - Array of message objects
+ */
+async function fetchForClientSideFilter(accessToken, endpoint, maxCount) {
+  const searchFields = getEmailFields('search');
+  const params = {
+    $top: Math.min(200, maxCount * 5),
+    $select: searchFields,
+    $orderby: 'receivedDateTime desc',
+  };
+  const response = await callGraphAPIPaginated(
+    accessToken,
+    'GET',
+    endpoint,
+    params,
+    Math.min(200, maxCount * 5)
+  );
+  return response.value || [];
 }
 
 /**
@@ -531,37 +746,75 @@ function addBooleanFilters(params, filterTerms) {
  * @returns {object} - MCP response object
  */
 function formatSearchResults(response, folder, verbosity) {
-  if (!response.value || response.value.length === 0) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `No emails found matching your search criteria.`,
-        },
-      ],
-    };
-  }
-
   // Build metadata
   const meta = {
-    returned: response.value.length,
+    returned: (response.value || []).length,
     totalAvailable: response['@odata.count'] || null,
     hasMore: Boolean(response['@odata.nextLink']),
     verbosity: verbosity,
   };
 
-  // Add search strategy info if available (for debugging)
-  let searchNote = '';
+  // Add searchMetadata to _meta when available (for programmatic fallback detection)
   if (response._searchInfo) {
-    const strategy =
+    const finalStrategy =
       response._searchInfo.strategies[
         response._searchInfo.strategies.length - 1
       ];
+    meta.searchMetadata = {
+      strategiesAttempted: response._searchInfo.strategies,
+      finalStrategy: finalStrategy,
+      filterApplied: !response._searchInfo.noResults,
+      originalFilters: response._searchInfo.originalTerms,
+    };
+  }
+
+  // Handle 0 results
+  if (!response.value || response.value.length === 0) {
+    // Actionable guidance when filters were specified but matched nothing
+    if (response._searchInfo?.noResults) {
+      const filters = response._searchInfo.originalTerms || {};
+      const activeFilters = Object.entries(filters)
+        .filter(([, v]) => v)
+        .map(([k]) => k);
+      const filterDesc =
+        activeFilters.length > 0
+          ? ` (filters: ${activeFilters.join(', ')})`
+          : '';
+
+      const text =
+        `No emails found matching your filters in "${folder}"${filterDesc}.\n\n` +
+        '**Suggestions:**\n' +
+        '- Try `searchAllFolders: true` to search across all folders including Archive\n' +
+        '- Specify the correct folder if emails have been moved (use `folders` tool to list folders)\n' +
+        '- Use `from` filter instead of `to` (more reliable on personal accounts)\n' +
+        '- Use `kqlQuery` with `searchAllFolders: true` for cross-folder search';
+
+      return {
+        content: [{ type: 'text', text }],
+        _meta: meta,
+      };
+    }
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: 'No emails found matching your search criteria.',
+        },
+      ],
+      _meta: meta,
+    };
+  }
+
+  // Add search strategy note for transparency
+  let searchNote = '';
+  if (response._searchInfo) {
+    const strategy = meta.searchMetadata.finalStrategy;
     if (strategy === 'recent-emails') {
       searchNote =
-        '\n\n**Note**: Your search query could not be applied — showing recent emails instead. ' +
-        'On personal Microsoft accounts, free-text `query` search may not work. ' +
-        'Try using `subject`, `from`, `to`, or `kqlQuery` parameters for more reliable filtering.';
+        '\n\n**Note**: No search filters were applied — showing recent emails.';
+    } else if (strategy.startsWith('client-side-')) {
+      searchNote = `\n\n_Search strategy: ${strategy} (filtered locally due to personal account API limitations)_`;
     } else {
       searchNote = `\n\n_Search strategy: ${strategy}_`;
     }
@@ -699,4 +952,6 @@ module.exports = {
   buildFromFilter,
   buildToFilter,
   classifyEmailFilter,
+  filterToClientSide,
+  filterQueryClientSide,
 };

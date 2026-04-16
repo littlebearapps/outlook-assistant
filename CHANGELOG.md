@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.7.1] - 2026-04
+
+### Fixed
+
+- **Silent fallback returns unfiltered results** — `search-emails` no longer silently returns unfiltered recent emails when filters (`from`, `to`, `subject`, `query`) match nothing in the target folder. Now returns 0 results with actionable guidance (suggests `searchAllFolders: true` and correct folder). Previously, AI agents had no way to detect the fallback and would make incorrect conclusions. (#138)
+- **`to` filter broken on personal accounts** — `toRecipients/any()` OData lambda expressions fail silently on personal Microsoft accounts. Added client-side `to` filter fallback: fetches recent messages and filters by `toRecipients` locally. Same pattern used by `conversations.js` for conversation grouping. (#139)
+- **`query` free-text search fails on personal accounts** — when `contains(subject)` returns 0 results for a `query` search, now tries client-side body search against `bodyPreview`, `subject`, and `from` fields before giving up.
+
+### Added
+
+- **`searchMetadata` in `_meta` block** — all `search-emails` responses now include `_meta.searchMetadata` with `strategiesAttempted`, `finalStrategy`, `filterApplied`, and `originalFilters`. AI agents can now programmatically detect when search filters were not applied. (#140)
+- **`filterToClientSide()` helper** — client-side `toRecipients` filtering for personal account fallback.
+- **`filterQueryClientSide()` helper** — client-side body/subject/from text search for personal account fallback.
+- **New test file** `test/email/search.test.js` — 32 tests covering search fallback behaviour, client-side filtering, and helper functions.
+
 ## [3.7.0] - 2026-03
 
 ### Added

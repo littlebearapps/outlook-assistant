@@ -103,8 +103,9 @@ utils/
 |------|---------|
 | `index.js` | MCP protocol handler, combines all tools |
 | `config.js` | API endpoint, auth settings, defaults |
-| `auth/token-storage.js` | Token storage with auto-refresh at `~/.outlook-assistant-tokens.json` |
+| `auth/token-storage.js` | Token storage with auto-refresh at `~/.outlook-assistant-tokens.json` (includes `auth_method` field) |
 | `auth/device-code.js` | Device code flow for headless/remote authentication |
+| `auth/tools.js` | Auth tool handlers; persists device code state to `~/.outlook-assistant-pending-auth.json` |
 | `utils/graph-api.js` | All Graph API calls go through here (includes $batch) |
 | `email/mail-tips.js` | Pre-send recipient validation |
 | `utils/safety.js` | Rate limiter, allowlist, dry-run preview |
@@ -174,6 +175,8 @@ OUTLOOK_AUTH_METHOD=device-code            # Optional: default auth method (devi
 | Device code sign-in shows "wrongplace" | Normal — sign-in completed. Close the browser, call `device-code-complete` |
 | Device code sign-in redirects to localhost | Use incognito/private browser for `microsoft.com/devicelogin` |
 | `device-code-complete` hangs | Tool is polling (not a permission prompt). Wait 10-15s. If still hanging, sign-in didn't complete — get new code, use incognito browser |
+| `device-code-complete` "no pending flow" | Fixed in v3.7.2 — device code state now persists to disk, surviving MCP server restarts. Update to v3.7.2+ |
+| Token refresh fails after ~60 min (device code) | Fixed in v3.7.2 — earlier versions sent `client_secret` for public client refresh. Update to v3.7.2+ |
 | `search-emails` returns 503 error | Fixed in v3.5.2 — `query` now falls back to `contains(subject)` on personal accounts. For body search, use `kqlQuery` (#98) |
 
 ## Testing

@@ -11,7 +11,7 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 
 | Tool | Actions | Safety | Key Parameters |
 |------|---------|--------|----------------|
-| `auth` | `status` (default), `authenticate`, `device-code-complete`, `about` | moderate write | `method` (`device-code` default, `browser`), `force` |
+| `auth` | `status` (default), `authenticate`, `device-code-complete`, `about` | moderate write | `method` (`device-code` default, `browser`), `force`. Device code state persists across server restarts (v3.7.2+). |
 
 ## Email (8 tools)
 

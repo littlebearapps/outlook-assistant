@@ -87,7 +87,7 @@ This returns the server version, available tools, and configuration details.
 | Token file exists but auth reports failure | Corrupted token file | Delete `~/.outlook-assistant-tokens.json` and re-authenticate |
 | Auth server says "missing client ID" | Auth server does not have env vars | Create a `.env` file or export `OUTLOOK_CLIENT_ID`/`OUTLOOK_CLIENT_SECRET` in your shell — see [Connect guide](connect-outlook-to-claude.md#authenticate-for-the-first-time) |
 | Device code "invalid_client" | Public client flows not enabled | Enable "Allow public client flows" in Azure Portal > App registrations > Authentication > Advanced settings |
-| "No pending device code flow" | Called `device-code-complete` before `authenticate` | Call `auth` with `action: authenticate` first to get the code, then `action: device-code-complete` |
+| "No pending device code flow" | Called `device-code-complete` before `authenticate`, or server restarted (pre-v3.7.2) | Call `auth` with `action: authenticate` first. In v3.7.2+, device code state persists across server restarts. |
 | "wrongplace" page after device code sign-in | Normal — means sign-in completed but Microsoft doesn't know where to redirect | Close the browser tab. The device code flow completed successfully. Call `device-code-complete` to finish. |
 | Device code sign-in redirects to localhost | Cached browser session interfering with device code flow | Use a **private/incognito browser window** for `microsoft.com/devicelogin` |
 | `device-code-complete` hangs silently | The tool is polling Microsoft (not a permission prompt) — sign-in may not have completed | Wait 10-15 seconds. If still hanging, press Escape, get a new code, sign in with incognito browser, and try again |

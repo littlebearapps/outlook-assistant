@@ -356,6 +356,8 @@ No auth server needed. Works everywhere, including remote/headless environments.
 5. Tokens are saved to `~/.outlook-assistant-tokens.json` and **refresh automatically**
 
 > **Prerequisite**: Enable "Allow public client flows" in Azure Portal > your app > Authentication > Advanced settings.
+>
+> **Server restarts** (v3.7.2+): Device code state is persisted to `~/.outlook-assistant-pending-auth.json`, so `device-code-complete` works even if the MCP server restarts between steps 1 and 4 (e.g., Untether/Telegram bridge, Claude Desktop session changes).
 
 ### Browser Redirect Flow (Alternative)
 
@@ -430,6 +432,10 @@ If using browser flow: start the auth server first with `npm run auth-server`. I
 ### Device code "invalid_client"
 
 Enable "Allow public client flows" in Azure Portal > App registrations > Authentication > Advanced settings.
+
+### Token refresh fails after ~60 minutes (device code auth)
+
+Fixed in v3.7.2. Earlier versions sent `client_secret` in token refresh requests for device-code auth, which Microsoft rejects for public client flows. Update to v3.7.2+ or re-authenticate.
 
 ### Empty API responses
 

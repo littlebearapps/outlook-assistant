@@ -183,7 +183,7 @@ The device code flow lets you authenticate without running the auth server — i
 7. Set **Allow public client flows** to **Yes**
 8. Click **Save**
 
-> **Why?** Device code flow is a "public client" flow that doesn't require the client secret during authentication. This is the default auth method in Outlook Assistant v3.5.1+. The native client redirect URI tells Microsoft to handle device code sign-in correctly.
+> **Why?** Device code flow is a "public client" flow that doesn't require the client secret during authentication. This is the default auth method in Outlook Assistant v3.5.1+. The native client redirect URI tells Microsoft to handle device code sign-in correctly. In v3.7.2+, device code state is persisted to disk (`~/.outlook-assistant-pending-auth.json`) so authentication survives MCP server restarts, and token refresh correctly omits `client_secret` for public client tokens.
 >
 > If you skip this step, you can still authenticate using the browser redirect flow (`method=browser`), but you'll need to run the auth server on port 3333.
 

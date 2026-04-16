@@ -120,6 +120,8 @@ Your AI assistant will call the `auth` tool with `action: authenticate`. You'll 
 
 4. Tell your AI assistant you've completed sign-in. It will call `auth` with `action: device-code-complete` to finish authentication. Tokens are saved to `~/.outlook-assistant-tokens.json`.
 
+> **Server restarts** (v3.7.2+): Device code state is persisted to disk, so `device-code-complete` works even if the MCP server restarts between steps 1 and 4.
+
 ### Browser Redirect Flow (Alternative)
 
 If you prefer the traditional OAuth browser redirect (e.g. for localhost development):

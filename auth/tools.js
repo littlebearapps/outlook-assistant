@@ -2,8 +2,16 @@
  * Authentication-related tools for the Outlook Assistant server
  */
 const config = require('../config');
+const fs = require('fs');
+const path = require('path');
 const tokenManager = require('./token-manager');
 const { initiateDeviceCodeFlow, pollForToken } = require('./device-code');
+
+// Path for persisting device code state across MCP server restarts
+const DEVICE_CODE_STATE_PATH = path.join(
+  process.env.HOME || process.env.USERPROFILE,
+  '.outlook-assistant-pending-auth.json'
+);
 
 // Dynamic tool count — set by index.js after TOOLS array is built
 let _toolCount = 0;
@@ -89,12 +97,57 @@ async function handleAuthenticate(args) {
   };
 }
 
-// Module-level state for pending device code flow
+// In-memory state for pending device code flow (also persisted to disk)
 let pendingDeviceCode = null;
+
+/**
+ * Save device code state to disk so it survives MCP server restarts.
+ * Uses mode 0o600 (owner-only) — same as token file.
+ * @param {object|null} state - Device code state or null to delete
+ */
+function saveDeviceCodeState(state) {
+  try {
+    if (state) {
+      fs.writeFileSync(DEVICE_CODE_STATE_PATH, JSON.stringify(state), {
+        mode: 0o600,
+      });
+    } else if (fs.existsSync(DEVICE_CODE_STATE_PATH)) {
+      fs.unlinkSync(DEVICE_CODE_STATE_PATH);
+    }
+  } catch (error) {
+    console.error(
+      `[AUTH] Failed to ${state ? 'save' : 'clean up'} device code state: ${error.message}`
+    );
+  }
+}
+
+/**
+ * Load device code state from disk (fallback when in-memory state is lost).
+ * Returns null if no state exists or if the state has expired.
+ * @returns {object|null}
+ */
+function loadDeviceCodeState() {
+  try {
+    if (!fs.existsSync(DEVICE_CODE_STATE_PATH)) {
+      return null;
+    }
+    const state = JSON.parse(fs.readFileSync(DEVICE_CODE_STATE_PATH, 'utf8'));
+    if (Date.now() > state.expiresAt) {
+      console.error('[AUTH] Persisted device code has expired, cleaning up');
+      saveDeviceCodeState(null);
+      return null;
+    }
+    return state;
+  } catch (error) {
+    console.error(`[AUTH] Failed to load device code state: ${error.message}`);
+    return null;
+  }
+}
 
 /**
  * Device code flow step 1 — request a code for the user to enter.
  * Returns the code + URL immediately. Call device-code-complete to finish.
+ * State is persisted to disk so it survives MCP server restarts.
  * @returns {object} - MCP response
  */
 async function handleDeviceCodeAuth() {
@@ -116,13 +169,14 @@ async function handleDeviceCodeAuth() {
     config.AUTH_CONFIG.scopes
   );
 
-  // Store for the completion step
+  // Store in memory and persist to disk
   pendingDeviceCode = {
     deviceCode: response.deviceCode,
     interval: response.interval,
     expiresIn: response.expiresIn,
     expiresAt: Date.now() + response.expiresIn * 1000,
   };
+  saveDeviceCodeState(pendingDeviceCode);
 
   console.error(
     `[AUTH] Device code: ${response.userCode}, expires in ${response.expiresIn}s`
@@ -146,9 +200,15 @@ async function handleDeviceCodeAuth() {
 
 /**
  * Device code flow step 2 — poll until the user completes authentication.
+ * Checks in-memory state first, falls back to disk-persisted state.
  * @returns {object} - MCP response
  */
 async function handleDeviceCodeComplete() {
+  // Try in-memory first, fall back to disk (survives server restarts)
+  if (!pendingDeviceCode) {
+    pendingDeviceCode = loadDeviceCodeState();
+  }
+
   if (!pendingDeviceCode) {
     return {
       content: [
@@ -162,6 +222,7 @@ async function handleDeviceCodeComplete() {
 
   if (Date.now() > pendingDeviceCode.expiresAt) {
     pendingDeviceCode = null;
+    saveDeviceCodeState(null);
     return {
       content: [
         {
@@ -184,8 +245,9 @@ async function handleDeviceCodeComplete() {
     );
 
     pendingDeviceCode = null;
+    saveDeviceCodeState(null);
 
-    // Save tokens using TokenStorage
+    // Save tokens using TokenStorage — mark as device-code auth
     const TokenStorage = require('./token-storage');
     const tokenStorage = new TokenStorage({
       clientId: config.AUTH_CONFIG.clientId,
@@ -202,6 +264,7 @@ async function handleDeviceCodeComplete() {
       expires_at: Date.now() + tokenResponse.expires_in * 1000,
       scope: tokenResponse.scope,
       token_type: tokenResponse.token_type,
+      auth_method: 'device-code',
     };
     await tokenStorage._saveTokensToFile();
 
@@ -217,6 +280,7 @@ async function handleDeviceCodeComplete() {
     };
   } catch (error) {
     pendingDeviceCode = null;
+    saveDeviceCodeState(null);
     return {
       content: [
         {

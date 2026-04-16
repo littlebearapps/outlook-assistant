@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.7.2] - 2026-04
+
+### Fixed
+
+- **Device code auth state lost on MCP server restart** — the pending device code was stored only in module-level memory, which is lost when the MCP server process restarts between the `authenticate` and `device-code-complete` tool calls. Now persisted to `~/.outlook-assistant-pending-auth.json` (mode 0o600) so the completion step works even after server restarts. Critical for Untether (Telegram bridge) and any environment where MCP servers restart between tool calls. (#142)
+- **Token refresh fails for device-code auth** — `refreshAccessToken()` unconditionally included `client_secret` in refresh requests, but device code flow is a public client flow where Microsoft rejects `client_secret` ("Public clients can't send a client secret"). Now stores `auth_method: "device-code"` in the token file and conditionally excludes `client_secret` from refresh requests for device-code-obtained tokens. Browser-flow tokens continue to include `client_secret` as before. (#143)
+
+### Added
+
+- **`auth_method` field in token file** — tokens now include `auth_method: "device-code"` or `auth_method: "browser"` to track how they were obtained, enabling correct refresh behaviour for each flow.
+- **New test files** `test/auth/auth-tools.test.js` and `test/auth/token-refresh.test.js` — 10 tests covering device code state persistence, disk fallback, expiry cleanup, auth_method propagation, and conditional `client_secret` handling.
+
 ## [3.7.1] - 2026-04
 
 ### Fixed

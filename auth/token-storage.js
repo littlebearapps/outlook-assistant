@@ -49,11 +49,13 @@ class TokenStorage {
       }
     }
 
-    if (!this.config.clientId || !this.config.clientSecret) {
+    if (!this.config.clientId) {
       console.warn(
-        'TokenStorage: OUTLOOK_CLIENT_ID or OUTLOOK_CLIENT_SECRET is not configured. Token operations might fail.'
+        'TokenStorage: OUTLOOK_CLIENT_ID is not configured. Token operations will fail.'
       );
     }
+    // client_secret is only required for browser flow (confidential client).
+    // Device code flow (public client) does not use client_secret.
   }
 
   async _loadTokensFromFile() {
@@ -158,14 +160,24 @@ class TokenStorage {
       return this._refreshPromise.then((tokens) => tokens.access_token);
     }
 
-    console.log('Attempting to refresh access token...');
-    const postData = querystring.stringify({
+    // Device code flow is a public client flow — Microsoft rejects client_secret
+    // in refresh requests for tokens obtained via device code.
+    // Browser flow (confidential client) requires client_secret.
+    const isDeviceCode = this.tokens.auth_method === 'device-code';
+    console.log(
+      `Attempting to refresh access token (auth_method: ${this.tokens.auth_method || 'browser'})...`
+    );
+
+    const refreshParams = {
       client_id: this.config.clientId,
-      client_secret: this.config.clientSecret,
       grant_type: 'refresh_token',
       refresh_token: this.tokens.refresh_token,
       scope: this.config.scopes.join(' '),
-    });
+    };
+    if (!isDeviceCode) {
+      refreshParams.client_secret = this.config.clientSecret;
+    }
+    const postData = querystring.stringify(refreshParams);
 
     const requestOptions = {
       method: 'POST',

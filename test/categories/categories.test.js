@@ -43,6 +43,20 @@ describe('handleListCategories', () => {
     expect(result._meta.count).toBe(1);
   });
 
+  it('should emit full IDs (F-9: no truncation)', async () => {
+    const longIdCategory = {
+      id: 'b906d6f3-1234-5678-90ab-cdef01234567',
+      displayName: 'WithLongId',
+      color: 'preset0',
+    };
+    callGraphAPI.mockResolvedValue({ value: [longIdCategory] });
+
+    const result = await handleListCategories({});
+
+    expect(result.content[0].text).toContain(longIdCategory.id);
+    expect(result.content[0].text).not.toContain('b906d6f3...');
+  });
+
   it('should handle empty categories', async () => {
     callGraphAPI.mockResolvedValue({ value: [] });
 
@@ -145,11 +159,13 @@ describe('handleCreateCategory', () => {
 
 describe('handleUpdateCategory', () => {
   it('should update a category', async () => {
-    callGraphAPI.mockResolvedValue({
-      id: 'cat-1',
-      displayName: 'Updated',
-      color: 'preset4',
-    });
+    callGraphAPI
+      .mockResolvedValueOnce({}) // PATCH
+      .mockResolvedValueOnce({
+        id: 'cat-1',
+        displayName: 'Updated',
+        color: 'preset4',
+      }); // GET fresh state
 
     const result = await handleUpdateCategory({
       id: 'cat-1',
@@ -159,6 +175,52 @@ describe('handleUpdateCategory', () => {
 
     expect(result.content[0].text).toContain('Category updated');
     expect(result.content[0].text).toContain('Green');
+    // No divergence warning when Graph stored what was requested
+    expect(result.content[0].text).not.toMatch(/Warning/);
+  });
+
+  it('should warn when Graph silently drops the color update (F-35)', async () => {
+    callGraphAPI
+      .mockResolvedValueOnce({}) // PATCH
+      .mockResolvedValueOnce({
+        id: 'cat-1',
+        displayName: 'Important',
+        color: 'preset0', // Graph kept the original color
+      }); // GET fresh state
+
+    const result = await handleUpdateCategory({
+      id: 'cat-1',
+      color: 'preset5', // requested orange, Graph stored red
+    });
+
+    expect(result.content[0].text).toMatch(/Warning/);
+    expect(result.content[0].text).toMatch(
+      /Requested color `preset5`.*Graph stored `preset0`/
+    );
+    expect(result.content[0].text).toMatch(
+      /master-category colors may be immutable/
+    );
+  });
+
+  it('should accept categoryId as deprecated alias for id (F-34)', async () => {
+    callGraphAPI
+      .mockResolvedValueOnce({}) // PATCH
+      .mockResolvedValueOnce({
+        id: 'cat-1',
+        displayName: 'Renamed',
+        color: 'preset0',
+      });
+
+    const result = await handleUpdateCategory({
+      categoryId: 'cat-1', // legacy param name
+      displayName: 'Renamed',
+    });
+
+    expect(result.content[0].text).toContain('Category updated');
+    // Confirm PATCH was sent to the right ID
+    expect(callGraphAPI.mock.calls[0][2]).toBe(
+      'me/outlook/masterCategories/cat-1'
+    );
   });
 
   it('should require ID', async () => {
@@ -203,6 +265,17 @@ describe('handleDeleteCategory', () => {
     const result = await handleDeleteCategory({ id: 'cat-1' });
 
     expect(result.content[0].text).toContain('Category deleted');
+  });
+
+  it('should accept categoryId as deprecated alias for id (F-34)', async () => {
+    callGraphAPI.mockResolvedValue({});
+
+    const result = await handleDeleteCategory({ categoryId: 'cat-1' });
+
+    expect(result.content[0].text).toContain('Category deleted');
+    expect(callGraphAPI.mock.calls[0][2]).toBe(
+      'me/outlook/masterCategories/cat-1'
+    );
   });
 
   it('should require ID', async () => {

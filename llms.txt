@@ -76,7 +76,9 @@ Requires an Azure app registration with Microsoft Graph delegated permissions. S
 - [Connect Outlook to Claude](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/how-to/getting-started/connect-outlook-to-claude.md): Step-by-step setup guide for Claude Desktop / Claude Code
 - [Verify Your Connection](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/how-to/getting-started/verify-your-connection.md): Test and troubleshoot the connection after installation
 - [Azure Setup](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/guides/azure-setup.md): Azure app registration and API permissions walkthrough
+- [FAQ](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/faq/index.md): Frequently asked questions — install, accounts, permissions, tokens, send safety, updates, uninstall (also at <https://littlebearapps.com/help/outlook-assistant/faq/>)
 - [CLAUDE.md](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CLAUDE.md): Quick reference for development
 - [CONTRIBUTING](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CONTRIBUTING.md): Contribution guidelines
 - [CHANGELOG](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CHANGELOG.md): Version history (current: v3.7.4 — patch release closing two regressions surfaced by an independent v3.7.3 E2E re-verification: F-24 chokepoint now catches JSON-stringified arrays from MCP transport (#168) and search-emails kqlQuery no longer silently drops on Step 0 fall-through (#169))
+- [ROADMAP](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/ROADMAP.md): Active milestones (v3.7.5 polish, v3.8.0 task integration & auth, v3.9.0 new Graph APIs)
 - [SECURITY](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/SECURITY.md): Security policy, token handling, and MCP safety controls

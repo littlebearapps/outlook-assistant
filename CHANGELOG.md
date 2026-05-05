@@ -66,6 +66,14 @@ install actually contains the fixes the version claims.
   milestones plus a recently-shipped section. Linked from `README.md`.
   Resolves the "no published roadmap to compare against" gap surfaced
   during the v3.7.2 build-page audit (littlebearapps/littlebearapps.com#142).
+- Added `docs/faq/index.md` — 11 question/answer pairs covering install,
+  account compatibility, Microsoft Graph permissions, token storage,
+  read-only mode, Azure registration, device-code-vs-browser auth,
+  updates, uninstall, privacy, and getting help. Linked from
+  `docs/README.md`. The marketing-site help-centre infrastructure
+  emits Schema.org `FAQPage` JSON-LD from this file once the matching
+  `scripts/docs-sync.config.ts` mapping lands in
+  `littlebearapps/littlebearapps.com`. (#167)
 - Updated `docs/troubleshooting.md` with two new rows: one for the
   `send-email` `ErrorInvalidRecipients` regression closed by #168, one
   for the `kqlQuery` silent-drop closed by V37-F-1 of #169.

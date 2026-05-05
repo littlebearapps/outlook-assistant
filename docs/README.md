@@ -10,7 +10,7 @@ New to Outlook Assistant? Start here:
 
 ## How-To Guides
 
-28 practical guides for managing email, calendar, contacts, and settings: **[Browse all guides](how-to/index.md)**
+29 practical guides for managing email, calendar, contacts, and settings: **[Browse all guides](how-to/index.md)**
 
 Popular guides:
 
@@ -26,6 +26,7 @@ Popular guides:
 | Document | Description |
 |----------|-------------|
 | [Tools Reference](quickrefs/tools-reference.md) | All 22 tools with parameters |
+| [FAQ](faq/index.md) | Frequently asked questions — install, accounts, permissions, tokens, updates, uninstall |
 | [Using Outlook Assistant in AI Agents](how-to/ai-agents/using-outlook-assistant-in-agents.md) | Tool selection, safety, and workflow patterns for AI agents |
 | [CLAUDE.md](../CLAUDE.md) | Quick reference for development |
 

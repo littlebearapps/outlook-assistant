@@ -163,11 +163,19 @@ async function handleUpdateRule(args) {
 
     const changedFields = Object.keys(patch)
       .map((k) => {
-        if (k === 'displayName') return `name → "${patch.displayName}"`;
-        if (k === 'isEnabled') {
-          return patch.isEnabled ? 'enabled' : 'disabled';
+        if (k === 'displayName') {
+          return `name: "${currentRule.displayName}" → "${patch.displayName}"`;
         }
-        if (k === 'sequence') return `sequence → ${patch.sequence}`;
+        if (k === 'isEnabled') {
+          // Show explicit before/after to remove the F-45 ambiguity:
+          // previously rendered as bare "enabled"/"disabled" with no
+          // indication of direction, so callers couldn't tell whether
+          // the rule was enabled or whether the action just succeeded.
+          return `isEnabled: ${currentRule.isEnabled} → ${patch.isEnabled}`;
+        }
+        if (k === 'sequence') {
+          return `sequence: ${currentRule.sequence} → ${patch.sequence}`;
+        }
         if (k === 'conditions') return 'conditions updated';
         if (k === 'actions') return 'actions updated';
         if (k === 'exceptions') return 'exceptions updated';

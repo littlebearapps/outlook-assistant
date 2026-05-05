@@ -339,6 +339,67 @@ describe('handleSetAutomaticReplies', () => {
     expect(result.content[0].text).not.toContain('Note');
   });
 
+  it('should clear schedule timestamps when disabling (F-6)', async () => {
+    callGraphAPI
+      .mockResolvedValueOnce({}) // PATCH
+      .mockResolvedValueOnce({ status: 'disabled' }); // GET updated
+
+    await handleSetAutomaticReplies({ enabled: false });
+
+    const patchBody = callGraphAPI.mock.calls[0][3].automaticRepliesSetting;
+    expect(patchBody.status).toBe('disabled');
+    // F-6: Without explicitly clearing the scheduled timestamps Graph
+    // can leave status stuck at 'scheduled'. Send the unix epoch.
+    expect(patchBody.scheduledStartDateTime.dateTime).toBe(
+      '1970-01-01T00:00:00.000'
+    );
+    expect(patchBody.scheduledEndDateTime.dateTime).toBe(
+      '1970-01-01T00:00:00.000'
+    );
+  });
+
+  it('should warn when Graph applies a different status than requested (F-7)', async () => {
+    callGraphAPI
+      .mockResolvedValueOnce({}) // PATCH
+      .mockResolvedValueOnce({ status: 'disabled' }); // GET — Graph silently coerced
+
+    const result = await handleSetAutomaticReplies({
+      enabled: true,
+      internalReplyMessage: 'OOO',
+    });
+
+    expect(result.content[0].text).toMatch(/Warning/);
+    expect(result.content[0].text).toMatch(/Requested status `alwaysEnabled`/);
+    expect(result.content[0].text).toMatch(/Graph applied `disabled`/);
+    expect(result.content[0].text).toMatch(
+      /Personal Outlook\.com accounts only support `scheduled` mode/
+    );
+  });
+
+  it('should clarify when only non-status fields were updated (F-4)', async () => {
+    callGraphAPI
+      .mockResolvedValueOnce({}) // PATCH
+      .mockResolvedValueOnce({ status: 'disabled' }); // GET
+
+    const result = await handleSetAutomaticReplies({
+      externalAudience: 'none',
+    });
+
+    // Should NOT claim 'Automatic replies updated!' which implies a state flip
+    expect(result.content[0].text).not.toMatch(/^Automatic replies updated!/);
+    expect(result.content[0].text).toMatch(/No status change applied/);
+    expect(result.content[0].text).toMatch(/externalAudience/);
+  });
+
+  it('should refuse to PATCH when no settings provided', async () => {
+    const result = await handleSetAutomaticReplies({});
+
+    expect(result.content[0].text).toMatch(
+      /No automatic-reply settings were provided/
+    );
+    expect(callGraphAPI).not.toHaveBeenCalled();
+  });
+
   it('should reject invalid externalAudience', async () => {
     const result = await handleSetAutomaticReplies({
       externalAudience: 'invalid',

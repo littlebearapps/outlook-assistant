@@ -227,12 +227,27 @@ async function handleSetAutomaticReplies(args) {
 
     // Build the settings object
     const settings = {};
+    let requestedStatus = null;
 
     // Determine status
     if (enabled === false) {
       settings.status = 'disabled';
+      requestedStatus = 'disabled';
+      // F-6: Graph keeps schedule timestamps when transitioning out of
+      // 'scheduled' mode unless they're explicitly cleared, which leaves
+      // status stuck at 'scheduled'. Reset both to the unix epoch so the
+      // disable actually applies. Graph rejects null here.
+      settings.scheduledStartDateTime = {
+        dateTime: '1970-01-01T00:00:00.000',
+        timeZone: 'UTC',
+      };
+      settings.scheduledEndDateTime = {
+        dateTime: '1970-01-01T00:00:00.000',
+        timeZone: 'UTC',
+      };
     } else if (startDateTime && endDateTime) {
       settings.status = 'scheduled';
+      requestedStatus = 'scheduled';
       settings.scheduledStartDateTime = {
         dateTime: new Date(startDateTime).toISOString(),
         timeZone: 'UTC',
@@ -243,6 +258,7 @@ async function handleSetAutomaticReplies(args) {
       };
     } else if (enabled === true) {
       settings.status = 'alwaysEnabled';
+      requestedStatus = 'alwaysEnabled';
     }
 
     // Reply messages
@@ -269,6 +285,21 @@ async function handleSetAutomaticReplies(args) {
       settings.externalAudience = externalAudience;
     }
 
+    // F-4: refuse to claim "updated" when nothing meaningful changed.
+    // Catches the misleading-success case where the caller passed only
+    // externalAudience without enabled/scheduled — previously the wrapper
+    // announced "Automatic replies updated!" with no actual state change.
+    if (Object.keys(settings).length === 0) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: 'No automatic-reply settings were provided. To change state, pass `enabled: true|false` or `startDateTime` + `endDateTime`. To update messages or audience, pass `internalReplyMessage`, `externalReplyMessage`, or `externalAudience`.',
+          },
+        ],
+      };
+    }
+
     // Apply settings
     await callGraphAPI(accessToken, 'PATCH', 'me/mailboxSettings', {
       automaticRepliesSetting: settings,
@@ -282,8 +313,36 @@ async function handleSetAutomaticReplies(args) {
     );
 
     const output = [];
-    output.push('Automatic replies updated!\n');
+    if (requestedStatus) {
+      output.push('Automatic replies updated!\n');
+    } else {
+      // F-4: no status-changing param was provided. Spell out exactly
+      // which fields the PATCH carried so the caller doesn't think
+      // the status flipped silently.
+      const otherFields = Object.keys(settings).join(', ');
+      output.push(
+        `Updated automatic-reply settings (${otherFields}). No status change applied — pass \`enabled\` or \`startDateTime\`+\`endDateTime\` to change state.\n`
+      );
+    }
     output.push(formatAutomaticReplies(updated));
+
+    // F-7: Graph silently coerces alwaysEnabled → disabled on personal
+    // Outlook.com accounts (no error returned). Detect divergence
+    // between requested and post-PATCH state and surface it to the
+    // caller so they can correct the call.
+    if (requestedStatus && updated.status !== requestedStatus) {
+      let hint = '';
+      if (
+        requestedStatus === 'alwaysEnabled' &&
+        updated.status === 'disabled'
+      ) {
+        hint =
+          ' Personal Outlook.com accounts only support `scheduled` mode — provide `startDateTime` + `endDateTime` instead of `enabled: true` alone.';
+      }
+      output.push(
+        `\n**⚠ Warning**: Requested status \`${requestedStatus}\` but Graph applied \`${updated.status}\`.${hint}`
+      );
+    }
 
     // Warn if enabling without messages
     if (

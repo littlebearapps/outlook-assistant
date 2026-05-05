@@ -37,7 +37,10 @@ const EXPORT_FORMATS = {
 async function handleExportEmail(args) {
   const emailId = args.id;
   const format = (args.format || EXPORT_FORMATS.MARKDOWN).toLowerCase();
-  const savePath = args.savePath;
+  // F-27: accept `outputDir` (canonical) and `savePath` (legacy alias).
+  // Previously single-message exports ignored outputDir entirely and
+  // hardcoded os.tmpdir(), inconsistent with target=messages.
+  const savePath = args.outputDir || args.savePath;
   const includeAttachments = args.includeAttachments !== false;
 
   if (!emailId) {
@@ -126,6 +129,9 @@ async function handleExportEmail(args) {
         ],
       };
     }
+
+    // Auto-create the parent directory so callers don't have to pre-mkdir.
+    fs.mkdirSync(path.dirname(finalPath), { recursive: true });
 
     // Save main file
     fs.writeFileSync(finalPath, content, 'utf8');

@@ -478,10 +478,15 @@ const emailTools = [
           type: 'string',
           description: 'Attachment ID (action=view/download, required)',
         },
+        outputDir: {
+          type: 'string',
+          description:
+            'Directory to save file (action=download, default: system tmpdir). Auto-created if missing.',
+        },
         savePath: {
           type: 'string',
           description:
-            'Directory to save file (action=download, default: current directory)',
+            'DEPRECATED alias for `outputDir`. Will be removed in v3.8.0.',
         },
       },
       additionalProperties: false,

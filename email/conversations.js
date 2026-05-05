@@ -372,19 +372,16 @@ async function handleGetConversation(args) {
 async function handleExportConversation(args) {
   const conversationId = args.conversationId;
   const format = (args.format || 'markdown').toLowerCase();
-  const outputDir = args.outputDir;
+  // F-29: default outputDir to os.tmpdir() to match target=message
+  // behaviour. Previously conversation export rejected calls without
+  // outputDir, inconsistent with the other export targets.
+  const outputDir = args.outputDir || require('os').tmpdir();
   const _includeAttachments = args.includeAttachments !== false;
   const order = args.order || 'chronological';
 
   if (!conversationId) {
     return {
       content: [{ type: 'text', text: 'Conversation ID is required.' }],
-    };
-  }
-
-  if (!outputDir) {
-    return {
-      content: [{ type: 'text', text: 'Output directory is required.' }],
     };
   }
 

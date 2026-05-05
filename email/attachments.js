@@ -4,6 +4,7 @@
  */
 const _https = require('https'); // Reserved for future use
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const _config = require('../config'); // Reserved for future use
 const { callGraphAPI } = require('../utils/graph-api');
@@ -110,7 +111,12 @@ async function handleListAttachments(args) {
  * @returns {object} - MCP response with download result
  */
 async function handleDownloadAttachment(args) {
-  const { messageId, attachmentId, savePath } = args;
+  // F-19: accept both `outputDir` (canonical) and `savePath` (legacy
+  // alias). Previously the silent-ignore-unknown-param behaviour
+  // dropped `outputDir` and fell through to cwd, polluting the source
+  // tree with downloaded files.
+  const { messageId, attachmentId } = args;
+  const savePath = args.outputDir || args.savePath;
 
   if (!messageId || !attachmentId) {
     return {
@@ -167,8 +173,12 @@ async function handleDownloadAttachment(args) {
         };
       }
 
-      // Determine save location
-      const outputDir = savePath || process.cwd();
+      // Determine save location. F-19: default to os.tmpdir() instead
+      // of cwd so attachments don't silently land in the source tree
+      // when the caller forgets to pass outputDir. Auto-create the
+      // target directory.
+      const outputDir = savePath || os.tmpdir();
+      fs.mkdirSync(outputDir, { recursive: true });
       const outputPath = path.join(outputDir, filename);
 
       // Decode base64 and save to file

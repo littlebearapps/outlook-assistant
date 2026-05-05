@@ -174,6 +174,9 @@ describe('handleCreateRule', () => {
 
     expect(result.content[0].text).toContain('Successfully created rule');
     expect(result.content[0].text).toContain('Test Rule');
+    // F-43: rule ID surfaced in response and _meta
+    expect(result.content[0].text).toMatch(/\*\*ID\*\*: new-rule-id/);
+    expect(result._meta.ruleId).toBe('new-rule-id');
   });
 
   it('should create a rule with subject condition and markAsRead', async () => {

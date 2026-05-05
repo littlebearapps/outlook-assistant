@@ -150,7 +150,10 @@ async function handleCreateRule(args) {
     );
 
     if (response && response.id) {
-      let text = `Successfully created rule "${name}" with sequence ${ruleSequence}.`;
+      // F-43: include the rule ID. update/delete accept ruleName so this
+      // is workable, but ID is more reliable when names contain unicode
+      // or duplicates exist.
+      let text = `Successfully created rule "${name}" with sequence ${ruleSequence}.\n\n**ID**: ${response.id}`;
       if (allWarnings.length > 0) {
         text += `\n\nNotes:\n${allWarnings.map((w) => `- ${w}`).join('\n')}`;
       }
@@ -160,6 +163,7 @@ async function handleCreateRule(args) {
       }
       return {
         content: [{ type: 'text', text }],
+        _meta: { ruleId: response.id },
       };
     }
 

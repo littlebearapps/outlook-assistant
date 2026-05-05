@@ -369,6 +369,7 @@ const authTools = [
             'Force re-authentication even if already authenticated (action=authenticate only)',
         },
       },
+      additionalProperties: false,
       required: [],
     },
     handler: async (args) => {

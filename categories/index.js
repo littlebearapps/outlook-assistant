@@ -851,6 +851,7 @@ const categoriesTools = [
           description: 'Category ID (action=update/delete, required)',
         },
       },
+      additionalProperties: false,
       required: [],
     },
     handler: async (args) => {
@@ -901,6 +902,7 @@ const categoriesTools = [
             'set (replace all), add (append), remove (remove specific). Default: set',
         },
       },
+      additionalProperties: false,
       required: ['categories'],
     },
     handler: handleApplyCategory,
@@ -945,6 +947,7 @@ const categoriesTools = [
             'Where to put emails from this sender (action=set, default: focused)',
         },
       },
+      additionalProperties: false,
       required: [],
     },
     handler: async (args) => {

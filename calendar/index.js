@@ -25,6 +25,7 @@ const calendarTools = [
           description: 'Number of events to retrieve (default: 10, max: 50)',
         },
       },
+      additionalProperties: false,
       required: [],
     },
     handler: handleListEvents,
@@ -65,6 +66,7 @@ const calendarTools = [
           description: 'Optional body content for the event',
         },
       },
+      additionalProperties: false,
       required: ['subject', 'start', 'end'],
     },
     handler: handleCreateEvent,
@@ -96,6 +98,7 @@ const calendarTools = [
           description: 'Optional comment for declining or cancelling the event',
         },
       },
+      additionalProperties: false,
       required: ['action', 'eventId'],
     },
     handler: async (args) => {

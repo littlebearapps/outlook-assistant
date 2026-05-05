@@ -378,6 +378,7 @@ const rulesTools = [
           description: 'ID of existing rule (action=update/delete)',
         },
       },
+      additionalProperties: false,
       required: [],
     },
     handler: async (args) => {

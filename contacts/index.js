@@ -687,6 +687,7 @@ const contactsTools = [
           description: 'Personal notes (action=create/update)',
         },
       },
+      additionalProperties: false,
       required: [],
     },
     handler: async (args) => {
@@ -729,6 +730,7 @@ const contactsTools = [
           description: 'Maximum results to return (default: 25, max: 50)',
         },
       },
+      additionalProperties: false,
       required: ['query'],
     },
     handler: handleSearchPeople,

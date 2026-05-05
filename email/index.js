@@ -137,6 +137,7 @@ const emailTools = [
             'Include email headers for each message (conversationId only)',
         },
       },
+      additionalProperties: false,
       required: [],
     },
     handler: async (args) => {
@@ -223,6 +224,7 @@ const emailTools = [
             'Return raw JSON instead of Markdown (headersMode only, default: false)',
         },
       },
+      additionalProperties: false,
       required: ['id'],
     },
     handler: async (args) => {
@@ -286,6 +288,7 @@ const emailTools = [
             'Check recipients for out-of-office, mailbox full, delivery restrictions before sending (default: false). Combine with dryRun=true for pre-send review.',
         },
       },
+      additionalProperties: false,
       required: ['to', 'subject', 'body'],
     },
     handler: handleSendEmail,
@@ -364,6 +367,7 @@ const emailTools = [
             'Check recipients for out-of-office, delivery restrictions before saving (action=create, default: false)',
         },
       },
+      additionalProperties: false,
       required: ['action'],
     },
     handler: handleDraft,
@@ -408,6 +412,7 @@ const emailTools = [
           description: 'Start date/time for follow-up, ISO 8601 (action=flag)',
         },
       },
+      additionalProperties: false,
       required: ['action'],
     },
     handler: async (args) => {
@@ -479,6 +484,7 @@ const emailTools = [
             'Directory to save file (action=download, default: current directory)',
         },
       },
+      additionalProperties: false,
       required: ['messageId'],
     },
     handler: async (args) => {
@@ -581,6 +587,7 @@ const emailTools = [
           description: 'Max content size in bytes (target=mime, default: 1MB)',
         },
       },
+      additionalProperties: false,
       required: [],
     },
     handler: async (args) => {
@@ -630,6 +637,7 @@ const emailTools = [
             'Comma-separated tip types to request (default: all). Options: automaticReplies, mailboxFullStatus, customMailTip, externalMemberCount, totalMemberCount, maxMessageSize, deliveryRestriction, moderationStatus, recipientScope, recipientSuggestions',
         },
       },
+      additionalProperties: false,
       required: ['recipients'],
     },
     handler: handleGetMailTips,

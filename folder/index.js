@@ -81,6 +81,7 @@ const folderTools = [
             'Folder name to delete — resolved to ID (action=delete). Cannot delete protected folders (Inbox, Drafts, Sent, etc.)',
         },
       },
+      additionalProperties: false,
       required: [],
     },
     handler: async (args) => {

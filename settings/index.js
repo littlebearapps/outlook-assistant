@@ -641,6 +641,7 @@ const settingsTools = [
             "Time zone name, e.g. 'Australia/Melbourne' (action=set-working-hours)",
         },
       },
+      additionalProperties: false,
       required: [],
     },
     handler: async (args) => {

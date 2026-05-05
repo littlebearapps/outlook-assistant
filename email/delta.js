@@ -90,6 +90,11 @@ async function handleListEmailsDelta(args) {
     const isInitialSync = !deltaToken;
     const hasMoreChanges = Boolean(nextLink);
     const newDeltaToken = deltaLink || nextLink;
+    // F-15: nextLink is a continuation token (more pages of the same
+    // sync), not a delta token. The real delta token only emits once
+    // the initial sync finishes paging. Distinguish them in output so
+    // callers know what they're storing.
+    const tokenIsContinuation = !deltaLink && Boolean(nextLink);
 
     // Format output based on verbosity
     let resultText;
@@ -101,7 +106,10 @@ async function handleListEmailsDelta(args) {
       resultText += `| Type | ${isInitialSync ? 'Initial' : 'Incremental'} |\n`;
       resultText += `| More | ${hasMoreChanges ? 'Yes' : 'No'} |\n`;
       if (newDeltaToken) {
-        resultText += `\n**Delta Token** (save for next call):\n\`\`\`\n${newDeltaToken}\n\`\`\`\n`;
+        const label = tokenIsContinuation
+          ? 'Continuation Token (more pages — call again to keep paging)'
+          : 'Delta Token (save for next sync call)';
+        resultText += `\n**${label}**:\n\`\`\`\n${newDeltaToken}\n\`\`\`\n`;
       }
     } else {
       resultText = `## Delta Sync ${isInitialSync ? '(Initial)' : '(Incremental)'}\n\n`;
@@ -142,14 +150,19 @@ async function handleListEmailsDelta(args) {
 
       // Pagination info
       if (hasMoreChanges) {
-        resultText += `\n### More Changes Available\n`;
-        resultText += `Use the deltaToken below to fetch next page.\n`;
+        resultText += `\n### More Pages Available\n`;
+        resultText += `This page returned a continuation token. Call \`search-emails deltaMode=true deltaToken=<token>\` again to fetch the next page. The real delta token only emits once paging completes.\n`;
       }
 
-      // Delta token
+      // Token (delta or continuation)
       if (newDeltaToken) {
-        resultText += `\n### Delta Token\n`;
-        resultText += `**Save this token for next sync call:**\n\`\`\`\n${newDeltaToken}\n\`\`\`\n`;
+        if (tokenIsContinuation) {
+          resultText += `\n### Continuation Token\n`;
+          resultText += `**More pages remain. Pass this back to keep paging:**\n\`\`\`\n${newDeltaToken}\n\`\`\`\n`;
+        } else {
+          resultText += `\n### Delta Token\n`;
+          resultText += `**Save this token for next sync call:**\n\`\`\`\n${newDeltaToken}\n\`\`\`\n`;
+        }
       }
     }
 
@@ -167,6 +180,7 @@ async function handleListEmailsDelta(args) {
         hasMoreChanges: hasMoreChanges,
         changesSummary: changesSummary,
         deltaToken: newDeltaToken,
+        tokenType: tokenIsContinuation ? 'continuation' : 'delta',
       },
     };
   } catch (error) {

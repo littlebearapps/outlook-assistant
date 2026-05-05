@@ -236,6 +236,35 @@ describe('filterQueryClientSide', () => {
     const result = filterQueryClientSide(messages, 'nonexistent');
     expect(result).toHaveLength(0);
   });
+
+  test('multi-word query splits on whitespace and ANDs (F-12)', () => {
+    const githubMessages = [
+      mockEmail({
+        id: 'gh1',
+        subject: '[GitHub] Your fine-grained personal access token',
+        bodyPreview: 'A token was created on your account.',
+      }),
+      mockEmail({
+        id: 'unrelated',
+        subject: 'Order confirmation',
+        bodyPreview: 'Thanks for your purchase.',
+      }),
+    ];
+    // Previously this would have failed because no field contained
+    // the literal phrase "github token"; F-12 changed the matcher to
+    // require all whitespace-separated words to be present (in any
+    // order, anywhere in subject/body/from).
+    const result = filterQueryClientSide(githubMessages, 'github token');
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('gh1');
+  });
+
+  test('multi-word query rejects when not all words present', () => {
+    // 'unicorn' appears nowhere; even though 'tax' is present in
+    // multiple messages, the AND requirement fails.
+    const result = filterQueryClientSide(messages, 'tax unicorn');
+    expect(result).toHaveLength(0);
+  });
 });
 
 // ──────────────────────────────────────────────────

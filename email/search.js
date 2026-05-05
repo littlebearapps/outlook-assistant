@@ -33,7 +33,12 @@ async function handleSearchEmails(args) {
     };
   }
 
-  const requestedCount = args.count ?? DEFAULT_LIMITS.searchEmails; // Default 10
+  // F-17: accept `maxResults` as an alias for `count` in non-delta mode.
+  // The schema declares both, but `maxResults` was only consumed by
+  // the delta path, so callers passing `maxResults=5` to a normal
+  // search saw their override silently ignored.
+  const requestedCount =
+    args.count ?? args.maxResults ?? DEFAULT_LIMITS.searchEmails;
   const verbosity = args.outputVerbosity || VERBOSITY.STANDARD;
   const query = args.query || '';
   const from = args.from || '';
@@ -566,18 +571,26 @@ function filterToClientSide(messages, toValue) {
  * @returns {Array} - Filtered messages matching the query
  */
 function filterQueryClientSide(messages, queryText) {
-  const queryLower = queryText.toLowerCase();
+  // F-12: split multi-word queries on whitespace and require ALL words
+  // to be present (AND search). Previous behaviour was substring match
+  // on the literal phrase, which missed the common case where the
+  // user types e.g. "github token" expecting it to find a subject
+  // like "[GitHub] Your fine-grained personal access token".
+  const queryLower = queryText.toLowerCase().trim();
+  if (!queryLower) return messages;
+  const words = queryLower.split(/\s+/).filter(Boolean);
+
   return messages.filter((m) => {
-    const subject = (m.subject || '').toLowerCase();
-    const body = (m.bodyPreview || '').toLowerCase();
-    const fromAddr = (m.from?.emailAddress?.address || '').toLowerCase();
-    const fromName = (m.from?.emailAddress?.name || '').toLowerCase();
-    return (
-      subject.includes(queryLower) ||
-      body.includes(queryLower) ||
-      fromAddr.includes(queryLower) ||
-      fromName.includes(queryLower)
-    );
+    const haystack = [
+      m.subject,
+      m.bodyPreview,
+      m.from?.emailAddress?.address,
+      m.from?.emailAddress?.name,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    return words.every((w) => haystack.includes(w));
   });
 }
 

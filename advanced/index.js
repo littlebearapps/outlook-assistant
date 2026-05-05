@@ -458,11 +458,24 @@ async function handleFindMeetingRooms(args) {
         );
         rooms = roomsResponse.value || [];
       } catch (findRoomsError) {
+        // F-47: distinguish "feature not available on personal account"
+        // from generic permission errors. Personal Outlook.com accounts
+        // surface a 404 here; organizational accounts surface
+        // permission errors. Both look similar in Graph but mean very
+        // different things to the caller.
+        const errMsg = findRoomsError.message || '';
+        const isLikelyPersonal =
+          errMsg.includes('404') ||
+          errMsg.includes('Not Found') ||
+          errMsg.includes('NotFound');
+        const explanation = isLikelyPersonal
+          ? 'Meeting room search is M365-only. Personal Outlook.com accounts cannot use this feature — there are no rooms to find. Connect a Microsoft 365 work/school account to enable.'
+          : 'This feature requires:\n- Places.Read.All permission\n- Meeting rooms configured in your organization';
         return {
           content: [
             {
               type: 'text',
-              text: `Unable to find meeting rooms.\n\n**Note**: This feature requires:\n- Places.Read.All permission\n- Meeting rooms configured in your organization\n\nError: ${findRoomsError.message}`,
+              text: `Unable to find meeting rooms.\n\n**Note**: ${explanation}\n\nError: ${errMsg}`,
             },
           ],
         };

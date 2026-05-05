@@ -30,7 +30,13 @@ jest.mock('../../config', () => ({
 const {
   handleDeviceCodeAuth,
   handleDeviceCodeComplete,
+  handleAbout,
 } = require('../../auth/tools');
+jest.mock('../../utils/graph-api');
+const { callGraphAPI } = require('../../utils/graph-api');
+jest.mock('../../auth', () => ({
+  ensureAuthenticated: jest.fn().mockResolvedValue('test-token'),
+}));
 const {
   initiateDeviceCodeFlow,
   pollForToken,
@@ -207,5 +213,65 @@ describe('device code state persistence', () => {
     // Check owner-only permissions (0o600 = rw-------)
     const mode = stats.mode & 0o777;
     expect(mode).toBe(0o600);
+  });
+});
+
+describe('handleAbout — F-1/F-2/F-48', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    process.env = { ...originalEnv };
+    delete process.env.OUTLOOK_MAX_EMAILS_PER_SESSION;
+    delete process.env.OUTLOOK_ALLOWED_RECIPIENTS;
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test('surfaces authenticated mailbox identity (F-2)', async () => {
+    callGraphAPI.mockResolvedValue({
+      userPrincipalName: 'user@example.com',
+      mail: 'user@example.com',
+      displayName: 'Test User',
+    });
+
+    const result = await handleAbout();
+
+    expect(result.content[0].text).toMatch(/Test User <user@example\.com>/);
+  });
+
+  test('warns when both safety belts are unset (F-1, F-48)', async () => {
+    callGraphAPI.mockResolvedValue({
+      userPrincipalName: 'u@example.com',
+    });
+
+    const result = await handleAbout();
+
+    expect(result.content[0].text).toMatch(/Safety Belts Not Configured/);
+    expect(result.content[0].text).toMatch(/OUTLOOK_MAX_EMAILS_PER_SESSION/);
+    expect(result.content[0].text).toMatch(/OUTLOOK_ALLOWED_RECIPIENTS/);
+  });
+
+  test('does not warn when both safety belts are set', async () => {
+    process.env.OUTLOOK_MAX_EMAILS_PER_SESSION = '10';
+    process.env.OUTLOOK_ALLOWED_RECIPIENTS = 'example.com';
+    callGraphAPI.mockResolvedValue({ userPrincipalName: 'u@example.com' });
+
+    const result = await handleAbout();
+
+    expect(result.content[0].text).not.toMatch(/Safety Belts Not Configured/);
+  });
+
+  test('degrades gracefully when not authenticated', async () => {
+    const { ensureAuthenticated } = require('../../auth');
+    ensureAuthenticated.mockRejectedValueOnce(
+      new Error('Authentication required')
+    );
+
+    const result = await handleAbout();
+
+    expect(result.content[0].text).toMatch(/Not authenticated/);
   });
 });

@@ -27,6 +27,19 @@ const { advancedTools } = require('./advanced');
 console.error(`STARTING ${config.SERVER_NAME.toUpperCase()} MCP SERVER`);
 console.error(`Test mode is ${config.USE_TEST_MODE ? 'enabled' : 'disabled'}`);
 
+// F-1 / F-48: warn at startup when safety belts are unset. Mirrors the
+// warning surfaced by `auth action=about`. Visible to operators reading
+// stderr; AI clients reading the JSON-RPC stream are unaffected.
+if (
+  !process.env.OUTLOOK_MAX_EMAILS_PER_SESSION &&
+  !process.env.OUTLOOK_ALLOWED_RECIPIENTS &&
+  !config.USE_TEST_MODE
+) {
+  console.error(
+    '⚠ Safety belts not configured. Consider setting OUTLOOK_MAX_EMAILS_PER_SESSION and OUTLOOK_ALLOWED_RECIPIENTS in your .mcp.json env block for safer AI-assisted sending. See `auth action=about` for details.'
+  );
+}
+
 // Combine all tools
 const TOOLS = [
   ...authTools,

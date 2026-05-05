@@ -203,7 +203,7 @@ async function handleGetMailTips(args) {
         content: [
           {
             type: 'text',
-            text: 'No mail tips returned for the specified recipients.',
+            text: 'No mail tips returned. Mail Tips is M365-only — personal Outlook.com accounts return empty responses, so recipient validation is unavailable on this account.',
           },
         ],
       };
@@ -211,15 +211,39 @@ async function handleGetMailTips(args) {
 
     const { formatted, warningCount } = formatMailTips(mailTips);
 
+    // F-23: Detect a "fully empty" tips response — every recipient
+    // returned with no actionable fields. Personal Outlook.com
+    // accounts surface this as a successful empty response rather
+    // than a feature-unsupported error, leading to false confidence
+    // when callers see "No issues detected".
+    const allEmpty = mailTips.every((tip) => {
+      const hasContent =
+        tip.recipientNotFound ||
+        tip.mailboxFull ||
+        tip.deliveryRestricted ||
+        tip.isModerated ||
+        tip.automaticReplies?.message ||
+        tip.maxMessageSize ||
+        tip.totalMemberCount ||
+        tip.customMailTip;
+      return !hasContent;
+    });
+
     let header = `# Mail Tips\n\n`;
     header += `**Recipients checked**: ${mailTips.length}\n`;
-    header += `**Warnings**: ${warningCount}\n\n`;
+    header += `**Warnings**: ${warningCount}\n`;
+    if (allEmpty && warningCount === 0) {
+      header +=
+        '\n**Note**: Graph returned no actionable mail tips for any recipient. This usually means Mail Tips is not supported on the connected account (M365-only feature) — "No issues detected" below means "no warnings flagged by Graph", NOT "validated as deliverable".\n';
+    }
+    header += '\n';
 
     return {
       content: [{ type: 'text', text: header + formatted }],
       _meta: {
         recipientCount: mailTips.length,
         warningCount,
+        allEmpty,
       },
     };
   } catch (error) {

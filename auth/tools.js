@@ -28,10 +28,32 @@ async function handleAbout() {
     (s) => s !== 'offline_access'
   );
   const testMode = config.USE_TEST_MODE ? 'Enabled' : 'Disabled';
+  const rateLimitConfigured = Boolean(
+    process.env.OUTLOOK_MAX_EMAILS_PER_SESSION
+  );
+  const allowlistConfigured = Boolean(process.env.OUTLOOK_ALLOWED_RECIPIENTS);
   const rateLimit =
     process.env.OUTLOOK_MAX_EMAILS_PER_SESSION || 'Unlimited (no limit set)';
   const allowlist =
     process.env.OUTLOOK_ALLOWED_RECIPIENTS || 'None (all recipients allowed)';
+
+  // F-2: surface the authenticated user's email so callers and AI
+  // agents can confirm which mailbox is connected. Uses a single
+  // GET /me round-trip when a valid token is available; degrades
+  // gracefully when not authenticated.
+  let identity = 'Not authenticated (run `auth action=authenticate`)';
+  try {
+    const { ensureAuthenticated } = require('./index');
+    const { callGraphAPI } = require('../utils/graph-api');
+    const token = await ensureAuthenticated();
+    const me = await callGraphAPI(token, 'GET', 'me', null, {
+      $select: 'userPrincipalName,mail,displayName',
+    });
+    const upn = me.mail || me.userPrincipalName;
+    identity = me.displayName ? `${me.displayName} <${upn}>` : upn;
+  } catch (_e) {
+    // Leave default identity message in place
+  }
 
   const lines = [
     `# Outlook Assistant Server v${config.SERVER_VERSION}\n`,
@@ -39,6 +61,7 @@ async function handleAbout() {
     `## Diagnostics\n`,
     `| Setting | Value |`,
     `|---------|-------|`,
+    `| Mailbox | ${identity} |`,
     `| Tools | ${_toolCount} across 9 modules |`,
     `| Modules | auth, email, calendar, folder, rules, contacts, categories, settings, advanced |`,
     `| Timezone | ${config.DEFAULT_TIMEZONE} |`,
@@ -49,6 +72,27 @@ async function handleAbout() {
     ``,
     `**Scopes**: ${scopes.join(', ')}`,
   ];
+
+  // F-1 / F-48: warn when no safety belts are wired up. AI-assisted
+  // sending is significantly safer with a session rate limit and a
+  // recipient allowlist; both are off by default.
+  if (!rateLimitConfigured || !allowlistConfigured) {
+    lines.push('');
+    lines.push('## ⚠ Safety Belts Not Configured\n');
+    lines.push(
+      'No rate limit or recipient allowlist is set. For safer AI-assisted sending, add to your `.mcp.json` env block:'
+    );
+    lines.push('```');
+    if (!rateLimitConfigured) {
+      lines.push('OUTLOOK_MAX_EMAILS_PER_SESSION=10');
+    }
+    if (!allowlistConfigured) {
+      lines.push(
+        'OUTLOOK_ALLOWED_RECIPIENTS=your-domain.com,trusted@example.com'
+      );
+    }
+    lines.push('```');
+  }
 
   return {
     content: [

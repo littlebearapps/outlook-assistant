@@ -7,6 +7,153 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.7.3] - 2026-05
+
+E2E sweep findings fix-up. The previous session ran a full manual sweep
+of every tool/action permutation against a live personal Outlook.com
+mailbox and filed 48 findings across 7 GitHub issues (#159 tracker,
+#160-#165 themes). v3.7.3 fixes them.
+
+### Fixed
+
+- **MCP boundary param coercion** — most MCP clients deliver array,
+  boolean, integer, and number params as JSON-encoded strings. Handlers
+  were written assuming JS-typed values, so mismatches surfaced as
+  per-character Graph errors (`update-email ids`), silent no-ops
+  (`manage-rules isEnabled`, `markAsRead`, `includeDetails`), or
+  silently-ignored params (`folders includeItemCounts`). A single
+  chokepoint in `index.js` now walks each tool's `inputSchema` once
+  and coerces values into the right JS type before dispatch — no
+  per-handler edits needed. (#160)
+- **`update-email ids` array iterates char-by-char** — batch flag /
+  unflag / complete operations now work. Was completely broken; one
+  call could produce 400+ Graph errors. (F-25)
+- **`apply-category categories` array has no working shape** — array
+  param now deserialises properly. The categorisation pathway via
+  `apply-category` was unusable from MCP. (F-33, F-36)
+- **`manage-rules` boolean params silently ignored** — `isEnabled`,
+  `markAsRead`, `includeDetails` are now honoured. Update output
+  shows explicit before/after (`isEnabled: true → false`). (F-42, F-44, F-45)
+- **`search-emails query="multi word"` misses obvious matches** —
+  client-side fallback now splits on whitespace and AND-matches all
+  words across subject/body/from. The flagship "progressive search
+  finds emails Microsoft's `$search` API misses" claim now actually
+  works for the common multi-word case. (F-12)
+- **`set-auto-replies enabled=false` doesn't transition `scheduled`
+  → `disabled`** — schedule timestamps are now explicitly cleared on
+  disable, so the state actually flips. Was the cleanup-blocker for
+  the v3.7.2 E2E sweep. (F-6)
+- **`set-auto-replies enabled=true` (no schedule) silently coerced to
+  disabled on personal accounts** — divergence between requested and
+  Graph-applied status now surfaces a warning explaining the
+  personal-account constraint. (F-7)
+- **`set-auto-replies` with only `externalAudience` claims "updated"**
+  — now clarifies "no status change applied; only externalAudience
+  was updated" so callers don't think the state flipped. (F-4)
+- **`manage-category set color=…` is a silent no-op** — handler now
+  re-fetches after PATCH and warns when Graph stored something
+  different (master-category colors are immutable on some account
+  types). (F-35)
+- **`manage-category list` truncates IDs with ellipsis** — full IDs
+  emitted at standard verbosity so they can be copy-pasted. (F-9)
+- **`manage-contact update jobTitle` shows up as "Company"** —
+  formatter now emits separate "Job Title" and "Company" lines instead
+  of squashing both into a single "Company" line. (F-40)
+- **`attachments download outputDir`, `export target=message
+  outputDir`, `export target=conversation outputDir` ignored or
+  inconsistent** — all now honour `outputDir`, default to
+  `os.tmpdir()` instead of cwd, and auto-create the target directory.
+  Adds a deprecated `savePath` alias for the original schema name.
+  (F-19, F-27, F-29)
+- **`read-email` body output leaks tracking-pixel zero-width chars** —
+  `formatEmailContent` now strips `U+200B..U+200F`, `U+2060`, `U+FEFF`,
+  and the corresponding HTML entities (`&#8203;`, `&zwj;`, etc.) before
+  returning. Hundreds of these were bloating token usage on Gmail-style
+  messages. (F-16)
+- **`search-emails maxResults` ignored in non-delta mode** — handler
+  now accepts `maxResults` as an alias for `count`. (F-17)
+- **Delta-sync mislabels nextLink as "Delta Token"** — output now
+  distinguishes a continuation token (more pages of the same sync)
+  from a real delta token (sync complete). `_meta.tokenType` exposes
+  the distinction programmatically. (F-15)
+- **`folders create` and `manage-rules create` don't return the new
+  ID** — both now include `**ID**: <id>` in the response and surface
+  the ID in `_meta`. (F-31, F-43)
+- **Multi-action tools silently route typos to list/get** — every
+  multi-action tool's switch default now returns an explicit "Unknown
+  action 'X'. Valid actions: …" error. The MCP boundary enum
+  validation also rejects out-of-enum action values. (F-5, F-32, #162)
+- **`manage-event accept` deliberately omitted** — documented in
+  CLAUDE.md and tools-reference rather than left as a silent gap.
+  Microsoft Graph doesn't expose an accept verb that works
+  reliably on personal Outlook.com calendars. (F-38)
+- **`get-mail-tips` reports "No issues detected" for invalid
+  recipients on personal accounts** — now detects empty Graph
+  responses (M365-only feature) and explicitly says "no warnings
+  flagged ≠ validated as deliverable" so callers don't get false
+  confidence. (F-23)
+- **`find-meeting-rooms` 404 wrapped with permission-style hint on
+  personal accounts** — now distinguishes "feature not available on
+  this account type" (clear M365-only message) from generic permission
+  errors. (F-47)
+- **`auth action=about` doesn't show the authenticated mailbox** —
+  output now includes `displayName <email>` at the top of the
+  diagnostics block via a single `GET /me` round-trip. (F-2)
+- **Safety-belt env vars off by default with no visible warning** —
+  `auth about` and server startup now warn when
+  `OUTLOOK_MAX_EMAILS_PER_SESSION` or `OUTLOOK_ALLOWED_RECIPIENTS`
+  are unset, with a copy-paste snippet for the .mcp.json env block.
+  Ships a `.mcp.json.example` with both vars pre-wired. (F-1, F-48)
+- **`manage-contact list` shows "Total: 50" with no pagination cue**
+  — now requests `$count: true` from Graph and surfaces "Showing N
+  of M" plus a "pass `skip: N`" hint when more pages exist. Adds a
+  `skip` schema param. (F-22)
+
+### Changed
+
+- **Strict parameter validation** — every tool now rejects unknown
+  parameters at the MCP boundary (`additionalProperties: false`).
+  Calls that previously silently ignored typos (e.g. `verbosity` on
+  `folders list`) now error with a clear list of valid params.
+  Authorised AI clients should be unaffected; clients depending on
+  silent-ignore behaviour will need to drop the bogus params. (F-10)
+- **Param-name aliases** — backwards-compatible aliases added so
+  callers don't have to remember per-tool naming:
+  `manage-event` accepts `id` (canonical) alongside `eventId`,
+  `manage-rules` accepts `displayName` alongside `name` (matches
+  Graph's own field name), `manage-category` accepts `categoryId`
+  (deprecated) alongside `id` and `set` (deprecated) alongside
+  `update`, `access-shared-mailbox` accepts `email` alongside
+  `sharedMailbox`, `manage-contact create` accepts `firstName` /
+  `lastName` / `emails` (mapped to Graph's `givenName` / `surname`
+  / `emailAddresses[]`), `attachments download` and `export
+  target=message` accept `outputDir` alongside `savePath`,
+  `export target=messages` accepts `query` as a shortcut for
+  `searchQuery: { subject }`. (#163)
+- **Export Formats — per-target support clarified** — README and
+  schema description now spell out which formats are valid for each
+  `target`. mbox/html are conversation-only; target=message rejects
+  them with a helpful message instead of "Unknown format". (F-26, F-30)
+- **README claim audit** — softened the email forensics claim to
+  reflect that the tool surfaces raw header data (DKIM, SPF, DMARC,
+  X-Mailer, X-Originating-IP, delivery chain) but does not yet emit
+  an automated phishing verdict. Updated Account Compatibility
+  table — Focused Inbox API works on personal Outlook.com but mail
+  routing is unaffected. Added a Recommended setup snippet under
+  Send-email protections showing the safety belts pre-wired. (F-11,
+  F-20, #164)
+
+### Added
+
+- **`utils/schema-coerce.js`** — JSON-schema-driven param coercion +
+  validation module used at the MCP boundary. 36 unit + integration
+  tests covering each coercion path, `additionalProperties`, enum,
+  and required validation against the real schemas.
+- **`.mcp.json.example`** — copy-paste config template with safety
+  env vars pre-wired and inline comments explaining each.
+- **Test suite expansion** — 82 new regression tests covering every
+  fix above. 608 → 690 passing tests.
+
 ## [3.7.2] - 2026-04
 
 ### Fixed

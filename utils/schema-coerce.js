@@ -118,6 +118,31 @@ function coerceValue(value, schema, path) {
         `${path}: expected comma-separated string, got array — pass "a@example.com,b@example.com" instead of ["a@example.com","b@example.com"]`
       );
     }
+    // F-24 part 2 (#168): some MCP clients JSON-stringify array literals
+    // before transmission when the schema declares type:string, so the
+    // array arrives here as the literal string '["a@x.com","b@x.com"]'
+    // (brackets and quotes intact). Array.isArray returns false; the
+    // value would otherwise pass through and Graph would reject the
+    // literal-bracket address with a confusing 400.
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+        let parsed;
+        try {
+          parsed = JSON.parse(trimmed);
+        } catch (_e) {
+          parsed = undefined;
+        }
+        if (Array.isArray(parsed)) {
+          const hint = parsed.every((p) => typeof p === 'string')
+            ? `"${parsed.join(',')}"`
+            : 'a comma-separated string';
+          throw new CoercionError(
+            `${path}: expected comma-separated string, got JSON-encoded array — pass ${hint} instead of ${trimmed}`
+          );
+        }
+      }
+    }
     return value;
   }
 

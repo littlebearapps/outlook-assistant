@@ -163,6 +163,49 @@ describe('schema-coerce', () => {
           )
         ).toThrow(CoercionError);
       });
+
+      // #168: MCP clients that JSON-stringify array literals before
+      // transmission deliver the array as a literal-bracket string. The
+      // first F-24 fix (Array.isArray) only caught the live-array form;
+      // the v3.7.3 E2E sweep showed the user-visible failure mode
+      // (Graph 400 ErrorInvalidRecipients) was still reproducible.
+      test('rejects JSON-stringified array (transport-encoded form)', () => {
+        expect(() =>
+          coerceValue('["a@example.com"]', { type: 'string' }, 'to')
+        ).toThrow(/JSON-encoded array.*"a@example.com"/);
+      });
+
+      test('rejects JSON-stringified multi-element array with usable hint', () => {
+        expect(() =>
+          coerceValue(
+            '["a@example.com","b@example.com"]',
+            { type: 'string' },
+            'to'
+          )
+        ).toThrow(/JSON-encoded array.*"a@example.com,b@example.com"/);
+      });
+
+      test('handles whitespace around JSON-stringified array', () => {
+        expect(() =>
+          coerceValue('  ["a@x.com"]  ', { type: 'string' }, 'to')
+        ).toThrow(CoercionError);
+      });
+
+      test('passes through strings that merely start with [ but are not JSON arrays', () => {
+        // Subject lines or body text legitimately starting with `[` (e.g.
+        // notification subjects like `[GitHub] ...`) must not trip the guard.
+        expect(
+          coerceValue('[GitHub] PR opened', { type: 'string' }, 'subject')
+        ).toBe('[GitHub] PR opened');
+      });
+
+      test('passes through bracketed non-array JSON like "[1,2"', () => {
+        // Malformed brackets shouldn't fall foul of the guard — only
+        // *parseable* arrays are rejected. Other non-JSON content passes.
+        expect(coerceValue('[unclosed', { type: 'string' }, 'subject')).toBe(
+          '[unclosed'
+        );
+      });
     });
   });
 

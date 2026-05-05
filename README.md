@@ -487,7 +487,8 @@ USE_TEST_MODE=true npm start
 |-------|-------------|
 | [Getting Started](docs/how-to/getting-started/connect-outlook-to-claude.md) | Install, configure, and authenticate — start here |
 | [Azure Setup Guide](docs/guides/azure-setup.md) | Azure account creation, app registration, permissions, and secrets |
-| [How-To Guides](docs/how-to/index.md) | 28 practical guides for email, calendar, contacts, and settings |
+| [How-To Guides](docs/how-to/index.md) | 29 practical guides for email, calendar, contacts, and settings |
+| [Roadmap](ROADMAP.md) | Active milestones (v3.7.5, v3.8.0, v3.9.0) and recent releases |
 | [Troubleshooting & FAQ](docs/how-to/getting-started/verify-your-connection.md#common-connection-problems) | Common problems, re-authentication, and frequently asked questions |
 | [Tools Reference](docs/quickrefs/tools-reference.md) | All 22 tools with parameters |
 | [AI Agent Guide](docs/how-to/ai-agents/using-outlook-assistant-in-agents.md) | Tool selection and workflow patterns for AI agents |

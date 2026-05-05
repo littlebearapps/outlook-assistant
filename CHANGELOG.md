@@ -60,6 +60,18 @@ install actually contains the fixes the version claims.
   covering silent-drop prevention, no-double-wrap on quoted/colon/
   multi-word KQL, single-token auto-wrap, and error surfacing.
 
+### Documentation
+
+- Added `ROADMAP.md` covering the active v3.7.5, v3.8.0, and v3.9.0
+  milestones plus a recently-shipped section. Linked from `README.md`.
+  Resolves the "no published roadmap to compare against" gap surfaced
+  during the v3.7.2 build-page audit (littlebearapps/littlebearapps.com#142).
+- Updated `docs/troubleshooting.md` with two new rows: one for the
+  `send-email` `ErrorInvalidRecipients` regression closed by #168, one
+  for the `kqlQuery` silent-drop closed by V37-F-1 of #169.
+- Bumped how-to-guide count in README from 28 → 29 (matches actual
+  count under `docs/how-to/`).
+
 ### Deferred to v3.8.0
 
 - **V37-F-2** — `searchAllFolders=true` returning fewer matches than

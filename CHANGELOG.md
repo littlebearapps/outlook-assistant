@@ -7,6 +7,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.7.4] - 2026-05
+
+Patch release closing two regressions surfaced by an independent
+v3.7.3 E2E re-verification against a live personal Outlook.com
+mailbox. The v3.7.3 release tag is left in place; v3.7.4 ships the
+post-tag bug fixes plus the new patches below so the version users
+install actually contains the fixes the version claims.
+
+### Fixed
+
+- **F-24 chokepoint catches JSON-stringified arrays** — the original
+  v3.7.3 fix only rejected live JS arrays in string-typed recipient
+  params. In practice some MCP transports JSON-stringify array
+  literals before transmission when the schema declares
+  `type: "string"`, so the chokepoint received the literal string
+  `'["a@x.com"]'` (brackets and quotes intact) and `Array.isArray`
+  returned false. The user-visible failure mode (Graph 400
+  `ErrorInvalidRecipients`) was unchanged. The check now also
+  detects strings that parse as JSON arrays and rejects them with
+  the same friendly hint, including the comma-joined form callers
+  should pass instead. False-positive guards verified against
+  bracketed subjects (`[GitHub] PR opened`) and malformed brackets.
+  (#168)
+- **`search-emails kqlQuery` no longer silently dropped** — two
+  bugs in `progressiveSearch` Step 0:
+  1. The kqlQuery was auto-wrapped in extra double quotes, breaking
+     any caller using KQL field syntax (e.g. `subject:"foo bar"`
+     became `"subject:"foo bar""` — broken nested quotes that Graph
+     parsed unpredictably or failed to honour).
+  2. If Step 0 returned 0 results (often a side-effect of bug 1),
+     execution silently fell through to combined-search, which ran
+     *without* the kqlQuery filter and returned recent unfiltered
+     messages with a misleading `combined-search` strategy line.
+  Fixed: don't auto-wrap quoted/multi-word/colon-bearing kqlQuery
+  values; only quote bare single tokens. Always return from the
+  raw-KQL branch — never fall through. Empty results carry
+  `noResults: true` so the formatter shows the helpful suggestions
+  block. Errors carry a `kqlError` marker and a `raw-kql-error`
+  strategy line for programmatic detection. (#169)
+- **F-17 `maxResults` alias in list mode** — wired through both
+  `email/search.js` and `email/list.js` so `search-emails
+  folder=junk maxResults=5` returns 5 results, not the previous 25.
+  (Originally part of post-tag commit `9b4373a`, included here for
+  the merged release notes.)
+
+### Tests
+
+- 690 → 708 passing tests, 26 suites, 0 failures (+18 regression
+  cases): 5 for #168 covering both array forms, whitespace,
+  multi-element arrays, and false-positive guards; 7 for #169
+  covering silent-drop prevention, no-double-wrap on quoted/colon/
+  multi-word KQL, single-token auto-wrap, and error surfacing.
+
+### Deferred to v3.8.0
+
+- **V37-F-2** — `searchAllFolders=true` returning fewer matches than
+  inbox-only `query` searches on personal Outlook.com. Needs a Graph
+  `$search` semantics audit and possibly a client-side cross-folder
+  fanout fallback. Tracked under #169.
+- **V37-F-3 / F-12 edge case** — multi-word query AND-match misses
+  subjects with bracket-prefixed tokens like `[GitHub] A fine-grained
+  personal access token has been added`. Tracked under #138.
+- **noResults rendering** says "in 'inbox'" even when
+  `searchAllFolders=true` was passed. Cosmetic; underlying
+  `_searchInfo` strategy is correct.
+- Renaming `kqlQuery` to something less misleading — Microsoft Graph
+  `$search` is not full KQL.
+
 ## [3.7.3] - 2026-05
 
 E2E sweep findings fix-up. The previous session ran a full manual sweep

@@ -78,5 +78,5 @@ Requires an Azure app registration with Microsoft Graph delegated permissions. S
 - [Azure Setup](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/guides/azure-setup.md): Azure app registration and API permissions walkthrough
 - [CLAUDE.md](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CLAUDE.md): Quick reference for development
 - [CONTRIBUTING](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CONTRIBUTING.md): Contribution guidelines
-- [CHANGELOG](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CHANGELOG.md): Version history (current: v3.7.3 — E2E sweep fix-up: MCP boundary param coercion + validation, strict unknown-param rejection, param-name aliases across tools)
+- [CHANGELOG](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CHANGELOG.md): Version history (current: v3.7.4 — patch release closing two regressions surfaced by an independent v3.7.3 E2E re-verification: F-24 chokepoint now catches JSON-stringified arrays from MCP transport (#168) and search-emails kqlQuery no longer silently drops on Step 0 fall-through (#169))
 - [SECURITY](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/SECURITY.md): Security policy, token handling, and MCP safety controls

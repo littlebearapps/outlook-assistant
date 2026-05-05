@@ -50,8 +50,9 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 
 | File | Purpose |
 |------|---------|
-| `index.js` | MCP protocol handler, combines all tools |
+| `index.js` | MCP protocol handler, combines all tools, runs schema coercion before each handler |
 | `config.js` | API endpoint, auth settings, defaults |
+| `utils/schema-coerce.js` | MCP-boundary param coercion + validation (string→array/boolean/number, `additionalProperties: false`, required, enums) |
 | `auth/token-storage.js` | Token storage with auto-refresh at `~/.outlook-assistant-tokens.json` (includes `auth_method` field) |
 | `auth/device-code.js` | Device code flow for headless/remote authentication |
 | `auth/tools.js` | Auth tool handlers; persists device code state to `~/.outlook-assistant-pending-auth.json` |

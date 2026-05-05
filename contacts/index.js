@@ -127,6 +127,8 @@ async function handleListContacts(args) {
   const verbosity = args.outputVerbosity || 'standard';
   const folder = args.folder || null; // null = default contacts folder
 
+  const skip = args.skip || 0;
+
   try {
     const accessToken = await ensureAuthenticated();
 
@@ -139,7 +141,9 @@ async function handleListContacts(args) {
       $select: fields.join(','),
       $top: count,
       $orderby: 'displayName',
+      $count: 'true', // Surface true total so callers know if more pages exist
     };
+    if (skip > 0) queryParams.$skip = skip;
 
     const response = await callGraphAPI(
       accessToken,
@@ -149,10 +153,29 @@ async function handleListContacts(args) {
       queryParams
     );
     const contacts = response.value || [];
+    const totalAvailable = response['@odata.count'];
+    const hasMore = Boolean(response['@odata.nextLink']);
 
     const output = [];
     output.push(`# Contacts\n`);
-    output.push(`**Total**: ${contacts.length}`);
+    if (typeof totalAvailable === 'number') {
+      output.push(
+        `**Showing**: ${contacts.length} of ${totalAvailable}${skip > 0 ? ` (offset ${skip})` : ''}`
+      );
+    } else {
+      output.push(`**Showing**: ${contacts.length}`);
+    }
+    // F-22: surface pagination cue when more results exist so callers
+    // know to ask for the next page instead of assuming "Total: 50"
+    // is the entire address book.
+    if (
+      hasMore ||
+      (totalAvailable && contacts.length + skip < totalAvailable)
+    ) {
+      output.push(
+        `**More available**: pass \`skip: ${skip + contacts.length}\` to fetch the next page (or \`count\` to raise the page size up to 100).`
+      );
+    }
     output.push('');
 
     contacts.forEach((contact) => {
@@ -161,7 +184,13 @@ async function handleListContacts(args) {
 
     return {
       content: [{ type: 'text', text: output.join('\n') }],
-      _meta: { count: contacts.length },
+      _meta: {
+        count: contacts.length,
+        ...(typeof totalAvailable === 'number' && {
+          totalAvailable,
+        }),
+        hasMore,
+      },
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
@@ -670,6 +699,11 @@ const contactsTools = [
           type: 'number',
           description:
             'Number of results (action=list default: 50, action=search default: 25)',
+        },
+        skip: {
+          type: 'integer',
+          description:
+            'Pagination offset for action=list (default: 0). Use the value suggested by the previous page response.',
         },
         folder: {
           type: 'string',

@@ -63,7 +63,26 @@ describe('handleListContacts', () => {
 
     const result = await handleListContacts({});
 
-    expect(result.content[0].text).toContain('**Total**: 0');
+    expect(result.content[0].text).toContain('**Showing**: 0');
+  });
+
+  it('surfaces pagination hint when more results exist (F-22)', async () => {
+    callGraphAPI.mockResolvedValue({
+      value: Array.from({ length: 50 }, (_, i) => ({
+        ...mockContact,
+        id: `c-${i}`,
+        displayName: `Person ${i}`,
+      })),
+      '@odata.count': 137,
+      '@odata.nextLink': 'https://graph.microsoft.com/...&$skip=50',
+    });
+
+    const result = await handleListContacts({});
+
+    expect(result.content[0].text).toMatch(/Showing.*50 of 137/);
+    expect(result.content[0].text).toMatch(/skip: 50/);
+    expect(result._meta.hasMore).toBe(true);
+    expect(result._meta.totalAvailable).toBe(137);
   });
 
   it('should respect count parameter', async () => {

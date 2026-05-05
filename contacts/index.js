@@ -76,13 +76,10 @@ function formatContact(contact, verbosity = 'standard') {
       lines.push(`**Phone**: ${phones.join(' | ')}`);
     }
 
-    // Company info
-    if (contact.companyName || contact.jobTitle) {
-      const company = [contact.jobTitle, contact.companyName]
-        .filter(Boolean)
-        .join(' at ');
-      lines.push(`**Company**: ${company}`);
-    }
+    // Job title and company info — F-40: previously squashed into a
+    // single 'Company' label which mislabeled jobTitle-only contacts.
+    if (contact.jobTitle) lines.push(`**Job Title**: ${contact.jobTitle}`);
+    if (contact.companyName) lines.push(`**Company**: ${contact.companyName}`);
   }
 
   // Full verbosity extras
@@ -340,13 +337,32 @@ async function handleGetContact(args) {
  * Create contact handler
  */
 async function handleCreateContact(args) {
-  const { displayName, email, mobilePhone, companyName, jobTitle, notes } =
-    args;
+  const {
+    displayName,
+    firstName,
+    lastName,
+    email,
+    emails,
+    mobilePhone,
+    companyName,
+    jobTitle,
+    notes,
+  } = args;
 
-  if (!displayName && !email) {
+  // F-39: derive displayName from firstName/lastName if not provided.
+  const resolvedDisplayName =
+    displayName ||
+    [firstName, lastName].filter(Boolean).join(' ') ||
+    email ||
+    (Array.isArray(emails) && emails[0]);
+
+  if (!resolvedDisplayName && !email && !(emails && emails.length > 0)) {
     return {
       content: [
-        { type: 'text', text: 'At least displayName or email is required.' },
+        {
+          type: 'text',
+          text: 'At least displayName, firstName/lastName, email, or emails is required.',
+        },
       ],
     };
   }
@@ -356,23 +372,38 @@ async function handleCreateContact(args) {
 
     const contactData = {};
 
-    if (displayName) contactData.displayName = displayName;
-    if (email) {
-      contactData.emailAddresses = [
-        { address: email, name: displayName || email },
-      ];
-    }
-    if (mobilePhone) contactData.mobilePhone = mobilePhone;
-    if (companyName) contactData.companyName = companyName;
-    if (jobTitle) contactData.jobTitle = jobTitle;
-    if (notes) contactData.personalNotes = notes;
+    if (resolvedDisplayName) contactData.displayName = resolvedDisplayName;
 
-    // Parse name into given/surname if provided
-    if (displayName && displayName.includes(' ')) {
+    // F-39: prefer explicit givenName/surname when supplied; otherwise
+    // derive from displayName if it's a multi-word string.
+    if (firstName) contactData.givenName = firstName;
+    if (lastName) contactData.surname = lastName;
+    if (
+      !contactData.givenName &&
+      !contactData.surname &&
+      displayName &&
+      displayName.includes(' ')
+    ) {
       const parts = displayName.split(' ');
       contactData.givenName = parts[0];
       contactData.surname = parts.slice(1).join(' ');
     }
+
+    // Email: accept either `email` (single) or `emails` (array).
+    const allEmails = [];
+    if (email) allEmails.push(email);
+    if (Array.isArray(emails)) allEmails.push(...emails);
+    if (allEmails.length > 0) {
+      contactData.emailAddresses = allEmails.map((addr) => ({
+        address: addr,
+        name: resolvedDisplayName || addr,
+      }));
+    }
+
+    if (mobilePhone) contactData.mobilePhone = mobilePhone;
+    if (companyName) contactData.companyName = companyName;
+    if (jobTitle) contactData.jobTitle = jobTitle;
+    if (notes) contactData.personalNotes = notes;
 
     const contact = await callGraphAPI(
       accessToken,
@@ -666,9 +697,25 @@ const contactsTools = [
           type: 'string',
           description: 'Full name (action=create/update)',
         },
+        firstName: {
+          type: 'string',
+          description:
+            'Given name (action=create/update). Maps to Graph `givenName`. If displayName not provided, will be combined with lastName.',
+        },
+        lastName: {
+          type: 'string',
+          description:
+            'Surname (action=create/update). Maps to Graph `surname`.',
+        },
         email: {
           type: 'string',
           description: 'Primary email address (action=create/update)',
+        },
+        emails: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Multiple email addresses (action=create/update). First entry is primary.',
         },
         mobilePhone: {
           type: 'string',

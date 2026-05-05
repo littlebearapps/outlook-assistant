@@ -46,6 +46,18 @@ describe('handleListContacts', () => {
     expect(result._meta.count).toBe(1);
   });
 
+  it('should label jobTitle and companyName separately (F-40)', async () => {
+    callGraphAPI.mockResolvedValue({ value: [mockContact] });
+
+    const result = await handleListContacts({});
+
+    // Previously both were squashed into a single 'Company' line as
+    // "Engineer at Acme Corp", which mislabeled jobTitle.
+    expect(result.content[0].text).toContain('**Job Title**: Engineer');
+    expect(result.content[0].text).toContain('**Company**: Acme Corp');
+    expect(result.content[0].text).not.toContain('Engineer at Acme Corp');
+  });
+
   it('should handle empty contacts', async () => {
     callGraphAPI.mockResolvedValue({ value: [] });
 
@@ -216,9 +228,46 @@ describe('handleCreateContact', () => {
   it('should require displayName or email', async () => {
     const result = await handleCreateContact({});
 
-    expect(result.content[0].text).toBe(
-      'At least displayName or email is required.'
+    expect(result.content[0].text).toMatch(
+      /At least displayName, firstName\/lastName, email, or emails is required/
     );
+  });
+
+  it('should accept firstName/lastName as structured input (F-39)', async () => {
+    callGraphAPI.mockResolvedValue({ ...mockContact, id: 'new-contact' });
+
+    await handleCreateContact({
+      firstName: 'Jane',
+      lastName: 'Doe',
+      email: 'jane@example.com',
+    });
+
+    expect(callGraphAPI).toHaveBeenCalledWith(
+      mockAccessToken,
+      'POST',
+      'me/contacts',
+      expect.objectContaining({
+        givenName: 'Jane',
+        surname: 'Doe',
+        displayName: 'Jane Doe',
+      })
+    );
+  });
+
+  it('should accept emails array (F-39)', async () => {
+    callGraphAPI.mockResolvedValue({ ...mockContact, id: 'new-contact' });
+
+    await handleCreateContact({
+      displayName: 'Multi Mail',
+      emails: ['a@example.com', 'b@example.com'],
+    });
+
+    const patchCall = callGraphAPI.mock.calls[0];
+    const body = patchCall[3];
+    expect(body.emailAddresses).toEqual([
+      { address: 'a@example.com', name: 'Multi Mail' },
+      { address: 'b@example.com', name: 'Multi Mail' },
+    ]);
   });
 
   it('should handle auth error', async () => {

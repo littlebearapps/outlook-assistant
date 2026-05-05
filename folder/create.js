@@ -43,6 +43,9 @@ async function handleCreateFolder(args) {
           text: result.message,
         },
       ],
+      // F-31: surface the folder ID in _meta so callers can chain
+      // create→move→stats without an extra `folders list` round-trip.
+      ...(result.folderId && { _meta: { folderId: result.folderId } }),
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
@@ -118,7 +121,9 @@ async function createMailFolder(accessToken, folderName, parentFolderName) {
 
       return {
         success: true,
-        message: `Successfully created folder "${folderName}" ${locationInfo}.`,
+        // F-31: include the ID in the human-readable message too so it
+        // shows up for AI agents that don't read _meta.
+        message: `Successfully created folder "${folderName}" ${locationInfo}.\n\n**ID**: ${response.id}`,
         folderId: response.id,
       };
     } else {

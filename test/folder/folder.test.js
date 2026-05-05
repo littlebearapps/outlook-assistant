@@ -108,6 +108,16 @@ describe('handleCreateFolder', () => {
     expect(result.content[0].text).toContain('root level');
   });
 
+  it('should include the new folder ID in response (F-31)', async () => {
+    getFolderIdByName.mockResolvedValueOnce(null);
+    callGraphAPI.mockResolvedValue({ id: 'new-folder-id-12345' });
+
+    const result = await handleCreateFolder({ name: 'WithId' });
+
+    expect(result.content[0].text).toMatch(/\*\*ID\*\*: new-folder-id-12345/);
+    expect(result._meta.folderId).toBe('new-folder-id-12345');
+  });
+
   it('should create a folder inside a parent', async () => {
     getFolderIdByName
       .mockResolvedValueOnce(null) // No existing folder with same name

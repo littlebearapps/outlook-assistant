@@ -94,3 +94,17 @@ jobs:
           TAG="v${{ steps.version.outputs.current }}"
           gh workflow run publish.yml --ref "$TAG"
           echo "Triggered publish workflow for $TAG"
+
+      - name: Trigger website notification
+        # Releases created by GITHUB_TOKEN don't fire the `release: published`
+        # event (infinite-loop prevention), so notify-website.yml needs to be
+        # dispatched explicitly. Same workaround pattern as the publish step
+        # above. workflow_dispatch IS exempt from the GITHUB_TOKEN trigger
+        # restriction, so this works without a PAT.
+        if: steps.version.outputs.changed == 'true' && steps.check-tag.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v${{ steps.version.outputs.current }}"
+          gh workflow run notify-website.yml --ref main -f tag="$TAG"
+          echo "Triggered notify-website workflow for $TAG"

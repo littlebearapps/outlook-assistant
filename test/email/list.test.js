@@ -120,6 +120,38 @@ describe('handleListEmails', () => {
       );
     });
 
+    test('honours maxResults as alias for count in list mode (F-17 fix)', async () => {
+      ensureAuthenticated.mockResolvedValue(mockAccessToken);
+      resolveFolderPath.mockResolvedValue(WELL_KNOWN_FOLDERS.inbox);
+      callGraphAPIPaginated.mockResolvedValue({ value: [mockEmails[0]] });
+
+      await handleListEmails({ maxResults: 5 });
+
+      expect(callGraphAPIPaginated).toHaveBeenCalledWith(
+        mockAccessToken,
+        'GET',
+        WELL_KNOWN_FOLDERS.inbox,
+        expect.objectContaining({ $top: 5 }),
+        5
+      );
+    });
+
+    test('count wins when both count and maxResults are provided', async () => {
+      ensureAuthenticated.mockResolvedValue(mockAccessToken);
+      resolveFolderPath.mockResolvedValue(WELL_KNOWN_FOLDERS.inbox);
+      callGraphAPIPaginated.mockResolvedValue({ value: [mockEmails[0]] });
+
+      await handleListEmails({ count: 7, maxResults: 99 });
+
+      expect(callGraphAPIPaginated).toHaveBeenCalledWith(
+        mockAccessToken,
+        'GET',
+        WELL_KNOWN_FOLDERS.inbox,
+        expect.objectContaining({ $top: 7 }),
+        7
+      );
+    });
+
     test('should format email list correctly with sender info', async () => {
       ensureAuthenticated.mockResolvedValue(mockAccessToken);
       resolveFolderPath.mockResolvedValue(WELL_KNOWN_FOLDERS.inbox);

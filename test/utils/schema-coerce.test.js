@@ -138,6 +138,32 @@ describe('schema-coerce', () => {
         });
       });
     });
+
+    describe('string (F-24 fix)', () => {
+      test('passes through real strings', () => {
+        expect(coerceValue('hi', { type: 'string' }, 'to')).toBe('hi');
+      });
+
+      test('passes through empty string', () => {
+        expect(coerceValue('', { type: 'string' }, 'to')).toBe('');
+      });
+
+      test('rejects array passed to string-typed param with helpful hint', () => {
+        expect(() =>
+          coerceValue(['a@example.com'], { type: 'string' }, 'to')
+        ).toThrow(/expected comma-separated string, got array/);
+      });
+
+      test('rejects multi-element array on string-typed param', () => {
+        expect(() =>
+          coerceValue(
+            ['a@example.com', 'b@example.com'],
+            { type: 'string' },
+            'to'
+          )
+        ).toThrow(CoercionError);
+      });
+    });
   });
 
   describe('coerceArgsAgainstSchema (full args)', () => {

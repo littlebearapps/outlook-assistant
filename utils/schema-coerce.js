@@ -105,7 +105,23 @@ function coerceValue(value, schema, path) {
     return result;
   }
 
-  // type === 'string' or unknown: pass through
+  if (type === 'string') {
+    // F-24: reject arrays passed to string-typed params with a clear
+    // hint. The chokepoint pattern coerces arrays *into* arrays
+    // (F-25/F-33/F-36) but quietly let arrays slip through to string
+    // params, where they got JSON-stringified and rejected by Graph
+    // with a confusing 400. Tools whose schema declares a comma-
+    // separated string for `to`/`cc`/etc. now surface a friendly
+    // MCP-layer error before the call ever leaves the process.
+    if (Array.isArray(value)) {
+      throw new CoercionError(
+        `${path}: expected comma-separated string, got array — pass "a@example.com,b@example.com" instead of ["a@example.com","b@example.com"]`
+      );
+    }
+    return value;
+  }
+
+  // unknown type: pass through
   return value;
 }
 

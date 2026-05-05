@@ -71,7 +71,15 @@ mailbox and filed 48 findings across 7 GitHub issues (#159 tracker,
   returning. Hundreds of these were bloating token usage on Gmail-style
   messages. (F-16)
 - **`search-emails maxResults` ignored in non-delta mode** — handler
-  now accepts `maxResults` as an alias for `count`. (F-17)
+  now accepts `maxResults` as an alias for `count` in both search
+  and list paths. (F-17)
+- **MCP chokepoint coercion silently passed arrays through to
+  string-typed params** — `to`, `cc`, `bcc`, etc. accept comma-
+  separated strings, but an array literal slipped through as a
+  JSON-stringified value and bounced off Graph as an opaque 400.
+  The string branch now rejects arrays at the MCP boundary with
+  `expected comma-separated string, got array — pass "a,b" instead
+  of ["a","b"]`. (F-24)
 - **Delta-sync mislabels nextLink as "Delta Token"** — output now
   distinguishes a continuation token (more pages of the same sync)
   from a real delta token (sync complete). `_meta.tokenType` exposes

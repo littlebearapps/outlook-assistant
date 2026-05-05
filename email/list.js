@@ -44,7 +44,12 @@ function getFieldPresetForVerbosity(verbosity) {
  */
 async function handleListEmails(args) {
   const folder = args.folder || 'inbox';
-  const requestedCount = args.count || DEFAULT_LIMITS.listEmails; // Default 25 (was 10)
+  // F-17: accept `maxResults` as an alias for `count` here too. The
+  // search-mode handler already does this; list-mode used `args.count`
+  // only, so callers passing `maxResults=5` to a non-search list call
+  // saw their override silently ignored.
+  const requestedCount =
+    args.count ?? args.maxResults ?? DEFAULT_LIMITS.listEmails;
   const verbosity = args.outputVerbosity || VERBOSITY.STANDARD;
 
   try {

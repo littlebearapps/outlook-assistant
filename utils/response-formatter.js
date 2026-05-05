@@ -261,6 +261,11 @@ function formatEmailContent(
     body = email.bodyPreview || 'No content';
   }
 
+  // F-16: strip tracking-pixel zero-width chars before returning. These
+  // serve no purpose for AI consumption and can run into the hundreds
+  // per message, bloating token usage.
+  body = stripZeroWidth(body);
+
   // Truncate if needed (unless full verbosity requested)
   if (verbosity !== VERBOSITY.FULL) {
     const truncated = truncateWithMeta(body, DEFAULT_LIMITS.maxBodyTruncation);
@@ -480,6 +485,27 @@ function stripHtml(html) {
     .trim();
 }
 
+/**
+ * Strip zero-width characters and their HTML entity equivalents
+ * (F-16). Mailers inject hundreds of these to defeat Gmail clipping
+ * and threading; they bloat token usage and confuse AI consumers
+ * without adding any signal. Removes:
+ *
+ *   - U+200B..U+200F (zero-width space, joiner, non-joiner, RTL/LTR
+ *     marks)
+ *   - U+FEFF (BOM)
+ *   - U+2060 (word joiner)
+ *   - HTML decimal entities: &#8203;..&#8207;, &#8288;, &#65279;
+ *   - HTML named entities: &zwj;, &zwnj;, &lrm;, &rlm;
+ */
+function stripZeroWidth(text) {
+  if (!text) return text;
+  return text
+    .replace(/[\u200B-\u200F\u2060\uFEFF]+/g, '')
+    .replace(/&#(8203|8204|8205|8206|8207|8288|65279);/g, '')
+    .replace(/&(zwj|zwnj|lrm|rlm);/g, '');
+}
+
 function escapeCSV(value) {
   if (value === null || value === undefined) return '';
   const str = String(value);
@@ -520,5 +546,6 @@ module.exports = {
   formatRecipients,
   truncateText,
   stripHtml,
+  stripZeroWidth,
   escapeCSV,
 };

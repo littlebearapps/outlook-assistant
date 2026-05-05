@@ -1,7 +1,63 @@
 const {
   formatEmailsAsCSV,
   escapeCSV,
+  stripZeroWidth,
+  formatEmailContent,
+  VERBOSITY,
 } = require('../../utils/response-formatter');
+
+describe('stripZeroWidth (F-16)', () => {
+  it('removes Unicode zero-width characters', () => {
+    const dirty = `Hello\u200B\u200C\u200D\u200E\u200F\uFEFFworld`;
+    expect(stripZeroWidth(dirty)).toBe('Helloworld');
+  });
+
+  it('removes word-joiner U+2060', () => {
+    expect(stripZeroWidth(`a\u2060b`)).toBe('ab');
+  });
+
+  it('removes HTML decimal entity equivalents', () => {
+    const dirty = 'a&#8203;&#8204;&#8205;&#8206;&#8207;&#8288;&#65279;b';
+    expect(stripZeroWidth(dirty)).toBe('ab');
+  });
+
+  it('removes HTML named entity equivalents', () => {
+    const dirty = 'a&zwj;&zwnj;&lrm;&rlm;b';
+    expect(stripZeroWidth(dirty)).toBe('ab');
+  });
+
+  it('returns input unchanged when no zero-widths present', () => {
+    expect(stripZeroWidth('plain text')).toBe('plain text');
+  });
+
+  it('handles empty/falsy input', () => {
+    expect(stripZeroWidth('')).toBe('');
+    expect(stripZeroWidth(null)).toBe(null);
+  });
+
+  it('strips hundreds of repetitions in one pass', () => {
+    const dirty = `${'\u200B'.repeat(500)}real content${'\uFEFF'.repeat(500)}`;
+    expect(stripZeroWidth(dirty)).toBe('real content');
+  });
+});
+
+describe('formatEmailContent body cleanup (F-16 integration)', () => {
+  it('strips zero-width chars from body output', () => {
+    const email = {
+      subject: 'Test',
+      from: { emailAddress: { address: 'a@example.com', name: 'A' } },
+      receivedDateTime: '2026-05-05T12:00:00Z',
+      body: {
+        contentType: 'text',
+        content: '\u200B\u200B\u200BHello world\uFEFF',
+      },
+    };
+    const result = formatEmailContent(email, VERBOSITY.STANDARD);
+    expect(result).toContain('Hello world');
+    expect(result).not.toContain('\u200B');
+    expect(result).not.toContain('\uFEFF');
+  });
+});
 
 // ──────────────────────────────────────────────────
 // escapeCSV

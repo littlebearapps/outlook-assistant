@@ -46,7 +46,10 @@ function formatEmail(email, verbosity = 'standard') {
  * Requires Mail.Read.Shared permission
  */
 async function handleAccessSharedMailbox(args) {
-  const { sharedMailbox, folder, count, outputVerbosity } = args;
+  // F-46: accept `email` as alias for `sharedMailbox`. The original
+  // param name is awkward; most callers reach for `email` first.
+  const { folder, count, outputVerbosity } = args;
+  const sharedMailbox = args.sharedMailbox || args.email;
 
   if (!sharedMailbox) {
     return {
@@ -616,6 +619,11 @@ const advancedTools = [
           type: 'string',
           description: 'Email address of the shared mailbox (required)',
         },
+        email: {
+          type: 'string',
+          description:
+            'Alias for `sharedMailbox` (more intuitive name for the same value).',
+        },
         folder: {
           type: 'string',
           description: 'Folder to read from (default: inbox)',
@@ -631,7 +639,7 @@ const advancedTools = [
         },
       },
       additionalProperties: false,
-      required: ['sharedMailbox'],
+      required: [],
     },
     handler: handleAccessSharedMailbox,
   },

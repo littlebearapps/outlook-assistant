@@ -13,6 +13,7 @@ jest.mock('../../auth', () => {
     ensureAuthenticated: jest.fn().mockResolvedValue('test-token'),
   };
 });
+jest.mock('../../utils/graph-api');
 
 describe('action fallthrough → explicit unknown-action error', () => {
   test('manage-rules', async () => {
@@ -90,5 +91,58 @@ describe('action fallthrough → explicit unknown-action error', () => {
     const tool = authTools.find((t) => t.name === 'auth');
     const result = await tool.handler({ action: 'badaction' });
     expect(result.content[0].text).toMatch(/Unknown action 'badaction'/);
+  });
+});
+
+// Param alias bundle (#163)
+describe('param-name aliases', () => {
+  test('manage-event accepts `id` as alias for `eventId` (F-37)', async () => {
+    const { calendarTools } = require('../../calendar');
+    const tool = calendarTools.find((t) => t.name === 'manage-event');
+
+    // Without `id` or `eventId` should error
+    const noId = await tool.handler({ action: 'cancel' });
+    expect(noId.content[0].text).toMatch(/eventId.*missing/);
+
+    // With `id` alias the dispatcher should not error on missing eventId
+    // (the actual cancel will fail due to mocked auth, but we just check
+    // the alias passes the dispatcher gate).
+    const { callGraphAPI } = require('../../utils/graph-api');
+    callGraphAPI.mockResolvedValueOnce({});
+    const withId = await tool.handler({ action: 'cancel', id: 'event-123' });
+    expect(withId.content[0].text).not.toMatch(/missing/);
+  });
+
+  test('manage-rules accepts `displayName` as alias for `name` (F-41)', async () => {
+    const { rulesTools } = require('../../rules');
+    const tool = rulesTools.find((t) => t.name === 'manage-rules');
+    const { callGraphAPI } = require('../../utils/graph-api');
+    callGraphAPI.mockResolvedValueOnce({ value: [] });
+
+    // displayName instead of name should be accepted; the create
+    // handler will error for other reasons (no conditions/actions)
+    // but not for "Rule name is required".
+    const result = await tool.handler({
+      action: 'create',
+      displayName: 'aliased-rule',
+      containsSubject: 'foo',
+      markAsRead: true,
+    });
+    expect(result.content[0].text).not.toMatch(/Rule name is required/);
+  });
+
+  test('access-shared-mailbox accepts `email` as alias for `sharedMailbox` (F-46)', async () => {
+    const { advancedTools } = require('../../advanced');
+    const tool = advancedTools.find((t) => t.name === 'access-shared-mailbox');
+    const { callGraphAPI } = require('../../utils/graph-api');
+
+    // Without either should error
+    const missing = await tool.handler({});
+    expect(missing.content[0].text).toMatch(/Shared mailbox email/);
+
+    // With `email` alias should not error on missing param
+    callGraphAPI.mockResolvedValueOnce({ value: [] });
+    const withEmail = await tool.handler({ email: 'shared@example.com' });
+    expect(withEmail.content[0].text).not.toMatch(/Shared mailbox email/);
   });
 });

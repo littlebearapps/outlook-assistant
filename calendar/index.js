@@ -93,15 +93,38 @@ const calendarTools = [
           type: 'string',
           description: 'The ID of the event',
         },
+        id: {
+          type: 'string',
+          description:
+            'Alias for `eventId` (canonical per the v3.7.3 alias pass).',
+        },
         comment: {
           type: 'string',
           description: 'Optional comment for declining or cancelling the event',
         },
       },
       additionalProperties: false,
-      required: ['action', 'eventId'],
+      required: ['action'],
     },
     handler: async (args) => {
+      // F-37: accept `id` as alias for `eventId` so callers don't have
+      // to remember which tool uses which name. Both work; eventId
+      // remains the canonical Graph param.
+      const normalised = { ...args };
+      if (!normalised.eventId && normalised.id) {
+        normalised.eventId = normalised.id;
+      }
+      if (!normalised.eventId) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: 'Required parameter `eventId` (or alias `id`) is missing.',
+            },
+          ],
+        };
+      }
+      args = normalised;
       switch (args.action) {
         case 'decline':
           return handleDeclineEvent(args);

@@ -652,8 +652,16 @@ const settingsTools = [
         case 'set-working-hours':
           return handleSetWorkingHours(args);
         case 'get':
-        default:
           return handleGetMailboxSettings(args);
+        default:
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Unknown action '${action}'. Valid actions: get, set-auto-replies, set-working-hours.`,
+              },
+            ],
+          };
       }
     },
   },

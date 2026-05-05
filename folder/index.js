@@ -96,8 +96,16 @@ const folderTools = [
         case 'delete':
           return handleDeleteFolder(args);
         case 'list':
-        default:
           return handleListFolders(args);
+        default:
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Unknown action '${action}'. Valid actions: list, create, move, stats, delete.`,
+              },
+            ],
+          };
       }
     },
   },

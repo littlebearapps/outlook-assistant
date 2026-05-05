@@ -382,8 +382,16 @@ const authTools = [
         case 'about':
           return handleAbout();
         case 'status':
-        default:
           return handleCheckAuthStatus();
+        default:
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Unknown action '${action}'. Valid actions: status, authenticate, device-code-complete, about.`,
+              },
+            ],
+          };
       }
     },
   },

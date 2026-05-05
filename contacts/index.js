@@ -704,8 +704,16 @@ const contactsTools = [
         case 'delete':
           return handleDeleteContact(args);
         case 'list':
-        default:
           return handleListContacts(args);
+        default:
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Unknown action '${action}'. Valid actions: list, search, get, create, update, delete.`,
+              },
+            ],
+          };
       }
     },
   },

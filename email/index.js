@@ -495,8 +495,16 @@ const emailTools = [
         case 'download':
           return handleDownloadAttachment(args);
         case 'list':
-        default:
           return handleListAttachments(args);
+        default:
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Unknown action '${action}'. Valid actions: list, view, download.`,
+              },
+            ],
+          };
       }
     },
   },
@@ -600,8 +608,16 @@ const emailTools = [
         case 'mime':
           return handleGetMimeContent(args);
         case 'message':
-        default:
           return handleExportEmail(args);
+        default:
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Unknown export target '${target}'. Valid targets: message, messages, conversation, mime.`,
+              },
+            ],
+          };
       }
     },
   },

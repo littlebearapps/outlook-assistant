@@ -824,8 +824,9 @@ const categoriesTools = [
       properties: {
         action: {
           type: 'string',
-          enum: ['list', 'create', 'update', 'delete'],
-          description: 'Action to perform (default: list)',
+          enum: ['list', 'create', 'update', 'set', 'delete'],
+          description:
+            "Action to perform (default: list). 'set' is a deprecated alias for 'update'.",
         },
         // list params
         outputVerbosity: {
@@ -859,13 +860,22 @@ const categoriesTools = [
       switch (action) {
         case 'create':
           return handleCreateCategory(args);
+        case 'set': // deprecated alias
         case 'update':
           return handleUpdateCategory(args);
         case 'delete':
           return handleDeleteCategory(args);
         case 'list':
-        default:
           return handleListCategories(args);
+        default:
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Unknown action '${action}'. Valid actions: list, create, update, delete.`,
+              },
+            ],
+          };
       }
     },
   },
@@ -958,8 +968,16 @@ const categoriesTools = [
         case 'delete':
           return handleSetFocusedInboxOverride(args);
         case 'list':
-        default:
           return handleGetFocusedInboxOverrides(args);
+        default:
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Unknown action '${action}'. Valid actions: list, set, delete.`,
+              },
+            ],
+          };
       }
     },
   },

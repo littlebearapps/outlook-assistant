@@ -393,8 +393,16 @@ const rulesTools = [
         case 'delete':
           return handleDeleteRule(args);
         case 'list':
-        default:
           return handleListRules(args);
+        default:
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Unknown action '${action}'. Valid actions: list, create, update, reorder, delete.`,
+              },
+            ],
+          };
       }
     },
   },

@@ -14,6 +14,7 @@
   <a href="https://github.com/littlebearapps/outlook-assistant/actions/workflows/ci.yml"><img src="https://github.com/littlebearapps/outlook-assistant/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://github.com/littlebearapps/outlook-assistant/actions/workflows/codeql.yml"><img src="https://github.com/littlebearapps/outlook-assistant/actions/workflows/codeql.yml/badge.svg" alt="CodeQL" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
+  <a href="https://glama.ai/mcp/servers/littlebearapps/outlook-assistant"><img src="https://glama.ai/mcp/servers/littlebearapps/outlook-assistant/badges/score.svg" alt="Glama score" /></a>
 </p>
 
 Outlook Assistant connects AI assistants to your Microsoft Outlook account through the [Model Context Protocol](https://modelcontextprotocol.io/). Ask your AI assistant to search your inbox, send emails, schedule meetings, manage contacts, and configure mailbox settings — without leaving the conversation. Works with Claude, Cursor, Windsurf, and any MCP-compatible client.
@@ -36,8 +37,8 @@ Outlook Assistant connects AI assistants to your Microsoft Outlook account throu
 - 🛡️ **Send emails with safety controls** — dry-run preview, pre-send mail tips (out-of-office, mailbox full, delivery restrictions), session rate limiting, and recipient allowlist to prevent mistakes
 - ✏️ **Draft emails for review** — create, update, and send drafts; reply and forward as drafts; preview before saving with dry-run mode
 - 📅 **Manage your calendar** — view upcoming events, schedule meetings with attendees, decline or cancel invitations
-- 📦 **Export emails** — save to Markdown, EML, MBOX, JSON, or HTML for archiving, analysis, or migration; export search results or entire threads in one call
-- 🔍 **Investigate email headers** — check DKIM, SPF, and DMARC authentication; trace delivery chains; analyse spam scores — useful for phishing investigation and compliance
+- 📦 **Export emails** — save individual messages to Markdown, EML, JSON, or CSV; export full conversation threads to MBOX or HTML; bulk-export search results in one call
+- 🔍 **Investigate email headers** — full raw header access (DKIM, SPF, DMARC, delivery chain, X-Mailer, X-Originating-IP) for phishing investigation and compliance review
 - 🗂️ **Organise your inbox** — create folders, set up inbox rules, colour-code with categories, manage Focused Inbox — all work together for complete inbox automation
 - 🔄 **Track inbox changes** — delta sync detects new, modified, and deleted emails since your last check, with tokens for incremental polling
 - 👥 **Manage contacts** — search your contact book and organisational directory, create and update contact records
@@ -75,16 +76,18 @@ Outlook Assistant connects AI assistants to your Microsoft Outlook account throu
 
 ### Export Formats
 
-| Format | Extension | When to Use It |
-|--------|-----------|----------------|
-| `mime` / `eml` | `.eml` | Legal holds, forensic preservation, importing into other mail clients |
-| `mbox` | `.mbox` | Archiving entire conversation threads, migrating between systems |
-| `markdown` | `.md` | Pasting into documents, feeding into AI workflows |
-| `json` | `.json` | Data analysis, pipeline processing, compliance reporting |
-| `html` | `.html` | Visual archival with formatting intact |
-| `csv` | `.csv` | Spreadsheet import, bulk metadata analysis, compliance audits |
+Format support varies by `target`:
 
-Export individual emails, search results, or entire conversation threads — use `target=messages` with a search query to batch-export without manually collecting IDs.
+| Format | Extension | `target=message` (single) | `target=messages` (batch) | `target=conversation` (thread) |
+|--------|-----------|--------|--------|--------|
+| `mime` / `eml` | `.eml` | ✅ | – | ✅ |
+| `mbox` | `.mbox` | – | – | ✅ |
+| `markdown` | `.md` | ✅ | ✅ | ✅ |
+| `json` | `.json` | ✅ | ✅ | ✅ |
+| `html` | `.html` | – | – | ✅ |
+| `csv` | `.csv` | ✅ | ✅ | ✅ |
+
+Export individual emails, search results, or entire conversation threads — use `target=messages` with a search query (or the `query` shortcut) to batch-export without manually collecting IDs.
 
 ## Account Compatibility
 
@@ -100,7 +103,7 @@ Outlook Assistant works with both personal and work/school Microsoft accounts, b
 | Free-text `query` search | Limited — use `subject`, `from`, `to` filters instead | Full KQL support |
 | Categories | Full support | Full support |
 | Mailbox settings | Full support | Full support |
-| Focused Inbox | Not available | Full support |
+| Focused Inbox | API works (overrides stored) but mail routing not affected | Full support |
 | Shared mailboxes | Not available | Requires `Mail.Read.Shared` |
 | Meeting room search | Not available | Requires `Place.Read.All` + admin consent |
 
@@ -109,7 +112,7 @@ Outlook Assistant works with both personal and work/school Microsoft accounts, b
 ### What Makes This Different
 
 - **Progressive search** — on accounts where Microsoft's `$search` API is limited, Outlook Assistant automatically falls back through up to 4 search strategies to find your emails. Most Graph API wrappers fail silently; this one adapts.
-- **Email forensics** — full header analysis (DKIM, SPF, DMARC, delivery chain, spam scores) built in as a first-class feature — useful for phishing investigation, compliance, and security review.
+- **Email forensics** — raw header access for DKIM, SPF, DMARC, delivery chain, X-Mailer, X-Originating-IP, and spam scores. Returns the full data so you can investigate phishing, audit compliance, or trace delivery issues. (Auto-verdict is on the v3.8.0 roadmap; today the data is surfaced and analysed in-conversation.)
 - **Delta sync** — incremental inbox monitoring returns only what changed since your last check, with tokens for continuous polling. Designed for agent workflows that need to watch a mailbox.
 - **Batch operations** — flag, move, export, or categorise multiple emails in a single call. Search-driven export lets you batch-export results without collecting IDs manually.
 - **Pre-send intelligence** — check recipients for out-of-office, full mailbox, delivery restrictions, and moderation status before sending — no other Outlook MCP server offers this.
@@ -126,6 +129,17 @@ Outlook Assistant is designed with safety-first principles for AI-driven email a
 - **Dry-run mode** (`dryRun: true`) — preview composed emails without sending
 - **Session rate limiting** — configurable via `OUTLOOK_MAX_EMAILS_PER_SESSION` (default: unlimited)
 - **Recipient allowlist** — restrict sending to approved addresses/domains via `OUTLOOK_ALLOWED_RECIPIENTS`
+
+> **Recommended setup**: enable both safety belts in your `.mcp.json` from day one. They're off by default; `auth action=about` reports their state and prints a setup hint when unset. See [`.mcp.json.example`](.mcp.json.example) for a copy-paste template.
+>
+> ```json
+> "env": {
+>   "OUTLOOK_CLIENT_ID": "…",
+>   "OUTLOOK_CLIENT_SECRET": "…",
+>   "OUTLOOK_MAX_EMAILS_PER_SESSION": "10",
+>   "OUTLOOK_ALLOWED_RECIPIENTS": "your-domain.com,trusted@example.com"
+> }
+> ```
 
 **Draft protections** — The `draft` tool shares `send-email` safety controls: dry-run preview, recipient allowlist, mail-tips validation, and rate limiting. The `send` action shares the `send-email` rate limit counter, preventing circumvention via the draft-then-send pathway.
 
@@ -499,10 +513,6 @@ For security concerns, please see our [Security Policy](SECURITY.md). Do not ope
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
-
-## Listed On
-
-<a href="https://glama.ai/mcp/servers/littlebearapps/outlook-assistant"><img width="190" height="100" src="https://glama.ai/mcp/servers/littlebearapps/outlook-assistant/badge" alt="Outlook Assistant on Glama" /></a>
 
 ## About
 

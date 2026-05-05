@@ -84,7 +84,7 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 |------|-------------|--------|----------------|
 | `list-events` | List upcoming events | read-only | `count` |
 | `create-event` | Create new event | moderate write | `subject`, `start`, `end`, `attendees`, `body`. Times use configured timezone (default: Australia/Melbourne) — omit `Z` suffix for local time |
-| `manage-event` | Decline, cancel, or delete | **destructive** | `action` (`decline`/`cancel`/`delete`), `eventId`, `comment` |
+| `manage-event` | Decline, cancel, or delete | **destructive** | `action` (`decline`/`cancel`/`delete`), `eventId` (or alias `id`), `comment` |
 
 ## Folder (1 tool)
 
@@ -96,7 +96,7 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 
 | Tool | Actions | Safety | Key Parameters |
 |------|---------|--------|----------------|
-| `manage-rules` | `list` (default), `create`, `update`, `reorder`, `delete` | **destructive** | `name`, `fromAddresses`, `containsSubject`, `bodyContains`, `hasAttachments`, `moveToFolder`, `forwardTo`, `assignCategories`, `dryRun`, `except*`, `ruleName`, `ruleId`, `sequence` |
+| `manage-rules` | `list` (default), `create`, `update`, `reorder`, `delete` | **destructive** | `name` (or alias `displayName`), `fromAddresses`, `containsSubject`, `bodyContains`, `hasAttachments`, `moveToFolder`, `forwardTo`, `assignCategories`, `dryRun`, `except*`, `ruleName`, `ruleId`, `sequence` |
 
 ## Contacts (2 tools)
 
@@ -109,7 +109,7 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
-| `manage-category` | CRUD: `list` (default), `create`, `update`, `delete` | moderate write | `action`, `displayName`, `color`, `id` |
+| `manage-category` | CRUD: `list` (default), `create`, `update`/`set` (alias), `delete` | moderate write | `action`, `displayName`, `color`, `id` (or deprecated alias `categoryId`) |
 | `apply-category` | Apply/add/remove categories on messages | moderate write | `messageId`/`messageIds`, `categories`, `action` |
 | `manage-focused-inbox` | Focused Inbox overrides: `list` (default), `set`, `delete` | moderate write | `action`, `emailAddress`, `classifyAs` |
 
@@ -127,7 +127,7 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
-| `access-shared-mailbox` | Read shared mailbox | read-only | `sharedMailbox`, `folder`, `count` |
+| `access-shared-mailbox` | Read shared mailbox | read-only | `sharedMailbox` (or alias `email`), `folder`, `count` |
 | `find-meeting-rooms` | Search meeting rooms | read-only | `query`, `building`, `capacity` |
 
 ## Safety Annotations

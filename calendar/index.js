@@ -13,7 +13,7 @@ const calendarTools = [
   {
     name: 'list-events',
     description:
-      'List upcoming calendar events for the signed-in user (read-only). Returns an array of events with id, subject, start/end, attendees, location, organiser, and webLink. Use `count` (default 10, max 50) to control page size; this tool does not filter — use the Outlook UI or specific date ranges via Graph for filtered queries. Times are returned in the configured timezone (default Australia/Melbourne; override with `OUTLOOK_DEFAULT_TIMEZONE`).',
+      'List calendar events for the signed-in user (read-only). By default returns upcoming events (`start ≥ now`). Optional `startAfter`, `startBefore`, and `subject` filters let you search past, current, or specifically-named events; supplying any of them replaces the default "now" filter and the provided filters are AND-ed together. Returns an array of events with id, subject, start/end, attendees, location, organiser, and webLink. Use `count` (default 10, max 50) to control page size. Times are returned in the configured timezone (default Australia/Melbourne; override with `OUTLOOK_DEFAULT_TIMEZONE`).',
     annotations: {
       title: 'List Calendar Events',
       readOnlyHint: true,
@@ -25,6 +25,23 @@ const calendarTools = [
         count: {
           type: 'number',
           description: 'Number of events to retrieve (default: 10, max: 50)',
+        },
+        startAfter: {
+          type: 'string',
+          format: 'date-time',
+          description:
+            'Optional ISO 8601 datetime. Only return events whose start is on or after this time. Replaces the default "now" lower bound when supplied. Example: "2026-01-01T00:00:00Z".',
+        },
+        startBefore: {
+          type: 'string',
+          format: 'date-time',
+          description:
+            'Optional ISO 8601 datetime. Only return events whose start is strictly before this time. Combine with `startAfter` to bound a window. Example: "2026-02-01T00:00:00Z".',
+        },
+        subject: {
+          type: 'string',
+          description:
+            'Optional substring to match against the event subject (case-insensitive via Graph `contains()`). Useful for finding past or current events by name.',
         },
       },
       additionalProperties: false,

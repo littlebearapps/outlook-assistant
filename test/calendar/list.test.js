@@ -138,12 +138,35 @@ describe('buildListEventsFilter — pure unit tests', () => {
     expect(ts.getTime()).toBeLessThanOrEqual(after.getTime());
   });
 
-  test('escapes single quotes in startAfter', () => {
-    // Defensive: even though ISO timestamps don't contain quotes,
-    // we don't trust the caller's input.
-    expect(buildListEventsFilter({ startAfter: "2026-01-01' or '" })).toBe(
-      "start/dateTime ge '2026-01-01'' or '''"
+  test('rejects malformed startAfter as not-an-ISO-datetime', () => {
+    expect(() => buildListEventsFilter({ startAfter: 'not-a-date' })).toThrow(
+      /Invalid startAfter/
     );
+  });
+
+  test('rejects malformed startBefore as not-an-ISO-datetime', () => {
+    expect(() => buildListEventsFilter({ startBefore: 'tomorrow' })).toThrow(
+      /Invalid startBefore/
+    );
+  });
+
+  test('injection-style strings in startAfter are rejected before reaching OData', () => {
+    // The ISO validation is an earlier, stricter line of defence than the
+    // OData escape: anything that isn't parseable as a datetime never makes
+    // it into the filter string at all.
+    expect(() =>
+      buildListEventsFilter({ startAfter: "2026-01-01' or '" })
+    ).toThrow(/Invalid startAfter/);
+  });
+
+  test('accepts valid ISO 8601 datetimes in multiple forms', () => {
+    // Both `Z` (UTC) and offset forms parse cleanly.
+    expect(() =>
+      buildListEventsFilter({ startAfter: '2026-01-01T00:00:00Z' })
+    ).not.toThrow();
+    expect(() =>
+      buildListEventsFilter({ startBefore: '2026-06-05T17:00:00+01:00' })
+    ).not.toThrow();
   });
 });
 

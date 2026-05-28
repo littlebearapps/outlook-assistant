@@ -28,11 +28,13 @@ const calendarTools = [
         },
         startAfter: {
           type: 'string',
+          format: 'date-time',
           description:
             'Optional ISO 8601 datetime. Only return events whose start is on or after this time. Replaces the default "now" lower bound when supplied. Example: "2026-01-01T00:00:00Z".',
         },
         startBefore: {
           type: 'string',
+          format: 'date-time',
           description:
             'Optional ISO 8601 datetime. Only return events whose start is strictly before this time. Combine with `startAfter` to bound a window. Example: "2026-02-01T00:00:00Z".',
         },

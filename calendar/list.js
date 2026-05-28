@@ -4,6 +4,47 @@
 const config = require('../config');
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
+const {
+  escapeODataString,
+  buildODataFilter,
+} = require('../utils/odata-helpers');
+
+/**
+ * Build the $filter clause for the list-events Graph query.
+ *
+ * Backward-compatible behaviour: when no search args are supplied, the filter
+ * defaults to `start/dateTime ge '<now>'` so callers without parameters keep
+ * seeing only upcoming events. When ANY of startAfter/startBefore/subject are
+ * supplied, those replace the default and are AND-ed together.
+ *
+ * Single quotes in user-supplied strings are escaped via OData rules
+ * (`'` -> `''`) to prevent filter injection.
+ *
+ * @param {object} args - { startAfter?, startBefore?, subject? }
+ * @returns {string} - The complete $filter expression
+ */
+function buildListEventsFilter(args) {
+  const { startAfter, startBefore, subject } = args;
+  const hasAnyFilter = Boolean(startAfter || startBefore || subject);
+
+  const conditions = [];
+
+  if (hasAnyFilter) {
+    if (startAfter) {
+      conditions.push(`start/dateTime ge '${escapeODataString(startAfter)}'`);
+    }
+    if (startBefore) {
+      conditions.push(`start/dateTime lt '${escapeODataString(startBefore)}'`);
+    }
+    if (subject) {
+      conditions.push(`contains(subject, '${escapeODataString(subject)}')`);
+    }
+  } else {
+    conditions.push(`start/dateTime ge '${new Date().toISOString()}'`);
+  }
+
+  return buildODataFilter(conditions);
+}
 
 /**
  * List events handler
@@ -24,7 +65,7 @@ async function handleListEvents(args) {
     const queryParams = {
       $top: count,
       $orderby: 'start/dateTime',
-      $filter: `start/dateTime ge '${new Date().toISOString()}'`,
+      $filter: buildListEventsFilter(args),
       $select: config.CALENDAR_SELECT_FIELDS,
     };
 
@@ -106,3 +147,4 @@ async function handleListEvents(args) {
 }
 
 module.exports = handleListEvents;
+module.exports.buildListEventsFilter = buildListEventsFilter;

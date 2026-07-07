@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- Documented the single-tenant Azure app fix for `AADSTS50059`: set
+  `OUTLOOK_AUTH_AUDIENCE` to the app registration's Directory (tenant) ID
+  instead of using the default `common` audience.
+- Clarified that the default device-code flow does not require a client
+  secret when Azure public client flows are enabled, and updated getting-started
+  examples to include send-safety environment variables.
+
 ## [3.8.1] - 2026-05
 
 Patch release driven by a glama.ai / safemcp.info scoring audit. Lifts the

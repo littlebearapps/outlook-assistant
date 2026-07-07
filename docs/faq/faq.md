@@ -78,6 +78,8 @@ Every tool also carries [MCP annotations](https://modelcontextprotocol.io/docs/c
 
 Microsoft Graph (the API behind Outlook, Teams, OneDrive, etc.) requires every client application to be registered in Microsoft Entra ID before it can request delegated access on a user's behalf. The app registration gives Microsoft three things: (1) a client ID so they know which application is asking, (2) a redirect URI / public-client mode for the OAuth flow, and (3) a list of scopes the app may request. Without registration, OAuth would have no entry point.
 
+For device-code auth, the app can run as a public client and does not need a client secret. If your Azure app is single-tenant ("My organisation only"), set `OUTLOOK_AUTH_AUDIENCE` to the app registration's Directory (tenant) ID; the default `common` audience is for apps that support both work/school and personal Microsoft accounts.
+
 Microsoft does not offer a "shared multi-tenant client ID" that any open-source project can reuse — every published Outlook MCP server has the same requirement. We're tracking [#147](https://github.com/littlebearapps/outlook-assistant/issues/147) (publisher-verified shared multi-tenant app) for a future release where Little Bear Apps publishes a verified shared app users can authorise without creating their own registration. Until then, the [Azure Setup Guide](guides/azure-setup.md) walks through the process in about 10 minutes.
 
 ## What's the difference between device code and browser authentication?

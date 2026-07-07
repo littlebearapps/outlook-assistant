@@ -32,7 +32,7 @@ Follow the full walkthrough in the [Azure Setup Guide](../../guides/azure-setup.
 
 1. Go to [Azure Portal → App registrations](https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade)
 2. Click **New registration** (no redirect URI needed at this stage)
-3. Under **Certificates & secrets**, create a new client secret — copy the **Value** (not the Secret ID)
+3. Choose the supported account type. For most users, choose **Accounts in any organizational directory and personal Microsoft accounts** and leave `OUTLOOK_AUTH_AUDIENCE` unset or set to `common`. If your organisation requires **My organisation only**, copy the **Directory (tenant) ID** and set `OUTLOOK_AUTH_AUDIENCE` to that tenant ID in your MCP config.
 4. Under **Authentication** > **Add a platform** > **Mobile and desktop applications** — check `https://login.microsoftonline.com/common/oauth2/nativeclient`
 5. Under **Authentication** > **Advanced settings** — set **"Allow public client flows"** to **Yes**
 6. Under **API permissions**, add these Microsoft Graph **delegated** permissions:
@@ -48,7 +48,7 @@ Follow the full walkthrough in the [Azure Setup Guide](../../guides/azure-setup.
    - `Mail.Read.Shared` — shared mailbox access
    - `Place.Read.All` — meeting room search (requires admin consent)
 
-> **Common mistake**: Copy the secret **Value**, not the Secret ID. Using the wrong one causes `AADSTS7000215` errors.
+> **Device-code auth note**: The default device-code flow does not need a client secret when public client flows are enabled. Create a client secret only if you plan to use browser redirect auth or another confidential-client flow. If you do create one, copy the secret **Value**, not the Secret ID; using the wrong one causes `AADSTS7000215` errors.
 
 ## Add to Your AI Tool
 
@@ -64,7 +64,9 @@ Add to your `claude_desktop_config.json`:
       "args": ["-y", "@littlebearapps/outlook-assistant"],
       "env": {
         "OUTLOOK_CLIENT_ID": "your-client-id",
-        "OUTLOOK_CLIENT_SECRET": "your-secret-value"
+        "OUTLOOK_AUTH_METHOD": "device-code",
+        "OUTLOOK_MAX_EMAILS_PER_SESSION": "10",
+        "OUTLOOK_ALLOWED_RECIPIENTS": "your-email@example.com"
       }
     }
   }
@@ -85,7 +87,9 @@ Add to your `.mcp.json` or project settings:
       "args": ["-y", "@littlebearapps/outlook-assistant"],
       "env": {
         "OUTLOOK_CLIENT_ID": "your-client-id",
-        "OUTLOOK_CLIENT_SECRET": "your-secret-value"
+        "OUTLOOK_AUTH_METHOD": "device-code",
+        "OUTLOOK_MAX_EMAILS_PER_SESSION": "10",
+        "OUTLOOK_ALLOWED_RECIPIENTS": "your-email@example.com"
       }
     }
   }
@@ -94,7 +98,7 @@ Add to your `.mcp.json` or project settings:
 
 ### Other MCP Clients
 
-Any MCP-compatible client can use Outlook Assistant. Set the command to `npx -y @littlebearapps/outlook-assistant` and pass the two environment variables.
+Any MCP-compatible client can use Outlook Assistant. Set the command to `npx -y @littlebearapps/outlook-assistant` and pass `OUTLOOK_CLIENT_ID`, `OUTLOOK_AUTH_METHOD=device-code`, and the safety variables. Add `OUTLOOK_AUTH_AUDIENCE=<tenant-guid>` only for single-tenant app registrations.
 
 ## Authenticate for the First Time
 
@@ -179,6 +183,7 @@ If you see your recent emails, everything is connected.
 | Problem | Solution |
 |---------|----------|
 | `AADSTS7000215` (invalid secret) | Use the secret **Value**, not the Secret ID |
+| `AADSTS50059` | Single-tenant app using the default `common` audience. Set `OUTLOOK_AUTH_AUDIENCE` to the app registration's Directory (tenant) ID |
 | `EADDRINUSE :3333` | Run `npx kill-port 3333` then restart the auth server |
 | Auth URL doesn't open | Start the auth server first with `npx @littlebearapps/outlook-assistant auth-server` |
 | Permissions error after login | Check API permissions in Azure Portal and grant admin consent if required |

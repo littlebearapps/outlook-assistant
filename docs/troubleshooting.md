@@ -8,6 +8,7 @@ Common issues and their fixes. For getting-started guidance, see [`docs/how-to/g
 |-------|----------|
 | `AADSTS7000215` (invalid secret) | Use secret **VALUE**, not Secret ID from Azure |
 | `AADSTS9002331` ("configured for Microsoft Account users only … use /consumers") | Your Azure app is registered as "Personal Microsoft accounts only". Set `OUTLOOK_AUTH_AUDIENCE=consumers` in your MCP client `env` block (v3.8.0+). Single-tenant apps need their tenant GUID; multi-tenant apps can use the default (`common`). |
+| `AADSTS50059` ("No tenant-identifying information found") | Your Azure app is likely single-tenant ("My organisation only") but the server is using the default `common` audience. Set `OUTLOOK_AUTH_AUDIENCE` to the app registration's Directory (tenant) ID, then authenticate again. |
 | `EADDRINUSE :3333` | `npx kill-port 3333` then restart auth server |
 | Module not found | Run `npm install` |
 | Auth URL doesn't work | Start auth server first: `npm run auth-server` |

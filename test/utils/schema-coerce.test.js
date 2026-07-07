@@ -137,6 +137,28 @@ describe('schema-coerce', () => {
           extra: 'kept',
         });
       });
+
+      test('rejects unknown nested properties when additionalProperties is false', () => {
+        const schema = {
+          type: 'object',
+          properties: { x: { type: 'integer' } },
+          additionalProperties: false,
+        };
+        expect(() =>
+          coerceValue({ x: '1', extra: 'blocked' }, schema, 'q')
+        ).toThrow(/q: unknown property 'extra'/);
+      });
+
+      test('enforces nested required properties', () => {
+        const schema = {
+          type: 'object',
+          properties: { x: { type: 'integer' } },
+          required: ['x'],
+        };
+        expect(() => coerceValue({}, schema, 'q')).toThrow(
+          /q: required property 'x' is missing/
+        );
+      });
     });
 
     describe('string (F-24 fix)', () => {
@@ -339,6 +361,40 @@ describe('schema-coerce', () => {
         expect(result.error).toBeUndefined();
         expect(result.args.action).toBe('create');
       });
+
+      test('rejects out-of-enum nested value', () => {
+        const schema = {
+          properties: {
+            recurrenceRaw: {
+              type: 'object',
+              properties: {
+                pattern: {
+                  type: 'object',
+                  properties: {
+                    type: {
+                      type: 'string',
+                      enum: ['daily', 'weekly'],
+                    },
+                  },
+                  required: ['type'],
+                  additionalProperties: false,
+                },
+              },
+              required: ['pattern'],
+              additionalProperties: false,
+            },
+          },
+        };
+
+        const result = coerceArgsAgainstSchema(
+          { recurrenceRaw: { pattern: { type: 'hourly' } } },
+          schema
+        );
+
+        expect(result.error).toMatch(
+          /recurrenceRaw\.pattern\.type: value 'hourly' not in allowed values/
+        );
+      });
     });
 
     describe('integration: real tool schemas with bug-report payloads', () => {
@@ -429,6 +485,38 @@ describe('schema-coerce', () => {
         // maxResults schema is `type: 'number'` in this codebase — coerced fine
         expect(typeof result.args.maxResults).toBe('number');
         expect(result.args.maxResults).toBe(5);
+      });
+
+      test('create-event: unknown recurrenceRaw sub-param is rejected', () => {
+        const { calendarTools } = require('../../calendar');
+        const createEvent = calendarTools.find(
+          (t) => t.name === 'create-event'
+        );
+        const result = coerceArgsAgainstSchema(
+          {
+            subject: 'Recurring test',
+            start: '2026-04-14T09:00:00',
+            end: '2026-04-14T09:30:00',
+            recurrenceRaw: {
+              pattern: {
+                type: 'weekly',
+                interval: 1,
+                daysOfWeek: ['monday'],
+                unsupported: true,
+              },
+              range: {
+                type: 'numbered',
+                startDate: '2026-04-14',
+                numberOfOccurrences: 2,
+              },
+            },
+          },
+          createEvent.inputSchema
+        );
+
+        expect(result.error).toMatch(
+          /recurrenceRaw\.pattern: unknown property 'unsupported'/
+        );
       });
     });
 

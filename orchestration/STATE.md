@@ -303,3 +303,12 @@ Checks:
   - PR opened: `gh pr create --repo davidb73-hub/outlook-assistant --base docs/phase-0-golive --head fix/118-list-events-timezone ...` → https://github.com/davidb73-hub/outlook-assistant/pull/6 → PASS
 Gate: PASSED_WITH_DRIFT
 Notes: `list-events` now appends the configured display timezone to every rendered start and end time, matching the timezone used for conversion. Raw `npm run lint` remains polluted by untracked local `.claude/` scaffold files; tracked product lint is clean. Live read-only verification remains pending until after the fork PR is merged.
+
+## [2026-07-08 09:21] Phase 2.1 — #118 fork PR merge + live read-only verification
+Branch/PR: fix/118-list-events-timezone / davidb73-hub/outlook-assistant#6
+Checks:
+  - Merge: `gh api -X PUT repos/davidb73-hub/outlook-assistant/pulls/6/merge ...` → merged `true`, merge sha `ecf6c01043809f27b5ab0c2eec89217332f98a6f` → PASS
+  - Local base sync: `git pull --ff-only fork docs/phase-0-golive` → fast-forwarded local base from `0c3f2ed` to `ecf6c01` → PASS
+  - Live read-only check: exported local `.env`, called `list-events` with `count: 3` against live mailbox → 3 events returned, 6 start/end lines checked, every time line included `(Australia/Sydney)` → PASS
+Gate: PASSED
+Notes: The first live-check attempt sourced `.env` without exporting variables and therefore failed authentication via the stale/default `common` audience path. Reran with `set -a; source .env; set +a`; token refresh succeeded and the read-only calendar verification passed. No calendar mutation was performed, and event subjects/bodies/IDs were not recorded.

@@ -37,7 +37,7 @@ const emailTools = [
     annotations: {
       title: 'Search Emails',
       readOnlyHint: true,
-      openWorldHint: false,
+      openWorldHint: true,
     },
     inputSchema: {
       type: 'object',
@@ -183,7 +183,7 @@ const emailTools = [
     annotations: {
       title: 'Read Email',
       readOnlyHint: true,
-      openWorldHint: false,
+      openWorldHint: true,
     },
     inputSchema: {
       type: 'object',

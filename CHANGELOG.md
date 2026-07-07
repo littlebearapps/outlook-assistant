@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Improved `AADSTS7000215` authentication errors so operators are told to use
   the Azure client secret **Value**, not the Secret ID. (#69)
+- Set `openWorldHint: true` on tools that return external-content surfaces
+  (`search-emails`, `read-email`, `search-people`, and
+  `access-shared-mailbox`) and pinned annotations for all 22 tools. (#92)
 
 ### Documentation
 

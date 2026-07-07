@@ -72,7 +72,7 @@ Yes. Two layers of control let you scope what Outlook Assistant can do:
 1. **Azure permissions.** When you register the app, request only the read scopes — `Mail.Read`, `Calendars.Read`, `Contacts.Read`, `User.Read`, `offline_access` — and skip the `*ReadWrite` and `Mail.Send` scopes. Tools that need write access will fail at the Graph layer, which is the correct behaviour.
 2. **Send-safety belts.** Even with full permissions, you can configure `OUTLOOK_MAX_EMAILS_PER_SESSION` (rate cap on `send-email` + `draft send`) and `OUTLOOK_ALLOWED_RECIPIENTS` (allowlist of approved addresses or domains). `auth action=about` reports their state and prints a setup hint when unset. See the [Recommended setup snippet](../README.md#safety--token-efficiency) in the README and [`.mcp.json.example`](../.mcp.json.example) for the copy-paste template.
 
-Every tool also carries [MCP annotations](https://modelcontextprotocol.io/docs/concepts/tools#annotations) (`readOnlyHint`, `destructiveHint`, `idempotentHint`) so AI clients can auto-approve safe reads and prompt for confirmation on destructive operations.
+Every tool also carries [MCP annotations](https://modelcontextprotocol.io/docs/concepts/tools#annotations) (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) so AI clients can auto-approve safe reads, prompt for confirmation on destructive operations, and treat external-content results such as emails and shared mailbox content as prompt-injection surface.
 
 ## Why does Outlook Assistant need an Azure app registration?
 

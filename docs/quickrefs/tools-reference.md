@@ -5,7 +5,7 @@ tags:
 
 # Tools Reference - Outlook Assistant
 
-Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP safety annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`).
+Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP safety annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`).
 
 ## Authentication (1 tool)
 
@@ -138,6 +138,8 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 | **Destructive** (5) | `send-email`, `draft`, `manage-event`, `folders`, `manage-rules` | Client prompts for confirmation |
 | **Idempotent** (2) | `update-email`, `mailbox-settings` | Safe to retry |
 | **Moderate write** (8) | All others | Normal approval flow |
+
+`openWorldHint: true` is set on tools whose output may include untrusted external content: `search-emails`, `read-email`, `send-email`, `draft`, `search-people`, and `access-shared-mailbox`. MCP clients can treat these results as prompt-injection surface even when the operation itself is read-only.
 
 ## send-email Safety Controls
 

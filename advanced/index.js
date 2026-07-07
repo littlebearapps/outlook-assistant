@@ -611,7 +611,7 @@ const advancedTools = [
     annotations: {
       title: 'Shared Mailbox',
       readOnlyHint: true,
-      openWorldHint: false,
+      openWorldHint: true,
     },
     inputSchema: {
       type: 'object',

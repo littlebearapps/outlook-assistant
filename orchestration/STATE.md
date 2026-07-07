@@ -409,3 +409,12 @@ Checks:
   - PR opened: `gh pr create --repo davidb73-hub/outlook-assistant --base docs/phase-0-golive --head feat/127-contact-email-fields ...` → https://github.com/davidb73-hub/outlook-assistant/pull/10 → PASS
 Gate: PASSED_WITH_DRIFT
 Notes: Added structured contact email field support to `manage-contact` create/update and list/get display while preserving existing `email`/`emails` compatibility. Raw `npm run lint` remains polluted by untracked local `.claude/` scaffold files; tracked product lint is clean. Live create/get/delete verification remains pending until after the fork PR is merged.
+
+## [2026-07-08 12:20] Phase 2.5 — #127 fork PR merge + live create/get/delete verification
+Branch/PR: feat/127-contact-email-fields / davidb73-hub/outlook-assistant#10
+Checks:
+  - Merge: `gh api -X PUT repos/davidb73-hub/outlook-assistant/pulls/10/merge ...` → merged `true`, merge sha `3677b82fb00a16eb6414e0b6ef09764ee43e20fd` → PASS
+  - Local base sync: `git pull --ff-only fork docs/phase-0-golive` → fast-forwarded local base from `2c7090b` to `3677b82` → PASS
+  - Live create/get/delete check: exported local `.env`, created a test contact with `primaryEmailAddress`, `secondaryEmailAddress`, and `tertiaryEmailAddress`; `get` read back all three structured email fields; `delete` removed the created test contact → PASS
+Gate: PASSED
+Notes: This was the single permitted live contact mutation for #127 and it was cleaned up in the same script using the returned contact ID. No contact IDs, mailbox content, unrelated contact data, or tokens were recorded. The first live attempt failed only because sandbox DNS blocked `graph.microsoft.com`; reran the same smoke with approved network access.

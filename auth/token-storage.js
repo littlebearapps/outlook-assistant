@@ -3,6 +3,7 @@ const fsSync = require('fs');
 const path = require('path');
 const https = require('https');
 const querystring = require('querystring');
+const { formatTokenEndpointError } = require('./token-error');
 
 class TokenStorage {
   constructor(config) {
@@ -226,8 +227,10 @@ class TokenStorage {
                 console.error('Error refreshing token:', responseBody);
                 reject(
                   new Error(
-                    responseBody.error_description ||
+                    formatTokenEndpointError(
+                      responseBody,
                       `Token refresh failed with status ${res.statusCode}`
+                    )
                   )
                 );
               }
@@ -320,8 +323,10 @@ class TokenStorage {
                 );
                 reject(
                   new Error(
-                    responseBody.error_description ||
+                    formatTokenEndpointError(
+                      responseBody,
                       `Token exchange failed with status ${res.statusCode}`
+                    )
                   )
                 );
               }

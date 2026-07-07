@@ -10,6 +10,7 @@
 const https = require('https');
 const querystring = require('querystring');
 const config = require('../config');
+const { formatTokenEndpointError } = require('./token-error');
 
 /**
  * POST helper for OAuth2 endpoints
@@ -63,8 +64,10 @@ async function initiateDeviceCodeFlow(clientId, scopes) {
 
   if (statusCode < 200 || statusCode >= 300) {
     throw new Error(
-      body.error_description ||
+      formatTokenEndpointError(
+        body,
         `Device code request failed with status ${statusCode}`
+      )
     );
   }
 
@@ -124,8 +127,10 @@ async function pollForToken(clientId, deviceCode, interval, expiresIn) {
         );
       default:
         throw new Error(
-          body.error_description ||
+          formatTokenEndpointError(
+            body,
             `Token polling failed: ${body.error || `status ${statusCode}`}`
+          )
         );
     }
   }

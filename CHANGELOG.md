@@ -12,6 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `--version` and `-v` CLI flags that print the package version and exit
   without starting the MCP stdio server. (#68)
 
+### Fixed
+
+- Improved `AADSTS7000215` authentication errors so operators are told to use
+  the Azure client secret **Value**, not the Secret ID. (#69)
+
 ### Documentation
 
 - Documented the single-tenant Azure app fix for `AADSTS50059`: set

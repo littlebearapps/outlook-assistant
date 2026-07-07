@@ -179,3 +179,25 @@ Checks:
   - Whitespace: `git diff --check` → no output → PASS
 Gate: PASSED_WITH_DRIFT
 Notes: Drift from package baseline: current clean working branch reports 748 tests before this task, not the older package reference of 751; this task adds two assertions for a final count of 750. Raw `npm run lint` fails only because untracked local orchestration scaffold files under `.claude/` are included by ESLint; tracked product JS lint remains 0 errors. Issue body contradicted the local brief by requiring `-v` and scoped package-name output; implementation follows the issue while reusing `config.SERVER_VERSION` for the version value.
+
+## [2026-07-08 01:35] Phase 1.1 — #68 fork PR merge
+Branch/PR: feat/68-version-flag / davidb73-hub/outlook-assistant#1
+Checks:
+  - PR ready: `gh pr ready 1 --repo davidb73-hub/outlook-assistant` → ready for review → PASS
+  - Merge: `gh api -X PUT repos/davidb73-hub/outlook-assistant/pulls/1/merge ...` → merged `true`, merge sha `16a048edc36581e72e5a9b94be46b254392dd8fa` → PASS
+Gate: PASSED
+Notes: Standard `gh pr merge` returned a GitHub 504 and did not merge; verified PR was still open before using the direct GitHub merge API. Fork base `docs/phase-0-golive` now includes #68.
+
+## [2026-07-08 01:50] Phase 1.2 — #69 AADSTS7000215 client secret guidance
+Branch/PR: feat/69-secret-error-message / davidb73-hub/outlook-assistant#2
+Checks:
+  - Issue reconciliation: `gh issue view 69 --repo littlebearapps/outlook-assistant` → issue asks for friendly `AADSTS7000215` Secret ID vs Secret Value guidance → PASS
+  - Baseline tests before edit: `npm test` → Test Suites: 30 passed, 30 total; Tests: 750 passed, 750 total → PASS
+  - Baseline product lint before edit: `git ls-files '*.js' | xargs npx eslint` → 25 warnings; 0 errors → PASS_WITH_DRIFT
+  - TDD red: `npx jest test/auth -t "7000215"` before implementation → 3 failures; raw Azure error lacked Secret ID/Secret Value guidance → PASS
+  - Targeted green: `npx jest test/auth -t "7000215"` → Test Suites: 2 passed, 5 skipped; Tests: 3 passed, 86 skipped → PASS
+  - Full suite: `npm test` → Test Suites: 30 passed, 30 total; Tests: 753 passed, 753 total → PASS
+  - Product lint: `git ls-files '*.js' auth/token-error.js | xargs npx eslint` → 25 warnings; 0 errors → PASS
+  - Whitespace: `git diff --check` → no output → PASS
+Gate: PASSED_WITH_DRIFT
+Notes: Added shared auth token-endpoint error formatting for `AADSTS7000215`, preserving the original Azure code/message while adding the Azure Portal Secret Value correction. Applied to `auth/token-storage.js`, `auth/device-code.js`, and standalone `outlook-auth-server.js`. Raw `npm run lint` remains polluted by untracked local `.claude/` scaffold files; tracked product lint is clean.

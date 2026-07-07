@@ -145,4 +145,19 @@ describe('param-name aliases', () => {
     const withEmail = await tool.handler({ email: 'shared@example.com' });
     expect(withEmail.content[0].text).not.toMatch(/Shared mailbox email/);
   });
+
+  test('search-emails accepts `searchQuery` and legacy `kqlQuery` raw search params', async () => {
+    const { emailTools } = require('../../email');
+    const { coerceArgsAgainstSchema } = require('../../utils/schema-coerce');
+    const tool = emailTools.find((t) => t.name === 'search-emails');
+
+    expect(
+      coerceArgsAgainstSchema({ searchQuery: 'subject:PR' }, tool.inputSchema)
+        .error
+    ).toBeUndefined();
+    expect(
+      coerceArgsAgainstSchema({ kqlQuery: 'subject:PR' }, tool.inputSchema)
+        .error
+    ).toBeUndefined();
+  });
 });

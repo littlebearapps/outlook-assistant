@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Improved `search-emails` folder context and no-results guidance, added Sent
+  Items `from` → `to` hints, and introduced `searchQuery` as the clearer raw
+  Graph `$search` parameter while keeping `kqlQuery` as a backwards-compatible
+  alias. (#117, #169)
 - Added the configured timezone label to `list-events` start and end times so
   converted calendar output is no longer ambiguous. (#118)
 

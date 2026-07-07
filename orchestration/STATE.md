@@ -366,3 +366,19 @@ Checks:
   - Live read-only check: exported local `.env` plus `OUTLOOK_EXTRA_SCOPES=Calendars.Read.Shared`, called `find-meeting-times` with owner as sole attendee, 30-minute duration, 2026-07-20 to 2026-07-24 work-hours window, max 3 candidates → Graph returned meeting-time suggestions → PASS
 Gate: PASSED
 Notes: No live mutation was performed. The command printed only sanitized booleans and did not record suggested slots, attendee mailbox content, tokens, or IDs.
+
+## [2026-07-08 11:20] Phase 2.4 — #117 + #169 search-emails improvements
+Branch/PR: fix/117-169-search-improvements / davidb73-hub/outlook-assistant#9
+Checks:
+  - Issue reconciliation: `gh issue view 117` and `gh issue view 169` → #117 asks for Sent Items hints/folder context; #169 asks for `searchAllFolders=true` parity, no silent `kqlQuery` drop, no-results render fix, and clearer raw search parameter naming → PASS
+  - Baseline inherited from Phase 2.3 fork base: `npm test` → Test Suites: 32 passed, 32 total; Tests: 774 passed, 774 total; `git ls-files '*.js' | xargs npx eslint` → 25 warnings; 0 errors → PASS_WITH_DRIFT
+  - TDD red: `npx jest test/email/search.test.js -t "kqlQuery|folder context|sent items"` and `npx jest test/dispatcher/action-fallthrough.test.js -t "search-emails"` before implementation → failed for missing `searchQuery`, folder metadata, Sent Items hint, and no-results guidance when `searchAllFolders` was already true → PASS
+  - Targeted green: same focused test commands after implementation → Test Suites: 2 passed; search-focused tests and boundary alias test pass → PASS
+  - Search suite: `npx jest test/email/search.test.js` → Test Suites: 1 passed; Tests: 45 passed → PASS
+  - Alias boundary: stdio `tools/call` under `USE_TEST_MODE=true` with both legacy `kqlQuery` and new `searchQuery` → both accepted; no MCP unknown-param error; user-facing no-results filter labels match the supplied param name → PASS
+  - Full suite: `npm test` → Test Suites: 32 passed, 32 total; Tests: 779 passed, 779 total → PASS
+  - Product lint: `git ls-files '*.js' | xargs npx eslint` → 25 warnings; 0 errors → PASS_WITH_DRIFT
+  - Whitespace: `git diff --check` → no output → PASS
+  - PR opened: `gh pr create --repo davidb73-hub/outlook-assistant --base docs/phase-0-golive --head fix/117-169-search-improvements ...` → https://github.com/davidb73-hub/outlook-assistant/pull/9 → PASS
+Gate: PASSED_WITH_DRIFT
+Notes: Preserved the v3.7.4 no-fall-through guarantee for raw Graph search. Added canonical `searchQuery` while keeping `kqlQuery` as a backwards-compatible alias, added folder/searchAllFolders metadata, removed the misleading "try searchAllFolders" suggestion when it was already enabled, and added a Sent Items `from`→`to` hint. Raw `npm run lint` remains polluted by untracked local `.claude/` scaffold files; tracked product lint is clean. Live read-only checks remain pending until after the fork PR is merged.

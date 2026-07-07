@@ -17,7 +17,7 @@ Quick reference for all 23 MCP tools across 9 modules. Each tool includes MCP sa
 
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
-| `search-emails` | Search, list, delta sync, conversations | read-only | `query`, `from`, `to`, `folder`, `deltaMode`, `conversationId`, `groupByConversation`, `internetMessageId` |
+| `search-emails` | Search, list, delta sync, conversations | read-only | `query`, `searchQuery`, `kqlQuery` (legacy alias), `from`, `to`, `folder`, `deltaMode`, `conversationId`, `groupByConversation`, `internetMessageId` |
 | `read-email` | Read content or forensic headers | read-only | `id`, `headersMode`, `groupByType`, `importantOnly` |
 | `send-email` | Send email with safety controls | **destructive** | `to`, `subject`, `body`, `dryRun`, `checkRecipients`, `cc`, `bcc`, `importance` |
 | `draft` | Create, update, send, delete, reply, forward drafts | **destructive** | `action` (required), `id`, `to`, `subject`, `body`, `comment`, `dryRun`, `checkRecipients` |
@@ -37,7 +37,7 @@ Quick reference for all 23 MCP tools across 9 modules. Each tool includes MCP sa
 | Conversation get | `conversationId` | All messages in a thread |
 | Message-ID lookup | `internetMessageId` | Find by RFC Message-ID header |
 
-> **Personal accounts**: The `query` and `kqlQuery` parameters use Microsoft's `$search` API which has limited support on personal Outlook.com accounts. Outlook Assistant handles this automatically with progressive search fallback — if `$search` returns no results, it tries OData filters, boolean filters, and recent message listing. For the most direct results on personal accounts, use structured filters (`from`, `subject`, `to`, `receivedAfter`, `hasAttachments`, `unreadOnly`).
+> **Personal accounts**: The `query` and `searchQuery` parameters use Microsoft's `$search` API which has limited support on personal Outlook.com accounts. `kqlQuery` remains as a backwards-compatible alias for `searchQuery`. Outlook Assistant handles `query` with progressive search fallback — if `$search` returns no results, it tries OData filters, boolean filters, and recent message listing. For the most direct results on personal accounts, use structured filters (`from`, `subject`, `to`, `receivedAfter`, `hasAttachments`, `unreadOnly`). In Sent Items, prefer `to` over `from` because sent mail is normally from your own mailbox.
 
 > **Delta sync** is designed for inbox monitoring workflows. The first call returns current emails and a `deltaToken`; subsequent calls with that token return only new, modified, and deleted messages. See [Monitor Inbox with Delta Sync](../how-to/ai-agents/monitor-inbox-with-delta-sync.md).
 

@@ -370,6 +370,20 @@ describe('handleSearchEmails — kqlQuery silent-drop prevention (#169)', () => 
     expect(result._meta.searchMetadata.finalStrategy).toBe('raw-kql');
   });
 
+  test('does not suggest searchAllFolders when it was already enabled', async () => {
+    callGraphAPIPaginated.mockResolvedValue({ value: [] });
+
+    const result = await handleSearchEmails({
+      query: 'github token',
+      searchAllFolders: true,
+    });
+
+    expect(result.content[0].text).toContain('all folders');
+    expect(result.content[0].text).not.toContain(
+      'Try `searchAllFolders: true`'
+    );
+  });
+
   test('returns kqlQuery results when Graph returns matches', async () => {
     const emails = [mockEmail({ id: '1', subject: 'PR review' })];
     callGraphAPIPaginated.mockResolvedValue({ value: emails });
@@ -381,6 +395,21 @@ describe('handleSearchEmails — kqlQuery silent-drop prevention (#169)', () => 
     expect(result._meta.returned).toBe(1);
     expect(result._meta.searchMetadata.finalStrategy).toBe('raw-kql');
     expect(callGraphAPIPaginated).toHaveBeenCalledTimes(1);
+  });
+
+  test('accepts searchQuery as the canonical raw Graph search parameter', async () => {
+    const emails = [mockEmail({ id: '1', subject: 'PR review' })];
+    callGraphAPIPaginated.mockResolvedValue({ value: emails });
+
+    const result = await handleSearchEmails({
+      searchQuery: 'subject:PR',
+    });
+
+    expect(result._meta.returned).toBe(1);
+    expect(result._meta.searchMetadata.finalStrategy).toBe('raw-kql');
+    expect(callGraphAPIPaginated).toHaveBeenCalledTimes(1);
+    const [, , , params] = callGraphAPIPaginated.mock.calls[0];
+    expect(params.$search).toBe('subject:PR');
   });
 
   test('does NOT auto-wrap a kqlQuery that already contains quotes', async () => {
@@ -437,6 +466,37 @@ describe('handleSearchEmails — kqlQuery silent-drop prevention (#169)', () => 
     // misleading "combined-search" line.
     expect(result._meta.searchMetadata.finalStrategy).toBe('raw-kql-error');
     expect(callGraphAPIPaginated).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('handleSearchEmails — folder context and sent items UX (#117)', () => {
+  test('includes folder context in metadata', async () => {
+    const emails = [mockEmail({ id: '1' })];
+    callGraphAPIPaginated.mockResolvedValue({ value: emails });
+    resolveFolderPath.mockResolvedValue('me/mailFolders/sentitems/messages');
+
+    const result = await handleSearchEmails({
+      folder: 'sentitems',
+      to: 'alice@example.com',
+    });
+
+    expect(result._meta.folder).toBe('sentitems');
+    expect(result._meta.searchAllFolders).toBe(false);
+  });
+
+  test('hints to use to: when searching sent items with from:', async () => {
+    const emails = [mockEmail({ id: '1' })];
+    callGraphAPIPaginated.mockResolvedValue({ value: emails });
+    resolveFolderPath.mockResolvedValue('me/mailFolders/sentitems/messages');
+
+    const result = await handleSearchEmails({
+      folder: 'sentitems',
+      from: 'alice@example.com',
+    });
+
+    expect(result.content[0].text).toContain(
+      'Sent Items searches usually work better with `to`'
+    );
   });
 });
 

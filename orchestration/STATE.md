@@ -382,3 +382,14 @@ Checks:
   - PR opened: `gh pr create --repo davidb73-hub/outlook-assistant --base docs/phase-0-golive --head fix/117-169-search-improvements ...` → https://github.com/davidb73-hub/outlook-assistant/pull/9 → PASS
 Gate: PASSED_WITH_DRIFT
 Notes: Preserved the v3.7.4 no-fall-through guarantee for raw Graph search. Added canonical `searchQuery` while keeping `kqlQuery` as a backwards-compatible alias, added folder/searchAllFolders metadata, removed the misleading "try searchAllFolders" suggestion when it was already enabled, and added a Sent Items `from`→`to` hint. Raw `npm run lint` remains polluted by untracked local `.claude/` scaffold files; tracked product lint is clean. Live read-only checks remain pending until after the fork PR is merged.
+
+## [2026-07-08 11:35] Phase 2.4 — #117 + #169 fork PR merge + live read-only verification
+Branch/PR: fix/117-169-search-improvements / davidb73-hub/outlook-assistant#9
+Checks:
+  - Merge: `gh api -X PUT repos/davidb73-hub/outlook-assistant/pulls/9/merge ...` → merged `true`, merge sha `17652919808a1ad338b38dea44d6a1accf564fd2` → PASS
+  - Local base sync: `git switch -C docs/phase-0-golive-final fork/docs/phase-0-golive` after fetch → local base aligned to merged fork branch → PASS_WITH_DRIFT
+  - Live Sent Items check: `search-emails {"folder":"sentitems","count":3}` against live mailbox → 3 sent items returned; no error → PASS
+  - Live all-folders parity check: `search-emails {"query":"outlook-assistant","count":10}` returned 1; `search-emails {"query":"outlook-assistant","searchAllFolders":true,"count":10}` returned 2 → all-folders result count ≥ single-folder count → PASS
+  - Live legacy alias check: `search-emails {"kqlQuery":"outlook-assistant","searchAllFolders":true,"count":10}` → accepted legacy param, returned 2, final strategy `raw-kql` → PASS
+Gate: PASSED_WITH_DRIFT
+Notes: No live mutation was performed. The live script printed only sanitized counts and strategy names; no subjects, bodies, message IDs, or tokens were recorded. Drift: local base had a duplicate pre-PR search commit due to an operator branching mistake; it was repointed to the merged fork base, discarding only the operator-created duplicate commit.

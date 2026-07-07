@@ -8,6 +8,69 @@ const handleCancelEvent = require('./cancel');
 const handleDeleteEvent = require('./delete');
 const handleUpdateEvent = require('./update');
 
+const dayOfWeekEnum = [
+  'sunday',
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+];
+
+const recurrenceRawSchema = {
+  type: 'object',
+  properties: {
+    pattern: {
+      type: 'object',
+      properties: {
+        type: {
+          type: 'string',
+          enum: [
+            'daily',
+            'weekly',
+            'absoluteMonthly',
+            'relativeMonthly',
+            'absoluteYearly',
+            'relativeYearly',
+          ],
+        },
+        interval: { type: 'integer' },
+        daysOfWeek: {
+          type: 'array',
+          items: { type: 'string', enum: dayOfWeekEnum },
+        },
+        dayOfMonth: { type: 'integer' },
+        month: { type: 'integer' },
+        firstDayOfWeek: { type: 'string', enum: dayOfWeekEnum },
+        index: {
+          type: 'string',
+          enum: ['first', 'second', 'third', 'fourth', 'last'],
+        },
+      },
+      required: ['type', 'interval'],
+      additionalProperties: false,
+    },
+    range: {
+      type: 'object',
+      properties: {
+        type: {
+          type: 'string',
+          enum: ['endDate', 'noEnd', 'numbered'],
+        },
+        startDate: { type: 'string' },
+        endDate: { type: 'string' },
+        numberOfOccurrences: { type: 'integer' },
+        recurrenceTimeZone: { type: 'string' },
+      },
+      required: ['type', 'startDate'],
+      additionalProperties: false,
+    },
+  },
+  required: ['pattern', 'range'],
+  additionalProperties: false,
+};
+
 // Calendar tool definitions (consolidated: 5 → 3)
 const calendarTools = [
   {
@@ -35,7 +98,7 @@ const calendarTools = [
   {
     name: 'create-event',
     description:
-      "Create a new calendar event on the signed-in user's default calendar. Returns the created event with its `id`, `webLink`, and (if attendees are present) an auto-generated online-meeting URL — attendees receive invitations on save. Times use the configured timezone (default Australia/Melbourne; override with `OUTLOOK_DEFAULT_TIMEZONE`); omit the `Z` suffix to send local time. Use `manage-event` action=`update` to modify an event after creation, or `manage-event` action=`cancel`/`delete` to remove it.",
+      "Create a new one-off or recurring calendar event on the signed-in user's default calendar. Returns the created event with its `id`, `webLink`, and recurrence summary when supplied — attendees receive invitations on save. Times use the configured timezone (default Australia/Melbourne; override with `OUTLOOK_DEFAULT_TIMEZONE`); omit the `Z` suffix to send local time. For common repeats use `recurrenceType` (`daily`, `weekly`, `monthly`, `yearly`) with `recurrenceInterval`, `recurrenceDaysOfWeek`, `recurrenceEndDate`, or `recurrenceCount`; for advanced Graph patterns pass `recurrenceRaw`/`recurrence`. Use `manage-event` action=`update` to modify an event after creation, or `manage-event` action=`cancel`/`delete` to remove it.",
     annotations: {
       title: 'Create Calendar Event',
       readOnlyHint: false,
@@ -67,6 +130,43 @@ const calendarTools = [
         body: {
           type: 'string',
           description: 'Optional body content for the event',
+        },
+        recurrenceType: {
+          type: 'string',
+          enum: ['daily', 'weekly', 'monthly', 'yearly'],
+          description:
+            'Simplified recurrence type. Maps monthly/yearly to absolute Graph patterns based on the start date.',
+        },
+        recurrenceInterval: {
+          type: 'integer',
+          description:
+            'Repeat every N days/weeks/months/years when recurrenceType is supplied (default: 1).',
+        },
+        recurrenceDaysOfWeek: {
+          type: 'array',
+          items: { type: 'string', enum: dayOfWeekEnum },
+          description:
+            'Days for weekly recurrence, e.g. ["monday","wednesday","friday"]. Defaults to the event start weekday.',
+        },
+        recurrenceEndDate: {
+          type: 'string',
+          description:
+            'End recurrence on this YYYY-MM-DD date. Mutually exclusive with recurrenceCount.',
+        },
+        recurrenceCount: {
+          type: 'integer',
+          description:
+            'End recurrence after this many occurrences. Mutually exclusive with recurrenceEndDate.',
+        },
+        recurrenceRaw: {
+          ...recurrenceRawSchema,
+          description:
+            'Advanced Microsoft Graph patternedRecurrence object with pattern and range.',
+        },
+        recurrence: {
+          ...recurrenceRawSchema,
+          description:
+            'Alias for recurrenceRaw: advanced Microsoft Graph patternedRecurrence object.',
         },
       },
       additionalProperties: false,

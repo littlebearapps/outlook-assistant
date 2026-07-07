@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added recurring calendar event support to `create-event`, including
+  simplified daily/weekly/monthly/yearly recurrence parameters and raw
+  Microsoft Graph `recurrenceRaw` passthrough for advanced patterns. (#125)
+
 ### Fixed
 
 - Added the configured timezone label to `list-events` start and end times so

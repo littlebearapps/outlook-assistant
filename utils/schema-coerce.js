@@ -51,27 +51,35 @@ function coerceValue(value, schema, path) {
       );
     }
     if (schema.items) {
-      return arr.map((item, i) =>
-        coerceValue(item, schema.items, `${path}[${i}]`)
+      return validateEnum(
+        arr.map((item, i) => coerceValue(item, schema.items, `${path}[${i}]`)),
+        schema,
+        path
       );
     }
-    return arr;
+    return validateEnum(arr, schema, path);
   }
 
   if (type === 'boolean') {
-    if (typeof value === 'boolean') return value;
-    if (value === 'true' || value === 1 || value === '1') return true;
-    if (value === 'false' || value === 0 || value === '0') return false;
+    if (typeof value === 'boolean') return validateEnum(value, schema, path);
+    if (value === 'true' || value === 1 || value === '1') {
+      return validateEnum(true, schema, path);
+    }
+    if (value === 'false' || value === 0 || value === '0') {
+      return validateEnum(false, schema, path);
+    }
     throw new CoercionError(
       `${path}: expected boolean, got ${describeType(value)} (${truncate(JSON.stringify(value))})`
     );
   }
 
   if (type === 'integer') {
-    if (typeof value === 'number' && Number.isInteger(value)) return value;
+    if (typeof value === 'number' && Number.isInteger(value)) {
+      return validateEnum(value, schema, path);
+    }
     if (typeof value === 'string' && value.trim() !== '') {
       const n = Number(value);
-      if (Number.isInteger(n)) return n;
+      if (Number.isInteger(n)) return validateEnum(n, schema, path);
     }
     throw new CoercionError(
       `${path}: expected integer, got ${describeType(value)} (${truncate(JSON.stringify(value))})`
@@ -79,10 +87,10 @@ function coerceValue(value, schema, path) {
   }
 
   if (type === 'number') {
-    if (typeof value === 'number') return value;
+    if (typeof value === 'number') return validateEnum(value, schema, path);
     if (typeof value === 'string' && value.trim() !== '') {
       const n = Number(value);
-      if (!Number.isNaN(n)) return n;
+      if (!Number.isNaN(n)) return validateEnum(n, schema, path);
     }
     throw new CoercionError(
       `${path}: expected number, got ${describeType(value)} (${truncate(JSON.stringify(value))})`
@@ -96,13 +104,39 @@ function coerceValue(value, schema, path) {
       );
     }
     if (!schema.properties) return value;
+    if (schema.additionalProperties === false) {
+      const known = new Set(Object.keys(schema.properties));
+      const unknown = Object.keys(value).filter((key) => !known.has(key));
+      if (unknown.length > 0) {
+        throw new CoercionError(
+          `${path}: unknown propert${unknown.length > 1 ? 'ies' : 'y'} ${unknown
+            .map((key) => `'${key}'`)
+            .join(', ')}.`
+        );
+      }
+    }
+
     const result = { ...value };
     for (const [key, propSchema] of Object.entries(schema.properties)) {
       if (key in value) {
         result[key] = coerceValue(value[key], propSchema, `${path}.${key}`);
       }
     }
-    return result;
+    if (Array.isArray(schema.required)) {
+      for (const key of schema.required) {
+        if (
+          !(key in value) ||
+          value[key] === undefined ||
+          value[key] === null ||
+          value[key] === ''
+        ) {
+          throw new CoercionError(
+            `${path}: required property '${key}' is missing.`
+          );
+        }
+      }
+    }
+    return validateEnum(result, schema, path);
   }
 
   if (type === 'string') {
@@ -143,11 +177,22 @@ function coerceValue(value, schema, path) {
         }
       }
     }
-    return value;
+    return validateEnum(value, schema, path);
   }
 
   // unknown type: pass through
   return value;
+}
+
+function validateEnum(value, schema, path) {
+  if (!Array.isArray(schema.enum)) return value;
+  if (value === undefined || value === null) return value;
+  if (schema.enum.includes(value)) return value;
+  throw new CoercionError(
+    `${path}: value '${value}' not in allowed values [${schema.enum
+      .map((x) => `'${x}'`)
+      .join(', ')}].`
+  );
 }
 
 /**

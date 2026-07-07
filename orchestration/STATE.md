@@ -312,3 +312,20 @@ Checks:
   - Live read-only check: exported local `.env`, called `list-events` with `count: 3` against live mailbox → 3 events returned, 6 start/end lines checked, every time line included `(Australia/Sydney)` → PASS
 Gate: PASSED
 Notes: The first live-check attempt sourced `.env` without exporting variables and therefore failed authentication via the stale/default `common` audience path. Reran with `set -a; source .env; set +a`; token refresh succeeded and the read-only calendar verification passed. No calendar mutation was performed, and event subjects/bodies/IDs were not recorded.
+
+## [2026-07-08 09:55] Phase 2.2 — #125 recurring calendar events
+Branch/PR: feat/125-recurring-events / davidb73-hub/outlook-assistant#7
+Checks:
+  - Issue reconciliation: `gh issue view 125 --repo littlebearapps/outlook-assistant` → issue asks for simplified recurrence params plus raw Graph recurrence support and validation → PASS
+  - Microsoft Graph docs check: official Learn docs for `POST /me/events`, `patternedRecurrence`, `recurrencePattern`, and `recurrenceRange` verified the `recurrence.pattern`/`recurrence.range` shape and enum values → PASS
+  - Baseline tests before edit: `npm test` → Test Suites: 32 passed, 32 total; Tests: 758 passed, 758 total → PASS
+  - Baseline product lint before edit: `git ls-files '*.js' | xargs npx eslint` → 25 warnings; 0 errors → PASS_WITH_DRIFT
+  - TDD red: `npx jest test/calendar/create.test.js -t recurrence` and `npx jest test/utils/schema-coerce.test.js -t "nested|recurrenceRaw"` before implementation → failed for missing recurrence payloads, validation, nested schema enforcement, and `recurrenceRaw` schema → PASS
+  - Targeted green: same recurrence/schema commands after implementation → Test Suites: 2 passed; recurrence tests and nested-schema tests pass → PASS
+  - MCP schema boundary: stdio `tools/call` `create-event` with `recurrenceRaw.pattern.unsupported=true` under `USE_TEST_MODE=true` → rejected with `recurrenceRaw.pattern: unknown property 'unsupported'.` → PASS
+  - Full suite: `npm test` → Test Suites: 32 passed, 32 total; Tests: 769 passed, 769 total → PASS
+  - Product lint: `git ls-files '*.js' | xargs npx eslint` → 25 warnings; 0 errors → PASS_WITH_DRIFT
+  - Whitespace: `git diff --check` → no output → PASS
+  - PR opened: `gh pr create --repo davidb73-hub/outlook-assistant --base docs/phase-0-golive --head feat/125-recurring-events ...` → https://github.com/davidb73-hub/outlook-assistant/pull/7 → PASS
+Gate: PASSED_WITH_DRIFT
+Notes: Added simplified `create-event` recurrence params (`recurrenceType`, `recurrenceInterval`, `recurrenceDaysOfWeek`, `recurrenceEndDate`, `recurrenceCount`) plus raw Graph `recurrenceRaw` and `recurrence` alias support. Extended schema coercion to enforce nested `additionalProperties`, `required`, and enum constraints where schemas declare them. Raw `npm run lint` remains polluted by untracked local `.claude/` scaffold files; tracked product lint is clean. Live create/list/delete verification remains pending until after the fork PR is merged.

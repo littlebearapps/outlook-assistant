@@ -37,6 +37,26 @@ params:
 
 Attendees receive a calendar invitation by email.
 
+## Create a Recurring Event
+
+> "Schedule a team check-in every Monday and Wednesday until the end of June"
+
+```
+tool: create-event
+params:
+  subject: "Team Check-in"
+  start: "2026-04-06T09:00:00"
+  end: "2026-04-06T09:30:00"
+  recurrenceType: "weekly"
+  recurrenceDaysOfWeek: ["monday", "wednesday"]
+  recurrenceEndDate: "2026-06-30"
+```
+
+For common repeats, use `recurrenceType` (`daily`, `weekly`, `monthly`, or
+`yearly`), plus `recurrenceInterval`, `recurrenceEndDate`, or
+`recurrenceCount`. For advanced Microsoft Graph patterns, pass a full
+`recurrenceRaw` object with `pattern` and `range`.
+
 ## Add a Description and Location
 
 > "Book the Level 3 boardroom for an offsite planning session"
@@ -61,6 +81,12 @@ params:
 | `attendees` | List of email addresses | No |
 | `body` | Event description or agenda | No |
 | `location` | Room name or address | No |
+| `recurrenceType` | Repeat pattern: `daily`, `weekly`, `monthly`, or `yearly` | No |
+| `recurrenceInterval` | Repeat every N days/weeks/months/years | No |
+| `recurrenceDaysOfWeek` | Days for weekly recurrence | No |
+| `recurrenceEndDate` | Last recurrence date (`YYYY-MM-DD`) | No |
+| `recurrenceCount` | Number of occurrences before stopping | No |
+| `recurrenceRaw` | Advanced Microsoft Graph recurrence object | No |
 
 ## Timezone Handling
 

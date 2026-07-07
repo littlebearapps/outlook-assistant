@@ -103,7 +103,7 @@ Quick reference for all 23 MCP tools across 9 modules. Each tool includes MCP sa
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
 | `manage-contact` | Full CRUD: `list` (default), `search`, `get`, `create`, `update`, `delete` | moderate write | `action`, `query`, `id`, `displayName`, `email`, `emails`, `primaryEmailAddress`, `secondaryEmailAddress`, `tertiaryEmailAddress`, `count` |
-| `search-people` | Relevance-based search (People API) | read-only | `query`, `count` |
+| `search-people` | Relevance-based search plus work/school org hierarchy lookup | read-only | `action`, `query`, `userId`, `count` |
 
 ## Categories (3 tools)
 

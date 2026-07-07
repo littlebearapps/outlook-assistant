@@ -102,6 +102,7 @@ module.exports = {
       // 'Calendars.Read.Shared', // find-meeting-times tool
       // 'Mail.Read.Shared',   // access-shared-mailbox tool
       // 'Place.Read.All',     // find-meeting-rooms tool
+      // 'User.Read.All',      // search-people manager/directReports actions
     ],
     tokenStorePath: path.join(homeDir, '.outlook-assistant-tokens.json'),
     authServerUrl: 'http://localhost:3333',

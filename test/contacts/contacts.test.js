@@ -468,10 +468,12 @@ describe('handleDeleteContact', () => {
 
 describe('handleSearchPeople', () => {
   const mockPerson = {
+    id: 'person-1',
     displayName: 'Jane Doe',
     scoredEmailAddresses: [{ address: 'jane@example.com' }],
     companyName: 'Acme Corp',
     jobTitle: 'Manager',
+    department: 'Operations',
     personType: { class: 'Person' },
     phones: [{ number: '+61400111222' }],
   };
@@ -517,5 +519,96 @@ describe('handleSearchPeople', () => {
     expect(result.content[0].text).toBe(
       'Error searching people: People search failed'
     );
+  });
+
+  it('should look up my manager with org hierarchy action', async () => {
+    callGraphAPI.mockResolvedValue({
+      id: 'manager-1',
+      displayName: 'Alex Manager',
+      mail: 'alex.manager@example.com',
+      jobTitle: 'Director',
+      department: 'Operations',
+    });
+
+    const result = await handleSearchPeople({ action: 'manager' });
+
+    expect(callGraphAPI).toHaveBeenCalledWith(
+      mockAccessToken,
+      'GET',
+      'me/manager',
+      null,
+      expect.objectContaining({
+        $select: expect.stringContaining('displayName'),
+      })
+    );
+    expect(result.content[0].text).toContain('# Manager');
+    expect(result.content[0].text).toContain('Alex Manager');
+    expect(result.content[0].text).toContain('alex.manager@example.com');
+    expect(result._meta.action).toBe('manager');
+    expect(result._meta.userId).toBe('me');
+  });
+
+  it('should look up a specific user manager', async () => {
+    callGraphAPI.mockResolvedValue({
+      id: 'manager-1',
+      displayName: 'Alex Manager',
+    });
+
+    await handleSearchPeople({
+      action: 'manager',
+      userId: 'jane@example.com',
+    });
+
+    expect(callGraphAPI).toHaveBeenCalledWith(
+      mockAccessToken,
+      'GET',
+      'users/jane%40example.com/manager',
+      null,
+      expect.any(Object)
+    );
+  });
+
+  it('should list direct reports with org hierarchy action', async () => {
+    callGraphAPI.mockResolvedValue({
+      value: [
+        {
+          id: 'report-1',
+          displayName: 'Riley Report',
+          mail: 'riley.report@example.com',
+          jobTitle: 'Analyst',
+        },
+      ],
+    });
+
+    const result = await handleSearchPeople({ action: 'directReports' });
+
+    expect(callGraphAPI).toHaveBeenCalledWith(
+      mockAccessToken,
+      'GET',
+      'me/directReports',
+      null,
+      expect.objectContaining({
+        $top: 25,
+      })
+    );
+    expect(result.content[0].text).toContain('# Direct Reports');
+    expect(result.content[0].text).toContain('Riley Report');
+    expect(result._meta.action).toBe('directReports');
+    expect(result._meta.count).toBe(1);
+  });
+
+  it('should return friendly work or school guidance for org hierarchy errors', async () => {
+    callGraphAPI.mockRejectedValue(
+      new Error(
+        '403 Forbidden: Insufficient privileges to complete the operation'
+      )
+    );
+
+    const result = await handleSearchPeople({ action: 'manager' });
+
+    expect(result.content[0].text).toContain(
+      'Org hierarchy requires a work or school account'
+    );
+    expect(result.content[0].text).toContain('User.Read.All');
   });
 });

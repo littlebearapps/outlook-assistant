@@ -418,3 +418,19 @@ Checks:
   - Live create/get/delete check: exported local `.env`, created a test contact with `primaryEmailAddress`, `secondaryEmailAddress`, and `tertiaryEmailAddress`; `get` read back all three structured email fields; `delete` removed the created test contact → PASS
 Gate: PASSED
 Notes: This was the single permitted live contact mutation for #127 and it was cleaned up in the same script using the returned contact ID. No contact IDs, mailbox content, unrelated contact data, or tokens were recorded. The first live attempt failed only because sandbox DNS blocked `graph.microsoft.com`; reran the same smoke with approved network access.
+
+## [2026-07-08 12:55] Phase 2.6 — #91 `search-people` org hierarchy
+Branch/PR: feat/91-org-hierarchy / davidb73-hub/outlook-assistant#11
+Checks:
+  - Issue reconciliation: `gh issue view 91 --repo littlebearapps/outlook-assistant` → issue asks to extend existing `search-people` with `action=search|manager|directReports`, optional `userId`, work/school-only guidance, and commented `User.Read.All` scope → PASS
+  - Microsoft Graph docs check: official Learn docs for `/manager` and `/directReports` verified personal accounts are unsupported; manager least-privileged delegated work/school permission is `User.Read.All`; direct reports supports delegated work/school permissions and not personal accounts → PASS
+  - TDD red: `npx jest test/contacts -t "hierarchy|manager|direct reports|work or school"` before implementation → failed because `search-people` still required `query` and made no org hierarchy calls → PASS
+  - Targeted green: same focused command after implementation → 4 hierarchy tests passed → PASS
+  - Contacts suite: `npx jest test/contacts` → Test Suites: 1 passed; Tests: 44 passed → PASS
+  - Schema boundary: stdio `tools/call search-people` with `action=manager` and no `query` under `USE_TEST_MODE=true` → accepted schema; unsupported `action=badAction` rejected by enum validation → PASS
+  - Full suite: `npm test` → Test Suites: 32 passed, 32 total; Tests: 786 passed, 786 total → PASS
+  - Product lint: `git ls-files '*.js' | xargs npx eslint` → 25 warnings; 0 errors → PASS_WITH_DRIFT
+  - Whitespace: `git diff --check` → no output → PASS
+  - PR opened: `gh pr create --repo davidb73-hub/outlook-assistant --base docs/phase-0-golive --head feat/91-org-hierarchy ...` → https://github.com/davidb73-hub/outlook-assistant/pull/11 → PASS
+Gate: PASSED_WITH_DRIFT
+Notes: Added read-only manager and direct-reports actions to the existing `search-people` tool, keeping the tool count stable. `User.Read.All` remains an optional work/school scope via `OUTLOOK_EXTRA_SCOPES` and a commented config entry rather than a default scope, preserving personal-account compatibility. Raw `npm run lint` remains polluted by untracked local `.claude/` scaffold files; tracked product lint is clean. Live org-hierarchy verification remains pending until after the fork PR is merged; it may return friendly scope/account guidance if the tenant has not granted `User.Read.All`.

@@ -393,3 +393,19 @@ Checks:
   - Live legacy alias check: `search-emails {"kqlQuery":"outlook-assistant","searchAllFolders":true,"count":10}` → accepted legacy param, returned 2, final strategy `raw-kql` → PASS
 Gate: PASSED_WITH_DRIFT
 Notes: No live mutation was performed. The live script printed only sanitized counts and strategy names; no subjects, bodies, message IDs, or tokens were recorded. Drift: local base had a duplicate pre-PR search commit due to an operator branching mistake; it was repointed to the merged fork base, discarding only the operator-created duplicate commit.
+
+## [2026-07-08 12:05] Phase 2.5 — #127 structured contact email fields
+Branch/PR: feat/127-contact-email-fields / davidb73-hub/outlook-assistant#10
+Checks:
+  - Issue reconciliation: `gh issue view 127 --repo littlebearapps/outlook-assistant` → issue asks for Graph contact fields `primaryEmailAddress`, `secondaryEmailAddress`, and `tertiaryEmailAddress` while preserving legacy `emailAddresses` support → PASS
+  - Microsoft Graph docs check: official Learn docs for contact resource verified the three structured email fields exist in v1.0 → PASS
+  - Baseline before edit: `npm test` → Test Suites: 32 passed, 32 total; Tests: 779 passed, 779 total; `git ls-files '*.js' | xargs npx eslint` → 25 warnings; 0 errors → PASS_WITH_DRIFT
+  - TDD red: `npx jest test/contacts` before implementation → failed for structured field rendering, create payload, and update payload expectations → PASS
+  - Targeted green: `npx jest test/contacts` → Test Suites: 1 passed; Tests: 40 passed → PASS
+  - Schema boundary: stdio `tools/call manage-contact` with new structured email params under `USE_TEST_MODE=true` → accepted; unknown `unsupportedEmailField` rejected with the valid parameter list including the three new fields → PASS
+  - Full suite: `npm test` → Test Suites: 32 passed, 32 total; Tests: 782 passed, 782 total → PASS
+  - Product lint: `git ls-files '*.js' | xargs npx eslint` → 25 warnings; 0 errors → PASS_WITH_DRIFT
+  - Whitespace: `git diff --check` → no output → PASS
+  - PR opened: `gh pr create --repo davidb73-hub/outlook-assistant --base docs/phase-0-golive --head feat/127-contact-email-fields ...` → https://github.com/davidb73-hub/outlook-assistant/pull/10 → PASS
+Gate: PASSED_WITH_DRIFT
+Notes: Added structured contact email field support to `manage-contact` create/update and list/get display while preserving existing `email`/`emails` compatibility. Raw `npm run lint` remains polluted by untracked local `.claude/` scaffold files; tracked product lint is clean. Live create/get/delete verification remains pending until after the fork PR is merged.

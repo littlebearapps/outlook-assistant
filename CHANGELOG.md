@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `find-meeting-times`, a work/school Microsoft 365 scheduling assistant
   tool that calls Graph `findMeetingTimes` and returns ranked candidate slots
   with confidence and attendee availability. (#126)
+- Added structured contact email field support to `manage-contact` via
+  `primaryEmailAddress`, `secondaryEmailAddress`, and `tertiaryEmailAddress`,
+  while keeping existing `email`/`emails` compatibility. (#127)
 
 ### Fixed
 

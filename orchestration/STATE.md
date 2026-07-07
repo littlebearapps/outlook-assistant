@@ -357,3 +357,12 @@ Checks:
   - PR opened: `gh pr create --repo davidb73-hub/outlook-assistant --base docs/phase-0-golive --head feat/126-find-meeting-times ...` → https://github.com/davidb73-hub/outlook-assistant/pull/8 → PASS
 Gate: PASSED_WITH_DRIFT
 Notes: Drift from local task brief: Microsoft's current docs require delegated `Calendars.Read.Shared` for work/school accounts and do not support personal Microsoft accounts. To avoid breaking personal-account auth by default, added `OUTLOOK_EXTRA_SCOPES` support and documented `Calendars.Read.Shared` as an optional work/school scope for `find-meeting-times`. Live verification remains pending until after the fork PR is merged; it may require Azure permission update and re-authentication.
+
+## [2026-07-08 10:50] Phase 2.3 — #126 fork PR merge + live read-only verification
+Branch/PR: feat/126-find-meeting-times / davidb73-hub/outlook-assistant#8
+Checks:
+  - Merge: `gh api -X PUT repos/davidb73-hub/outlook-assistant/pulls/8/merge ...` → merged `true`, merge sha `6d75ca08fc6e32e928122293704aff9a2ab4391d` → PASS
+  - Local base sync: `git pull --ff-only fork docs/phase-0-golive` → fast-forwarded local base from `8551d32` to `6d75ca0` → PASS
+  - Live read-only check: exported local `.env` plus `OUTLOOK_EXTRA_SCOPES=Calendars.Read.Shared`, called `find-meeting-times` with owner as sole attendee, 30-minute duration, 2026-07-20 to 2026-07-24 work-hours window, max 3 candidates → Graph returned meeting-time suggestions → PASS
+Gate: PASSED
+Notes: No live mutation was performed. The command printed only sanitized booleans and did not record suggested slots, attendee mailbox content, tokens, or IDs.

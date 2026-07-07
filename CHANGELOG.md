@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Added the configured timezone label to `list-events` start and end times so
+  converted calendar output is no longer ambiguous. (#118)
+
 ## [3.8.2] - 2026-07-08
 
 ### Added

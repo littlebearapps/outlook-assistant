@@ -329,3 +329,12 @@ Checks:
   - PR opened: `gh pr create --repo davidb73-hub/outlook-assistant --base docs/phase-0-golive --head feat/125-recurring-events ...` → https://github.com/davidb73-hub/outlook-assistant/pull/7 → PASS
 Gate: PASSED_WITH_DRIFT
 Notes: Added simplified `create-event` recurrence params (`recurrenceType`, `recurrenceInterval`, `recurrenceDaysOfWeek`, `recurrenceEndDate`, `recurrenceCount`) plus raw Graph `recurrenceRaw` and `recurrence` alias support. Extended schema coercion to enforce nested `additionalProperties`, `required`, and enum constraints where schemas declare them. Raw `npm run lint` remains polluted by untracked local `.claude/` scaffold files; tracked product lint is clean. Live create/list/delete verification remains pending until after the fork PR is merged.
+
+## [2026-07-08 10:05] Phase 2.2 — #125 fork PR merge + live create/list/delete verification
+Branch/PR: feat/125-recurring-events / davidb73-hub/outlook-assistant#7
+Checks:
+  - Merge: `gh api -X PUT repos/davidb73-hub/outlook-assistant/pulls/7/merge ...` → merged `true`, merge sha `8d1fbf997cd8f9503e01f2d3e1a7422143f71e04` → PASS
+  - Local base sync: `git pull --ff-only fork docs/phase-0-golive` → fast-forwarded local base from `6a85d2a` to `8d1fbf9` → PASS
+  - Live create/list/delete check: exported local `.env`, created no-attendee weekly recurring test event with subject `oa-125-test` and `recurrenceCount: 2`; create response included recurrence; `list-events` found the event with timezone-labelled output; `manage-event` delete removed the created event → PASS
+Gate: PASSED
+Notes: This was the single permitted live calendar mutation for #125 and it was cleaned up in the same script using the returned event ID. No event IDs, mailbox content, or unrelated calendar details were recorded.

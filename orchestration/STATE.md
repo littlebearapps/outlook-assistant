@@ -226,3 +226,28 @@ Checks:
   - Home token mtime after: `stat -f '%m' ~/.outlook-assistant-tokens.json` → `1783410139` unchanged → PASS
 Gate: PASSED_WITH_DRIFT
 Notes: Added a test-only integration file that requires `utils/graph-api.js`, drives `callGraphAPIWithAuth()`, mocks only `https`, redirects token storage via a temporary `HOME`, verifies 401 → refresh → retry with the new bearer token, verifies refreshed tokens are persisted to the temp token file, and verifies refresh failure rethrows the original `UNAUTHORIZED` path. No CHANGELOG entry added because this is test-only and the brief says to skip unless precedent requires it.
+
+## [2026-07-08 02:40] Phase 1.3 — #72 fork PR merge
+Branch/PR: test/72-token-refresh-integration / davidb73-hub/outlook-assistant#3
+Checks:
+  - PR opened: `gh pr create --repo davidb73-hub/outlook-assistant --base docs/phase-0-golive --head test/72-token-refresh-integration ...` → https://github.com/davidb73-hub/outlook-assistant/pull/3 → PASS
+  - Merge: `gh api -X PUT repos/davidb73-hub/outlook-assistant/pulls/3/merge ...` → merged `true`, merge sha `eb37216b79469655e7798d56b8587c24e9894bf9` → PASS
+Gate: PASSED
+Notes: Fork base `docs/phase-0-golive` now includes #72.
+
+## [2026-07-08 03:00] Phase 1.4 — #92 openWorldHint annotation audit
+Branch/PR: fix/92-openworldhint-audit / davidb73-hub/outlook-assistant#4
+Checks:
+  - Issue reconciliation: `gh issue view 92 --repo littlebearapps/outlook-assistant` → authoritative flip list is `search-emails`, `read-email`, `search-people`, `access-shared-mailbox`; leave `get-mail-tips`, `list-events`, `manage-contact` unchanged → PASS
+  - Baseline tests before edit: `npm test` → Test Suites: 31 passed, 31 total; Tests: 756 passed, 756 total → PASS
+  - Baseline product lint before edit: `git ls-files '*.js' | xargs npx eslint` → 25 warnings; 0 errors → PASS_WITH_DRIFT
+  - TDD red: `npx jest -t "annotation"` before implementation → failed because `search-emails` still had `openWorldHint: false` → PASS
+  - Annotation pinning: `npx jest -t "annotation"` → Test Suites: 1 passed, 31 skipped; Tests: 1 passed, 756 skipped → PASS
+  - Only non-openWorld hints unchanged in production modules: `git diff fork/docs/phase-0-golive -G"readOnlyHint|destructiveHint|idempotentHint" -- auth calendar categories contacts email folder rules settings advanced '*.js'` → no output → PASS
+  - Tool count and annotation presence: scripted stdio `initialize` + `tools/list` with `USE_TEST_MODE=true` → `{"count":22,"missingOpenWorldHint":[]}` → PASS
+  - Full suite: `npm test` → Test Suites: 32 passed, 32 total; Tests: 757 passed, 757 total → PASS
+  - Product lint: `git ls-files '*.js' test/dispatcher/tool-annotations.test.js | xargs npx eslint` → 25 warnings; 0 errors → PASS
+  - FAQ floor: `grep -cE '^## ' docs/faq/faq.md` → 11 → PASS
+  - Whitespace: `git diff --check` → no output → PASS
+Gate: PASSED_WITH_DRIFT
+Notes: Flipped only the four issue-listed external-content tools to `openWorldHint: true`; added explicit `openWorldHint: false` to `mailbox-settings` so all 22 tools carry the key. Updated CHANGELOG, tools reference, and FAQ read-only-mode answer. Raw `npm run lint` remains polluted by untracked local `.claude/` scaffold files; tracked product lint is clean.

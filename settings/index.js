@@ -621,6 +621,7 @@ const settingsTools = [
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: true,
+      openWorldHint: false,
     },
     inputSchema: {
       type: 'object',

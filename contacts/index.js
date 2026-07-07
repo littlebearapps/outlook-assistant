@@ -805,7 +805,7 @@ const contactsTools = [
     annotations: {
       title: 'People Search',
       readOnlyHint: true,
-      openWorldHint: false,
+      openWorldHint: true,
     },
     inputSchema: {
       type: 'object',

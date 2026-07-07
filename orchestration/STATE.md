@@ -273,3 +273,19 @@ Checks:
   - Final upstream state: `gh issue view 93 --repo littlebearapps/outlook-assistant --json state` → `OPEN` → BLOCKED_UPSTREAM_PERMISSION
 Gate: PASSED_WITH_OWNER_OVERRIDE
 Notes: No description gaps found and no code/docs edits required for #93. Upstream issue closure is blocked because the fork owner lacks upstream close permission. Per owner instruction to continue from the fork as canonical and not stop on upstream permission gates, proceed to Phase 1 release using the fork state; upstream maintainers can close #93 from the posted audit evidence.
+
+## [2026-07-08 03:50] Phase 1.6 — v3.8.2 patch release branch
+Branch/PR: release/v3.8.2 / davidb73-hub/outlook-assistant#5
+Checks:
+  - Release branch: `git switch -C release/v3.8.2 fork/docs/phase-0-golive` → branch created from fork base including #68, #69, #72, #92, and #93 audit ledger → PASS
+  - Release baseline tests: `npm test` → Test Suites: 32 passed, 32 total; Tests: 757 passed, 757 total → PASS
+  - Release baseline product lint: `git ls-files '*.js' | xargs npx eslint` → 25 warnings; 0 errors → PASS_WITH_DRIFT
+  - Version bump: `npm version patch --no-git-tag-version` → `v3.8.2`; `package.json`, `package-lock.json`, and `server.json` synced → PASS
+  - Version consistency: `node -p "require('./package.json').version + ' ' + require('./server.json').version + ' ' + require('./server.json').packages[0].version"` → `3.8.2 3.8.2 3.8.2` → PASS
+  - Release test gate: `npm test` → Test Suites: 32 passed, 32 total; Tests: 757 passed, 757 total → PASS
+  - Release lint gate: `git ls-files '*.js' | xargs npx eslint` → 25 warnings; 0 errors → PASS
+  - CLI version: `node index.js --version` → `@littlebearapps/outlook-assistant v3.8.2` → PASS
+  - Tool count: scripted stdio `initialize` + `tools/list` with `USE_TEST_MODE=true` → 22 tools → PASS
+  - FAQ floor: `grep -cE '^## ' docs/faq/faq.md` → 11 → PASS
+Gate: PASSED_WITH_DRIFT
+Notes: Owner approval for the version bump is covered by the earlier instruction to continue to the end without further approval. Raw `npm run lint` remains polluted by untracked local `.claude/` scaffold files; tracked product lint is clean.

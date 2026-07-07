@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.8.2] - 2026-07-08
+
 ### Added
 
 - Added `--version` and `-v` CLI flags that print the package version and exit
@@ -28,6 +30,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Clarified that the default device-code flow does not require a client
   secret when Azure public client flows are enabled, and updated getting-started
   examples to include send-safety environment variables.
+
+### Tests
+
+- Added integration coverage for the Graph 401 → token refresh → retry flow,
+  including persistence of refreshed tokens to an isolated token file. (#72)
 
 ## [3.8.1] - 2026-05
 

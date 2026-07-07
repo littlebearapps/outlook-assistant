@@ -19,6 +19,9 @@ const mockContact = {
   id: 'contact-1',
   displayName: 'John Smith',
   emailAddresses: [{ address: 'john@example.com' }],
+  primaryEmailAddress: { address: 'john.primary@example.com' },
+  secondaryEmailAddress: { address: 'john.secondary@example.com' },
+  tertiaryEmailAddress: { address: 'john.tertiary@example.com' },
   mobilePhone: '+61400000000',
   businessPhones: ['+61300000000'],
   companyName: 'Acme Corp',
@@ -56,6 +59,22 @@ describe('handleListContacts', () => {
     expect(result.content[0].text).toContain('**Job Title**: Engineer');
     expect(result.content[0].text).toContain('**Company**: Acme Corp');
     expect(result.content[0].text).not.toContain('Engineer at Acme Corp');
+  });
+
+  it('should label structured contact email fields', async () => {
+    callGraphAPI.mockResolvedValue({ value: [mockContact] });
+
+    const result = await handleListContacts({});
+
+    expect(result.content[0].text).toContain(
+      '**Primary Email**: john.primary@example.com'
+    );
+    expect(result.content[0].text).toContain(
+      '**Secondary Email**: john.secondary@example.com'
+    );
+    expect(result.content[0].text).toContain(
+      '**Tertiary Email**: john.tertiary@example.com'
+    );
   });
 
   it('should handle empty contacts', async () => {
@@ -289,6 +308,35 @@ describe('handleCreateContact', () => {
     ]);
   });
 
+  it('should create a contact with structured email fields', async () => {
+    callGraphAPI.mockResolvedValue({ ...mockContact, id: 'new-contact' });
+
+    await handleCreateContact({
+      displayName: 'Structured Mail',
+      primaryEmailAddress: 'primary@example.com',
+      secondaryEmailAddress: 'secondary@example.com',
+      tertiaryEmailAddress: 'tertiary@example.com',
+    });
+
+    const body = callGraphAPI.mock.calls[0][3];
+    expect(body).toEqual(
+      expect.objectContaining({
+        primaryEmailAddress: {
+          address: 'primary@example.com',
+          name: 'Structured Mail',
+        },
+        secondaryEmailAddress: {
+          address: 'secondary@example.com',
+          name: 'Structured Mail',
+        },
+        tertiaryEmailAddress: {
+          address: 'tertiary@example.com',
+          name: 'Structured Mail',
+        },
+      })
+    );
+  });
+
   it('should handle auth error', async () => {
     ensureAuthenticated.mockRejectedValue(new Error('Authentication required'));
 
@@ -327,6 +375,28 @@ describe('handleUpdateContact', () => {
       expect.stringContaining('me/contacts/'),
       expect.objectContaining({ displayName: 'John Updated' })
     );
+  });
+
+  it('should update only supplied structured email fields', async () => {
+    callGraphAPI.mockResolvedValue({
+      ...mockContact,
+      secondaryEmailAddress: { address: 'new.secondary@example.com' },
+    });
+
+    await handleUpdateContact({
+      id: 'contact-1',
+      secondaryEmailAddress: 'new.secondary@example.com',
+    });
+
+    const body = callGraphAPI.mock.calls[0][3];
+    expect(body).toEqual({
+      secondaryEmailAddress: {
+        address: 'new.secondary@example.com',
+      },
+    });
+    expect(body).not.toHaveProperty('primaryEmailAddress');
+    expect(body).not.toHaveProperty('tertiaryEmailAddress');
+    expect(body).not.toHaveProperty('emailAddresses');
   });
 
   it('should require contact ID', async () => {

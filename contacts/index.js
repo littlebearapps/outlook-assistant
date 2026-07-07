@@ -13,11 +13,21 @@ const { ensureAuthenticated } = require('../auth');
  * Contact field presets for different use cases
  */
 const CONTACT_FIELDS = {
-  minimal: ['id', 'displayName', 'emailAddresses'],
+  minimal: [
+    'id',
+    'displayName',
+    'emailAddresses',
+    'primaryEmailAddress',
+    'secondaryEmailAddress',
+    'tertiaryEmailAddress',
+  ],
   list: [
     'id',
     'displayName',
     'emailAddresses',
+    'primaryEmailAddress',
+    'secondaryEmailAddress',
+    'tertiaryEmailAddress',
     'mobilePhone',
     'businessPhones',
   ],
@@ -27,6 +37,9 @@ const CONTACT_FIELDS = {
     'givenName',
     'surname',
     'emailAddresses',
+    'primaryEmailAddress',
+    'secondaryEmailAddress',
+    'tertiaryEmailAddress',
     'mobilePhone',
     'businessPhones',
     'homePhones',
@@ -56,7 +69,10 @@ function formatContact(contact, verbosity = 'standard') {
   lines.push(`### ${contact.displayName || '(No name)'}`);
 
   // Email addresses
-  if (contact.emailAddresses?.length > 0) {
+  const structuredEmailLines = formatStructuredEmailLines(contact);
+  if (structuredEmailLines.length > 0) {
+    lines.push(...structuredEmailLines);
+  } else if (contact.emailAddresses?.length > 0) {
     const emails = contact.emailAddresses.map((e) => e.address).join(', ');
     lines.push(`**Email**: ${emails}`);
   }
@@ -117,6 +133,17 @@ function formatContact(contact, verbosity = 'standard') {
   lines.push('');
 
   return lines.join('\n');
+}
+
+function formatStructuredEmailLines(contact) {
+  const fields = [
+    ['Primary Email', contact.primaryEmailAddress],
+    ['Secondary Email', contact.secondaryEmailAddress],
+    ['Tertiary Email', contact.tertiaryEmailAddress],
+  ];
+  return fields
+    .filter(([, value]) => value?.address)
+    .map(([label, value]) => `**${label}**: ${value.address}`);
 }
 
 /**
@@ -372,6 +399,9 @@ async function handleCreateContact(args) {
     lastName,
     email,
     emails,
+    primaryEmailAddress,
+    secondaryEmailAddress,
+    tertiaryEmailAddress,
     mobilePhone,
     companyName,
     jobTitle,
@@ -382,10 +412,20 @@ async function handleCreateContact(args) {
   const resolvedDisplayName =
     displayName ||
     [firstName, lastName].filter(Boolean).join(' ') ||
+    primaryEmailAddress ||
+    secondaryEmailAddress ||
+    tertiaryEmailAddress ||
     email ||
     (Array.isArray(emails) && emails[0]);
 
-  if (!resolvedDisplayName && !email && !(emails && emails.length > 0)) {
+  if (
+    !resolvedDisplayName &&
+    !email &&
+    !(emails && emails.length > 0) &&
+    !primaryEmailAddress &&
+    !secondaryEmailAddress &&
+    !tertiaryEmailAddress
+  ) {
     return {
       content: [
         {
@@ -429,6 +469,14 @@ async function handleCreateContact(args) {
       }));
     }
 
+    addStructuredEmailFields(contactData, {
+      primaryEmailAddress,
+      secondaryEmailAddress,
+      tertiaryEmailAddress,
+      displayName: resolvedDisplayName,
+      includeName: true,
+    });
+
     if (mobilePhone) contactData.mobilePhone = mobilePhone;
     if (companyName) contactData.companyName = companyName;
     if (jobTitle) contactData.jobTitle = jobTitle;
@@ -469,12 +517,42 @@ async function handleCreateContact(args) {
   }
 }
 
+function addStructuredEmailFields(target, options) {
+  const mappings = [
+    ['primaryEmailAddress', options.primaryEmailAddress],
+    ['secondaryEmailAddress', options.secondaryEmailAddress],
+    ['tertiaryEmailAddress', options.tertiaryEmailAddress],
+  ];
+
+  mappings.forEach(([field, address]) => {
+    if (address === undefined) return;
+    if (!address) {
+      target[field] = null;
+      return;
+    }
+    target[field] = { address };
+    if (options.includeName) {
+      target[field].name = options.displayName || address;
+    }
+  });
+}
+
 /**
  * Update contact handler
  */
 async function handleUpdateContact(args) {
-  const { id, displayName, email, mobilePhone, companyName, jobTitle, notes } =
-    args;
+  const {
+    id,
+    displayName,
+    email,
+    primaryEmailAddress,
+    secondaryEmailAddress,
+    tertiaryEmailAddress,
+    mobilePhone,
+    companyName,
+    jobTitle,
+    notes,
+  } = args;
 
   if (!id) {
     return { content: [{ type: 'text', text: 'Contact ID is required.' }] };
@@ -496,6 +574,12 @@ async function handleUpdateContact(args) {
     if (email !== undefined) {
       contactData.emailAddresses = email ? [{ address: email }] : [];
     }
+    addStructuredEmailFields(contactData, {
+      primaryEmailAddress,
+      secondaryEmailAddress,
+      tertiaryEmailAddress,
+      includeName: false,
+    });
     if (mobilePhone !== undefined) contactData.mobilePhone = mobilePhone;
     if (companyName !== undefined) contactData.companyName = companyName;
     if (jobTitle !== undefined) contactData.jobTitle = jobTitle;
@@ -679,7 +763,7 @@ const contactsTools = [
   {
     name: 'manage-contact',
     description:
-      "Full CRUD over the signed-in user's personal Outlook contacts (destructive: covers `delete` action). action=`list` (default) returns contacts with pagination via `skip`/`count` (default 50). action=`search` returns contacts matching `query` against name/email (default 25). action=`get` returns full contact detail by `id`. action=`create` adds a new contact and returns its `id`. action=`update` patches the given fields by `id` (only fields passed are changed). action=`delete` permanently removes the contact by `id`. Use `outputVerbosity` (minimal/standard/full) on list/search to control field count. Prefer `search-people` for cross-source relevance ranking (contacts + directory + recent comms) — this tool only searches your personal contact store.",
+      "Full CRUD over the signed-in user's personal Outlook contacts (destructive: covers `delete` action). action=`list` (default) returns contacts with pagination via `skip`/`count` (default 50). action=`search` returns contacts matching `query` against name/email (default 25). action=`get` returns full contact detail by `id`. action=`create` adds a new contact and returns its `id`. action=`update` patches the given fields by `id` (only fields passed are changed). action=`delete` permanently removes the contact by `id`. Email fields accept the legacy `email`/`emails` array plus structured `primaryEmailAddress`, `secondaryEmailAddress`, and `tertiaryEmailAddress`. Use `outputVerbosity` (minimal/standard/full) on list/search to control field count. Prefer `search-people` for cross-source relevance ranking (contacts + directory + recent comms) — this tool only searches your personal contact store.",
     annotations: {
       title: 'Contacts',
       readOnlyHint: false,
@@ -750,6 +834,21 @@ const contactsTools = [
           items: { type: 'string' },
           description:
             'Multiple email addresses (action=create/update). First entry is primary.',
+        },
+        primaryEmailAddress: {
+          type: 'string',
+          description:
+            'Structured primary email address (action=create/update). Maps to Graph `primaryEmailAddress`.',
+        },
+        secondaryEmailAddress: {
+          type: 'string',
+          description:
+            'Structured secondary email address (action=create/update). Maps to Graph `secondaryEmailAddress`.',
+        },
+        tertiaryEmailAddress: {
+          type: 'string',
+          description:
+            'Structured tertiary email address (action=create/update). Maps to Graph `tertiaryEmailAddress`.',
         },
         mobilePhone: {
           type: 'string',

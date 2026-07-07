@@ -163,3 +163,19 @@ Checks:
   - Canonical working path: proceed from `davidb73-hub/outlook-assistant` fork while upstream PR #209 remains draft/unmerged → PASS
 Gate: PASSED_WITH_OWNER_OVERRIDE
 Notes: This explicitly overrides the Phase 0 upstream merge checkpoint for execution momentum. Continue Phase 1 from the fork/canonical working branch. Keep PR #209 pending upstream; do not claim it is merged.
+
+## [2026-07-08 01:20] Phase 1.1 — #68 `--version` CLI flag
+Branch/PR: feat/68-version-flag / davidb73-hub/outlook-assistant#1
+Checks:
+  - Issue reconciliation: `gh issue view 68 --repo littlebearapps/outlook-assistant` → issue asks for both `--version` and `-v`, with output example `@littlebearapps/outlook-assistant v3.3.1` → PASS
+  - Baseline tests before edit: `npm test` → Test Suites: 29 passed, 29 total; Tests: 748 passed, 748 total → PASS_WITH_DRIFT
+  - Baseline product lint before edit: `git ls-files '*.js' | xargs npx eslint` → 25 warnings; 0 errors → PASS_WITH_DRIFT
+  - TDD red: `npx jest test/dispatcher/version-flag.test.js` before implementation → 2 failures; stdout was empty instead of `@littlebearapps/outlook-assistant v3.8.1` → PASS
+  - Flag behavior: `node index.js --version` and `node index.js -v` → `@littlebearapps/outlook-assistant v3.8.1`; exit 0 → PASS
+  - TDD green: `npx jest test/dispatcher/version-flag.test.js` → Test Suites: 1 passed, 1 total; Tests: 2 passed, 2 total → PASS
+  - MCP unaffected: scripted stdio `initialize` + `tools/list` with `USE_TEST_MODE=true` → 22 tools → PASS
+  - Full suite: `npm test` → Test Suites: 30 passed, 30 total; Tests: 750 passed, 750 total → PASS
+  - Product lint: `git ls-files '*.js' | xargs npx eslint` → 25 warnings; 0 errors → PASS
+  - Whitespace: `git diff --check` → no output → PASS
+Gate: PASSED_WITH_DRIFT
+Notes: Drift from package baseline: current clean working branch reports 748 tests before this task, not the older package reference of 751; this task adds two assertions for a final count of 750. Raw `npm run lint` fails only because untracked local orchestration scaffold files under `.claude/` are included by ESLint; tracked product JS lint remains 0 errors. Issue body contradicted the local brief by requiring `-v` and scoped package-name output; implementation follows the issue while reusing `config.SERVER_VERSION` for the version value.

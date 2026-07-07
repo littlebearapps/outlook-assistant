@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added `--version` and `-v` CLI flags that print the package version and exit
+  without starting the MCP stdio server. (#68)
+
 ### Documentation
 
 - Documented the single-tenant Azure app fix for `AADSTS50059`: set

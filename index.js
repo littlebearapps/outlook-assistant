@@ -5,11 +5,18 @@
  * A Model Context Protocol server that provides access to
  * Microsoft Outlook through the Microsoft Graph API.
  */
+const config = require('./config');
+const { name: packageName } = require('./package.json');
+
+if (process.argv.includes('--version') || process.argv.includes('-v')) {
+  console.log(`${packageName} v${config.SERVER_VERSION}`);
+  process.exit(0);
+}
+
 const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
 const {
   StdioServerTransport,
 } = require('@modelcontextprotocol/sdk/server/stdio.js');
-const config = require('./config');
 const { coerceArgsAgainstSchema } = require('./utils/schema-coerce');
 
 // Import module tools

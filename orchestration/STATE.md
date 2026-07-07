@@ -251,3 +251,25 @@ Checks:
   - Whitespace: `git diff --check` → no output → PASS
 Gate: PASSED_WITH_DRIFT
 Notes: Flipped only the four issue-listed external-content tools to `openWorldHint: true`; added explicit `openWorldHint: false` to `mailbox-settings` so all 22 tools carry the key. Updated CHANGELOG, tools reference, and FAQ read-only-mode answer. Raw `npm run lint` remains polluted by untracked local `.claude/` scaffold files; tracked product lint is clean.
+
+## [2026-07-08 03:15] Phase 1.4 — #92 fork PR merge
+Branch/PR: fix/92-openworldhint-audit / davidb73-hub/outlook-assistant#4
+Checks:
+  - PR opened: `gh pr create --repo davidb73-hub/outlook-assistant --base docs/phase-0-golive --head fix/92-openworldhint-audit ...` → https://github.com/davidb73-hub/outlook-assistant/pull/4 → PASS
+  - Merge: `gh api -X PUT repos/davidb73-hub/outlook-assistant/pulls/4/merge ...` → merged `true`, merge sha `1b346e151e17b6563287594f82f3a35ec95e1437` → PASS
+Gate: PASSED
+Notes: Fork base `docs/phase-0-golive` now includes #92. #93 may begin; group B sequencing is satisfied.
+
+## [2026-07-08 03:30] Phase 1.5 — #93 tool-description audit
+Branch/PR: fix/93-tool-descriptions-audit / no PR needed
+Checks:
+  - Issue reconciliation: `gh issue view 93 --repo littlebearapps/outlook-assistant` → asks for 22-tool description audit, `llms.txt`, and tools reference consistency → PASS
+  - Description audit: current 22 tool descriptions reviewed against purpose, key params, return format, constraints/errors, and consistent style; all covered by v3.8.1/current-base prose → PASS
+  - `llms.txt` scope check: `rg -n "Tool Categories|Email \\(8 tools\\)|Advanced \\(2 tools\\)" llms.txt` → lists all 22 tools by category → PASS
+  - Tools reference scope check: `docs/quickrefs/tools-reference.md` lists all 22 tools with description, safety, and key parameters → PASS
+  - Upstream audit comment: `gh issue comment 93 --repo littlebearapps/outlook-assistant --body-file /private/tmp/outlook-assistant-issue-93-audit.md` → https://github.com/littlebearapps/outlook-assistant/issues/93#issuecomment-4905843940 → PASS
+  - Upstream close attempt: `gh issue close 93 --repo littlebearapps/outlook-assistant ...` → GraphQL permission error for `CloseIssue` → BLOCKED_UPSTREAM_PERMISSION
+  - Close-request comment: close command still posted maintainer-facing close-as-shipped comment → https://github.com/littlebearapps/outlook-assistant/issues/93#issuecomment-4905846959 → PASS_WITH_DRIFT
+  - Final upstream state: `gh issue view 93 --repo littlebearapps/outlook-assistant --json state` → `OPEN` → BLOCKED_UPSTREAM_PERMISSION
+Gate: PASSED_WITH_OWNER_OVERRIDE
+Notes: No description gaps found and no code/docs edits required for #93. Upstream issue closure is blocked because the fork owner lacks upstream close permission. Per owner instruction to continue from the fork as canonical and not stop on upstream permission gates, proceed to Phase 1 release using the fork state; upstream maintainers can close #93 from the posted audit evidence.

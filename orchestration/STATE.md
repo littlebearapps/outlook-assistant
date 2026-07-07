@@ -155,3 +155,11 @@ Checks:
   - Draft PR: `gh pr create --repo littlebearapps/outlook-assistant --head davidb73-hub:docs/phase-0-golive --base main --draft` → https://github.com/littlebearapps/outlook-assistant/pull/209 → PASS
 Gate: PASSED
 Notes: This resolves the earlier GitHub auth/write blocker for PR creation by using the authenticated fork workflow. The PR remains draft and unmerged; Phase 0 local go-live is complete, but upstream merge/review is still pending.
+
+## [2026-07-08 00:55] Phase 1 entry — Owner override to continue from fork
+Branch/PR: docs/phase-0-golive-clean / #209 pending
+Checks:
+  - Owner instruction: "agreed. Proceed. I want you to continue building till the end. very end." after being told Phase 1 should wait unless continuing from fork as canonical → PASS
+  - Canonical working path: proceed from `davidb73-hub/outlook-assistant` fork while upstream PR #209 remains draft/unmerged → PASS
+Gate: PASSED_WITH_OWNER_OVERRIDE
+Notes: This explicitly overrides the Phase 0 upstream merge checkpoint for execution momentum. Continue Phase 1 from the fork/canonical working branch. Keep PR #209 pending upstream; do not claim it is merged.

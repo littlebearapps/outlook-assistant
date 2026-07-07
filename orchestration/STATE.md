@@ -434,3 +434,13 @@ Checks:
   - PR opened: `gh pr create --repo davidb73-hub/outlook-assistant --base docs/phase-0-golive --head feat/91-org-hierarchy ...` → https://github.com/davidb73-hub/outlook-assistant/pull/11 → PASS
 Gate: PASSED_WITH_DRIFT
 Notes: Added read-only manager and direct-reports actions to the existing `search-people` tool, keeping the tool count stable. `User.Read.All` remains an optional work/school scope via `OUTLOOK_EXTRA_SCOPES` and a commented config entry rather than a default scope, preserving personal-account compatibility. Raw `npm run lint` remains polluted by untracked local `.claude/` scaffold files; tracked product lint is clean. Live org-hierarchy verification remains pending until after the fork PR is merged; it may return friendly scope/account guidance if the tenant has not granted `User.Read.All`.
+
+## [2026-07-08 13:10] Phase 2.6 — #91 fork PR merge + live read-only verification
+Branch/PR: feat/91-org-hierarchy / davidb73-hub/outlook-assistant#11
+Checks:
+  - Merge: `gh api -X PUT repos/davidb73-hub/outlook-assistant/pulls/11/merge ...` → merged `true`, merge sha `fa3bc11e7bb536260bbab54cd280bbc4a8ffb9a1` → PASS
+  - Local base sync: `git pull --ff-only fork docs/phase-0-golive` → fast-forwarded local base from `cd31bc1` to `fa3bc11` → PASS
+  - Live manager check: exported local `.env`, called `search-people {"action":"manager"}` against live work/school mailbox → non-error response reporting no manager configured for the signed-in user → PASS
+  - Live direct reports check: exported local `.env`, called `search-people {"action":"directReports","count":3}` against live work/school mailbox → non-error direct reports response with no reports found → PASS
+Gate: PASSED
+Notes: No live mutation was performed. The live script printed only sanitized booleans and did not record people names, email addresses, IDs, tokens, or directory details. The tenant/account did not require an owner re-consent interruption for the observed self manager/directReports read-only smoke; if broader user lookups are needed later, `User.Read.All` remains documented as the optional work/school scope.

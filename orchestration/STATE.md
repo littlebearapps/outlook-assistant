@@ -201,3 +201,28 @@ Checks:
   - Whitespace: `git diff --check` → no output → PASS
 Gate: PASSED_WITH_DRIFT
 Notes: Added shared auth token-endpoint error formatting for `AADSTS7000215`, preserving the original Azure code/message while adding the Azure Portal Secret Value correction. Applied to `auth/token-storage.js`, `auth/device-code.js`, and standalone `outlook-auth-server.js`. Raw `npm run lint` remains polluted by untracked local `.claude/` scaffold files; tracked product lint is clean.
+
+## [2026-07-08 02:10] Phase 1.2 — #69 fork PR merge
+Branch/PR: feat/69-secret-error-message / davidb73-hub/outlook-assistant#2
+Checks:
+  - PR opened: `gh pr create --repo davidb73-hub/outlook-assistant --base docs/phase-0-golive --head feat/69-secret-error-message ...` → https://github.com/davidb73-hub/outlook-assistant/pull/2 → PASS
+  - GitHub API merge attempt: `gh api -X PUT repos/davidb73-hub/outlook-assistant/pulls/2/merge ...` → first 502, then `Merge already in progress`, but PR remained open → PASS_WITH_DRIFT
+  - Local merge fallback: `git merge --no-ff feat/69-secret-error-message -m "Merge pull request #2 ..."` followed by `git push fork HEAD:docs/phase-0-golive` → fork base updated to `87a4ec7` → PASS
+  - PR state: `gh pr view 2 --repo davidb73-hub/outlook-assistant --json state,mergedAt,mergeCommit` → state `MERGED`, merge commit `87a4ec76e14ae8b02fd1d5d6f204a4ad4175e70d` → PASS
+Gate: PASSED_WITH_DRIFT
+Notes: GitHub's merge API was unstable, so the completed PR was merged locally and pushed to the canonical fork base. GitHub then recognized PR #2 as merged.
+
+## [2026-07-08 02:25] Phase 1.3 — #72 token-refresh integration test
+Branch/PR: test/72-token-refresh-integration / davidb73-hub/outlook-assistant#3
+Checks:
+  - Issue reconciliation: `gh issue view 72 --repo littlebearapps/outlook-assistant` → issue asks for token refresh integration coverage; issue references legacy `auth/token-manager.js`, current code path is `utils/graph-api.js` + `auth/token-storage.js` → PASS_WITH_DRIFT
+  - Baseline tests before edit: `npm test` → Test Suites: 30 passed, 30 total; Tests: 753 passed, 753 total → PASS
+  - Baseline product lint before edit: `git ls-files '*.js' | xargs npx eslint` → 25 warnings; 0 errors → PASS_WITH_DRIFT
+  - Home token mtime before: `stat -f '%m' ~/.outlook-assistant-tokens.json` → `1783410139` → PASS
+  - New integration test: `npx jest test/auth/token-refresh-integration.test.js` → Test Suites: 1 passed, 1 total; Tests: 3 passed, 3 total → PASS
+  - Full suite: `npm test` → Test Suites: 31 passed, 31 total; Tests: 756 passed, 756 total → PASS
+  - Product lint: `git ls-files '*.js' test/auth/token-refresh-integration.test.js | xargs npx eslint` → 25 warnings; 0 errors → PASS
+  - No production-code changes: `git diff --name-only -- . ':!test' ':!CHANGELOG.md' ':!orchestration'` → no output → PASS
+  - Home token mtime after: `stat -f '%m' ~/.outlook-assistant-tokens.json` → `1783410139` unchanged → PASS
+Gate: PASSED_WITH_DRIFT
+Notes: Added a test-only integration file that requires `utils/graph-api.js`, drives `callGraphAPIWithAuth()`, mocks only `https`, redirects token storage via a temporary `HOME`, verifies 401 → refresh → retry with the new bearer token, verifies refreshed tokens are persisted to the temp token file, and verifies refresh failure rethrows the original `UNAUTHORIZED` path. No CHANGELOG entry added because this is test-only and the brief says to skip unless precedent requires it.

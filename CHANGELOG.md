@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added structured contact email field support to `manage-contact` via
   `primaryEmailAddress`, `secondaryEmailAddress`, and `tertiaryEmailAddress`,
   while keeping existing `email`/`emails` compatibility. (#127)
+- Added `search-people` org hierarchy actions for work/school accounts:
+  `action=manager` and `action=directReports`. (#91)
 
 ### Fixed
 

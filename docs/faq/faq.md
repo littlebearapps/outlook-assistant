@@ -50,8 +50,9 @@ Outlook Assistant uses delegated Microsoft Graph permissions — it accesses you
 - **`Contacts.Read`, `Contacts.ReadWrite`** — contact CRUD via `manage-contact`
 - **`MailboxSettings.ReadWrite`** — auto-replies, working hours, master categories, Focused Inbox overrides
 - **`People.Read`** — `search-people` relevance-ranked lookups
+- **`User.Read.All`** — optional work/school-only scope for `search-people` manager and direct reports lookups
 
-Two permissions are work/school only and optional: **`Mail.Read.Shared`** for shared mailboxes and **`Place.Read.All`** (admin consent required) for meeting room search. You grant these once during initial sign-in; they're scoped to your account and revocable any time at <https://account.live.com/consent/manage> (personal) or in your tenant admin console (work/school).
+Additional permissions are work/school only and optional: **`Mail.Read.Shared`** for shared mailboxes, **`Place.Read.All`** (admin consent required) for meeting room search, and **`User.Read.All`** for organisation hierarchy lookup. You grant these once during initial sign-in; they're scoped to your account and revocable any time at <https://account.live.com/consent/manage> (personal) or in your tenant admin console (work/school).
 
 ## Where are my tokens stored, and what happens when they expire?
 

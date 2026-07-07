@@ -104,6 +104,7 @@ Outlook Assistant works with both personal and work/school Microsoft accounts, b
 | Categories | Full support | Full support |
 | Mailbox settings | Full support | Full support |
 | Focused Inbox | API works (overrides stored) but mail routing not affected | Full support |
+| Org hierarchy lookup | Not available | Requires `User.Read.All` |
 | Shared mailboxes | Not available | Requires `Mail.Read.Shared` |
 | Meeting room search | Not available | Requires `Place.Read.All` + admin consent |
 
@@ -305,6 +306,7 @@ npm install
    - `MailboxSettings.ReadWrite` — settings, auto-replies, categories
    - `People.Read` — people search
 3. Optionally add **org-only** permissions (work/school accounts only):
+   - `User.Read.All` — manager and direct reports lookup via `search-people`
    - `Mail.Read.Shared` — shared mailbox access
    - `Place.Read.All` — meeting room search (requires admin consent)
 4. Click **Add permissions**

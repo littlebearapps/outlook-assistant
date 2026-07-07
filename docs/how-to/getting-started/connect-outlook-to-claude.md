@@ -45,6 +45,7 @@ Follow the full walkthrough in the [Azure Setup Guide](../../guides/azure-setup.
    - `People.Read` — people search
 
 **Optional** (work/school accounts only):
+   - `User.Read.All` — manager and direct reports lookup via `search-people`
    - `Mail.Read.Shared` — shared mailbox access
    - `Place.Read.All` — meeting room search (requires admin consent)
 

@@ -113,6 +113,7 @@ Outlook Assistant needs permission to access your mailbox data. These are **dele
 | Permission | What It Allows |
 |------------|----------------|
 | `Calendars.Read.Shared` | Find meeting times across attendees (only if you use the `find-meeting-times` tool; work/school accounts only) |
+| `User.Read.All` | Read manager and direct reports through `search-people` org hierarchy actions (work/school accounts only) |
 | `Mail.Read.Shared` | Read shared mailboxes (only if you use the `access-shared-mailbox` tool) |
 | `Place.Read.All` | Search for meeting rooms (only if you use the `find-meeting-rooms` tool) |
 

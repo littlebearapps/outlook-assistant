@@ -669,6 +669,24 @@ async function handleDeleteContact(args) {
  * Search people handler (relevance-based search via People API)
  */
 async function handleSearchPeople(args) {
+  const action = args.action || 'search';
+  if (action === 'manager') {
+    return handlePeopleManagerLookup(args);
+  }
+  if (action === 'directReports') {
+    return handlePeopleDirectReportsLookup(args);
+  }
+  if (action !== 'search') {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Unknown action '${action}'. Valid actions: search, manager, directReports.`,
+        },
+      ],
+    };
+  }
+
   const query = args.query;
   const count = Math.min(args.count || 25, 50);
 
@@ -753,6 +771,181 @@ async function handleSearchPeople(args) {
     return {
       content: [
         { type: 'text', text: `Error searching people: ${error.message}` },
+      ],
+    };
+  }
+}
+
+const ORG_PERSON_SELECT =
+  'id,displayName,mail,userPrincipalName,jobTitle,department,companyName,businessPhones,mobilePhone,officeLocation';
+
+function buildOrgHierarchyEndpoint(userId, relationship) {
+  if (!userId || userId === 'me') {
+    return `me/${relationship}`;
+  }
+  return `users/${encodeURIComponent(userId)}/${relationship}`;
+}
+
+function formatDirectoryPerson(person, headingPrefix = '###') {
+  const lines = [];
+  lines.push(`${headingPrefix} ${person.displayName || '(No name)'}`);
+
+  const email = person.mail || person.userPrincipalName;
+  if (email) lines.push(`**Email**: ${email}`);
+
+  const position = [person.jobTitle, person.companyName]
+    .filter(Boolean)
+    .join(' at ');
+  if (position) lines.push(`**Position**: ${position}`);
+  if (person.department) lines.push(`**Department**: ${person.department}`);
+  if (person.officeLocation) {
+    lines.push(`**Office**: ${person.officeLocation}`);
+  }
+
+  const phone =
+    person.mobilePhone ||
+    (Array.isArray(person.businessPhones) && person.businessPhones[0]);
+  if (phone) lines.push(`**Phone**: ${phone}`);
+
+  return lines.join('\n');
+}
+
+function orgHierarchyGuidance() {
+  return (
+    'Org hierarchy requires a work or school account and the Microsoft Graph ' +
+    '`User.Read.All` delegated permission. Personal Outlook.com accounts do not ' +
+    'support manager or direct reports lookups. If you just added the scope, ' +
+    'delete the token file and authenticate again so Microsoft issues a token ' +
+    'with the new permission.'
+  );
+}
+
+function isOrgHierarchyCompatibilityError(error) {
+  const message = error.message || '';
+  return (
+    message.includes('403') ||
+    message.includes('401') ||
+    message.includes('Authorization_RequestDenied') ||
+    message.includes('Insufficient privileges') ||
+    message.includes('Unsupported segment') ||
+    message.includes('Request_ResourceNotFound') ||
+    message.includes('personal') ||
+    message.includes('not supported')
+  );
+}
+
+async function handlePeopleManagerLookup(args) {
+  const userId = args.userId || 'me';
+
+  try {
+    const accessToken = await ensureAuthenticated();
+    const manager = await callGraphAPI(
+      accessToken,
+      'GET',
+      buildOrgHierarchyEndpoint(userId, 'manager'),
+      null,
+      { $select: ORG_PERSON_SELECT }
+    );
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `# Manager\n\n**User**: ${userId}\n\n${formatDirectoryPerson(manager)}`,
+        },
+      ],
+      _meta: { action: 'manager', userId, managerId: manager.id },
+    };
+  } catch (error) {
+    if (error.message === 'Authentication required') {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
+          },
+        ],
+      };
+    }
+    if (error.message?.includes('404')) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `No manager found for ${userId}.`,
+          },
+        ],
+        _meta: { action: 'manager', userId, found: false },
+      };
+    }
+    if (isOrgHierarchyCompatibilityError(error)) {
+      return { content: [{ type: 'text', text: orgHierarchyGuidance() }] };
+    }
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error looking up manager: ${error.message}`,
+        },
+      ],
+    };
+  }
+}
+
+async function handlePeopleDirectReportsLookup(args) {
+  const userId = args.userId || 'me';
+  const count = Math.min(args.count || 25, 50);
+
+  try {
+    const accessToken = await ensureAuthenticated();
+    const response = await callGraphAPI(
+      accessToken,
+      'GET',
+      buildOrgHierarchyEndpoint(userId, 'directReports'),
+      null,
+      { $top: count, $select: ORG_PERSON_SELECT }
+    );
+    const reports = response.value || [];
+
+    const output = [];
+    output.push('# Direct Reports\n');
+    output.push(`**User**: ${userId}`);
+    output.push(`**Found**: ${reports.length}`);
+    output.push('');
+
+    if (reports.length === 0) {
+      output.push('No direct reports found.');
+    } else {
+      reports.forEach((person, index) => {
+        output.push(formatDirectoryPerson(person, `## ${index + 1}.`));
+        output.push('');
+      });
+    }
+
+    return {
+      content: [{ type: 'text', text: output.join('\n') }],
+      _meta: { action: 'directReports', userId, count: reports.length },
+    };
+  } catch (error) {
+    if (error.message === 'Authentication required') {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
+          },
+        ],
+      };
+    }
+    if (isOrgHierarchyCompatibilityError(error)) {
+      return { content: [{ type: 'text', text: orgHierarchyGuidance() }] };
+    }
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error looking up direct reports: ${error.message}`,
+        },
       ],
     };
   }
@@ -900,7 +1093,7 @@ const contactsTools = [
   {
     name: 'search-people',
     description:
-      'Relevance-ranked search across personal contacts, organisation directory, and recent communications via the Microsoft Graph People API (read-only). Returns people objects with `displayName`, `emailAddresses`, `companyName`, `jobTitle`, and relevance metadata — ideal for "who is X?" or "who do I email about Y?" lookups. Use `manage-contact` action=`search` instead when you specifically need entries from your personal contact store only.',
+      'Read-only people lookup. action=`search` (default) does relevance-ranked search across personal contacts, organisation directory, and recent communications via the Microsoft Graph People API. action=`manager` returns the signed-in or specified work/school user manager. action=`directReports` lists the signed-in or specified work/school user direct reports. Org hierarchy actions require a Microsoft 365 work/school account and `User.Read.All`; personal Outlook.com accounts are not supported. Use `manage-contact` action=`search` instead when you specifically need entries from your personal contact store only.',
     annotations: {
       title: 'People Search',
       readOnlyHint: true,
@@ -909,17 +1102,30 @@ const contactsTools = [
     inputSchema: {
       type: 'object',
       properties: {
+        action: {
+          type: 'string',
+          enum: ['search', 'manager', 'directReports'],
+          description:
+            'Action to perform: search (default), manager, or directReports.',
+        },
         query: {
           type: 'string',
-          description: 'Search query (name, email, company)',
+          description:
+            'Search query for action=search (name, email, company). Required for search.',
+        },
+        userId: {
+          type: 'string',
+          description:
+            'User ID or user principal name for action=manager/directReports. Defaults to me.',
         },
         count: {
           type: 'number',
-          description: 'Maximum results to return (default: 25, max: 50)',
+          description:
+            'Maximum results to return for action=search/directReports (default: 25, max: 50)',
         },
       },
       additionalProperties: false,
-      required: ['query'],
+      required: [],
     },
     handler: handleSearchPeople,
   },

@@ -42,6 +42,14 @@ if (!homeDir) {
  */
 const AUTH_AUDIENCE = process.env.OUTLOOK_AUTH_AUDIENCE || 'common';
 
+function parseExtraScopes(value) {
+  if (!value) return [];
+  return value
+    .split(/[,\s]+/)
+    .map((scope) => scope.trim())
+    .filter(Boolean);
+}
+
 // Surface obvious misconfigurations at startup rather than failing later with a
 // cryptic AADSTS error from Microsoft. Warn rather than throw so we never break
 // an existing deployment on upgrade — Graph itself remains the source of truth
@@ -57,7 +65,6 @@ if (
   !VALID_AUDIENCE_LITERALS.has(AUTH_AUDIENCE) &&
   !TENANT_GUID_RE.test(AUTH_AUDIENCE)
 ) {
-  // eslint-disable-next-line no-console
   console.warn(
     `[outlook-assistant] OUTLOOK_AUTH_AUDIENCE="${AUTH_AUDIENCE}" is not a recognised value. ` +
       `Expected one of: common, consumers, organizations, or a tenant GUID. ` +
@@ -90,7 +97,9 @@ module.exports = {
       'Contacts.ReadWrite',
       'People.Read',
       'MailboxSettings.ReadWrite',
+      ...parseExtraScopes(process.env.OUTLOOK_EXTRA_SCOPES),
       // Org-dependent scopes (work/school accounts only):
+      // 'Calendars.Read.Shared', // find-meeting-times tool
       // 'Mail.Read.Shared',   // access-shared-mailbox tool
       // 'Place.Read.All',     // find-meeting-rooms tool
     ],

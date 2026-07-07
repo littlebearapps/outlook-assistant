@@ -338,3 +338,22 @@ Checks:
   - Live create/list/delete check: exported local `.env`, created no-attendee weekly recurring test event with subject `oa-125-test` and `recurrenceCount: 2`; create response included recurrence; `list-events` found the event with timezone-labelled output; `manage-event` delete removed the created event → PASS
 Gate: PASSED
 Notes: This was the single permitted live calendar mutation for #125 and it was cleaned up in the same script using the returned event ID. No event IDs, mailbox content, or unrelated calendar details were recorded.
+
+## [2026-07-08 10:35] Phase 2.3 — #126 `find-meeting-times`
+Branch/PR: feat/126-find-meeting-times / davidb73-hub/outlook-assistant#8
+Checks:
+  - Issue reconciliation: `gh issue view 126 --repo littlebearapps/outlook-assistant` → issue recommends standalone `find-meeting-times` tool with attendees, duration, time constraints, ranked suggestions, and read-only annotation → PASS
+  - Microsoft Graph docs check: official Learn docs for `POST /me/findMeetingTimes` verified work/school-only support, delegated `Calendars.Read.Shared` least-privileged permission, request params, `Prefer: outlook.timezone`, and response suggestion shape → PASS_WITH_DRIFT
+  - Baseline tests before edit: `npm test` → Test Suites: 32 passed, 32 total; Tests: 769 passed, 769 total → PASS
+  - Baseline product lint before edit: `git ls-files '*.js' | xargs npx eslint` → 25 warnings; 0 errors → PASS_WITH_DRIFT
+  - TDD red: `npx jest test/advanced -t "meeting-times"` before implementation → failed because `handleFindMeetingTimes` was not exported → PASS
+  - Targeted green: `npx jest test/advanced -t "meeting-times"` → Test Suites: 1 passed; Tests: 5 passed, 34 skipped → PASS
+  - Annotation pin: `npx jest test/dispatcher/tool-annotations.test.js` → 23 tools, `find-meeting-times` annotations pinned → PASS
+  - Tool registration: stdio `tools/list` under `USE_TEST_MODE=true` → 23 tools; `find-meeting-times` present with `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`, `openWorldHint: false` → PASS
+  - Stale count refs: `rg -n "22 tools|all 22|Advanced \\(2 tools\\)|advanced-2-tools|\\*\\*Read-only\\*\\* \\(7\\)|2 tools: access-shared" README.md CLAUDE.md package.json docs test` → no matches → PASS
+  - Full suite: `npm test` → Test Suites: 32 passed, 32 total; Tests: 774 passed, 774 total → PASS
+  - Product lint: `git ls-files '*.js' | xargs npx eslint` → 25 warnings; 0 errors → PASS_WITH_DRIFT
+  - Whitespace: `git diff --check` → no output → PASS
+  - PR opened: `gh pr create --repo davidb73-hub/outlook-assistant --base docs/phase-0-golive --head feat/126-find-meeting-times ...` → https://github.com/davidb73-hub/outlook-assistant/pull/8 → PASS
+Gate: PASSED_WITH_DRIFT
+Notes: Drift from local task brief: Microsoft's current docs require delegated `Calendars.Read.Shared` for work/school accounts and do not support personal Microsoft accounts. To avoid breaking personal-account auth by default, added `OUTLOOK_EXTRA_SCOPES` support and documented `Calendars.Read.Shared` as an optional work/school scope for `find-meeting-times`. Live verification remains pending until after the fork PR is merged; it may require Azure permission update and re-authentication.

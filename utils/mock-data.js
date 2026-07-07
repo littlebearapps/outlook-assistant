@@ -142,6 +142,37 @@ function simulateGraphAPIResponse(method, path, _data, _queryParams) {
   } else if (method === 'POST' && path.includes('sendMail')) {
     // Simulate a successful email send
     return {};
+  } else if (method === 'POST' && path.includes('findMeetingTimes')) {
+    // Simulate meeting-time suggestions
+    return {
+      meetingTimeSuggestions: [
+        {
+          confidence: 95,
+          suggestionReason: 'All attendees are available.',
+          meetingTimeSlot: {
+            start: {
+              dateTime: '2026-07-20T09:00:00',
+              timeZone: 'Australia/Melbourne',
+            },
+            end: {
+              dateTime: '2026-07-20T09:30:00',
+              timeZone: 'Australia/Melbourne',
+            },
+          },
+          attendeeAvailability: [
+            {
+              availability: 'free',
+              attendee: {
+                emailAddress: {
+                  name: 'Mock Attendee',
+                  address: 'attendee@example.com',
+                },
+              },
+            },
+          ],
+        },
+      ],
+    };
   }
 
   // If we get here, we don't have a simulation for this endpoint

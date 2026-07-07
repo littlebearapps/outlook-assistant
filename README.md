@@ -69,10 +69,10 @@ Outlook Assistant connects AI assistants to your Microsoft Outlook account throu
 | **Settings** | 1 | `mailbox-settings` (get/set auto-replies/set working hours) |
 | **Folder** | 1 | `folders` (list/create/move/stats/delete) |
 | **Rules** | 1 | `manage-rules` (list/create/update/reorder/delete) |
-| **Advanced** | 2 | `access-shared-mailbox`, `find-meeting-rooms` |
+| **Advanced** | 3 | `access-shared-mailbox`, `find-meeting-rooms`, `find-meeting-times` |
 | **Auth** | 1 | `auth` (status/authenticate/about) |
 
-**22 tools total** — consolidated from 55 for optimal AI performance. See the [Tools Reference](docs/quickrefs/tools-reference.md) for complete parameter details.
+**23 tools total** — consolidated from 55 for optimal AI performance. See the [Tools Reference](docs/quickrefs/tools-reference.md) for complete parameter details.
 
 ### Export Formats
 
@@ -143,7 +143,7 @@ Outlook Assistant is designed with safety-first principles for AI-driven email a
 
 **Draft protections** — The `draft` tool shares `send-email` safety controls: dry-run preview, recipient allowlist, mail-tips validation, and rate limiting. The `send` action shares the `send-email` rate limit counter, preventing circumvention via the draft-then-send pathway.
 
-**Token-optimised architecture** — Tools are consolidated using the STRAP (Single Tool, Resource, Action Pattern) approach. 22 tools instead of 55 reduces per-turn overhead by ~11,000 tokens (~64%), keeping more of the AI's context window available for your actual conversation. Fewer tools also means the AI selects the right tool more accurately — research shows tool selection degrades beyond ~40 tools.
+**Token-optimised architecture** — Tools are consolidated using the STRAP (Single Tool, Resource, Action Pattern) approach. 23 tools instead of 55 reduces per-turn overhead by ~11,000 tokens (~64%), keeping more of the AI's context window available for your actual conversation. Fewer tools also means the AI selects the right tool more accurately — research shows tool selection degrades beyond ~40 tools.
 
 > **Important**: These safeguards are defence-in-depth measures that reduce risk, but they are not a guarantee against unintended actions. AI-driven access to your email is inherently sensitive — always review tool calls before approving, particularly for sends and deletes. No automated guardrail is foolproof, and you remain responsible for actions taken through your mailbox.
 
@@ -402,7 +402,7 @@ This starts a local server on port 3333 to handle the OAuth callback.
 
 ```
 outlook-assistant/
-├── index.js                 # Main entry point (22 tools)
+├── index.js                 # Main entry point (23 tools)
 ├── config.js                # Configuration settings
 ├── outlook-auth-server.js   # OAuth server (port 3333)
 ├── auth/                    # Authentication module (1 tool)
@@ -419,7 +419,7 @@ outlook-assistant/
 ├── settings/                # Settings module (1 tool)
 ├── folder/                  # Folder module (1 tool)
 ├── rules/                   # Rules module (1 tool)
-├── advanced/                # Advanced module (2 tools)
+├── advanced/                # Advanced module (3 tools)
 └── utils/
     ├── graph-api.js         # Microsoft Graph API client (includes $batch)
     ├── safety.js            # Rate limiting, recipient allowlist, dry-run
@@ -499,7 +499,7 @@ USE_TEST_MODE=true npm start
 | [How-To Guides](docs/how-to/index.md) | 29 practical guides for email, calendar, contacts, and settings |
 | [Roadmap](ROADMAP.md) | Active milestones (v3.7.5, v3.8.0, v3.9.0) and recent releases |
 | [Troubleshooting & FAQ](docs/how-to/getting-started/verify-your-connection.md#common-connection-problems) | Common problems, re-authentication, and frequently asked questions |
-| [Tools Reference](docs/quickrefs/tools-reference.md) | All 22 tools with parameters |
+| [Tools Reference](docs/quickrefs/tools-reference.md) | All 23 tools with parameters |
 | [AI Agent Guide](docs/how-to/ai-agents/using-outlook-assistant-in-agents.md) | Tool selection and workflow patterns for AI agents |
 
 Full documentation: [docs/](docs/README.md)

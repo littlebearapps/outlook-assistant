@@ -152,11 +152,18 @@ const expectedAnnotations = {
     readOnlyHint: true,
     openWorldHint: false,
   },
+  'find-meeting-times': {
+    title: 'Find Meeting Times',
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
 };
 
 describe('tool annotations', () => {
   test('pin expected annotations for all tools', () => {
-    expect(allTools).toHaveLength(22);
+    expect(allTools).toHaveLength(23);
 
     const toolsByName = Object.fromEntries(
       allTools.map((tool) => [tool.name, tool])

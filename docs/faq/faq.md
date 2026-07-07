@@ -34,7 +34,7 @@ Configuration snippets for Claude Desktop, Claude Code, Cursor, Windsurf, VS Cod
 
 ## Does Outlook Assistant work with personal Outlook.com accounts?
 
-Yes. Outlook Assistant supports both personal Microsoft accounts (Outlook.com, Hotmail, Live.com) and work/school Microsoft 365 accounts. A few features are 365-only because Microsoft Graph itself doesn't expose them on personal accounts — meeting room search (`find-meeting-rooms`), shared mailbox access (`access-shared-mailbox`), pre-send mail tips (`get-mail-tips`), and Focused Inbox routing.
+Yes. Outlook Assistant supports both personal Microsoft accounts (Outlook.com, Hotmail, Live.com) and work/school Microsoft 365 accounts. A few features are 365-only because Microsoft Graph itself doesn't expose them on personal accounts — meeting room search (`find-meeting-rooms`), meeting-time suggestions across attendees (`find-meeting-times`), shared mailbox access (`access-shared-mailbox`), pre-send mail tips (`get-mail-tips`), and Focused Inbox routing.
 
 On personal accounts, Microsoft's `$search` API has limited support for free-text queries, so Outlook Assistant falls back through up to four progressive search strategies (server `$search` → `contains(subject)` → client-side body/subject/from scan → recent message listing) and exposes which strategy ran in the response's `_meta.searchMetadata` block. For the most direct results, use structured filters (`from`, `subject`, `to`, `receivedAfter`) where possible. The full per-feature compatibility matrix is in the [README's Account Compatibility section](../README.md#account-compatibility).
 
@@ -46,6 +46,7 @@ Outlook Assistant uses delegated Microsoft Graph permissions — it accesses you
 - **`User.Read`** — your display name and email, shown in `auth about` so you can confirm which mailbox is connected
 - **`Mail.Read`, `Mail.ReadWrite`, `Mail.Send`** — email operations across the 8 email tools
 - **`Calendars.Read`, `Calendars.ReadWrite`** — events listing, creation, and management
+- **`Calendars.Read.Shared`** — optional work/school-only scope for `find-meeting-times` across attendees
 - **`Contacts.Read`, `Contacts.ReadWrite`** — contact CRUD via `manage-contact`
 - **`MailboxSettings.ReadWrite`** — auto-replies, working hours, master categories, Focused Inbox overrides
 - **`People.Read`** — `search-people` relevance-ranked lookups

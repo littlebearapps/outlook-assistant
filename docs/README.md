@@ -25,7 +25,7 @@ Popular guides:
 
 | Document | Description |
 |----------|-------------|
-| [Tools Reference](quickrefs/tools-reference.md) | All 22 tools with parameters |
+| [Tools Reference](quickrefs/tools-reference.md) | All 23 tools with parameters |
 | [FAQ](faq/index.md) | Frequently asked questions — install, accounts, permissions, tokens, updates, uninstall |
 | [Using Outlook Assistant in AI Agents](how-to/ai-agents/using-outlook-assistant-in-agents.md) | Tool selection, safety, and workflow patterns for AI agents |
 | [CLAUDE.md](../CLAUDE.md) | Quick reference for development |

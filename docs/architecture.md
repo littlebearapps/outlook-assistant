@@ -34,7 +34,7 @@ rules/                # 1 tool: manage-rules (action: list|create|update|reorder
 contacts/             # 2 tools: manage-contact (full CRUD), search-people
 categories/           # 3 tools: manage-category, apply-category, manage-focused-inbox
 settings/             # 1 tool: mailbox-settings (action: get|set-auto-replies|set-working-hours)
-advanced/             # 2 tools: access-shared-mailbox, find-meeting-rooms
+advanced/             # 3 tools: access-shared-mailbox, find-meeting-rooms, find-meeting-times
 
 utils/
   ├── graph-api.js        # Graph API client with OData encoding, $batch, immutable IDs

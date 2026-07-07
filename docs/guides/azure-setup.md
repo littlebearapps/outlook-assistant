@@ -112,6 +112,7 @@ Outlook Assistant needs permission to access your mailbox data. These are **dele
 
 | Permission | What It Allows |
 |------------|----------------|
+| `Calendars.Read.Shared` | Find meeting times across attendees (only if you use the `find-meeting-times` tool; work/school accounts only) |
 | `Mail.Read.Shared` | Read shared mailboxes (only if you use the `access-shared-mailbox` tool) |
 | `Place.Read.All` | Search for meeting rooms (only if you use the `find-meeting-rooms` tool) |
 
@@ -346,5 +347,5 @@ After re-authenticating, use the `auth` tool with `action=status` to verify the 
 
 - [Connect Outlook to Your AI Assistant](../how-to/getting-started/connect-outlook-to-claude.md) — Install, configure your MCP client, and authenticate
 - [README](../../README.md) — Full feature overview and configuration
-- [Tools Reference](../quickrefs/tools-reference.md) — All 22 tools with parameters
+- [Tools Reference](../quickrefs/tools-reference.md) — All 23 tools with parameters
 - [Back to Docs](../README.md)

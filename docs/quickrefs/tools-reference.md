@@ -5,7 +5,7 @@ tags:
 
 # Tools Reference - Outlook Assistant
 
-Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP safety annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`).
+Quick reference for all 23 MCP tools across 9 modules. Each tool includes MCP safety annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`).
 
 ## Authentication (1 tool)
 
@@ -123,18 +123,19 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 |------|---------|--------|----------------|
 | `mailbox-settings` | `get` (default), `set-auto-replies`, `set-working-hours` | idempotent | `section`, `enabled`, `startDateTime`, `endDateTime`, `internalReplyMessage`, `startTime`, `endTime`, `daysOfWeek` |
 
-## Advanced (2 tools)
+## Advanced (3 tools)
 
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
 | `access-shared-mailbox` | Read shared mailbox | read-only | `sharedMailbox` (or alias `email`), `folder`, `count` |
 | `find-meeting-rooms` | Search meeting rooms | read-only | `query`, `building`, `capacity` |
+| `find-meeting-times` | Find available meeting slots | read-only | `attendees`, `duration`, `meetingDuration`, `startDateTime`, `endDateTime`, `meetingHours`, `maxCandidates`, `isOrganizerOptional` |
 
 ## Safety Annotations
 
 | Category | Tools | Client Behaviour |
 |----------|-------|------------------|
-| **Read-only** (7) | `search-emails`, `read-email`, `list-events`, `search-people`, `access-shared-mailbox`, `find-meeting-rooms`, `get-mail-tips` | Auto-approved by MCP clients that support annotations |
+| **Read-only** (8) | `search-emails`, `read-email`, `list-events`, `search-people`, `access-shared-mailbox`, `find-meeting-rooms`, `find-meeting-times`, `get-mail-tips` | Auto-approved by MCP clients that support annotations |
 | **Destructive** (5) | `send-email`, `draft`, `manage-event`, `folders`, `manage-rules` | Client prompts for confirmation |
 | **Idempotent** (2) | `update-email`, `mailbox-settings` | Safe to retry |
 | **Moderate write** (8) | All others | Normal approval flow |

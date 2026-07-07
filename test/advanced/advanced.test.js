@@ -3,6 +3,7 @@ const {
   handleSetMessageFlag,
   handleClearMessageFlag,
   handleFindMeetingRooms,
+  handleFindMeetingTimes,
 } = require('../../advanced');
 const { callGraphAPI } = require('../../utils/graph-api');
 const { ensureAuthenticated } = require('../../auth');
@@ -156,6 +157,133 @@ describe('handleAccessSharedMailbox', () => {
     expect(result.content[0].text).toBe(
       'Error accessing shared mailbox: Server error'
     );
+  });
+});
+
+describe('handleFindMeetingTimes', () => {
+  const mockSuggestions = {
+    meetingTimeSuggestions: [
+      {
+        confidence: 95,
+        suggestionReason: 'All attendees are available.',
+        meetingTimeSlot: {
+          start: {
+            dateTime: '2026-07-20T09:00:00',
+            timeZone: 'Australia/Sydney',
+          },
+          end: {
+            dateTime: '2026-07-20T09:30:00',
+            timeZone: 'Australia/Sydney',
+          },
+        },
+        attendeeAvailability: [
+          {
+            availability: 'free',
+            attendee: {
+              emailAddress: {
+                name: 'Alice',
+                address: 'alice@example.com',
+              },
+            },
+          },
+        ],
+      },
+    ],
+  };
+
+  it('meeting-times should construct the Graph payload', async () => {
+    callGraphAPI.mockResolvedValue(mockSuggestions);
+
+    await handleFindMeetingTimes({
+      attendees: ['alice@example.com'],
+      duration: 45,
+      startDateTime: '2026-07-20T09:00:00',
+      endDateTime: '2026-07-20T17:00:00',
+      maxCandidates: 3,
+      meetingHours: true,
+    });
+
+    expect(callGraphAPI).toHaveBeenCalledWith(
+      mockAccessToken,
+      'POST',
+      'me/findMeetingTimes',
+      {
+        attendees: [
+          {
+            type: 'required',
+            emailAddress: { address: 'alice@example.com' },
+          },
+        ],
+        meetingDuration: 'PT45M',
+        maxCandidates: 3,
+        isOrganizerOptional: false,
+        returnSuggestionReasons: true,
+        timeConstraint: {
+          activityDomain: 'work',
+          timeSlots: [
+            {
+              start: {
+                dateTime: '2026-07-20T09:00:00',
+                timeZone: 'Australia/Melbourne',
+              },
+              end: {
+                dateTime: '2026-07-20T17:00:00',
+                timeZone: 'Australia/Melbourne',
+              },
+            },
+          ],
+        },
+      },
+      {},
+      { Prefer: 'outlook.timezone="Australia/Melbourne"' }
+    );
+  });
+
+  it('meeting-times should render ranked suggestions with availability', async () => {
+    callGraphAPI.mockResolvedValue(mockSuggestions);
+
+    const result = await handleFindMeetingTimes({
+      attendees: ['alice@example.com'],
+    });
+
+    expect(result.content[0].text).toContain('Meeting Time Suggestions');
+    expect(result.content[0].text).toContain('**Confidence**: 95%');
+    expect(result.content[0].text).toContain('Alice <alice@example.com>: free');
+    expect(result._meta.count).toBe(1);
+  });
+
+  it('meeting-times should render empty suggestion reason', async () => {
+    callGraphAPI.mockResolvedValue({
+      meetingTimeSuggestions: [],
+      emptySuggestionsReason: 'attendeesUnavailable',
+    });
+
+    const result = await handleFindMeetingTimes({
+      attendees: ['alice@example.com'],
+    });
+
+    expect(result.content[0].text).toContain('No meeting times found');
+    expect(result.content[0].text).toContain('attendeesUnavailable');
+  });
+
+  it('meeting-times should require attendees', async () => {
+    const result = await handleFindMeetingTimes({});
+
+    expect(result.content[0].text).toContain('At least one attendee');
+    expect(callGraphAPI).not.toHaveBeenCalled();
+  });
+
+  it('meeting-times should return a friendly work-account error', async () => {
+    callGraphAPI.mockRejectedValue(
+      new Error('API call failed with status 403: Not supported')
+    );
+
+    const result = await handleFindMeetingTimes({
+      attendees: ['alice@example.com'],
+    });
+
+    expect(result.content[0].text).toContain('work/school Microsoft 365');
+    expect(result.content[0].text).toContain('Calendars.Read.Shared');
   });
 });
 

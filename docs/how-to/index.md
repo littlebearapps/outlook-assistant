@@ -68,6 +68,7 @@ Practical guides for managing your Microsoft 365 email, calendar, contacts, and 
 | [Investigate Email Headers](advanced/investigate-email-headers.md) | Phishing investigation, DKIM, SPF, DMARC authentication, delivery chain, spam scores |
 | [Access Shared Mailboxes](advanced/access-shared-mailboxes.md) | Read from team inboxes and service accounts |
 | [Find Meeting Rooms](advanced/find-meeting-rooms.md) | Search by building, floor, or capacity |
+| [Find Meeting Times](advanced/find-meeting-times.md) | Suggest available slots across attendees |
 | [Batch Operations](advanced/batch-operations.md) | Bulk flag, move, export, and categorise |
 
 ## For AI Agent Developers

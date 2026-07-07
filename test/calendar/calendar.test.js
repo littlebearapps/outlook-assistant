@@ -56,6 +56,19 @@ describe('handleListEvents', () => {
     expect(result.content[0].text).toContain('Sprint Planning');
   });
 
+  it('should include timezone information for listed event times', async () => {
+    callGraphAPI.mockResolvedValue({ value: mockEvents });
+
+    const result = await handleListEvents({});
+
+    expect(result.content[0].text).toContain(
+      'Start: 15 Jan 2024, 8:00 pm (Australia/Melbourne)'
+    );
+    expect(result.content[0].text).toContain(
+      'End: 15 Jan 2024, 8:30 pm (Australia/Melbourne)'
+    );
+  });
+
   it('should handle empty events', async () => {
     callGraphAPI.mockResolvedValue({ value: [] });
 

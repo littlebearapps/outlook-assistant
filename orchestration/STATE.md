@@ -289,3 +289,17 @@ Checks:
   - FAQ floor: `grep -cE '^## ' docs/faq/faq.md` → 11 → PASS
 Gate: PASSED_WITH_DRIFT
 Notes: Owner approval for the version bump is covered by the earlier instruction to continue to the end without further approval. Raw `npm run lint` remains polluted by untracked local `.claude/` scaffold files; tracked product lint is clean.
+
+## [2026-07-08 04:15] Phase 2.1 — #118 `list-events` timezone information
+Branch/PR: fix/118-list-events-timezone / davidb73-hub/outlook-assistant#6
+Checks:
+  - Issue reconciliation: `gh issue view 118 --repo littlebearapps/outlook-assistant` → issue asks for explicit timezone information in `list-events` output → PASS
+  - Baseline tests before edit: `npm test` → Test Suites: 32 passed, 32 total; Tests: 757 passed, 757 total → PASS
+  - TDD red: `npx jest test/calendar -t timezone` before implementation → failed because `Start:`/`End:` lines omitted `(Australia/Melbourne)` → PASS
+  - Targeted green: `npx jest test/calendar -t timezone` → Test Suites: 3 passed, 3 total; Tests: 8 passed, 51 skipped → PASS
+  - Full suite: `npm test` → Test Suites: 32 passed, 32 total; Tests: 758 passed, 758 total → PASS
+  - Product lint: `git ls-files '*.js' | xargs npx eslint` → 25 warnings; 0 errors → PASS_WITH_DRIFT
+  - Whitespace: `git diff --check` → no output → PASS
+  - PR opened: `gh pr create --repo davidb73-hub/outlook-assistant --base docs/phase-0-golive --head fix/118-list-events-timezone ...` → https://github.com/davidb73-hub/outlook-assistant/pull/6 → PASS
+Gate: PASSED_WITH_DRIFT
+Notes: `list-events` now appends the configured display timezone to every rendered start and end time, matching the timezone used for conversion. Raw `npm run lint` remains polluted by untracked local `.claude/` scaffold files; tracked product lint is clean. Live read-only verification remains pending until after the fork PR is merged.

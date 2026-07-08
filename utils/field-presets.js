@@ -247,6 +247,20 @@ const FOLDER_FIELDS = {
   ],
 };
 
+const TASK_FIELDS = {
+  list: ['id', 'title', 'status', 'importance', 'dueDateTime'],
+  full: [
+    'id',
+    'title',
+    'status',
+    'importance',
+    'createdDateTime',
+    'lastModifiedDateTime',
+    'dueDateTime',
+    'body',
+  ],
+};
+
 /**
  * Gets field selection string for Graph API $select parameter
  * @param {string} preset - Preset name (list, read, forensic, export, search, delta, conversation)
@@ -323,6 +337,7 @@ module.exports = {
   FIELD_PRESETS,
   EXTENDED_EMAIL_FIELDS,
   FOLDER_FIELDS,
+  TASK_FIELDS,
   getEmailFields,
   getFolderFields,
   buildFieldSelection,

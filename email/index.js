@@ -33,11 +33,11 @@ const emailTools = [
   {
     name: 'search-emails',
     description:
-      'Search, list, delta-sync, or thread-group emails — six modes selected by parameters (read-only). With no params: lists recent emails in `folder` (default `inbox`). With `query`/`from`/`to`/`subject`/date filters: full search (combines via OData filter). With `kqlQuery`: raw Keyword Query Language for advanced server-side search. With `deltaMode: true`: returns current state plus a `deltaToken`; pass the token back on the next call for incremental changes only — ideal for inbox monitoring. With `groupByConversation: true`: returns conversation threads. With `conversationId`: returns all messages in a single thread. With `internetMessageId`: looks up a message by its RFC Message-ID header. Personal Outlook.com accounts have limited `$search` support — this tool falls back through OData filters / boolean filters / recent listing automatically, but structured filters (`from`/`subject`/`receivedAfter`/`hasAttachments`/`unreadOnly`) return cleaner results. Returns paged messages with id/subject/from/receivedDateTime/preview by default; use `outputVerbosity` to expand.',
+      'Search, list, delta-sync, or thread-group emails — six modes selected by parameters (read-only). With no params: lists recent emails in `folder` (default `inbox`). With `query`/`from`/`to`/`subject`/date filters: full search (combines via OData filter). With `searchQuery`: raw Microsoft Graph `$search` expression for advanced server-side search; `kqlQuery` is a deprecated alias kept for backwards compatibility. With `deltaMode: true`: returns current state plus a `deltaToken`; pass the token back on the next call for incremental changes only — ideal for inbox monitoring. With `groupByConversation: true`: returns conversation threads. With `conversationId`: returns all messages in a single thread. With `internetMessageId`: looks up a message by its RFC Message-ID header. Personal Outlook.com accounts have limited `$search` support — this tool falls back through OData filters / boolean filters / recent listing automatically, but structured filters (`from`/`subject`/`receivedAfter`/`hasAttachments`/`unreadOnly`) return cleaner results. Sent Items recipient searches usually work best with `to`, not `from`. Returns paged messages with id/subject/from/receivedDateTime/preview by default; use `outputVerbosity` to expand.',
     annotations: {
       title: 'Search Emails',
       readOnlyHint: true,
-      openWorldHint: false,
+      openWorldHint: true,
     },
     inputSchema: {
       type: 'object',
@@ -71,7 +71,12 @@ const emailTools = [
         kqlQuery: {
           type: 'string',
           description:
-            'Raw KQL (Keyword Query Language) query for advanced search. Bypasses other search params.',
+            'Deprecated alias for `searchQuery`. Raw Microsoft Graph $search expression. Bypasses other search params.',
+        },
+        searchQuery: {
+          type: 'string',
+          description:
+            'Raw Microsoft Graph $search expression for advanced search. Bypasses other search params.',
         },
         folder: {
           type: 'string',
@@ -160,6 +165,7 @@ const emailTools = [
       // If any search params provided, use search handler
       if (
         args.query ||
+        args.searchQuery ||
         args.kqlQuery ||
         args.from ||
         args.to ||
@@ -183,7 +189,7 @@ const emailTools = [
     annotations: {
       title: 'Read Email',
       readOnlyHint: true,
-      openWorldHint: false,
+      openWorldHint: true,
     },
     inputSchema: {
       type: 'object',

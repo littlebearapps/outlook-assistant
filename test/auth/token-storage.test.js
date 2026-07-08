@@ -319,6 +319,27 @@ describe('TokenStorage', () => {
       );
     });
 
+    it('surfaces AADSTS7000215 secret Value guidance during token exchange', async () => {
+      const errorResponse = {
+        error: 'invalid_client',
+        error_description:
+          'AADSTS7000215: Invalid client secret provided. Ensure the secret being sent in the request is the client secret value.',
+      };
+      const exchangePromise = tokenStorage.exchangeCodeForTokens(mockAuthCode);
+      const mockRes = {
+        statusCode: 401,
+        on: (event, cb) => {
+          if (event === 'data') cb(Buffer.from(JSON.stringify(errorResponse)));
+          if (event === 'end') cb();
+        },
+      };
+      mockHttpsRequest.callback(mockRes);
+
+      await expect(exchangePromise).rejects.toThrow(/AADSTS7000215/);
+      await expect(exchangePromise).rejects.toThrow(/Secret ID/i);
+      await expect(exchangePromise).rejects.toThrow(/Secret Value/i);
+    });
+
     it('should reject on network error during token exchange', async () => {
       const networkError = new Error('Network fail');
       const exchangePromise = tokenStorage.exchangeCodeForTokens(mockAuthCode);
@@ -492,6 +513,28 @@ describe('TokenStorage', () => {
       await expect(refreshPromise).rejects.toThrow(
         errorResponse.error_description
       );
+      expect(tokenStorage._refreshPromise).toBeNull();
+    });
+
+    it('surfaces AADSTS7000215 secret Value guidance during token refresh', async () => {
+      const errorResponse = {
+        error: 'invalid_client',
+        error_description:
+          'AADSTS7000215: Invalid client secret provided. Ensure the secret being sent in the request is the client secret value.',
+      };
+      const refreshPromise = tokenStorage.refreshAccessToken();
+      const mockRes = {
+        statusCode: 401,
+        on: (event, cb) => {
+          if (event === 'data') cb(Buffer.from(JSON.stringify(errorResponse)));
+          if (event === 'end') cb();
+        },
+      };
+      mockHttpsRequest.callback(mockRes);
+
+      await expect(refreshPromise).rejects.toThrow(/AADSTS7000215/);
+      await expect(refreshPromise).rejects.toThrow(/Secret ID/i);
+      await expect(refreshPromise).rejects.toThrow(/Secret Value/i);
       expect(tokenStorage._refreshPromise).toBeNull();
     });
 

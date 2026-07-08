@@ -20,7 +20,8 @@ const { getEmailFields } = require('../utils/field-presets');
  * @param {string} [args.folder] - Folder to search (default: inbox)
  * @param {number} [args.count] - Number of results (default: 10, max: 50)
  * @param {string} [args.outputVerbosity] - minimal, standard, or full (default: standard)
- * @param {string} [args.kqlQuery] - Raw KQL query for advanced users
+ * @param {string} [args.searchQuery] - Raw Graph $search expression
+ * @param {string} [args.kqlQuery] - Deprecated alias for searchQuery
  * @returns {object} - MCP response with Markdown formatted content
  */
 async function handleSearchEmails(args) {
@@ -49,7 +50,7 @@ async function handleSearchEmails(args) {
   const receivedAfter = args.receivedAfter || '';
   const receivedBefore = args.receivedBefore || '';
   const searchAllFolders = args.searchAllFolders || false;
-  const kqlQuery = args.kqlQuery || ''; // Raw KQL for advanced users
+  const kqlQuery = args.searchQuery || args.kqlQuery || ''; // Raw Graph $search expression
 
   // Select fields based on verbosity
   const selectFields = getEmailFields(
@@ -74,13 +75,24 @@ async function handleSearchEmails(args) {
     const response = await progressiveSearch(
       endpoint,
       accessToken,
-      { query, from, to, subject, kqlQuery },
+      {
+        query,
+        from,
+        to,
+        subject,
+        kqlQuery,
+        rawSearchParameter: args.searchQuery ? 'searchQuery' : 'kqlQuery',
+      },
       { hasAttachments, unreadOnly, receivedAfter, receivedBefore },
       requestedCount,
       selectFields
     );
 
-    return formatSearchResults(response, folder, verbosity);
+    return formatSearchResults(response, folder, verbosity, {
+      searchAllFolders,
+      from,
+      to,
+    });
   } catch (error) {
     // Handle authentication errors
     if (error.message === 'Authentication required') {
@@ -802,13 +814,16 @@ function addBooleanFilters(params, filterTerms) {
  * @param {string} verbosity - Output verbosity level
  * @returns {object} - MCP response object
  */
-function formatSearchResults(response, folder, verbosity) {
+function formatSearchResults(response, folder, verbosity, context = {}) {
+  const searchedLocation = context.searchAllFolders ? 'all folders' : folder;
   // Build metadata
   const meta = {
     returned: (response.value || []).length,
     totalAvailable: response['@odata.count'] || null,
     hasMore: Boolean(response['@odata.nextLink']),
     verbosity: verbosity,
+    folder,
+    searchAllFolders: Boolean(context.searchAllFolders),
   };
 
   // Add searchMetadata to _meta when available (for programmatic fallback detection)
@@ -831,20 +846,18 @@ function formatSearchResults(response, folder, verbosity) {
     if (response._searchInfo?.noResults) {
       const filters = response._searchInfo.originalTerms || {};
       const activeFilters = Object.entries(filters)
-        .filter(([, v]) => v)
-        .map(([k]) => k);
+        .filter(([k, v]) => k !== 'rawSearchParameter' && v)
+        .map(([k]) =>
+          k === 'kqlQuery' && filters.rawSearchParameter
+            ? filters.rawSearchParameter
+            : k
+        );
       const filterDesc =
         activeFilters.length > 0
           ? ` (filters: ${activeFilters.join(', ')})`
           : '';
 
-      const text =
-        `No emails found matching your filters in "${folder}"${filterDesc}.\n\n` +
-        '**Suggestions:**\n' +
-        '- Try `searchAllFolders: true` to search across all folders including Archive\n' +
-        '- Specify the correct folder if emails have been moved (use `folders` tool to list folders)\n' +
-        '- Use `from` filter instead of `to` (more reliable on personal accounts)\n' +
-        '- Use `kqlQuery` with `searchAllFolders: true` for cross-folder search';
+      const text = `No emails found matching your filters in "${searchedLocation}"${filterDesc}.\n\n${buildNoResultsSuggestions(context)}`;
 
       return {
         content: [{ type: 'text', text }],
@@ -885,15 +898,55 @@ function formatSearchResults(response, folder, verbosity) {
     meta
   );
 
+  const sentItemsHint = buildSentItemsHint(folder, context);
+
   return {
     content: [
       {
         type: 'text',
-        text: formattedOutput + searchNote,
+        text: formattedOutput + searchNote + sentItemsHint,
       },
     ],
     _meta: meta,
   };
+}
+
+function buildNoResultsSuggestions(context) {
+  const suggestions = ['**Suggestions:**'];
+  if (!context.searchAllFolders) {
+    suggestions.push(
+      '- Try `searchAllFolders: true` to search across all folders including Archive'
+    );
+  } else {
+    suggestions.push(
+      '- You already searched all folders; try a narrower structured filter such as `from`, `to`, or `subject`'
+    );
+  }
+  suggestions.push(
+    '- Specify the correct folder if emails have been moved (use `folders` tool to list folders)'
+  );
+  suggestions.push(
+    context.to
+      ? '- If recipient filtering is unreliable on a personal account, try a narrower `subject` or `searchQuery`'
+      : '- Use `to` for Sent Items recipient searches; `from` usually matches your own mailbox there'
+  );
+  suggestions.push(
+    '- Use `searchQuery` (or legacy `kqlQuery`) with `searchAllFolders: true` for raw Graph $search'
+  );
+  return suggestions.join('\n');
+}
+
+function buildSentItemsHint(folder, context) {
+  if (!isSentItemsFolder(folder) || !context.from || context.to) {
+    return '';
+  }
+  return '\n\n**Hint**: Sent Items searches usually work better with `to` than `from`, because sent messages are normally from your own mailbox.';
+}
+
+function isSentItemsFolder(folder) {
+  return ['sentitems', 'sent', 'sent items'].includes(
+    String(folder || '').toLowerCase()
+  );
 }
 
 /**

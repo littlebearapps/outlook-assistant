@@ -13,11 +13,21 @@ const { ensureAuthenticated } = require('../auth');
  * Contact field presets for different use cases
  */
 const CONTACT_FIELDS = {
-  minimal: ['id', 'displayName', 'emailAddresses'],
+  minimal: [
+    'id',
+    'displayName',
+    'emailAddresses',
+    'primaryEmailAddress',
+    'secondaryEmailAddress',
+    'tertiaryEmailAddress',
+  ],
   list: [
     'id',
     'displayName',
     'emailAddresses',
+    'primaryEmailAddress',
+    'secondaryEmailAddress',
+    'tertiaryEmailAddress',
     'mobilePhone',
     'businessPhones',
   ],
@@ -27,6 +37,9 @@ const CONTACT_FIELDS = {
     'givenName',
     'surname',
     'emailAddresses',
+    'primaryEmailAddress',
+    'secondaryEmailAddress',
+    'tertiaryEmailAddress',
     'mobilePhone',
     'businessPhones',
     'homePhones',
@@ -56,7 +69,10 @@ function formatContact(contact, verbosity = 'standard') {
   lines.push(`### ${contact.displayName || '(No name)'}`);
 
   // Email addresses
-  if (contact.emailAddresses?.length > 0) {
+  const structuredEmailLines = formatStructuredEmailLines(contact);
+  if (structuredEmailLines.length > 0) {
+    lines.push(...structuredEmailLines);
+  } else if (contact.emailAddresses?.length > 0) {
     const emails = contact.emailAddresses.map((e) => e.address).join(', ');
     lines.push(`**Email**: ${emails}`);
   }
@@ -117,6 +133,17 @@ function formatContact(contact, verbosity = 'standard') {
   lines.push('');
 
   return lines.join('\n');
+}
+
+function formatStructuredEmailLines(contact) {
+  const fields = [
+    ['Primary Email', contact.primaryEmailAddress],
+    ['Secondary Email', contact.secondaryEmailAddress],
+    ['Tertiary Email', contact.tertiaryEmailAddress],
+  ];
+  return fields
+    .filter(([, value]) => value?.address)
+    .map(([label, value]) => `**${label}**: ${value.address}`);
 }
 
 /**
@@ -372,6 +399,9 @@ async function handleCreateContact(args) {
     lastName,
     email,
     emails,
+    primaryEmailAddress,
+    secondaryEmailAddress,
+    tertiaryEmailAddress,
     mobilePhone,
     companyName,
     jobTitle,
@@ -382,10 +412,20 @@ async function handleCreateContact(args) {
   const resolvedDisplayName =
     displayName ||
     [firstName, lastName].filter(Boolean).join(' ') ||
+    primaryEmailAddress ||
+    secondaryEmailAddress ||
+    tertiaryEmailAddress ||
     email ||
     (Array.isArray(emails) && emails[0]);
 
-  if (!resolvedDisplayName && !email && !(emails && emails.length > 0)) {
+  if (
+    !resolvedDisplayName &&
+    !email &&
+    !(emails && emails.length > 0) &&
+    !primaryEmailAddress &&
+    !secondaryEmailAddress &&
+    !tertiaryEmailAddress
+  ) {
     return {
       content: [
         {
@@ -429,6 +469,14 @@ async function handleCreateContact(args) {
       }));
     }
 
+    addStructuredEmailFields(contactData, {
+      primaryEmailAddress,
+      secondaryEmailAddress,
+      tertiaryEmailAddress,
+      displayName: resolvedDisplayName,
+      includeName: true,
+    });
+
     if (mobilePhone) contactData.mobilePhone = mobilePhone;
     if (companyName) contactData.companyName = companyName;
     if (jobTitle) contactData.jobTitle = jobTitle;
@@ -469,12 +517,42 @@ async function handleCreateContact(args) {
   }
 }
 
+function addStructuredEmailFields(target, options) {
+  const mappings = [
+    ['primaryEmailAddress', options.primaryEmailAddress],
+    ['secondaryEmailAddress', options.secondaryEmailAddress],
+    ['tertiaryEmailAddress', options.tertiaryEmailAddress],
+  ];
+
+  mappings.forEach(([field, address]) => {
+    if (address === undefined) return;
+    if (!address) {
+      target[field] = null;
+      return;
+    }
+    target[field] = { address };
+    if (options.includeName) {
+      target[field].name = options.displayName || address;
+    }
+  });
+}
+
 /**
  * Update contact handler
  */
 async function handleUpdateContact(args) {
-  const { id, displayName, email, mobilePhone, companyName, jobTitle, notes } =
-    args;
+  const {
+    id,
+    displayName,
+    email,
+    primaryEmailAddress,
+    secondaryEmailAddress,
+    tertiaryEmailAddress,
+    mobilePhone,
+    companyName,
+    jobTitle,
+    notes,
+  } = args;
 
   if (!id) {
     return { content: [{ type: 'text', text: 'Contact ID is required.' }] };
@@ -496,6 +574,12 @@ async function handleUpdateContact(args) {
     if (email !== undefined) {
       contactData.emailAddresses = email ? [{ address: email }] : [];
     }
+    addStructuredEmailFields(contactData, {
+      primaryEmailAddress,
+      secondaryEmailAddress,
+      tertiaryEmailAddress,
+      includeName: false,
+    });
     if (mobilePhone !== undefined) contactData.mobilePhone = mobilePhone;
     if (companyName !== undefined) contactData.companyName = companyName;
     if (jobTitle !== undefined) contactData.jobTitle = jobTitle;
@@ -585,6 +669,24 @@ async function handleDeleteContact(args) {
  * Search people handler (relevance-based search via People API)
  */
 async function handleSearchPeople(args) {
+  const action = args.action || 'search';
+  if (action === 'manager') {
+    return handlePeopleManagerLookup(args);
+  }
+  if (action === 'directReports') {
+    return handlePeopleDirectReportsLookup(args);
+  }
+  if (action !== 'search') {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Unknown action '${action}'. Valid actions: search, manager, directReports.`,
+        },
+      ],
+    };
+  }
+
   const query = args.query;
   const count = Math.min(args.count || 25, 50);
 
@@ -674,12 +776,187 @@ async function handleSearchPeople(args) {
   }
 }
 
+const ORG_PERSON_SELECT =
+  'id,displayName,mail,userPrincipalName,jobTitle,department,companyName,businessPhones,mobilePhone,officeLocation';
+
+function buildOrgHierarchyEndpoint(userId, relationship) {
+  if (!userId || userId === 'me') {
+    return `me/${relationship}`;
+  }
+  return `users/${encodeURIComponent(userId)}/${relationship}`;
+}
+
+function formatDirectoryPerson(person, headingPrefix = '###') {
+  const lines = [];
+  lines.push(`${headingPrefix} ${person.displayName || '(No name)'}`);
+
+  const email = person.mail || person.userPrincipalName;
+  if (email) lines.push(`**Email**: ${email}`);
+
+  const position = [person.jobTitle, person.companyName]
+    .filter(Boolean)
+    .join(' at ');
+  if (position) lines.push(`**Position**: ${position}`);
+  if (person.department) lines.push(`**Department**: ${person.department}`);
+  if (person.officeLocation) {
+    lines.push(`**Office**: ${person.officeLocation}`);
+  }
+
+  const phone =
+    person.mobilePhone ||
+    (Array.isArray(person.businessPhones) && person.businessPhones[0]);
+  if (phone) lines.push(`**Phone**: ${phone}`);
+
+  return lines.join('\n');
+}
+
+function orgHierarchyGuidance() {
+  return (
+    'Org hierarchy requires a work or school account and the Microsoft Graph ' +
+    '`User.Read.All` delegated permission. Personal Outlook.com accounts do not ' +
+    'support manager or direct reports lookups. If you just added the scope, ' +
+    'delete the token file and authenticate again so Microsoft issues a token ' +
+    'with the new permission.'
+  );
+}
+
+function isOrgHierarchyCompatibilityError(error) {
+  const message = error.message || '';
+  return (
+    message.includes('403') ||
+    message.includes('401') ||
+    message.includes('Authorization_RequestDenied') ||
+    message.includes('Insufficient privileges') ||
+    message.includes('Unsupported segment') ||
+    message.includes('Request_ResourceNotFound') ||
+    message.includes('personal') ||
+    message.includes('not supported')
+  );
+}
+
+async function handlePeopleManagerLookup(args) {
+  const userId = args.userId || 'me';
+
+  try {
+    const accessToken = await ensureAuthenticated();
+    const manager = await callGraphAPI(
+      accessToken,
+      'GET',
+      buildOrgHierarchyEndpoint(userId, 'manager'),
+      null,
+      { $select: ORG_PERSON_SELECT }
+    );
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `# Manager\n\n**User**: ${userId}\n\n${formatDirectoryPerson(manager)}`,
+        },
+      ],
+      _meta: { action: 'manager', userId, managerId: manager.id },
+    };
+  } catch (error) {
+    if (error.message === 'Authentication required') {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
+          },
+        ],
+      };
+    }
+    if (error.message?.includes('404')) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `No manager found for ${userId}.`,
+          },
+        ],
+        _meta: { action: 'manager', userId, found: false },
+      };
+    }
+    if (isOrgHierarchyCompatibilityError(error)) {
+      return { content: [{ type: 'text', text: orgHierarchyGuidance() }] };
+    }
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error looking up manager: ${error.message}`,
+        },
+      ],
+    };
+  }
+}
+
+async function handlePeopleDirectReportsLookup(args) {
+  const userId = args.userId || 'me';
+  const count = Math.min(args.count || 25, 50);
+
+  try {
+    const accessToken = await ensureAuthenticated();
+    const response = await callGraphAPI(
+      accessToken,
+      'GET',
+      buildOrgHierarchyEndpoint(userId, 'directReports'),
+      null,
+      { $top: count, $select: ORG_PERSON_SELECT }
+    );
+    const reports = response.value || [];
+
+    const output = [];
+    output.push('# Direct Reports\n');
+    output.push(`**User**: ${userId}`);
+    output.push(`**Found**: ${reports.length}`);
+    output.push('');
+
+    if (reports.length === 0) {
+      output.push('No direct reports found.');
+    } else {
+      reports.forEach((person, index) => {
+        output.push(formatDirectoryPerson(person, `## ${index + 1}.`));
+        output.push('');
+      });
+    }
+
+    return {
+      content: [{ type: 'text', text: output.join('\n') }],
+      _meta: { action: 'directReports', userId, count: reports.length },
+    };
+  } catch (error) {
+    if (error.message === 'Authentication required') {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
+          },
+        ],
+      };
+    }
+    if (isOrgHierarchyCompatibilityError(error)) {
+      return { content: [{ type: 'text', text: orgHierarchyGuidance() }] };
+    }
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error looking up direct reports: ${error.message}`,
+        },
+      ],
+    };
+  }
+}
+
 // Consolidated tool definitions (7 → 2)
 const contactsTools = [
   {
     name: 'manage-contact',
     description:
-      "Full CRUD over the signed-in user's personal Outlook contacts (destructive: covers `delete` action). action=`list` (default) returns contacts with pagination via `skip`/`count` (default 50). action=`search` returns contacts matching `query` against name/email (default 25). action=`get` returns full contact detail by `id`. action=`create` adds a new contact and returns its `id`. action=`update` patches the given fields by `id` (only fields passed are changed). action=`delete` permanently removes the contact by `id`. Use `outputVerbosity` (minimal/standard/full) on list/search to control field count. Prefer `search-people` for cross-source relevance ranking (contacts + directory + recent comms) — this tool only searches your personal contact store.",
+      "Full CRUD over the signed-in user's personal Outlook contacts (destructive: covers `delete` action). action=`list` (default) returns contacts with pagination via `skip`/`count` (default 50). action=`search` returns contacts matching `query` against name/email (default 25). action=`get` returns full contact detail by `id`. action=`create` adds a new contact and returns its `id`. action=`update` patches the given fields by `id` (only fields passed are changed). action=`delete` permanently removes the contact by `id`. Email fields accept the legacy `email`/`emails` array plus structured `primaryEmailAddress`, `secondaryEmailAddress`, and `tertiaryEmailAddress`. Use `outputVerbosity` (minimal/standard/full) on list/search to control field count. Prefer `search-people` for cross-source relevance ranking (contacts + directory + recent comms) — this tool only searches your personal contact store.",
     annotations: {
       title: 'Contacts',
       readOnlyHint: false,
@@ -751,6 +1028,21 @@ const contactsTools = [
           description:
             'Multiple email addresses (action=create/update). First entry is primary.',
         },
+        primaryEmailAddress: {
+          type: 'string',
+          description:
+            'Structured primary email address (action=create/update). Maps to Graph `primaryEmailAddress`.',
+        },
+        secondaryEmailAddress: {
+          type: 'string',
+          description:
+            'Structured secondary email address (action=create/update). Maps to Graph `secondaryEmailAddress`.',
+        },
+        tertiaryEmailAddress: {
+          type: 'string',
+          description:
+            'Structured tertiary email address (action=create/update). Maps to Graph `tertiaryEmailAddress`.',
+        },
         mobilePhone: {
           type: 'string',
           description: 'Mobile phone number (action=create/update)',
@@ -801,26 +1093,39 @@ const contactsTools = [
   {
     name: 'search-people',
     description:
-      'Relevance-ranked search across personal contacts, organisation directory, and recent communications via the Microsoft Graph People API (read-only). Returns people objects with `displayName`, `emailAddresses`, `companyName`, `jobTitle`, and relevance metadata — ideal for "who is X?" or "who do I email about Y?" lookups. Use `manage-contact` action=`search` instead when you specifically need entries from your personal contact store only.',
+      'Read-only people lookup. action=`search` (default) does relevance-ranked search across personal contacts, organisation directory, and recent communications via the Microsoft Graph People API. action=`manager` returns the signed-in or specified work/school user manager. action=`directReports` lists the signed-in or specified work/school user direct reports. Org hierarchy actions require a Microsoft 365 work/school account and `User.Read.All`; personal Outlook.com accounts are not supported. Use `manage-contact` action=`search` instead when you specifically need entries from your personal contact store only.',
     annotations: {
       title: 'People Search',
       readOnlyHint: true,
-      openWorldHint: false,
+      openWorldHint: true,
     },
     inputSchema: {
       type: 'object',
       properties: {
+        action: {
+          type: 'string',
+          enum: ['search', 'manager', 'directReports'],
+          description:
+            'Action to perform: search (default), manager, or directReports.',
+        },
         query: {
           type: 'string',
-          description: 'Search query (name, email, company)',
+          description:
+            'Search query for action=search (name, email, company). Required for search.',
+        },
+        userId: {
+          type: 'string',
+          description:
+            'User ID or user principal name for action=manager/directReports. Defaults to me.',
         },
         count: {
           type: 'number',
-          description: 'Maximum results to return (default: 25, max: 50)',
+          description:
+            'Maximum results to return for action=search/directReports (default: 25, max: 50)',
         },
       },
       additionalProperties: false,
-      required: ['query'],
+      required: [],
     },
     handler: handleSearchPeople,
   },

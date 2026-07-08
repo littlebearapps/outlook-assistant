@@ -86,6 +86,14 @@ describe('action fallthrough → explicit unknown-action error', () => {
     expect(result.content[0].text).toMatch(/Unknown action 'foo'/);
   });
 
+  test('manage-tasks', async () => {
+    const { tasksTools } = require('../../tasks');
+    const tool = tasksTools.find((t) => t.name === 'manage-tasks');
+    const result = await tool.handler({ action: 'foo' });
+    expect(result.content[0].text).toMatch(/Unknown action 'foo'/);
+    expect(result.content[0].text).toMatch(/list-lists, list, create/);
+  });
+
   test('auth', async () => {
     const { authTools } = require('../../auth');
     const tool = authTools.find((t) => t.name === 'auth');
@@ -144,5 +152,20 @@ describe('param-name aliases', () => {
     callGraphAPI.mockResolvedValueOnce({ value: [] });
     const withEmail = await tool.handler({ email: 'shared@example.com' });
     expect(withEmail.content[0].text).not.toMatch(/Shared mailbox email/);
+  });
+
+  test('search-emails accepts `searchQuery` and legacy `kqlQuery` raw search params', async () => {
+    const { emailTools } = require('../../email');
+    const { coerceArgsAgainstSchema } = require('../../utils/schema-coerce');
+    const tool = emailTools.find((t) => t.name === 'search-emails');
+
+    expect(
+      coerceArgsAgainstSchema({ searchQuery: 'subject:PR' }, tool.inputSchema)
+        .error
+    ).toBeUndefined();
+    expect(
+      coerceArgsAgainstSchema({ kqlQuery: 'subject:PR' }, tool.inputSchema)
+        .error
+    ).toBeUndefined();
   });
 });

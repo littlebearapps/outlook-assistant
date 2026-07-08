@@ -5,15 +5,22 @@
  * A Model Context Protocol server that provides access to
  * Microsoft Outlook through the Microsoft Graph API.
  */
+const config = require('./config');
+const { name: packageName } = require('./package.json');
+
+if (process.argv.includes('--version') || process.argv.includes('-v')) {
+  console.log(`${packageName} v${config.SERVER_VERSION}`);
+  process.exit(0);
+}
+
 const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
 const {
   StdioServerTransport,
 } = require('@modelcontextprotocol/sdk/server/stdio.js');
-const config = require('./config');
 const { coerceArgsAgainstSchema } = require('./utils/schema-coerce');
 
 // Import module tools
-const { authTools, setToolCount } = require('./auth');
+const { authTools, setToolCount, validateActiveAuthConfig } = require('./auth');
 const { calendarTools } = require('./calendar');
 const { emailTools } = require('./email');
 const { folderTools } = require('./folder');
@@ -22,10 +29,19 @@ const { contactsTools } = require('./contacts');
 const { categoriesTools } = require('./categories');
 const { settingsTools } = require('./settings');
 const { advancedTools } = require('./advanced');
+const { tasksTools } = require('./tasks');
+const { listPrompts, getPrompt } = require('./prompts');
 
 // Log startup information
 console.error(`STARTING ${config.SERVER_NAME.toUpperCase()} MCP SERVER`);
 console.error(`Test mode is ${config.USE_TEST_MODE ? 'enabled' : 'disabled'}`);
+
+try {
+  validateActiveAuthConfig();
+} catch (error) {
+  console.error(`Configuration error: ${error.message}`);
+  process.exit(1);
+}
 
 // F-1 / F-48: warn at startup when safety belts are unset. Mirrors the
 // warning surfaced by `auth action=about`. Visible to operators reading
@@ -51,6 +67,7 @@ const TOOLS = [
   ...categoriesTools,
   ...settingsTools,
   ...advancedTools,
+  ...tasksTools,
 ];
 
 // Set dynamic tool count for auth about handler
@@ -65,6 +82,7 @@ const server = new Server(
         acc[tool.name] = {};
         return acc;
       }, {}),
+      prompts: {},
     },
   }
 );
@@ -85,6 +103,7 @@ server.fallbackRequestHandler = async (request) => {
             acc[tool.name] = {};
             return acc;
           }, {}),
+          prompts: {},
         },
         serverInfo: {
           name: config.SERVER_NAME,
@@ -111,7 +130,11 @@ server.fallbackRequestHandler = async (request) => {
 
     // Required empty responses for other capabilities
     if (method === 'resources/list') return { resources: [] };
-    if (method === 'prompts/list') return { prompts: [] };
+    if (method === 'prompts/list') return { prompts: listPrompts() };
+    if (method === 'prompts/get') {
+      const { name, arguments: args = {} } = params || {};
+      return getPrompt(name, args);
+    }
 
     // Tool call handler
     if (method === 'tools/call') {

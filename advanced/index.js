@@ -602,7 +602,221 @@ async function handleFindMeetingRooms(args) {
   }
 }
 
-// Consolidated tool definitions (4 → 2, flag tools moved to email/update-email)
+/**
+ * Find meeting times handler
+ */
+async function handleFindMeetingTimes(args) {
+  const { attendees } = args;
+
+  if (!Array.isArray(attendees) || attendees.length === 0) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: 'At least one attendee email address is required.',
+        },
+      ],
+    };
+  }
+
+  try {
+    const accessToken = await ensureAuthenticated();
+    const payload = buildFindMeetingTimesPayload(args);
+    const response = await callGraphAPI(
+      accessToken,
+      'POST',
+      'me/findMeetingTimes',
+      payload,
+      {},
+      { Prefer: `outlook.timezone="${args.timeZone || DEFAULT_TIMEZONE}"` }
+    );
+
+    return formatMeetingTimeSuggestions(response);
+  } catch (error) {
+    if (error.message === 'Authentication required') {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
+          },
+        ],
+      };
+    }
+
+    if (isFindMeetingTimesAccountOrPermissionError(error)) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Unable to find meeting times.\n\n**Note**: find-meeting-times requires a work/school Microsoft 365 account and the delegated Microsoft Graph permission \`Calendars.Read.Shared\` (or \`Calendars.ReadWrite.Shared\`). Personal Microsoft accounts are not supported by Graph for this endpoint.\n\nError: ${error.message}`,
+          },
+        ],
+      };
+    }
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error finding meeting times: ${error.message}`,
+        },
+      ],
+    };
+  }
+}
+
+function buildFindMeetingTimesPayload(args) {
+  const meetingDuration = args.meetingDuration || minutesToDuration(args);
+  const payload = {
+    attendees: args.attendees.map((email) => ({
+      type: 'required',
+      emailAddress: { address: email },
+    })),
+    meetingDuration,
+    maxCandidates: Math.min(args.maxCandidates || 5, 20),
+    isOrganizerOptional: args.isOrganizerOptional === true,
+    returnSuggestionReasons: true,
+  };
+
+  const timeConstraint = buildTimeConstraint(args);
+  if (timeConstraint) {
+    payload.timeConstraint = timeConstraint;
+  }
+
+  if (args.minimumAttendeePercentage !== undefined) {
+    payload.minimumAttendeePercentage = args.minimumAttendeePercentage;
+  }
+
+  if (args.locationConstraint) {
+    payload.locationConstraint = args.locationConstraint;
+  }
+
+  return payload;
+}
+
+function minutesToDuration(args) {
+  const minutes = args.duration || 30;
+  if (!Number.isInteger(minutes) || minutes < 1) {
+    throw new Error('duration must be a positive integer number of minutes.');
+  }
+  return `PT${minutes}M`;
+}
+
+function buildTimeConstraint(args) {
+  if (args.timeConstraint) {
+    return args.timeConstraint;
+  }
+
+  const activityDomain =
+    args.meetingHours === false
+      ? 'unrestricted'
+      : args.activityDomain || 'work';
+
+  if (!args.startDateTime && !args.endDateTime) {
+    return { activityDomain };
+  }
+
+  if (!args.startDateTime || !args.endDateTime) {
+    throw new Error('startDateTime and endDateTime must be supplied together.');
+  }
+
+  return {
+    activityDomain,
+    timeSlots: [
+      {
+        start: {
+          dateTime: args.startDateTime,
+          timeZone: args.timeZone || DEFAULT_TIMEZONE,
+        },
+        end: {
+          dateTime: args.endDateTime,
+          timeZone: args.timeZone || DEFAULT_TIMEZONE,
+        },
+      },
+    ],
+  };
+}
+
+function formatMeetingTimeSuggestions(response) {
+  const suggestions = response.meetingTimeSuggestions || [];
+
+  if (suggestions.length === 0) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `No meeting times found.${response.emptySuggestionsReason ? `\n\nReason: ${response.emptySuggestionsReason}` : ''}`,
+        },
+      ],
+      _meta: {
+        count: 0,
+        emptySuggestionsReason: response.emptySuggestionsReason,
+      },
+    };
+  }
+
+  const output = [`# Meeting Time Suggestions (${suggestions.length})\n`];
+  suggestions.forEach((suggestion, index) => {
+    const slot = suggestion.meetingTimeSlot || {};
+    output.push(`## ${index + 1}. Candidate`);
+    output.push(`**Start**: ${formatDateTimeTimeZone(slot.start)}`);
+    output.push(`**End**: ${formatDateTimeTimeZone(slot.end)}`);
+    output.push(`**Confidence**: ${suggestion.confidence}%`);
+
+    if (suggestion.suggestionReason) {
+      output.push(`**Reason**: ${suggestion.suggestionReason}`);
+    }
+
+    const availability = suggestion.attendeeAvailability || [];
+    if (availability.length > 0) {
+      output.push('**Attendee availability**:');
+      availability.forEach((item) => {
+        const email = item.attendee?.emailAddress || {};
+        const label = email.name
+          ? `${email.name} <${email.address || 'unknown'}>`
+          : email.address || 'unknown attendee';
+        output.push(`- ${label}: ${item.availability || 'unknown'}`);
+      });
+    }
+
+    output.push('');
+  });
+
+  return {
+    content: [
+      {
+        type: 'text',
+        text: output.join('\n'),
+      },
+    ],
+    _meta: {
+      count: suggestions.length,
+      suggestions,
+    },
+  };
+}
+
+function formatDateTimeTimeZone(value) {
+  if (!value) return 'Unknown';
+  return `${value.dateTime || 'Unknown'} (${value.timeZone || DEFAULT_TIMEZONE})`;
+}
+
+function isFindMeetingTimesAccountOrPermissionError(error) {
+  const message = error.message || '';
+  return (
+    message.includes('403') ||
+    message.includes('404') ||
+    message.includes('Not supported') ||
+    message.includes('not supported') ||
+    message.includes('ErrorAccessDenied') ||
+    message.includes('Access is denied') ||
+    message.includes('Insufficient privileges') ||
+    message.includes('Calendars.Read.Shared')
+  );
+}
+
+// Consolidated tool definitions (4 → 3, flag tools moved to email/update-email)
 const advancedTools = [
   {
     name: 'access-shared-mailbox',
@@ -611,7 +825,7 @@ const advancedTools = [
     annotations: {
       title: 'Shared Mailbox',
       readOnlyHint: true,
-      openWorldHint: false,
+      openWorldHint: true,
     },
     inputSchema: {
       type: 'object',
@@ -683,6 +897,89 @@ const advancedTools = [
     },
     handler: handleFindMeetingRooms,
   },
+  {
+    name: 'find-meeting-times',
+    description:
+      'Find candidate meeting times across required attendees using Microsoft Graph findMeetingTimes (read-only, work/school Microsoft 365 only). Returns ranked time slots with start/end, confidence, suggestion reason, and attendee availability. Requires `attendees`; accepts `duration` in minutes (default 30) or `meetingDuration` ISO8601, optional `startDateTime`/`endDateTime` search window, `meetingHours`, `maxCandidates`, `isOrganizerOptional`, `minimumAttendeePercentage`, `timeConstraint`, and `locationConstraint`. Requires delegated `Calendars.Read.Shared` or `Calendars.ReadWrite.Shared`; personal Microsoft accounts are not supported by Graph for this endpoint.',
+    annotations: {
+      title: 'Find Meeting Times',
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        attendees: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Required attendee email addresses.',
+        },
+        duration: {
+          type: 'integer',
+          description:
+            'Meeting duration in minutes. Ignored when meetingDuration is supplied. Default: 30.',
+        },
+        meetingDuration: {
+          type: 'string',
+          description: 'Graph ISO8601 duration, e.g. PT30M or PT1H.',
+        },
+        startDateTime: {
+          type: 'string',
+          description:
+            'Optional search-window start dateTime. Must be paired with endDateTime.',
+        },
+        endDateTime: {
+          type: 'string',
+          description:
+            'Optional search-window end dateTime. Must be paired with startDateTime.',
+        },
+        timeZone: {
+          type: 'string',
+          description:
+            'Timezone for startDateTime/endDateTime and response preference. Defaults to configured timezone.',
+        },
+        meetingHours: {
+          type: 'boolean',
+          description:
+            'When false, search unrestricted hours. Default true searches work hours.',
+        },
+        activityDomain: {
+          type: 'string',
+          enum: ['work', 'personal', 'unrestricted'],
+          description:
+            'Graph timeConstraint activity domain. Defaults to work unless meetingHours=false.',
+        },
+        maxCandidates: {
+          type: 'integer',
+          description: 'Maximum suggestions to return (default 5, max 20).',
+        },
+        isOrganizerOptional: {
+          type: 'boolean',
+          description:
+            'Whether the organiser can be unavailable. Default false.',
+        },
+        minimumAttendeePercentage: {
+          type: 'number',
+          description:
+            'Minimum confidence percentage for returned suggestions.',
+        },
+        timeConstraint: {
+          type: 'object',
+          description:
+            'Advanced Graph timeConstraint object. Overrides startDateTime/endDateTime and activityDomain.',
+        },
+        locationConstraint: {
+          type: 'object',
+          description: 'Advanced Graph locationConstraint object.',
+        },
+      },
+      additionalProperties: false,
+      required: ['attendees'],
+    },
+    handler: handleFindMeetingTimes,
+  },
 ];
 
 module.exports = {
@@ -691,4 +988,6 @@ module.exports = {
   handleSetMessageFlag,
   handleClearMessageFlag,
   handleFindMeetingRooms,
+  handleFindMeetingTimes,
+  buildFindMeetingTimesPayload,
 };

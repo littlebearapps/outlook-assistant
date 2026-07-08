@@ -31,6 +31,29 @@ params:
 
 Results are ranked by relevance — people you interact with frequently appear first.
 
+## Find Managers and Direct Reports
+
+On Microsoft 365 work/school accounts, `search-people` can also read organisation
+hierarchy:
+
+```
+tool: search-people
+params:
+  action: "manager"
+```
+
+```
+tool: search-people
+params:
+  action: "directReports"
+  userId: "person@company.com"
+```
+
+Org hierarchy lookup is not available for personal Outlook.com accounts. Your
+Azure app registration may also need the delegated Microsoft Graph
+`User.Read.All` permission; if you add that permission later, delete the token
+file and authenticate again so Microsoft issues a token with the new scope.
+
 ## Search Your Contact Book
 
 The `manage-contact` tool searches only your personal contacts:
@@ -67,7 +90,7 @@ params:
 
 | Tool | Searches | Best for |
 |------|----------|----------|
-| `search-people` | Contacts + directory + recent emails | Finding anyone you've interacted with |
+| `search-people` | Contacts + directory + recent emails; work/school hierarchy actions | Finding anyone you've interacted with; checking manager/direct reports |
 | `manage-contact` (search) | Personal contacts only | Looking up saved contact details |
 
 Use `search-people` when you're not sure where the person is — it casts a wider net. Use `manage-contact` when you know the person is in your contact book and want their full details.

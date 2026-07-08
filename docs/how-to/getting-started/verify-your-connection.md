@@ -83,6 +83,7 @@ This returns the server version, available tools, and configuration details.
 | Auth succeeds but API calls fail with 403 | Insufficient permissions | Add missing permissions in [Azure Portal](https://portal.azure.com), then delete `~/.outlook-assistant-tokens.json` and re-authenticate to pick up new scopes |
 | "AADSTS700082" | Refresh token expired (>90 days inactive) | Re-authenticate with `force: true` |
 | "AADSTS7000215" | Client secret is wrong (using Secret ID instead of Value) or has expired | Check [Azure Setup Guide — Client Secret](../../guides/azure-setup.md#4-create-a-client-secret) |
+| "AADSTS50059" | Single-tenant Azure app is using the default `common` audience | Set `OUTLOOK_AUTH_AUDIENCE` to the app registration's Directory (tenant) ID, then re-authenticate |
 | "Need admin approval" during OAuth | Organisation requires admin consent | Ask your IT admin to grant consent — see [Admin Consent](../../guides/azure-setup.md#for-workschool-accounts-admin-consent) |
 | Token file exists but auth reports failure | Corrupted token file | Delete `~/.outlook-assistant-tokens.json` and re-authenticate |
 | Auth server says "missing client ID" | Auth server does not have env vars | Create a `.env` file or export `OUTLOOK_CLIENT_ID`/`OUTLOOK_CLIENT_SECRET` in your shell — see [Connect guide](connect-outlook-to-claude.md#authenticate-for-the-first-time) |

@@ -34,7 +34,7 @@ Configuration snippets for Claude Desktop, Claude Code, Cursor, Windsurf, VS Cod
 
 ## Does Outlook Assistant work with personal Outlook.com accounts?
 
-Yes. Outlook Assistant supports both personal Microsoft accounts (Outlook.com, Hotmail, Live.com) and work/school Microsoft 365 accounts. A few features are 365-only because Microsoft Graph itself doesn't expose them on personal accounts — meeting room search (`find-meeting-rooms`), shared mailbox access (`access-shared-mailbox`), pre-send mail tips (`get-mail-tips`), and Focused Inbox routing.
+Yes. Outlook Assistant supports both personal Microsoft accounts (Outlook.com, Hotmail, Live.com) and work/school Microsoft 365 accounts. A few features are 365-only because Microsoft Graph itself doesn't expose them on personal accounts — meeting room search (`find-meeting-rooms`), meeting-time suggestions across attendees (`find-meeting-times`), shared mailbox access (`access-shared-mailbox`), pre-send mail tips (`get-mail-tips`), and Focused Inbox routing.
 
 On personal accounts, Microsoft's `$search` API has limited support for free-text queries, so Outlook Assistant falls back through up to four progressive search strategies (server `$search` → `contains(subject)` → client-side body/subject/from scan → recent message listing) and exposes which strategy ran in the response's `_meta.searchMetadata` block. For the most direct results, use structured filters (`from`, `subject`, `to`, `receivedAfter`) where possible. The full per-feature compatibility matrix is in the [README's Account Compatibility section](../README.md#account-compatibility).
 
@@ -46,15 +46,20 @@ Outlook Assistant uses delegated Microsoft Graph permissions — it accesses you
 - **`User.Read`** — your display name and email, shown in `auth about` so you can confirm which mailbox is connected
 - **`Mail.Read`, `Mail.ReadWrite`, `Mail.Send`** — email operations across the 8 email tools
 - **`Calendars.Read`, `Calendars.ReadWrite`** — events listing, creation, and management
+- **`Calendars.Read.Shared`** — optional work/school-only scope for `find-meeting-times` across attendees
 - **`Contacts.Read`, `Contacts.ReadWrite`** — contact CRUD via `manage-contact`
+- **`Tasks.Read`, `Tasks.ReadWrite`** — Microsoft To Do task lists and tasks via `manage-tasks`
 - **`MailboxSettings.ReadWrite`** — auto-replies, working hours, master categories, Focused Inbox overrides
 - **`People.Read`** — `search-people` relevance-ranked lookups
+- **`User.Read.All`** — optional work/school-only scope for `search-people` manager and direct reports lookups
 
-Two permissions are work/school only and optional: **`Mail.Read.Shared`** for shared mailboxes and **`Place.Read.All`** (admin consent required) for meeting room search. You grant these once during initial sign-in; they're scoped to your account and revocable any time at <https://account.live.com/consent/manage> (personal) or in your tenant admin console (work/school).
+Additional delegated permissions are work/school only and optional: **`Mail.Read.Shared`** for shared mailboxes, **`Place.Read.All`** (admin consent required) for meeting room search, and **`User.Read.All`** for organisation hierarchy lookup. You grant these once during initial sign-in; they're scoped to your account and revocable any time at <https://account.live.com/consent/manage> (personal) or in your tenant admin console (work/school).
+
+Client credentials app-only auth is different: it uses Microsoft Graph application permissions, requires tenant-admin consent, and must be scoped to the target mailbox through Exchange RBAC or Application Access Policies. Without that scoping, application permissions can apply across the tenant.
 
 ## Where are my tokens stored, and what happens when they expire?
 
-Access and refresh tokens are stored at **`~/.outlook-assistant-tokens.json`** with file mode `0o600` (owner read/write only). Token refresh is automatic — the access token (~60 minutes) refreshes transparently via the stored refresh token, so the only time you'll re-authenticate is when the **refresh token expires (~90 days)**. From v3.7.2 onward, refresh works correctly for both public and confidential client flows.
+For device-code and browser auth, access and refresh tokens are stored at **`~/.outlook-assistant-tokens.json`** with file mode `0o600` (owner read/write only). Token refresh is automatic — the access token (~60 minutes) refreshes transparently via the stored refresh token, so the only time you'll re-authenticate is when the **refresh token expires (~90 days)**. From v3.7.2 onward, refresh works correctly for both public and confidential client flows.
 
 If tokens get corrupted or stuck:
 
@@ -65,6 +70,8 @@ rm ~/.outlook-assistant-tokens.json ~/.outlook-assistant-pending-auth.json
 
 The pending-auth file (also at `~/.outlook-assistant-pending-auth.json`, also `0o600`) only exists between calling `authenticate` and `device-code-complete` — its purpose is to make device-code auth survive MCP server restarts (Untether/Telegram bridges, Claude Desktop session changes, etc.).
 
+Client credentials app-only auth does not store refresh tokens. It reads a local certificate/private key, requests short-lived app-only access tokens from Microsoft, and caches those access tokens in memory only.
+
 ## Can I use Outlook Assistant in read-only mode?
 
 Yes. Two layers of control let you scope what Outlook Assistant can do:
@@ -72,11 +79,19 @@ Yes. Two layers of control let you scope what Outlook Assistant can do:
 1. **Azure permissions.** When you register the app, request only the read scopes — `Mail.Read`, `Calendars.Read`, `Contacts.Read`, `User.Read`, `offline_access` — and skip the `*ReadWrite` and `Mail.Send` scopes. Tools that need write access will fail at the Graph layer, which is the correct behaviour.
 2. **Send-safety belts.** Even with full permissions, you can configure `OUTLOOK_MAX_EMAILS_PER_SESSION` (rate cap on `send-email` + `draft send`) and `OUTLOOK_ALLOWED_RECIPIENTS` (allowlist of approved addresses or domains). `auth action=about` reports their state and prints a setup hint when unset. See the [Recommended setup snippet](../README.md#safety--token-efficiency) in the README and [`.mcp.json.example`](../.mcp.json.example) for the copy-paste template.
 
-Every tool also carries [MCP annotations](https://modelcontextprotocol.io/docs/concepts/tools#annotations) (`readOnlyHint`, `destructiveHint`, `idempotentHint`) so AI clients can auto-approve safe reads and prompt for confirmation on destructive operations.
+Every tool also carries [MCP annotations](https://modelcontextprotocol.io/docs/concepts/tools#annotations) (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) so AI clients can auto-approve safe reads, prompt for confirmation on destructive operations, and treat external-content results such as emails and shared mailbox content as prompt-injection surface.
+
+## What are the built-in MCP prompts?
+
+Prompts are guided workflow templates exposed to MCP clients. Outlook Assistant includes `triage-inbox`, `draft-reply`, `weekly-summary`, and `meeting-prep`. They do not grant extra permissions or bypass tool safety; they instruct the AI client how to combine existing tools. Send-adjacent prompts require `dryRun` first so you can review before anything is sent.
 
 ## Why does Outlook Assistant need an Azure app registration?
 
 Microsoft Graph (the API behind Outlook, Teams, OneDrive, etc.) requires every client application to be registered in Microsoft Entra ID before it can request delegated access on a user's behalf. The app registration gives Microsoft three things: (1) a client ID so they know which application is asking, (2) a redirect URI / public-client mode for the OAuth flow, and (3) a list of scopes the app may request. Without registration, OAuth would have no entry point.
+
+For device-code auth, the app can run as a public client and does not need a client secret. If your Azure app is single-tenant ("My organisation only"), set `OUTLOOK_AUTH_AUDIENCE` to the app registration's Directory (tenant) ID; the default `common` audience is for apps that support both work/school and personal Microsoft accounts.
+
+For client credentials app-only auth, you must use a work/school tenant, upload a certificate to the app registration, set `OUTLOOK_TENANT_ID`, `OUTLOOK_CERT_PATH`, `OUTLOOK_KEY_PATH`, and `OUTLOOK_TARGET_USER`, and grant tenant-admin consent to application permissions. See [Client Credentials App-Only Setup](guides/client-credentials-setup.md).
 
 Microsoft does not offer a "shared multi-tenant client ID" that any open-source project can reuse — every published Outlook MCP server has the same requirement. We're tracking [#147](https://github.com/littlebearapps/outlook-assistant/issues/147) (publisher-verified shared multi-tenant app) for a future release where Little Bear Apps publishes a verified shared app users can authorise without creating their own registration. Until then, the [Azure Setup Guide](guides/azure-setup.md) walks through the process in about 10 minutes.
 
@@ -86,7 +101,9 @@ Microsoft does not offer a "shared multi-tenant client ID" that any open-source 
 
 **Browser redirect flow (optional)** runs a local auth server on port 3333 and uses the standard OAuth redirect URI (`http://localhost:3333/auth/callback`). Convenient on a graphical workstation, but it needs an open port and a local browser — neither is available in many MCP host environments. Start it with `npm run auth-server`, then call `auth action=authenticate method=browser`.
 
-Most users should pick device code unless they have a specific reason to use the redirect flow. Both write to the same token file and the resulting MCP server behaviour is identical.
+**Client credentials flow (optional, Microsoft 365 only)** uses a certificate and app-only Microsoft Graph permissions. It is for unattended deployments, not normal personal use. It has no refresh token cliff, but it requires tenant-admin consent and mailbox scoping because application permissions are broader than delegated user permissions.
+
+Most users should pick device code unless they have a specific reason to use another flow. Device-code and browser auth write to the same token file and the resulting MCP server behaviour is identical. Client credentials auth is operationally different because it targets the mailbox configured in `OUTLOOK_TARGET_USER`.
 
 ## How do I update Outlook Assistant?
 

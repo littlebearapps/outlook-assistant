@@ -6,12 +6,12 @@
     "url": "https://github.com/littlebearapps/outlook-assistant",
     "source": "github"
   },
-  "version": "3.8.1",
+  "version": "3.9.1",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@littlebearapps/outlook-assistant",
-      "version": "3.8.1",
+      "version": "3.9.1",
       "transport": {
         "type": "stdio"
       },

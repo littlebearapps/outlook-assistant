@@ -5,6 +5,7 @@ const url = require('url');
 const querystring = require('querystring');
 const https = require('https');
 const fs = require('fs');
+const { formatTokenEndpointError } = require('./auth/token-error');
 
 /**
  * Escapes HTML special characters to prevent XSS in rendered responses.
@@ -346,9 +347,18 @@ function exchangeCodeForTokens(code) {
             reject(new Error(`Error parsing token response: ${error.message}`));
           }
         } else {
+          let responseBody = null;
+          try {
+            responseBody = JSON.parse(data);
+          } catch {
+            // Keep the raw response in the fallback message below.
+          }
           reject(
             new Error(
-              `Token exchange failed with status ${res.statusCode}: ${data}`
+              formatTokenEndpointError(
+                responseBody,
+                `Token exchange failed with status ${res.statusCode}: ${data}`
+              )
             )
           );
         }

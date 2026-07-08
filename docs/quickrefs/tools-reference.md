@@ -5,19 +5,19 @@ tags:
 
 # Tools Reference - Outlook Assistant
 
-Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP safety annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`).
+Quick reference for all 24 MCP tools across 10 modules, plus 4 built-in MCP prompts. Each tool includes MCP safety annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`).
 
 ## Authentication (1 tool)
 
 | Tool | Actions | Safety | Key Parameters |
 |------|---------|--------|----------------|
-| `auth` | `status` (default), `authenticate`, `device-code-complete`, `about` | moderate write | `method` (`device-code` default, `browser`), `force`. Device code state persists across server restarts (v3.7.2+). |
+| `auth` | `status` (default), `authenticate`, `device-code-complete`, `about` | moderate write | `method` (`device-code` default, `browser`, `client-credentials`), `force`. Device code state persists across server restarts; app-only auth uses certificate env vars and `OUTLOOK_TARGET_USER`. |
 
 ## Email (8 tools)
 
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
-| `search-emails` | Search, list, delta sync, conversations | read-only | `query`, `from`, `to`, `folder`, `deltaMode`, `conversationId`, `groupByConversation`, `internetMessageId` |
+| `search-emails` | Search, list, delta sync, conversations | read-only | `query`, `searchQuery`, `kqlQuery` (legacy alias), `from`, `to`, `folder`, `deltaMode`, `conversationId`, `groupByConversation`, `internetMessageId` |
 | `read-email` | Read content or forensic headers | read-only | `id`, `headersMode`, `groupByType`, `importantOnly` |
 | `send-email` | Send email with safety controls | **destructive** | `to`, `subject`, `body`, `dryRun`, `checkRecipients`, `cc`, `bcc`, `importance` |
 | `draft` | Create, update, send, delete, reply, forward drafts | **destructive** | `action` (required), `id`, `to`, `subject`, `body`, `comment`, `dryRun`, `checkRecipients` |
@@ -37,7 +37,7 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 | Conversation get | `conversationId` | All messages in a thread |
 | Message-ID lookup | `internetMessageId` | Find by RFC Message-ID header |
 
-> **Personal accounts**: The `query` and `kqlQuery` parameters use Microsoft's `$search` API which has limited support on personal Outlook.com accounts. Outlook Assistant handles this automatically with progressive search fallback — if `$search` returns no results, it tries OData filters, boolean filters, and recent message listing. For the most direct results on personal accounts, use structured filters (`from`, `subject`, `to`, `receivedAfter`, `hasAttachments`, `unreadOnly`).
+> **Personal accounts**: The `query` and `searchQuery` parameters use Microsoft's `$search` API which has limited support on personal Outlook.com accounts. `kqlQuery` remains as a backwards-compatible alias for `searchQuery`. Outlook Assistant handles `query` with progressive search fallback — if `$search` returns no results, it tries OData filters, boolean filters, and recent message listing. For the most direct results on personal accounts, use structured filters (`from`, `subject`, `to`, `receivedAfter`, `hasAttachments`, `unreadOnly`). In Sent Items, prefer `to` over `from` because sent mail is normally from your own mailbox.
 
 > **Delta sync** is designed for inbox monitoring workflows. The first call returns current emails and a `deltaToken`; subsequent calls with that token return only new, modified, and deleted messages. See [Monitor Inbox with Delta Sync](../how-to/ai-agents/monitor-inbox-with-delta-sync.md).
 
@@ -83,7 +83,7 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
 | `list-events` | List upcoming events | read-only | `count` |
-| `create-event` | Create new event | moderate write | `subject`, `start`, `end`, `attendees`, `body`. Times use configured timezone (default: Australia/Melbourne; override with `OUTLOOK_DEFAULT_TIMEZONE` env var) — omit `Z` suffix for local time |
+| `create-event` | Create one-off or recurring event | moderate write | `subject`, `start`, `end`, `attendees`, `body`, `recurrenceType`, `recurrenceInterval`, `recurrenceDaysOfWeek`, `recurrenceEndDate`, `recurrenceCount`, `recurrenceRaw`. Times use configured timezone (default: Australia/Melbourne; override with `OUTLOOK_DEFAULT_TIMEZONE` env var) — omit `Z` suffix for local time |
 | `manage-event` | Update, decline, cancel, or delete | **destructive** | `action` (`update`/`decline`/`cancel`/`delete`), `eventId` (or alias `id`), `comment` (decline/cancel), `subject`/`start`/`end`/`attendees`/`body`/`location`/`isOnlineMeeting`/`sensitivity`/`showAs`/`importance`/`categories`/`reminderMinutesBeforeStart` (update only — only the fields you pass are changed), `dryRun` (preview the PATCH without applying it) |
 
 ## Folder (1 tool)
@@ -102,8 +102,14 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
-| `manage-contact` | Full CRUD: `list` (default), `search`, `get`, `create`, `update`, `delete` | moderate write | `action`, `query`, `id`, `displayName`, `email`, `count` |
-| `search-people` | Relevance-based search (People API) | read-only | `query`, `count` |
+| `manage-contact` | Full CRUD: `list` (default), `search`, `get`, `create`, `update`, `delete` | moderate write | `action`, `query`, `id`, `displayName`, `email`, `emails`, `primaryEmailAddress`, `secondaryEmailAddress`, `tertiaryEmailAddress`, `count` |
+| `search-people` | Relevance-based search plus work/school org hierarchy lookup | read-only | `action`, `query`, `userId`, `count` |
+
+## Tasks (1 tool)
+
+| Tool | Description | Safety | Key Parameters |
+|------|-------------|--------|----------------|
+| `manage-tasks` | Microsoft To Do task lists and tasks: `list-lists` (default), `list`, `create`, `update`, `complete`, `delete` | **destructive** | `action`, `listId`, `taskId`, `title`, `body`, `dueDateTime`, `importance`, `dryRun`, `count`, `outputVerbosity` |
 
 ## Categories (3 tools)
 
@@ -123,21 +129,24 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 |------|---------|--------|----------------|
 | `mailbox-settings` | `get` (default), `set-auto-replies`, `set-working-hours` | idempotent | `section`, `enabled`, `startDateTime`, `endDateTime`, `internalReplyMessage`, `startTime`, `endTime`, `daysOfWeek` |
 
-## Advanced (2 tools)
+## Advanced (3 tools)
 
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
 | `access-shared-mailbox` | Read shared mailbox | read-only | `sharedMailbox` (or alias `email`), `folder`, `count` |
 | `find-meeting-rooms` | Search meeting rooms | read-only | `query`, `building`, `capacity` |
+| `find-meeting-times` | Find available meeting slots | read-only | `attendees`, `duration`, `meetingDuration`, `startDateTime`, `endDateTime`, `meetingHours`, `maxCandidates`, `isOrganizerOptional` |
 
 ## Safety Annotations
 
 | Category | Tools | Client Behaviour |
 |----------|-------|------------------|
-| **Read-only** (7) | `search-emails`, `read-email`, `list-events`, `search-people`, `access-shared-mailbox`, `find-meeting-rooms`, `get-mail-tips` | Auto-approved by MCP clients that support annotations |
-| **Destructive** (5) | `send-email`, `draft`, `manage-event`, `folders`, `manage-rules` | Client prompts for confirmation |
+| **Read-only** (8) | `search-emails`, `read-email`, `list-events`, `search-people`, `access-shared-mailbox`, `find-meeting-rooms`, `find-meeting-times`, `get-mail-tips` | Auto-approved by MCP clients that support annotations |
+| **Destructive** (6) | `send-email`, `draft`, `manage-event`, `folders`, `manage-rules`, `manage-tasks` | Client prompts for confirmation |
 | **Idempotent** (2) | `update-email`, `mailbox-settings` | Safe to retry |
 | **Moderate write** (8) | All others | Normal approval flow |
+
+`openWorldHint: true` is set on tools whose output may include untrusted external content: `search-emails`, `read-email`, `send-email`, `draft`, `search-people`, and `access-shared-mailbox`. MCP clients can treat these results as prompt-injection surface even when the operation itself is read-only.
 
 ## send-email Safety Controls
 
@@ -180,6 +189,15 @@ Check recipients before sending — detects out-of-office, mailbox full, deliver
 | Session rate limit (create/update) | `OUTLOOK_MAX_DRAFT_PER_SESSION` env | Unlimited (0) |
 | Session rate limit (send) | `OUTLOOK_MAX_EMAILS_PER_SESSION` env (shared with `send-email`) | Unlimited (0) |
 | Recipient allowlist | `OUTLOOK_ALLOWED_RECIPIENTS` env | Allow all |
+
+## MCP Prompts (4 prompts)
+
+| Prompt | Description | Arguments |
+|--------|-------------|-----------|
+| `triage-inbox` | Triage unread inbox email into urgent, action, FYI, and noise buckets | — |
+| `draft-reply` | Read a thread and prepare a dry-run reply for review | `emailId` required |
+| `weekly-summary` | Summarize recent email, calendar activity, and task signals | `days` optional, default 7 |
+| `meeting-prep` | Compile a meeting brief from calendar, email, and attendee context | `eventId` or `eventSubject` |
 
 ## Common Patterns
 

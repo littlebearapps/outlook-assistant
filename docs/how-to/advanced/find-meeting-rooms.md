@@ -102,4 +102,4 @@ This tool requires the `Place.Read.All` Microsoft Graph permission. Your Exchang
 
 - [Create Calendar Events](../calendar/create-calendar-events.md) — schedule a meeting in the room
 - [View Upcoming Events](../calendar/view-upcoming-events.md) — check your calendar
-- [Tools Reference — find-meeting-rooms](../../quickrefs/tools-reference.md#advanced-2-tools)
+- [Tools Reference — find-meeting-rooms](../../quickrefs/tools-reference.md#advanced-3-tools)

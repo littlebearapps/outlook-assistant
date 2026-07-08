@@ -20,6 +20,7 @@
 Outlook Assistant connects AI assistants to your Microsoft Outlook account through the [Model Context Protocol](https://modelcontextprotocol.io/). Ask your AI assistant to search your inbox, send emails, schedule meetings, manage contacts, and configure mailbox settings — without leaving the conversation. Works with Claude, Cursor, Windsurf, and any MCP-compatible client.
 
 **Works with personal Outlook.com and work/school Microsoft 365 accounts.**
+Optional client-credentials app-only auth is available for Microsoft 365 work/school tenants that need unattended operation.
 
 <div align="center">
   <br />
@@ -42,9 +43,11 @@ Outlook Assistant connects AI assistants to your Microsoft Outlook account throu
 - 🗂️ **Organise your inbox** — create folders, set up inbox rules, colour-code with categories, manage Focused Inbox — all work together for complete inbox automation
 - 🔄 **Track inbox changes** — delta sync detects new, modified, and deleted emails since your last check, with tokens for incremental polling
 - 👥 **Manage contacts** — search your contact book and organisational directory, create and update contact records
+- ✅ **Manage Microsoft To Do tasks** — list task lists, create/update/complete/delete tasks, and use dry-run previews before saving
 - ⚙️ **Configure settings** — set out-of-office auto-replies, working hours, and time zone
 - 📬 **Access shared mailboxes** — read team inboxes and service accounts (Microsoft 365)
 - 🏢 **Find meeting rooms** — search by building, floor, capacity, AV equipment, and wheelchair accessibility (Microsoft 365)
+- 🧭 **Run guided workflows** — built-in MCP prompts for inbox triage, reply drafting, weekly summaries, and meeting prep
 
 ### Why Outlook Assistant?
 
@@ -65,14 +68,18 @@ Outlook Assistant connects AI assistants to your Microsoft Outlook account throu
 | **Email** | 8 | `search-emails` (list/search/delta/conversations), `read-email` (content + forensic headers), `send-email` (with dry-run + mail tips), `draft` (create/update/send/delete/reply/forward), `update-email` (read status, flags), `attachments`, `export`, `get-mail-tips` |
 | **Calendar** | 3 | `list-events`, `create-event`, `manage-event` (update/decline/cancel/delete) |
 | **Contacts** | 2 | `manage-contact` (list/search/get/create/update/delete), `search-people` |
+| **Tasks** | 1 | `manage-tasks` (list-lists/list/create/update/complete/delete) |
 | **Categories** | 3 | `manage-category` (CRUD), `apply-category`, `manage-focused-inbox` |
 | **Settings** | 1 | `mailbox-settings` (get/set auto-replies/set working hours) |
 | **Folder** | 1 | `folders` (list/create/move/stats/delete) |
 | **Rules** | 1 | `manage-rules` (list/create/update/reorder/delete) |
-| **Advanced** | 2 | `access-shared-mailbox`, `find-meeting-rooms` |
+| **Advanced** | 3 | `access-shared-mailbox`, `find-meeting-rooms`, `find-meeting-times` |
 | **Auth** | 1 | `auth` (status/authenticate/about) |
 
-**22 tools total** — consolidated from 55 for optimal AI performance. See the [Tools Reference](docs/quickrefs/tools-reference.md) for complete parameter details.
+**24 tools total** — consolidated from 55 for optimal AI performance. See the [Tools Reference](docs/quickrefs/tools-reference.md) for complete parameter details.
+
+Outlook Assistant also exposes **4 MCP prompts** for common workflows:
+`triage-inbox`, `draft-reply`, `weekly-summary`, and `meeting-prep`.
 
 ### Export Formats
 
@@ -98,14 +105,17 @@ Outlook Assistant works with both personal and work/school Microsoft accounts, b
 | Email read, send, search | Full support | Full support |
 | Calendar events | Full support | Full support |
 | Contacts CRUD | Full support | Full support |
+| Microsoft To Do tasks | Full support | Full support |
 | Inbox rules | Full support | Full support |
 | Folders | Full support | Full support |
 | Free-text `query` search | Limited — use `subject`, `from`, `to` filters instead | Full KQL support |
 | Categories | Full support | Full support |
 | Mailbox settings | Full support | Full support |
 | Focused Inbox | API works (overrides stored) but mail routing not affected | Full support |
+| Org hierarchy lookup | Not available | Requires `User.Read.All` |
 | Shared mailboxes | Not available | Requires `Mail.Read.Shared` |
 | Meeting room search | Not available | Requires `Place.Read.All` + admin consent |
+| Client credentials app-only auth | Not available | Requires certificate, application permissions, admin consent, and mailbox scoping |
 
 > **Note**: On personal accounts, Microsoft's `$search` API has limited support for free-text queries. Outlook Assistant handles this automatically with progressive search — if your query returns no results, it falls back through OData filters, boolean filters, and recent message listing to find your emails. For the most direct results on personal accounts, use the structured filter parameters (`from`, `subject`, `to`, `receivedAfter`).
 
@@ -141,9 +151,11 @@ Outlook Assistant is designed with safety-first principles for AI-driven email a
 > }
 > ```
 
+> **App-only deployments**: if you use `OUTLOOK_AUTH_METHOD=client-credentials`, treat these send guards as mandatory and also scope the app to the target mailbox in Exchange. Application permissions can otherwise apply tenant-wide.
+
 **Draft protections** — The `draft` tool shares `send-email` safety controls: dry-run preview, recipient allowlist, mail-tips validation, and rate limiting. The `send` action shares the `send-email` rate limit counter, preventing circumvention via the draft-then-send pathway.
 
-**Token-optimised architecture** — Tools are consolidated using the STRAP (Single Tool, Resource, Action Pattern) approach. 22 tools instead of 55 reduces per-turn overhead by ~11,000 tokens (~64%), keeping more of the AI's context window available for your actual conversation. Fewer tools also means the AI selects the right tool more accurately — research shows tool selection degrades beyond ~40 tools.
+**Token-optimised architecture** — Tools are consolidated using the STRAP (Single Tool, Resource, Action Pattern) approach. 24 tools instead of 55 reduces per-turn overhead by ~11,000 tokens (~64%), keeping more of the AI's context window available for your actual conversation. Fewer tools also means the AI selects the right tool more accurately — research shows tool selection degrades beyond ~40 tools.
 
 > **Important**: These safeguards are defence-in-depth measures that reduce risk, but they are not a guarantee against unintended actions. AI-driven access to your email is inherently sensitive — always review tool calls before approving, particularly for sends and deletes. No automated guardrail is foolproof, and you remain responsible for actions taken through your mailbox.
 
@@ -171,6 +183,8 @@ You need a Microsoft Azure app registration to authenticate. See the **[Azure Se
 4. Under Authentication > **Add a platform** > **Mobile and desktop applications** — check `nativeclient` URI
 5. Enable **"Allow public client flows"** in Authentication > Advanced settings
 6. _(Optional)_ Set redirect URI to `http://localhost:3333/auth/callback` — only needed for browser auth flow
+
+For unattended Microsoft 365 deployments, see [Client Credentials App-Only Setup](docs/guides/client-credentials-setup.md). It uses a certificate instead of a client secret and requires application permissions, tenant-admin consent, and mailbox scoping.
 
 ### 3. Configure Your MCP Client
 
@@ -302,9 +316,11 @@ npm install
    - `Mail.Read`, `Mail.ReadWrite`, `Mail.Send` — email operations
    - `Calendars.Read`, `Calendars.ReadWrite` — calendar operations
    - `Contacts.Read`, `Contacts.ReadWrite` — contact management
+   - `Tasks.Read`, `Tasks.ReadWrite` — Microsoft To Do task management
    - `MailboxSettings.ReadWrite` — settings, auto-replies, categories
    - `People.Read` — people search
 3. Optionally add **org-only** permissions (work/school accounts only):
+   - `User.Read.All` — manager and direct reports lookup via `search-people`
    - `Mail.Read.Shared` — shared mailbox access
    - `Place.Read.All` — meeting room search (requires admin consent)
 4. Click **Add permissions**
@@ -398,11 +414,17 @@ This starts a local server on port 3333 to handle the OAuth callback.
 
 > **Note**: The auth server reads `OUTLOOK_CLIENT_ID` and `OUTLOOK_CLIENT_SECRET` from environment variables. Your MCP client's `"env"` config only applies to the MCP server process, not a separately-started auth server.
 
+### Client Credentials Flow (Microsoft 365 App-Only)
+
+For unattended deployments, set `OUTLOOK_AUTH_METHOD=client-credentials` and configure `OUTLOOK_TENANT_ID`, `OUTLOOK_CERT_PATH`, `OUTLOOK_KEY_PATH`, and `OUTLOOK_TARGET_USER`. App-only tokens are cached in memory and re-fetched before expiry; no refresh token is stored.
+
+Use this only after tenant-admin consent and Exchange mailbox scoping are in place. See [Client Credentials App-Only Setup](docs/guides/client-credentials-setup.md).
+
 ## Directory Structure
 
 ```
 outlook-assistant/
-├── index.js                 # Main entry point (22 tools)
+├── index.js                 # Main entry point (24 tools)
 ├── config.js                # Configuration settings
 ├── outlook-auth-server.js   # OAuth server (port 3333)
 ├── auth/                    # Authentication module (1 tool)
@@ -415,11 +437,12 @@ outlook-assistant/
 │   └── ...
 ├── calendar/                # Calendar module (3 tools)
 ├── contacts/                # Contacts module (2 tools)
+├── tasks/                   # Microsoft To Do module (1 tool)
 ├── categories/              # Categories module (3 tools)
 ├── settings/                # Settings module (1 tool)
 ├── folder/                  # Folder module (1 tool)
 ├── rules/                   # Rules module (1 tool)
-├── advanced/                # Advanced module (2 tools)
+├── advanced/                # Advanced module (3 tools)
 └── utils/
     ├── graph-api.js         # Microsoft Graph API client (includes $batch)
     ├── safety.js            # Rate limiting, recipient allowlist, dry-run
@@ -499,7 +522,7 @@ USE_TEST_MODE=true npm start
 | [How-To Guides](docs/how-to/index.md) | 29 practical guides for email, calendar, contacts, and settings |
 | [Roadmap](ROADMAP.md) | Active milestones (v3.7.5, v3.8.0, v3.9.0) and recent releases |
 | [Troubleshooting & FAQ](docs/how-to/getting-started/verify-your-connection.md#common-connection-problems) | Common problems, re-authentication, and frequently asked questions |
-| [Tools Reference](docs/quickrefs/tools-reference.md) | All 22 tools with parameters |
+| [Tools Reference](docs/quickrefs/tools-reference.md) | All 24 tools with parameters |
 | [AI Agent Guide](docs/how-to/ai-agents/using-outlook-assistant-in-agents.md) | Tool selection and workflow patterns for AI agents |
 
 Full documentation: [docs/](docs/README.md)

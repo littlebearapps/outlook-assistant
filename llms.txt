@@ -11,7 +11,7 @@ Built by [Little Bear Apps](https://littlebearapps.com).
 - **License**: MIT
 - **Node.js**: >= 18.0.0
 - **Authentication**: OAuth 2.0 with Microsoft Graph API (requires Azure app registration)
-- **Tools**: 22 tools across 9 modules (reduced from 55 for optimal AI performance)
+- **Tools**: 24 tools across 10 modules (reduced from 55 for optimal AI performance)
 
 ## Why Outlook Assistant?
 
@@ -32,10 +32,10 @@ Built by [Little Bear Apps](https://littlebearapps.com).
 
 ## Safety & Token Efficiency
 
-- **MCP safety annotations** on all 22 tools — AI clients auto-approve reads and prompt for destructive operations
+- **MCP safety annotations** on all 24 tools — AI clients auto-approve reads and prompt for destructive operations
 - **Send-email protections**: pre-send mail tips, dry-run preview, session rate limiting, recipient allowlist
 - **Rule protections**: dry-run preview on create/update, rate limiting, recipient allowlist on forward/redirect, no permanent-delete action
-- **Token-optimised**: 22 tools instead of 55 saves ~11,000 tokens per turn (~64% reduction), improving AI accuracy and context efficiency
+- **Token-optimised**: 24 tools instead of 55 saves ~11,000 tokens per turn (~64% reduction), improving AI accuracy and context efficiency
 - These safeguards reduce risk but are not foolproof — always review actions before approving
 
 ## Quick Start
@@ -63,16 +63,17 @@ Requires an Azure app registration with Microsoft Graph delegated permissions. S
 - **Email (8 tools)**: `search-emails`, `read-email`, `send-email`, `draft`, `update-email`, `attachments`, `export`, `get-mail-tips`
 - **Calendar (3 tools)**: `list-events`, `create-event`, `manage-event`
 - **Contacts (2 tools)**: `manage-contact`, `search-people`
+- **Tasks (1 tool)**: `manage-tasks` — list lists, list, create, update, complete, delete tasks
 - **Folders (1 tool)**: `folders` — list, create, move, stats
 - **Rules (1 tool)**: `manage-rules` — list, create, update, reorder, delete
 - **Categories (3 tools)**: `manage-category`, `apply-category`, `manage-focused-inbox`
 - **Settings (1 tool)**: `mailbox-settings` — get, set auto-replies, set working hours
-- **Advanced (2 tools)**: `access-shared-mailbox`, `find-meeting-rooms`
+- **Advanced (3 tools)**: `access-shared-mailbox`, `find-meeting-rooms`, `find-meeting-times`
 
 ## Documentation
 
 - [README](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/README.md): Full documentation including setup, Azure configuration, and usage
-- [Tools Reference](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/quickrefs/tools-reference.md): All 22 tools with parameters and safety annotations
+- [Tools Reference](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/quickrefs/tools-reference.md): All 24 tools with parameters and safety annotations
 - [Connect Outlook to Claude](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/how-to/getting-started/connect-outlook-to-claude.md): Step-by-step setup guide for Claude Desktop / Claude Code
 - [Verify Your Connection](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/how-to/getting-started/verify-your-connection.md): Test and troubleshoot the connection after installation
 - [Azure Setup](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/guides/azure-setup.md): Azure app registration and API permissions walkthrough

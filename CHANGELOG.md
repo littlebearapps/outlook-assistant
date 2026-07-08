@@ -7,6 +7,83 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.9.1] - 2026-07-08
+
+### Fixed
+
+- Updated client credentials certificate assertions to use Microsoft Entra's
+  current `PS256` / `x5t#S256` format with a SHA-256 certificate thumbprint,
+  resolving the CodeQL weak-cryptography finding on the earlier SHA-1 `x5t`
+  thumbprint implementation. (#123)
+
+## [3.9.0] - 2026-07-08
+
+### Added
+
+- Added recurring calendar event support to `create-event`, including
+  simplified daily/weekly/monthly/yearly recurrence parameters and raw
+  Microsoft Graph `recurrenceRaw` passthrough for advanced patterns. (#125)
+- Added `find-meeting-times`, a work/school Microsoft 365 scheduling assistant
+  tool that calls Graph `findMeetingTimes` and returns ranked candidate slots
+  with confidence and attendee availability. (#126)
+- Added structured contact email field support to `manage-contact` via
+  `primaryEmailAddress`, `secondaryEmailAddress`, and `tertiaryEmailAddress`,
+  while keeping existing `email`/`emails` compatibility. (#127)
+- Added `search-people` org hierarchy actions for work/school accounts:
+  `action=manager` and `action=directReports`. (#91)
+- Added four built-in MCP prompts for guided email workflows:
+  `triage-inbox`, `draft-reply`, `weekly-summary`, and `meeting-prep`. (#90)
+- Added `manage-tasks`, a Microsoft To Do tool for listing task lists,
+  listing tasks, creating/updating tasks with dry-run previews, completing
+  tasks, and deleting tasks. (#89)
+- Added optional certificate-based client credentials authentication for
+  Microsoft 365 app-only deployments, including in-memory token caching and
+  transparent `/me` to `/users/{OUTLOOK_TARGET_USER}` Graph routing. (#123)
+
+### Documentation
+
+- Added a client credentials setup guide covering certificate generation,
+  tenant-admin consent, Exchange mailbox scoping, and mandatory send guards for
+  app-only deployments. (#123)
+
+### Fixed
+
+- Improved `search-emails` folder context and no-results guidance, added Sent
+  Items `from` → `to` hints, and introduced `searchQuery` as the clearer raw
+  Graph `$search` parameter while keeping `kqlQuery` as a backwards-compatible
+  alias. (#117, #169)
+- Added the configured timezone label to `list-events` start and end times so
+  converted calendar output is no longer ambiguous. (#118)
+
+## [3.8.2] - 2026-07-08
+
+### Added
+
+- Added `--version` and `-v` CLI flags that print the package version and exit
+  without starting the MCP stdio server. (#68)
+
+### Fixed
+
+- Improved `AADSTS7000215` authentication errors so operators are told to use
+  the Azure client secret **Value**, not the Secret ID. (#69)
+- Set `openWorldHint: true` on tools that return external-content surfaces
+  (`search-emails`, `read-email`, `search-people`, and
+  `access-shared-mailbox`) and pinned annotations for all 22 tools. (#92)
+
+### Documentation
+
+- Documented the single-tenant Azure app fix for `AADSTS50059`: set
+  `OUTLOOK_AUTH_AUDIENCE` to the app registration's Directory (tenant) ID
+  instead of using the default `common` audience.
+- Clarified that the default device-code flow does not require a client
+  secret when Azure public client flows are enabled, and updated getting-started
+  examples to include send-safety environment variables.
+
+### Tests
+
+- Added integration coverage for the Graph 401 → token refresh → retry flow,
+  including persistence of refreshed tokens to an isolated token file. (#72)
+
 ## [3.8.1] - 2026-05
 
 Patch release driven by a glama.ai / safemcp.info scoring audit. Lifts the

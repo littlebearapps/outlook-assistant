@@ -6,7 +6,7 @@ tags: [outlook-assistant, ai-agents, how-to, reference]
 
 # How to Use Outlook Assistant in AI Agents
 
-This guide helps AI agents and their developers make effective use of Outlook Assistant's 22 tools. It covers tool selection, safety annotations, output handling, and token efficiency.
+This guide helps AI agents and their developers make effective use of Outlook Assistant's 24 tools. It covers tool selection, safety annotations, output handling, and token efficiency.
 
 ## Tool Selection Guide
 
@@ -32,6 +32,7 @@ This guide helps AI agents and their developers make effective use of Outlook As
 | Out-of-office / working hours | `mailbox-settings` | `action` |
 | Read shared mailbox | `access-shared-mailbox` | `sharedMailbox` |
 | Find meeting rooms | `find-meeting-rooms` | `building`, `capacity` |
+| Find meeting times | `find-meeting-times` | `attendees`, `duration`, `startDateTime`, `endDateTime` |
 | Auth status/connect | `auth` | `action` |
 
 ## Safety Annotations
@@ -47,7 +48,7 @@ Every tool includes MCP annotations that indicate its safety profile:
 
 ### Read-Only Tools (auto-approved)
 
-`search-emails`, `read-email`, `list-events`, `search-people`, `access-shared-mailbox`, `find-meeting-rooms`
+`search-emails`, `read-email`, `list-events`, `search-people`, `access-shared-mailbox`, `find-meeting-rooms`, `find-meeting-times`
 
 ### Destructive Tools (always require confirmation)
 
@@ -155,7 +156,7 @@ See [Investigate Email Headers](../advanced/investigate-email-headers.md) for he
 
 ## Related
 
-- [Tools Reference](../../quickrefs/tools-reference.md) — complete parameter reference for all 22 tools
+- [Tools Reference](../../quickrefs/tools-reference.md) — complete parameter reference for all 24 tools
 - [Monitor Inbox with Delta Sync](monitor-inbox-with-delta-sync.md) — incremental inbox monitoring for agents
 - [Investigate Email Headers](../advanced/investigate-email-headers.md) — forensic header analysis for phishing detection
 - [KQL Search Reference](../advanced/kql-search-reference.md) — advanced query patterns

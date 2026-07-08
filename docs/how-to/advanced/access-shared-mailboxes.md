@@ -79,4 +79,4 @@ Your Microsoft account must also have been granted access to the shared mailbox 
 - [Find Emails](../email/find-emails.md) — search your personal mailbox
 - [Verify Your Connection](../getting-started/verify-your-connection.md) — check permissions
 - [Azure Setup Guide](../../guides/azure-setup.md) — managing app permissions
-- [Tools Reference — access-shared-mailbox](../../quickrefs/tools-reference.md#advanced-2-tools)
+- [Tools Reference — access-shared-mailbox](../../quickrefs/tools-reference.md#advanced-3-tools)

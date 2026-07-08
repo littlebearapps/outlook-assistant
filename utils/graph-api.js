@@ -5,6 +5,38 @@ const https = require('https');
 const config = require('../config');
 const mockData = require('./mock-data');
 
+function isFullUrl(path) {
+  return path.startsWith('http://') || path.startsWith('https://');
+}
+
+function rewriteGraphPathForAuth(path) {
+  if (
+    isFullUrl(path) ||
+    config.AUTH_CONFIG.defaultAuthMethod !== 'client-credentials'
+  ) {
+    return path;
+  }
+
+  const targetUser = config.CLIENT_CREDENTIALS_CONFIG?.targetUser;
+  if (!targetUser || (path !== 'me' && !path.startsWith('me/'))) {
+    return path;
+  }
+
+  if (path === 'me') {
+    return `users/${targetUser}`;
+  }
+  return `users/${targetUser}/${path.slice(3)}`;
+}
+
+function encodeGraphPathPreservingODataSegment(path) {
+  return path
+    .split('/')
+    .map((segment) =>
+      segment.startsWith('$') ? segment : encodeURIComponent(segment)
+    )
+    .join('/');
+}
+
 /**
  * Makes a request to the Microsoft Graph API
  * In test mode (USE_TEST_MODE=true), routes to mock data instead of the real API.
@@ -34,13 +66,14 @@ async function callGraphAPI(
   try {
     // Check if path already contains the full URL (from nextLink)
     let finalUrl;
-    if (path.startsWith('http://') || path.startsWith('https://')) {
+    const resolvedPath = rewriteGraphPathForAuth(path);
+    if (isFullUrl(resolvedPath)) {
       // Path is already a full URL (from pagination nextLink)
-      finalUrl = path;
+      finalUrl = resolvedPath;
     } else {
       // Build URL from path and queryParams
       // Encode path segments properly
-      const encodedPath = path
+      const encodedPath = resolvedPath
         .split('/')
         .map((segment) => encodeURIComponent(segment))
         .join('/');
@@ -253,7 +286,9 @@ async function callGraphAPIBatch(accessToken, requests) {
     requests: requests.map((req) => ({
       id: req.id,
       method: req.method,
-      url: req.url.startsWith('/') ? req.url : `/${req.url}`,
+      url: `/${rewriteGraphPathForAuth(
+        req.url.startsWith('/') ? req.url.slice(1) : req.url
+      )}`,
       ...(req.body && { body: req.body }),
       ...(req.headers && { headers: req.headers }),
     })),
@@ -289,7 +324,9 @@ async function callGraphAPIRaw(accessToken, emailId) {
   }
 
   return new Promise((resolve, reject) => {
-    const path = `me/messages/${encodeURIComponent(emailId)}/$value`;
+    const path = encodeGraphPathPreservingODataSegment(
+      rewriteGraphPathForAuth(`me/messages/${emailId}/$value`)
+    );
     const finalUrl = `${config.GRAPH_API_ENDPOINT}${path}`;
 
     const options = {
@@ -352,7 +389,12 @@ async function callGraphAPIWithAuth(
   extraHeaders = {}
 ) {
   // Lazy require to avoid circular dependency
-  const { ensureAuthenticated, tokenStorage } = require('../auth');
+  const {
+    ensureAuthenticated,
+    tokenStorage,
+    clientCredentialsProvider,
+    isClientCredentialsAuth,
+  } = require('../auth');
 
   const accessToken = await ensureAuthenticated();
   try {
@@ -365,6 +407,20 @@ async function callGraphAPIWithAuth(
       extraHeaders
     );
   } catch (error) {
+    if (error.message === 'UNAUTHORIZED' && isClientCredentialsAuth()) {
+      console.error('[GRAPH-API] 401 received, refetching app-only token...');
+      clientCredentialsProvider.clearCache();
+      const newToken = await clientCredentialsProvider.getValidAccessToken();
+      return callGraphAPI(
+        newToken,
+        method,
+        path,
+        data,
+        queryParams,
+        extraHeaders
+      );
+    }
+
     if (error.message === 'UNAUTHORIZED' && tokenStorage) {
       console.error('[GRAPH-API] 401 received, attempting token refresh...');
       try {
@@ -396,4 +452,6 @@ module.exports = {
   callGraphAPIBatch,
   callGraphAPIRaw,
   callGraphAPIWithAuth,
+  rewriteGraphPathForAuth,
+  encodeGraphPathPreservingODataSegment,
 };

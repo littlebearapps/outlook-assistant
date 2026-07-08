@@ -157,6 +157,9 @@ params:
   searchAllFolders: true
 ```
 
+For raw Microsoft Graph `$search` expressions, use `searchQuery`.
+`kqlQuery` still works as a legacy alias.
+
 ## Combine Filters
 
 Filters stack — use multiple parameters together:
@@ -225,7 +228,8 @@ Delta sync is useful for inbox monitoring workflows, audit trails, and notificat
 | `receivedBefore` | Received before this date | `"2026-02-01"` |
 | `searchAllFolders` | Search every folder | `true` |
 | `count` | Number of results to return | `10` |
-| `kqlQuery` | Raw KQL for advanced queries | `"from:ceo AND hasAttachment:true"` |
+| `searchQuery` | Raw Microsoft Graph `$search` expression | `"from:ceo AND hasAttachment:true"` |
+| `kqlQuery` | Legacy alias for `searchQuery` | `"from:ceo AND hasAttachment:true"` |
 | `outputVerbosity` | Detail level: minimal, standard, full | `"minimal"` |
 
 ## Tips

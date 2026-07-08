@@ -163,5 +163,24 @@ describe('device-code', () => {
         pollForToken('test-client', 'dc_123', 0.001, 30)
       ).rejects.toThrow('Something went wrong');
     });
+
+    it('surfaces AADSTS7000215 secret Value guidance during token polling', async () => {
+      mockHttpsResponse(401, {
+        error: 'invalid_client',
+        error_description:
+          'AADSTS7000215: Invalid client secret provided. Ensure the secret being sent in the request is the client secret value.',
+      });
+
+      let thrown;
+      try {
+        await pollForToken('test-client', 'dc_123', 0.001, 30);
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown.message).toContain('AADSTS7000215');
+      expect(thrown.message).toMatch(/Secret ID/i);
+      expect(thrown.message).toMatch(/Secret Value/i);
+    });
   });
 });

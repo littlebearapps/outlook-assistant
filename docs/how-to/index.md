@@ -53,6 +53,12 @@ Practical guides for managing your Microsoft 365 email, calendar, contacts, and 
 | [Find Contacts and People](contacts/find-contacts-and-people.md) | Search contacts, directory, and recent communications |
 | [Manage Contacts](contacts/manage-contacts.md) | Create, update, and delete contact records |
 
+## Tasks
+
+| Guide | What it covers |
+|-------|---------------|
+| [Manage Microsoft To Do Tasks](tasks/manage-tasks.md) | List task lists, create, update, complete, and delete tasks |
+
 ## Settings
 
 | Guide | What it covers |
@@ -68,6 +74,7 @@ Practical guides for managing your Microsoft 365 email, calendar, contacts, and 
 | [Investigate Email Headers](advanced/investigate-email-headers.md) | Phishing investigation, DKIM, SPF, DMARC authentication, delivery chain, spam scores |
 | [Access Shared Mailboxes](advanced/access-shared-mailboxes.md) | Read from team inboxes and service accounts |
 | [Find Meeting Rooms](advanced/find-meeting-rooms.md) | Search by building, floor, or capacity |
+| [Find Meeting Times](advanced/find-meeting-times.md) | Suggest available slots across attendees |
 | [Batch Operations](advanced/batch-operations.md) | Bulk flag, move, export, and categorise |
 
 ## For AI Agent Developers

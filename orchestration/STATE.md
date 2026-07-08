@@ -557,3 +557,16 @@ Checks:
   - Live verification ledger: all read-only/contact/calendar/protocol live checks passed where possible; #89 To Do live verification remains blocked by delegated consent; #123 app-only live verification remains deferred pending owner/admin tenant setup → PASS_WITH_EXTERNAL_BLOCKERS
 Gate: PASSED_WITH_EXTERNAL_BLOCKERS
 Notes: Phase 2 is code-complete and release-process-clean in the fork. Remaining live work is not implementation work: it requires Microsoft/Azure owner-admin actions for delegated To Do consent and app-only certificate/application-permission/mailbox-scoping setup.
+
+## [2026-07-08 17:35] Production activation — delegated To Do consent + live verification
+Branch/PR: docs/phase-0-golive-final / n/a
+Checks:
+  - Initial live smoke: `auth status`, `auth about`, `search-emails`, `list-events`, `folders`, and `manage-tasks list-lists` all blocked by Microsoft `AADSTS65001 consent_required` for newly requested scopes → BLOCKED_REAUTH
+  - Device-code re-auth: `auth authenticate method=device-code`; owner completed Microsoft browser consent; `auth device-code-complete` → `Authentication successful! Tokens saved.` → PASS
+  - Auth status after consent: `auth status` → authenticated, token expires in ~81 minutes → PASS
+  - Read-only smoke after consent: `auth about`, `search-emails` recent list, `read-email` selected recent message, `list-events`, and `folders list` all returned non-error responses → PASS
+  - To Do read smoke: `manage-tasks {"action":"list-lists","count":5}` → returned 1 task list → PASS
+  - To Do dry-run guard: `manage-tasks create` with `dryRun:true` → preview returned, no task saved → PASS
+  - To Do live mutation check: created one `oa-live-activation-*` test task, completed it, then deleted it using returned IDs → PASS
+Gate: PASSED
+Notes: Live output was sanitized: no email subjects, bodies, message IDs, task IDs, task-list IDs, tokens, or unrelated mailbox content were recorded. This resolves the prior #89 delegated To Do consent/live-verification blocker. App-only auth remains optional and still requires Azure certificate, application permissions, admin consent, and Exchange mailbox scoping before live verification.

@@ -105,6 +105,8 @@ Outlook Assistant needs permission to access your mailbox data. These are **dele
 | `Calendars.ReadWrite` | Create, update, and delete calendar events |
 | `Contacts.Read` | Read your contacts |
 | `Contacts.ReadWrite` | Create, update, and delete contacts |
+| `Tasks.Read` | Read Microsoft To Do task lists and tasks |
+| `Tasks.ReadWrite` | Create, update, complete, and delete Microsoft To Do tasks |
 | `MailboxSettings.ReadWrite` | Read and update mailbox settings (auto-replies, working hours, categories) |
 | `People.Read` | Search for relevant people |
 
@@ -348,5 +350,5 @@ After re-authenticating, use the `auth` tool with `action=status` to verify the 
 
 - [Connect Outlook to Your AI Assistant](../how-to/getting-started/connect-outlook-to-claude.md) — Install, configure your MCP client, and authenticate
 - [README](../../README.md) — Full feature overview and configuration
-- [Tools Reference](../quickrefs/tools-reference.md) — All 23 tools with parameters
+- [Tools Reference](../quickrefs/tools-reference.md) — All 24 tools with parameters
 - [Back to Docs](../README.md)

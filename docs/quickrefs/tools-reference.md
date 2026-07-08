@@ -5,7 +5,7 @@ tags:
 
 # Tools Reference - Outlook Assistant
 
-Quick reference for all 23 MCP tools across 9 modules, plus 4 built-in MCP prompts. Each tool includes MCP safety annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`).
+Quick reference for all 24 MCP tools across 10 modules, plus 4 built-in MCP prompts. Each tool includes MCP safety annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`).
 
 ## Authentication (1 tool)
 
@@ -105,6 +105,12 @@ Quick reference for all 23 MCP tools across 9 modules, plus 4 built-in MCP promp
 | `manage-contact` | Full CRUD: `list` (default), `search`, `get`, `create`, `update`, `delete` | moderate write | `action`, `query`, `id`, `displayName`, `email`, `emails`, `primaryEmailAddress`, `secondaryEmailAddress`, `tertiaryEmailAddress`, `count` |
 | `search-people` | Relevance-based search plus work/school org hierarchy lookup | read-only | `action`, `query`, `userId`, `count` |
 
+## Tasks (1 tool)
+
+| Tool | Description | Safety | Key Parameters |
+|------|-------------|--------|----------------|
+| `manage-tasks` | Microsoft To Do task lists and tasks: `list-lists` (default), `list`, `create`, `update`, `complete`, `delete` | **destructive** | `action`, `listId`, `taskId`, `title`, `body`, `dueDateTime`, `importance`, `dryRun`, `count`, `outputVerbosity` |
+
 ## Categories (3 tools)
 
 | Tool | Description | Safety | Key Parameters |
@@ -136,7 +142,7 @@ Quick reference for all 23 MCP tools across 9 modules, plus 4 built-in MCP promp
 | Category | Tools | Client Behaviour |
 |----------|-------|------------------|
 | **Read-only** (8) | `search-emails`, `read-email`, `list-events`, `search-people`, `access-shared-mailbox`, `find-meeting-rooms`, `find-meeting-times`, `get-mail-tips` | Auto-approved by MCP clients that support annotations |
-| **Destructive** (5) | `send-email`, `draft`, `manage-event`, `folders`, `manage-rules` | Client prompts for confirmation |
+| **Destructive** (6) | `send-email`, `draft`, `manage-event`, `folders`, `manage-rules`, `manage-tasks` | Client prompts for confirmation |
 | **Idempotent** (2) | `update-email`, `mailbox-settings` | Safe to retry |
 | **Moderate write** (8) | All others | Normal approval flow |
 

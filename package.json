@@ -2,7 +2,7 @@
   "name": "@littlebearapps/outlook-assistant",
   "version": "3.8.2",
   "mcpName": "io.github.littlebearapps/outlook-assistant",
-  "description": "Outlook Assistant — MCP server with 23 tools for email, calendar, contacts, and settings via Microsoft Graph API",
+  "description": "Outlook Assistant — MCP server with 24 tools for email, calendar, contacts, tasks, and settings via Microsoft Graph API",
   "main": "index.js",
   "bin": {
     "outlook-assistant": "./index.js"
@@ -66,6 +66,7 @@
     "rules/",
     "settings/",
     "advanced/",
+    "tasks/",
     "utils/",
     ".env.example",
     "README.md",

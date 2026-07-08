@@ -42,6 +42,7 @@ Outlook Assistant connects AI assistants to your Microsoft Outlook account throu
 - 🗂️ **Organise your inbox** — create folders, set up inbox rules, colour-code with categories, manage Focused Inbox — all work together for complete inbox automation
 - 🔄 **Track inbox changes** — delta sync detects new, modified, and deleted emails since your last check, with tokens for incremental polling
 - 👥 **Manage contacts** — search your contact book and organisational directory, create and update contact records
+- ✅ **Manage Microsoft To Do tasks** — list task lists, create/update/complete/delete tasks, and use dry-run previews before saving
 - ⚙️ **Configure settings** — set out-of-office auto-replies, working hours, and time zone
 - 📬 **Access shared mailboxes** — read team inboxes and service accounts (Microsoft 365)
 - 🏢 **Find meeting rooms** — search by building, floor, capacity, AV equipment, and wheelchair accessibility (Microsoft 365)
@@ -66,6 +67,7 @@ Outlook Assistant connects AI assistants to your Microsoft Outlook account throu
 | **Email** | 8 | `search-emails` (list/search/delta/conversations), `read-email` (content + forensic headers), `send-email` (with dry-run + mail tips), `draft` (create/update/send/delete/reply/forward), `update-email` (read status, flags), `attachments`, `export`, `get-mail-tips` |
 | **Calendar** | 3 | `list-events`, `create-event`, `manage-event` (update/decline/cancel/delete) |
 | **Contacts** | 2 | `manage-contact` (list/search/get/create/update/delete), `search-people` |
+| **Tasks** | 1 | `manage-tasks` (list-lists/list/create/update/complete/delete) |
 | **Categories** | 3 | `manage-category` (CRUD), `apply-category`, `manage-focused-inbox` |
 | **Settings** | 1 | `mailbox-settings` (get/set auto-replies/set working hours) |
 | **Folder** | 1 | `folders` (list/create/move/stats/delete) |
@@ -73,7 +75,7 @@ Outlook Assistant connects AI assistants to your Microsoft Outlook account throu
 | **Advanced** | 3 | `access-shared-mailbox`, `find-meeting-rooms`, `find-meeting-times` |
 | **Auth** | 1 | `auth` (status/authenticate/about) |
 
-**23 tools total** — consolidated from 55 for optimal AI performance. See the [Tools Reference](docs/quickrefs/tools-reference.md) for complete parameter details.
+**24 tools total** — consolidated from 55 for optimal AI performance. See the [Tools Reference](docs/quickrefs/tools-reference.md) for complete parameter details.
 
 Outlook Assistant also exposes **4 MCP prompts** for common workflows:
 `triage-inbox`, `draft-reply`, `weekly-summary`, and `meeting-prep`.
@@ -102,6 +104,7 @@ Outlook Assistant works with both personal and work/school Microsoft accounts, b
 | Email read, send, search | Full support | Full support |
 | Calendar events | Full support | Full support |
 | Contacts CRUD | Full support | Full support |
+| Microsoft To Do tasks | Full support | Full support |
 | Inbox rules | Full support | Full support |
 | Folders | Full support | Full support |
 | Free-text `query` search | Limited — use `subject`, `from`, `to` filters instead | Full KQL support |
@@ -148,7 +151,7 @@ Outlook Assistant is designed with safety-first principles for AI-driven email a
 
 **Draft protections** — The `draft` tool shares `send-email` safety controls: dry-run preview, recipient allowlist, mail-tips validation, and rate limiting. The `send` action shares the `send-email` rate limit counter, preventing circumvention via the draft-then-send pathway.
 
-**Token-optimised architecture** — Tools are consolidated using the STRAP (Single Tool, Resource, Action Pattern) approach. 23 tools instead of 55 reduces per-turn overhead by ~11,000 tokens (~64%), keeping more of the AI's context window available for your actual conversation. Fewer tools also means the AI selects the right tool more accurately — research shows tool selection degrades beyond ~40 tools.
+**Token-optimised architecture** — Tools are consolidated using the STRAP (Single Tool, Resource, Action Pattern) approach. 24 tools instead of 55 reduces per-turn overhead by ~11,000 tokens (~64%), keeping more of the AI's context window available for your actual conversation. Fewer tools also means the AI selects the right tool more accurately — research shows tool selection degrades beyond ~40 tools.
 
 > **Important**: These safeguards are defence-in-depth measures that reduce risk, but they are not a guarantee against unintended actions. AI-driven access to your email is inherently sensitive — always review tool calls before approving, particularly for sends and deletes. No automated guardrail is foolproof, and you remain responsible for actions taken through your mailbox.
 
@@ -307,6 +310,7 @@ npm install
    - `Mail.Read`, `Mail.ReadWrite`, `Mail.Send` — email operations
    - `Calendars.Read`, `Calendars.ReadWrite` — calendar operations
    - `Contacts.Read`, `Contacts.ReadWrite` — contact management
+   - `Tasks.Read`, `Tasks.ReadWrite` — Microsoft To Do task management
    - `MailboxSettings.ReadWrite` — settings, auto-replies, categories
    - `People.Read` — people search
 3. Optionally add **org-only** permissions (work/school accounts only):
@@ -408,7 +412,7 @@ This starts a local server on port 3333 to handle the OAuth callback.
 
 ```
 outlook-assistant/
-├── index.js                 # Main entry point (23 tools)
+├── index.js                 # Main entry point (24 tools)
 ├── config.js                # Configuration settings
 ├── outlook-auth-server.js   # OAuth server (port 3333)
 ├── auth/                    # Authentication module (1 tool)
@@ -421,6 +425,7 @@ outlook-assistant/
 │   └── ...
 ├── calendar/                # Calendar module (3 tools)
 ├── contacts/                # Contacts module (2 tools)
+├── tasks/                   # Microsoft To Do module (1 tool)
 ├── categories/              # Categories module (3 tools)
 ├── settings/                # Settings module (1 tool)
 ├── folder/                  # Folder module (1 tool)
@@ -505,7 +510,7 @@ USE_TEST_MODE=true npm start
 | [How-To Guides](docs/how-to/index.md) | 29 practical guides for email, calendar, contacts, and settings |
 | [Roadmap](ROADMAP.md) | Active milestones (v3.7.5, v3.8.0, v3.9.0) and recent releases |
 | [Troubleshooting & FAQ](docs/how-to/getting-started/verify-your-connection.md#common-connection-problems) | Common problems, re-authentication, and frequently asked questions |
-| [Tools Reference](docs/quickrefs/tools-reference.md) | All 23 tools with parameters |
+| [Tools Reference](docs/quickrefs/tools-reference.md) | All 24 tools with parameters |
 | [AI Agent Guide](docs/how-to/ai-agents/using-outlook-assistant-in-agents.md) | Tool selection and workflow patterns for AI agents |
 
 Full documentation: [docs/](docs/README.md)

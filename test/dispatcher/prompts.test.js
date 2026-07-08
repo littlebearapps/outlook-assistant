@@ -121,6 +121,6 @@ describe('MCP prompts protocol', () => {
     ]);
     const tools = responses.find((response) => response.id === 2).result.tools;
 
-    expect(tools).toHaveLength(23);
+    expect(tools).toHaveLength(24);
   });
 });

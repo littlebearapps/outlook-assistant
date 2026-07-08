@@ -86,6 +86,14 @@ describe('action fallthrough → explicit unknown-action error', () => {
     expect(result.content[0].text).toMatch(/Unknown action 'foo'/);
   });
 
+  test('manage-tasks', async () => {
+    const { tasksTools } = require('../../tasks');
+    const tool = tasksTools.find((t) => t.name === 'manage-tasks');
+    const result = await tool.handler({ action: 'foo' });
+    expect(result.content[0].text).toMatch(/Unknown action 'foo'/);
+    expect(result.content[0].text).toMatch(/list-lists, list, create/);
+  });
+
   test('auth', async () => {
     const { authTools } = require('../../auth');
     const tool = authTools.find((t) => t.name === 'auth');

@@ -14,6 +14,37 @@ function simulateGraphAPIResponse(method, path, _data, _queryParams) {
   console.error(`Simulating response for: ${method} ${path}`);
 
   if (method === 'GET') {
+    if (path === 'me/todo/lists') {
+      return {
+        value: [
+          {
+            id: 'mock-task-list-1',
+            displayName: 'Tasks',
+            isOwner: true,
+            isShared: false,
+            wellknownListName: 'defaultList',
+          },
+        ],
+      };
+    }
+    if (path.includes('me/todo/lists/') && path.endsWith('/tasks')) {
+      return {
+        value: [
+          {
+            id: 'mock-task-1',
+            title: 'Mock task',
+            status: 'notStarted',
+            importance: 'normal',
+            createdDateTime: new Date().toISOString(),
+            lastModifiedDateTime: new Date().toISOString(),
+            body: {
+              content: 'Mock task body',
+              contentType: 'text',
+            },
+          },
+        ],
+      };
+    }
     if (path.includes('messages') && !path.includes('sendMail')) {
       // Simulate a successful email list/search response
       if (path.includes('/messages/')) {
@@ -141,6 +172,30 @@ function simulateGraphAPIResponse(method, path, _data, _queryParams) {
     }
   } else if (method === 'POST' && path.includes('sendMail')) {
     // Simulate a successful email send
+    return {};
+  } else if (method === 'POST' && path.includes('me/todo/lists/')) {
+    return {
+      id: 'mock-created-task',
+      title: _data?.title || 'Mock created task',
+      status: 'notStarted',
+      importance: _data?.importance || 'normal',
+      dueDateTime: _data?.dueDateTime,
+      body: _data?.body,
+      createdDateTime: new Date().toISOString(),
+      lastModifiedDateTime: new Date().toISOString(),
+    };
+  } else if (method === 'PATCH' && path.includes('me/todo/lists/')) {
+    return {
+      id: path.split('/').pop(),
+      title: _data?.title || 'Mock updated task',
+      status: _data?.status || 'notStarted',
+      importance: _data?.importance || 'normal',
+      dueDateTime: _data?.dueDateTime,
+      body: _data?.body,
+      createdDateTime: new Date().toISOString(),
+      lastModifiedDateTime: new Date().toISOString(),
+    };
+  } else if (method === 'DELETE' && path.includes('me/todo/lists/')) {
     return {};
   } else if (method === 'POST' && path.includes('findMeetingTimes')) {
     // Simulate meeting-time suggestions

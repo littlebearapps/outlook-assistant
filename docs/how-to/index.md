@@ -53,6 +53,12 @@ Practical guides for managing your Microsoft 365 email, calendar, contacts, and 
 | [Find Contacts and People](contacts/find-contacts-and-people.md) | Search contacts, directory, and recent communications |
 | [Manage Contacts](contacts/manage-contacts.md) | Create, update, and delete contact records |
 
+## Tasks
+
+| Guide | What it covers |
+|-------|---------------|
+| [Manage Microsoft To Do Tasks](tasks/manage-tasks.md) | List task lists, create, update, complete, and delete tasks |
+
 ## Settings
 
 | Guide | What it covers |

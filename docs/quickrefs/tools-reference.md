@@ -5,7 +5,7 @@ tags:
 
 # Tools Reference - Outlook Assistant
 
-Quick reference for all 23 MCP tools across 9 modules. Each tool includes MCP safety annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`).
+Quick reference for all 23 MCP tools across 9 modules, plus 4 built-in MCP prompts. Each tool includes MCP safety annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`).
 
 ## Authentication (1 tool)
 
@@ -183,6 +183,15 @@ Check recipients before sending — detects out-of-office, mailbox full, deliver
 | Session rate limit (create/update) | `OUTLOOK_MAX_DRAFT_PER_SESSION` env | Unlimited (0) |
 | Session rate limit (send) | `OUTLOOK_MAX_EMAILS_PER_SESSION` env (shared with `send-email`) | Unlimited (0) |
 | Recipient allowlist | `OUTLOOK_ALLOWED_RECIPIENTS` env | Allow all |
+
+## MCP Prompts (4 prompts)
+
+| Prompt | Description | Arguments |
+|--------|-------------|-----------|
+| `triage-inbox` | Triage unread inbox email into urgent, action, FYI, and noise buckets | — |
+| `draft-reply` | Read a thread and prepare a dry-run reply for review | `emailId` required |
+| `weekly-summary` | Summarize recent email, calendar activity, and task signals | `days` optional, default 7 |
+| `meeting-prep` | Compile a meeting brief from calendar, email, and attendee context | `eventId` or `eventSubject` |
 
 ## Common Patterns
 

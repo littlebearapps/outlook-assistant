@@ -444,3 +444,18 @@ Checks:
   - Live direct reports check: exported local `.env`, called `search-people {"action":"directReports","count":3}` against live work/school mailbox → non-error direct reports response with no reports found → PASS
 Gate: PASSED
 Notes: No live mutation was performed. The live script printed only sanitized booleans and did not record people names, email addresses, IDs, tokens, or directory details. The tenant/account did not require an owner re-consent interruption for the observed self manager/directReports read-only smoke; if broader user lookups are needed later, `User.Read.All` remains documented as the optional work/school scope.
+
+## [2026-07-08 13:40] Phase 2.7 — #90 MCP prompts
+Branch/PR: feat/90-mcp-prompts / davidb73-hub/outlook-assistant#12
+Checks:
+  - Issue reconciliation: `gh issue view 90 --repo littlebearapps/outlook-assistant` → issue asks for four built-in MCP prompts: `triage-inbox`, `draft-reply`, `weekly-summary`, and `meeting-prep`; issue body wins over local proposed prompt names → PASS
+  - TDD red: `npx jest test/dispatcher -t "prompts"` before implementation → failed because `initialize` omitted prompt capability, `prompts/list` returned empty array, and `prompts/get` was not implemented → PASS
+  - Protocol tests: `npx jest test/dispatcher -t "prompts"` after implementation → 5 prompt protocol tests passed → PASS
+  - Protocol smoke: stdio `initialize` + `prompts/list` + `tools/list` under `USE_TEST_MODE=true` → prompts capability present; prompt names `draft-reply`, `meeting-prep`, `triage-inbox`, `weekly-summary`; tool count remained 23 → PASS
+  - No-send prompt guarantee: `rg -n "send|dryRun" prompts/index.js` → send-adjacent `draft-reply` requires `send-email` with `dryRun=true`; other prompts explicitly say not to send email → PASS
+  - Full suite: `npm test` → Test Suites: 33 passed, 33 total; Tests: 791 passed, 791 total → PASS
+  - Product lint: `git ls-files '*.js' | xargs npx eslint` → 25 warnings; 0 errors → PASS_WITH_DRIFT
+  - Whitespace: `git diff --check` → no output → PASS
+  - PR opened: `gh pr create --repo davidb73-hub/outlook-assistant --base docs/phase-0-golive --head feat/90-mcp-prompts ...` → https://github.com/davidb73-hub/outlook-assistant/pull/12 → PASS
+Gate: PASSED_WITH_DRIFT
+Notes: Added a new `prompts/` module and hand-wired `prompts/list` plus `prompts/get` into the existing dispatcher without changing the tools array or tool count. `weekly-summary` references `manage-tasks` only as "if available" until #89 lands. Raw `npm run lint` remains polluted by untracked local `.claude/` scaffold files; tracked product lint is clean. No live mailbox call is required for prompts; post-merge verification will use the MCP protocol surface in test mode.

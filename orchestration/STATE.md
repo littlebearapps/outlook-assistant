@@ -532,10 +532,27 @@ Gate: PASSED_WITH_LIVE_DEFERRED
 Notes: Added certificate assertion signing with Node `crypto`, in-memory app-only token caching, auth tool status/about/authenticate support, startup validation, and central Graph `/me` rewrite for app-only target mailboxes. Device-code remains the default. Live app-only verification is deferred because it requires owner/admin Azure setup: certificate upload, Graph application permissions, tenant-admin consent, Exchange mailbox scoping, and app-only env vars. No live mailbox calls or mutations were made for #123. Full `manage-tasks` write parity remains delegated-only where Microsoft Graph documents app-only To Do creation as unsupported.
 
 ## [2026-07-08 16:50] Phase 2.10 — v3.9.0 release and roadmap closeout
-Branch/PR: release/3.9.0 / pending
+Branch/PR: release/3.9.0 / davidb73-hub/outlook-assistant#16
 Checks:
   - Version bump: `npm version minor --no-git-tag-version` → package metadata updated from `3.8.2` to `3.9.0`; `server.json` synced by the repository version script → PASS
   - Changelog closeout: moved Phase 2 `[Unreleased]` entries into `## [3.9.0] - 2026-07-08` → PASS
   - Roadmap closeout: removed the open `v3.8.x — Task Integration & Auth` section, added `v3.9.0` to Recently shipped, and moved the future platform-maturity bucket to `v3.10.0` → PASS
-Gate: IN_PROGRESS
-Notes: Release verification, PR, merge, and final phase-exit ledger entry are pending.
+  - Full suite: `npm test` outside sandbox → Test Suites: 36 passed, 36 total; Tests: 809 passed, 809 total → PASS
+  - Product lint: `git ls-files '*.js' | xargs npx eslint` → 24 warnings; 0 errors → PASS_WITH_DRIFT
+  - Version output: `node index.js --version` → `@littlebearapps/outlook-assistant v3.9.0` → PASS
+  - Whitespace: `git diff --check` → no output → PASS
+  - Packaging: `npm_config_cache=.npm-cache npm pack --dry-run` → built `littlebearapps-outlook-assistant-3.9.0.tgz` → PASS
+  - PR opened: `gh pr create --repo davidb73-hub/outlook-assistant --base docs/phase-0-golive --head release/3.9.0 ...` → https://github.com/davidb73-hub/outlook-assistant/pull/16 → PASS
+  - Merge: `gh api -X PUT repos/davidb73-hub/outlook-assistant/pulls/16/merge ...` → merged `true`, merge sha `a6a82105836bda2e5da2a80393a53a56f8319606` → PASS
+  - Local base sync: `git pull --ff-only fork docs/phase-0-golive` → fast-forwarded local base from `773f21d` to `a6a8210` → PASS
+Gate: PASSED
+Notes: Release metadata and roadmap closeout are merged into the canonical fork base. No npm publish or GitHub release tag was created in this local execution pass.
+
+## [2026-07-08 17:05] Phase 2 exit — v3.9.0 feature delivery complete
+Branch/PR: docs/phase-0-golive-final / n/a
+Checks:
+  - Phase 2 issue slots: #118, #125, #126, #117/#169, #127, #91, #90, #89, and #123 all merged into the canonical fork base → PASS
+  - Release closeout: v3.9.0 release branch merged; `ROADMAP.md` no longer contains the open v3.8.x Task Integration & Auth carry-over section → PASS
+  - Live verification ledger: all read-only/contact/calendar/protocol live checks passed where possible; #89 To Do live verification remains blocked by delegated consent; #123 app-only live verification remains deferred pending owner/admin tenant setup → PASS_WITH_EXTERNAL_BLOCKERS
+Gate: PASSED_WITH_EXTERNAL_BLOCKERS
+Notes: Phase 2 is code-complete and release-process-clean in the fork. Remaining live work is not implementation work: it requires Microsoft/Azure owner-admin actions for delegated To Do consent and app-only certificate/application-permission/mailbox-scoping setup.

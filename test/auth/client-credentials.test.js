@@ -87,8 +87,8 @@ describe('app-only client credentials auth', () => {
     const decodedPayload = JSON.parse(
       Buffer.from(payload, 'base64url').toString('utf8')
     );
-    expect(decodedHeader).toMatchObject({ alg: 'RS256', typ: 'JWT' });
-    expect(decodedHeader.x5t).toBeTruthy();
+    expect(decodedHeader).toMatchObject({ alg: 'PS256', typ: 'JWT' });
+    expect(decodedHeader['x5t#S256']).toBeTruthy();
     expect(decodedPayload).toMatchObject({
       iss: 'client-id-123',
       sub: 'client-id-123',

@@ -39,12 +39,12 @@ function buildClientAssertion({ clientId, tenantId, certPem, keyPem }) {
   const tokenEndpoint = buildTokenEndpoint(tenantId);
   const now = Math.floor(Date.now() / 1000);
   const certDer = certPemToDer(certPem);
-  const thumbprint = crypto.createHash('sha1').update(certDer).digest();
+  const thumbprint = crypto.createHash('sha256').update(certDer).digest();
 
   const header = {
-    alg: 'RS256',
+    alg: 'PS256',
     typ: 'JWT',
-    x5t: base64Url(thumbprint),
+    'x5t#S256': base64Url(thumbprint),
   };
   const payload = {
     aud: tokenEndpoint,
@@ -58,11 +58,11 @@ function buildClientAssertion({ clientId, tenantId, certPem, keyPem }) {
   const signingInput = `${base64Url(JSON.stringify(header))}.${base64Url(
     JSON.stringify(payload)
   )}`;
-  const signature = crypto.sign(
-    'RSA-SHA256',
-    Buffer.from(signingInput),
-    keyPem
-  );
+  const signature = crypto.sign('sha256', Buffer.from(signingInput), {
+    key: keyPem,
+    padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+    saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
+  });
 
   return `${signingInput}.${base64Url(signature)}`;
 }

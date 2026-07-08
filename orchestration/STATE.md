@@ -510,3 +510,32 @@ Checks:
   - Post-merge live read-only check: `manage-tasks {"action":"list-lists","count":5}` attempted token refresh and Microsoft returned `AADSTS65001 consent_required` for the newly requested To Do scopes → BLOCKED_REAUTH
 Gate: BLOCKED_REAUTH(required owner/admin interactive consent for `Tasks.Read` and `Tasks.ReadWrite`)
 Notes: No live task mutation was performed. The To Do implementation and follow-up live request-shape fix are merged. Full `list-lists` + dryRun/create/complete live verification is blocked until the owner completes interactive re-auth/consent for the new delegated To Do scopes.
+
+## [2026-07-08 16:35] Phase 2.9 — #123 client credentials app-only auth
+Branch/PR: feat/123-app-only-auth / davidb73-hub/outlook-assistant#15
+Checks:
+  - Issue reconciliation: `gh issue view 123 --repo littlebearapps/outlook-assistant` → issue asks for optional certificate-based client credentials auth with `OUTLOOK_AUTH_METHOD=client-credentials`, `OUTLOOK_TENANT_ID`, `OUTLOOK_CERT_PATH`, `OUTLOOK_KEY_PATH`, `OUTLOOK_TARGET_USER`, `.default` token scope, and `/me` → `/users/{target}` rewriting → PASS
+  - Microsoft Graph To Do docs check: official Learn docs verified To Do app-only support is uneven; task list read supports application permission, task creation is documented delegated-only, and user-targeted update supports `Tasks.ReadWrite.All` → PASS_WITH_GRAPH_LIMITATION
+  - Baseline before edit: `npm test` → Test Suites: 34 passed, 34 total; Tests: 800 passed, 800 total; tracked product lint → 25 warnings; 0 errors → PASS_WITH_DRIFT
+  - TDD red: `npx jest test/auth/client-credentials.test.js test/auth/client-credentials-config.test.js test/utils/graph-api.test.js -t "app-only|client credentials|rewrite|device-code remains|exposes client"` before implementation → failed for missing provider, missing config block, and missing rewrite helper → PASS
+  - Targeted green: `npx jest test/auth/client-credentials.test.js test/auth/client-credentials-config.test.js test/utils/graph-api.test.js` → Test Suites: 3 passed, 3 total; Tests: 62 passed → PASS
+  - Auth suite: `npx jest test/auth` outside sandbox → Test Suites: 10 passed, 10 total; Tests: 98 passed → PASS
+  - Full suite: `npm test` outside sandbox → Test Suites: 36 passed, 36 total; Tests: 809 passed, 809 total → PASS
+  - Product lint: `git ls-files '*.js' | xargs npx eslint` → 24 warnings; 0 errors → PASS_WITH_DRIFT
+  - Whitespace: `git diff --check HEAD~1 HEAD` → no output → PASS
+  - Boot validation: `OUTLOOK_AUTH_METHOD=client-credentials USE_TEST_MODE=true node index.js` → exits non-zero with clear missing `OUTLOOK_CLIENT_ID`, `OUTLOOK_TENANT_ID`, `OUTLOOK_CERT_PATH`, `OUTLOOK_KEY_PATH`, `OUTLOOK_TARGET_USER` config error → PASS
+  - Packaging: `npm_config_cache=.npm-cache npm pack --dry-run` → `auth/client-credentials.js` included in package → PASS
+  - PR opened: `gh pr create --repo davidb73-hub/outlook-assistant --base docs/phase-0-golive --head feat/123-app-only-auth ...` → https://github.com/davidb73-hub/outlook-assistant/pull/15 → PASS
+  - Merge: `gh api -X PUT repos/davidb73-hub/outlook-assistant/pulls/15/merge ...` → merged `true`, merge sha `773f21d29f162c34d456087ff47584e20fedf342` → PASS
+  - Local base sync: `git pull --ff-only fork docs/phase-0-golive` → fast-forwarded local base from `267baff` to `773f21d` → PASS
+Gate: PASSED_WITH_LIVE_DEFERRED
+Notes: Added certificate assertion signing with Node `crypto`, in-memory app-only token caching, auth tool status/about/authenticate support, startup validation, and central Graph `/me` rewrite for app-only target mailboxes. Device-code remains the default. Live app-only verification is deferred because it requires owner/admin Azure setup: certificate upload, Graph application permissions, tenant-admin consent, Exchange mailbox scoping, and app-only env vars. No live mailbox calls or mutations were made for #123. Full `manage-tasks` write parity remains delegated-only where Microsoft Graph documents app-only To Do creation as unsupported.
+
+## [2026-07-08 16:50] Phase 2.10 — v3.9.0 release and roadmap closeout
+Branch/PR: release/3.9.0 / pending
+Checks:
+  - Version bump: `npm version minor --no-git-tag-version` → package metadata updated from `3.8.2` to `3.9.0`; `server.json` synced by the repository version script → PASS
+  - Changelog closeout: moved Phase 2 `[Unreleased]` entries into `## [3.9.0] - 2026-07-08` → PASS
+  - Roadmap closeout: removed the open `v3.8.x — Task Integration & Auth` section, added `v3.9.0` to Recently shipped, and moved the future platform-maturity bucket to `v3.10.0` → PASS
+Gate: IN_PROGRESS
+Notes: Release verification, PR, merge, and final phase-exit ledger entry are pending.

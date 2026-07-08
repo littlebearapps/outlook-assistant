@@ -55,8 +55,9 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 | `utils/schema-coerce.js` | MCP-boundary param coercion + validation (string→array/boolean/number, `additionalProperties: false`, required, enums) |
 | `auth/token-storage.js` | Token storage with auto-refresh at `~/.outlook-assistant-tokens.json` (includes `auth_method` field) |
 | `auth/device-code.js` | Device code flow for headless/remote authentication |
+| `auth/client-credentials.js` | Certificate-based app-only token acquisition and in-memory token cache |
 | `auth/tools.js` | Auth tool handlers; persists device code state to `~/.outlook-assistant-pending-auth.json` |
-| `utils/graph-api.js` | All Graph API calls go through here (includes $batch) |
+| `utils/graph-api.js` | All Graph API calls go through here; rewrites `me` paths for app-only auth (includes $batch) |
 | `email/mail-tips.js` | Pre-send recipient validation |
 | `utils/safety.js` | Rate limiter, allowlist, dry-run preview |
 | `utils/field-presets.js` | Optimised field selections per operation |
@@ -71,9 +72,14 @@ USE_TEST_MODE=false
 OUTLOOK_MAX_EMAILS_PER_SESSION=10          # Optional: rate limit sends
 OUTLOOK_ALLOWED_RECIPIENTS=example.com     # Optional: restrict recipients
 OUTLOOK_IMMUTABLE_IDS=true                 # Optional: IDs persist through folder moves
-OUTLOOK_AUTH_METHOD=device-code            # Optional: default auth method (device-code|browser)
+OUTLOOK_AUTH_METHOD=device-code            # Optional: default auth method (device-code|browser|client-credentials)
 OUTLOOK_AUTH_AUDIENCE=common               # Optional: common|consumers|organizations|<tenant-guid> (v3.8.0; fixes AADSTS9002331 for personal-only Azure apps)
 OUTLOOK_DEFAULT_TIMEZONE=Australia/Melbourne  # Optional: overrides hardcoded default (v3.8.0)
+# App-only auth only:
+# OUTLOOK_TENANT_ID=<tenant-guid>
+# OUTLOOK_CERT_PATH=/absolute/path/to/cert.pem
+# OUTLOOK_KEY_PATH=/absolute/path/to/key.pem
+# OUTLOOK_TARGET_USER=user@example.com
 ```
 
 > The server reads `OUTLOOK_CLIENT_ID`/`OUTLOOK_CLIENT_SECRET` from `config.js`.
@@ -101,7 +107,12 @@ OUTLOOK_DEFAULT_TIMEZONE=Australia/Melbourne  # Optional: overrides hardcoded de
 3. Open URL in browser → Microsoft login
 4. Grant permissions → tokens saved automatically
 
-**Token refresh**: Tokens auto-refresh transparently via `token-storage.js`. Re-auth only needed when refresh token expires (~90 days).
+**Client credentials (optional, Microsoft 365 app-only):**
+1. Configure certificate env vars and `OUTLOOK_TARGET_USER`
+2. Grant tenant-admin consent to application permissions
+3. Scope the app to the target mailbox in Exchange before live use
+
+**Token refresh**: Delegated tokens auto-refresh transparently via `token-storage.js`. Re-auth only needed when refresh token expires (~90 days). App-only tokens are cached in memory and re-fetched before expiry.
 
 ## Adding New Tools
 

@@ -8,9 +8,15 @@ jest.mock('https');
 // Save original config values
 const originalTestMode = config.USE_TEST_MODE;
 const originalEndpoint = config.GRAPH_API_ENDPOINT;
+const originalAuthMethod = config.AUTH_CONFIG.defaultAuthMethod;
+const originalClientCredentialsConfig = config.CLIENT_CREDENTIALS_CONFIG;
 
 // We need to re-require after mocking https
-let callGraphAPI, callGraphAPIPaginated, callGraphAPIBatch, callGraphAPIRaw;
+let callGraphAPI,
+  callGraphAPIPaginated,
+  callGraphAPIBatch,
+  callGraphAPIRaw,
+  rewriteGraphPathForAuth;
 
 beforeAll(() => {
   config.GRAPH_API_ENDPOINT = 'https://graph.microsoft.com/v1.0/';
@@ -19,12 +25,15 @@ beforeAll(() => {
     callGraphAPIPaginated,
     callGraphAPIBatch,
     callGraphAPIRaw,
+    rewriteGraphPathForAuth,
   } = require('../../utils/graph-api'));
 });
 
 afterAll(() => {
   config.USE_TEST_MODE = originalTestMode;
   config.GRAPH_API_ENDPOINT = originalEndpoint;
+  config.AUTH_CONFIG.defaultAuthMethod = originalAuthMethod;
+  config.CLIENT_CREDENTIALS_CONFIG = originalClientCredentialsConfig;
 });
 
 /**
@@ -63,6 +72,8 @@ describe('callGraphAPI', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     config.USE_TEST_MODE = false;
+    config.AUTH_CONFIG.defaultAuthMethod = originalAuthMethod;
+    config.CLIENT_CREDENTIALS_CONFIG = originalClientCredentialsConfig;
   });
 
   describe('test mode', () => {
@@ -191,6 +202,55 @@ describe('callGraphAPI', () => {
 
       const calledUrl = https.request.mock.calls[0][0];
       expect(calledUrl).toBe('https://graph.microsoft.com/v1.0/me/messages');
+    });
+
+    it('should keep /me paths unchanged for delegated auth', () => {
+      config.AUTH_CONFIG.defaultAuthMethod = 'device-code';
+      config.CLIENT_CREDENTIALS_CONFIG = {
+        targetUser: 'target@example.com',
+      };
+
+      expect(rewriteGraphPathForAuth('me/messages')).toBe('me/messages');
+      expect(rewriteGraphPathForAuth('users/other/messages')).toBe(
+        'users/other/messages'
+      );
+    });
+
+    it('should rewrite /me paths to the configured target user for app-only auth', () => {
+      config.AUTH_CONFIG.defaultAuthMethod = 'client-credentials';
+      config.CLIENT_CREDENTIALS_CONFIG = {
+        targetUser: 'target.user@example.com',
+      };
+
+      expect(rewriteGraphPathForAuth('me')).toBe(
+        'users/target.user@example.com'
+      );
+      expect(rewriteGraphPathForAuth('me/messages')).toBe(
+        'users/target.user@example.com/messages'
+      );
+      expect(rewriteGraphPathForAuth('me/mailFolders/Inbox/messages')).toBe(
+        'users/target.user@example.com/mailFolders/Inbox/messages'
+      );
+      expect(
+        rewriteGraphPathForAuth(
+          'https://graph.microsoft.com/v1.0/me/messages?$top=10'
+        )
+      ).toBe('https://graph.microsoft.com/v1.0/me/messages?$top=10');
+    });
+
+    it('should use rewritten /users path when app-only auth is active', async () => {
+      config.AUTH_CONFIG.defaultAuthMethod = 'client-credentials';
+      config.CLIENT_CREDENTIALS_CONFIG = {
+        targetUser: 'target.user@example.com',
+      };
+      mockHttpsRequest(200, {});
+
+      await callGraphAPI('token', 'GET', 'me/messages');
+
+      const calledUrl = https.request.mock.calls[0][0];
+      expect(calledUrl).toBe(
+        'https://graph.microsoft.com/v1.0/users/target.user%40example.com/messages'
+      );
     });
   });
 

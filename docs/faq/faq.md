@@ -53,11 +53,13 @@ Outlook Assistant uses delegated Microsoft Graph permissions — it accesses you
 - **`People.Read`** — `search-people` relevance-ranked lookups
 - **`User.Read.All`** — optional work/school-only scope for `search-people` manager and direct reports lookups
 
-Additional permissions are work/school only and optional: **`Mail.Read.Shared`** for shared mailboxes, **`Place.Read.All`** (admin consent required) for meeting room search, and **`User.Read.All`** for organisation hierarchy lookup. You grant these once during initial sign-in; they're scoped to your account and revocable any time at <https://account.live.com/consent/manage> (personal) or in your tenant admin console (work/school).
+Additional delegated permissions are work/school only and optional: **`Mail.Read.Shared`** for shared mailboxes, **`Place.Read.All`** (admin consent required) for meeting room search, and **`User.Read.All`** for organisation hierarchy lookup. You grant these once during initial sign-in; they're scoped to your account and revocable any time at <https://account.live.com/consent/manage> (personal) or in your tenant admin console (work/school).
+
+Client credentials app-only auth is different: it uses Microsoft Graph application permissions, requires tenant-admin consent, and must be scoped to the target mailbox through Exchange RBAC or Application Access Policies. Without that scoping, application permissions can apply across the tenant.
 
 ## Where are my tokens stored, and what happens when they expire?
 
-Access and refresh tokens are stored at **`~/.outlook-assistant-tokens.json`** with file mode `0o600` (owner read/write only). Token refresh is automatic — the access token (~60 minutes) refreshes transparently via the stored refresh token, so the only time you'll re-authenticate is when the **refresh token expires (~90 days)**. From v3.7.2 onward, refresh works correctly for both public and confidential client flows.
+For device-code and browser auth, access and refresh tokens are stored at **`~/.outlook-assistant-tokens.json`** with file mode `0o600` (owner read/write only). Token refresh is automatic — the access token (~60 minutes) refreshes transparently via the stored refresh token, so the only time you'll re-authenticate is when the **refresh token expires (~90 days)**. From v3.7.2 onward, refresh works correctly for both public and confidential client flows.
 
 If tokens get corrupted or stuck:
 
@@ -67,6 +69,8 @@ rm ~/.outlook-assistant-tokens.json ~/.outlook-assistant-pending-auth.json
 ```
 
 The pending-auth file (also at `~/.outlook-assistant-pending-auth.json`, also `0o600`) only exists between calling `authenticate` and `device-code-complete` — its purpose is to make device-code auth survive MCP server restarts (Untether/Telegram bridges, Claude Desktop session changes, etc.).
+
+Client credentials app-only auth does not store refresh tokens. It reads a local certificate/private key, requests short-lived app-only access tokens from Microsoft, and caches those access tokens in memory only.
 
 ## Can I use Outlook Assistant in read-only mode?
 
@@ -87,6 +91,8 @@ Microsoft Graph (the API behind Outlook, Teams, OneDrive, etc.) requires every c
 
 For device-code auth, the app can run as a public client and does not need a client secret. If your Azure app is single-tenant ("My organisation only"), set `OUTLOOK_AUTH_AUDIENCE` to the app registration's Directory (tenant) ID; the default `common` audience is for apps that support both work/school and personal Microsoft accounts.
 
+For client credentials app-only auth, you must use a work/school tenant, upload a certificate to the app registration, set `OUTLOOK_TENANT_ID`, `OUTLOOK_CERT_PATH`, `OUTLOOK_KEY_PATH`, and `OUTLOOK_TARGET_USER`, and grant tenant-admin consent to application permissions. See [Client Credentials App-Only Setup](guides/client-credentials-setup.md).
+
 Microsoft does not offer a "shared multi-tenant client ID" that any open-source project can reuse — every published Outlook MCP server has the same requirement. We're tracking [#147](https://github.com/littlebearapps/outlook-assistant/issues/147) (publisher-verified shared multi-tenant app) for a future release where Little Bear Apps publishes a verified shared app users can authorise without creating their own registration. Until then, the [Azure Setup Guide](guides/azure-setup.md) walks through the process in about 10 minutes.
 
 ## What's the difference between device code and browser authentication?
@@ -95,7 +101,9 @@ Microsoft does not offer a "shared multi-tenant client ID" that any open-source 
 
 **Browser redirect flow (optional)** runs a local auth server on port 3333 and uses the standard OAuth redirect URI (`http://localhost:3333/auth/callback`). Convenient on a graphical workstation, but it needs an open port and a local browser — neither is available in many MCP host environments. Start it with `npm run auth-server`, then call `auth action=authenticate method=browser`.
 
-Most users should pick device code unless they have a specific reason to use the redirect flow. Both write to the same token file and the resulting MCP server behaviour is identical.
+**Client credentials flow (optional, Microsoft 365 only)** uses a certificate and app-only Microsoft Graph permissions. It is for unattended deployments, not normal personal use. It has no refresh token cliff, but it requires tenant-admin consent and mailbox scoping because application permissions are broader than delegated user permissions.
+
+Most users should pick device code unless they have a specific reason to use another flow. Device-code and browser auth write to the same token file and the resulting MCP server behaviour is identical. Client credentials auth is operationally different because it targets the mailbox configured in `OUTLOOK_TARGET_USER`.
 
 ## How do I update Outlook Assistant?
 

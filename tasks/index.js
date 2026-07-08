@@ -2,9 +2,6 @@ const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { DEFAULT_TIMEZONE } = require('../config');
 const { checkRateLimit } = require('../utils/safety');
-const { TASK_FIELDS } = require('../utils/field-presets');
-
-const TASK_LIST_FIELDS = ['id', 'displayName', 'isOwner', 'isShared'];
 
 function encodeSegment(value) {
   return encodeURIComponent(value);
@@ -74,8 +71,9 @@ function formatTask(task, verbosity = 'standard') {
     );
   }
   if (verbosity === 'full') {
-    if (task.createdDateTime)
+    if (task.createdDateTime) {
       lines.push(`**Created**: ${task.createdDateTime}`);
+    }
     if (task.lastModifiedDateTime) {
       lines.push(`**Modified**: ${task.lastModifiedDateTime}`);
     }
@@ -109,14 +107,8 @@ function requireParam(args, name, label = name) {
 async function handleListLists(args, accessToken) {
   const count = Math.min(args.count || 50, 100);
   const verbosity = args.outputVerbosity || 'standard';
-  const response = await callGraphAPI(
-    accessToken,
-    'GET',
-    'me/todo/lists',
-    null,
-    { $top: count, $select: TASK_LIST_FIELDS.join(',') }
-  );
-  const lists = response.value || [];
+  const response = await callGraphAPI(accessToken, 'GET', 'me/todo/lists');
+  const lists = (response.value || []).slice(0, count);
   const output = ['# Task Lists', `**Showing**: ${lists.length}`, ''];
   lists.forEach((list) => {
     output.push(formatTaskList(list, verbosity));
@@ -137,11 +129,9 @@ async function handleListTasks(args, accessToken) {
   const response = await callGraphAPI(
     accessToken,
     'GET',
-    taskEndpoint(args.listId),
-    null,
-    { $top: count, $select: TASK_FIELDS.full.join(',') }
+    taskEndpoint(args.listId)
   );
-  const tasks = response.value || [];
+  const tasks = (response.value || []).slice(0, count);
   const output = [
     '# Tasks',
     `**List ID**: ${args.listId}`,
@@ -296,17 +286,17 @@ async function handleManageTasks(args = {}) {
     const accessToken = await ensureAuthenticated();
     switch (action) {
       case 'list-lists':
-        return handleListLists(args, accessToken);
+        return await handleListLists(args, accessToken);
       case 'list':
-        return handleListTasks(args, accessToken);
+        return await handleListTasks(args, accessToken);
       case 'create':
-        return handleCreateTask(args, accessToken);
+        return await handleCreateTask(args, accessToken);
       case 'update':
-        return handleUpdateTask(args, accessToken);
+        return await handleUpdateTask(args, accessToken);
       case 'complete':
-        return handleCompleteTask(args, accessToken);
+        return await handleCompleteTask(args, accessToken);
       case 'delete':
-        return handleDeleteTask(args, accessToken);
+        return await handleDeleteTask(args, accessToken);
       default:
         return {
           content: [

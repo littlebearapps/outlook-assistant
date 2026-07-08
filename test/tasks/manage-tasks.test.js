@@ -47,9 +47,7 @@ describe('manage-tasks', () => {
     expect(callGraphAPI).toHaveBeenCalledWith(
       mockAccessToken,
       'GET',
-      'me/todo/lists',
-      null,
-      expect.objectContaining({ $top: 50 })
+      'me/todo/lists'
     );
     expect(result.content[0].text).toContain('# Task Lists');
     expect(result.content[0].text).toContain('Tasks');
@@ -68,9 +66,7 @@ describe('manage-tasks', () => {
     expect(callGraphAPI).toHaveBeenCalledWith(
       mockAccessToken,
       'GET',
-      'me/todo/lists/list-1/tasks',
-      null,
-      expect.objectContaining({ $top: 10 })
+      'me/todo/lists/list-1/tasks'
     );
     expect(result.content[0].text).toContain('# Tasks');
     expect(result.content[0].text).toContain('Review PR #88');

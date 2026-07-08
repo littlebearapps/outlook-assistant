@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.9.1] - 2026-07-08
+
+### Fixed
+
+- Updated client credentials certificate assertions to use Microsoft Entra's
+  current `PS256` / `x5t#S256` format with a SHA-256 certificate thumbprint,
+  resolving the CodeQL weak-cryptography finding on the earlier SHA-1 `x5t`
+  thumbprint implementation. (#123)
+
 ## [3.9.0] - 2026-07-08
 
 ### Added

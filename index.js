@@ -29,6 +29,7 @@ const { contactsTools } = require('./contacts');
 const { categoriesTools } = require('./categories');
 const { settingsTools } = require('./settings');
 const { advancedTools } = require('./advanced');
+const { listPrompts, getPrompt } = require('./prompts');
 
 // Log startup information
 console.error(`STARTING ${config.SERVER_NAME.toUpperCase()} MCP SERVER`);
@@ -72,6 +73,7 @@ const server = new Server(
         acc[tool.name] = {};
         return acc;
       }, {}),
+      prompts: {},
     },
   }
 );
@@ -92,6 +94,7 @@ server.fallbackRequestHandler = async (request) => {
             acc[tool.name] = {};
             return acc;
           }, {}),
+          prompts: {},
         },
         serverInfo: {
           name: config.SERVER_NAME,
@@ -118,7 +121,11 @@ server.fallbackRequestHandler = async (request) => {
 
     // Required empty responses for other capabilities
     if (method === 'resources/list') return { resources: [] };
-    if (method === 'prompts/list') return { prompts: [] };
+    if (method === 'prompts/list') return { prompts: listPrompts() };
+    if (method === 'prompts/get') {
+      const { name, arguments: args = {} } = params || {};
+      return getPrompt(name, args);
+    }
 
     // Tool call handler
     if (method === 'tools/call') {

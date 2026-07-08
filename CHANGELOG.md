@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   while keeping existing `email`/`emails` compatibility. (#127)
 - Added `search-people` org hierarchy actions for work/school accounts:
   `action=manager` and `action=directReports`. (#91)
+- Added four built-in MCP prompts for guided email workflows:
+  `triage-inbox`, `draft-reply`, `weekly-summary`, and `meeting-prep`. (#90)
 
 ### Fixed
 

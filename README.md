@@ -45,6 +45,7 @@ Outlook Assistant connects AI assistants to your Microsoft Outlook account throu
 - ⚙️ **Configure settings** — set out-of-office auto-replies, working hours, and time zone
 - 📬 **Access shared mailboxes** — read team inboxes and service accounts (Microsoft 365)
 - 🏢 **Find meeting rooms** — search by building, floor, capacity, AV equipment, and wheelchair accessibility (Microsoft 365)
+- 🧭 **Run guided workflows** — built-in MCP prompts for inbox triage, reply drafting, weekly summaries, and meeting prep
 
 ### Why Outlook Assistant?
 
@@ -73,6 +74,9 @@ Outlook Assistant connects AI assistants to your Microsoft Outlook account throu
 | **Auth** | 1 | `auth` (status/authenticate/about) |
 
 **23 tools total** — consolidated from 55 for optimal AI performance. See the [Tools Reference](docs/quickrefs/tools-reference.md) for complete parameter details.
+
+Outlook Assistant also exposes **4 MCP prompts** for common workflows:
+`triage-inbox`, `draft-reply`, `weekly-summary`, and `meeting-prep`.
 
 ### Export Formats
 

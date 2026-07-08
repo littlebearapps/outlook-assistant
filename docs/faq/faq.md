@@ -76,6 +76,10 @@ Yes. Two layers of control let you scope what Outlook Assistant can do:
 
 Every tool also carries [MCP annotations](https://modelcontextprotocol.io/docs/concepts/tools#annotations) (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) so AI clients can auto-approve safe reads, prompt for confirmation on destructive operations, and treat external-content results such as emails and shared mailbox content as prompt-injection surface.
 
+## What are the built-in MCP prompts?
+
+Prompts are guided workflow templates exposed to MCP clients. Outlook Assistant includes `triage-inbox`, `draft-reply`, `weekly-summary`, and `meeting-prep`. They do not grant extra permissions or bypass tool safety; they instruct the AI client how to combine existing tools. Send-adjacent prompts require `dryRun` first so you can review before anything is sent.
+
 ## Why does Outlook Assistant need an Azure app registration?
 
 Microsoft Graph (the API behind Outlook, Teams, OneDrive, etc.) requires every client application to be registered in Microsoft Entra ID before it can request delegated access on a user's behalf. The app registration gives Microsoft three things: (1) a client ID so they know which application is asking, (2) a redirect URI / public-client mode for the OAuth flow, and (3) a list of scopes the app may request. Without registration, OAuth would have no entry point.

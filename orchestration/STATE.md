@@ -468,3 +468,20 @@ Checks:
   - Post-merge protocol smoke: stdio `initialize` + `prompts/list` + `prompts/get draft-reply` + `tools/list` under `USE_TEST_MODE=true` → prompts capability present, 4 prompts listed, `draft-reply` contained `dryRun`, tool count remained 23 → PASS
 Gate: PASSED
 Notes: No live mailbox access or mutation was required for this additive MCP protocol feature. Prompt support is now merged into the canonical fork base and verified via the MCP protocol surface.
+
+## [2026-07-08 14:45] Phase 2.8 — #89 `manage-tasks` Microsoft To Do tool
+Branch/PR: feat/89-manage-tasks / davidb73-hub/outlook-assistant#13
+Checks:
+  - Issue reconciliation: `gh issue view 89 --repo littlebearapps/outlook-assistant` → issue asks for new `tasks/` module with `manage-tasks` actions `list-lists`, `list`, `create`, `update`, `complete`, and `delete`; issue body wins over local delete caution → PASS
+  - Microsoft Graph docs check: official Learn docs for Microsoft To Do lists/tasks verified `/me/todo/lists`, `/me/todo/lists/{listId}/tasks`, delegated `Tasks.Read`/`Tasks.ReadWrite`, and personal + work/school support → PASS
+  - TDD red: `npx jest test/tasks` before implementation → failed because `../../tasks` module did not exist → PASS
+  - Unit tests: `npx jest test/tasks` → 8 tests passed for list-lists, list, create, update, complete, delete, dryRun, and rate limiting → PASS
+  - Dispatcher tests: `npx jest test/tasks test/dispatcher/tool-annotations.test.js test/dispatcher/action-fallthrough.test.js test/dispatcher/prompts.test.js` → 4 suites passed; 29 tests passed → PASS
+  - Registration: stdio `tools/list` under `USE_TEST_MODE=true` → 24 tools; `manage-tasks` present with `readOnlyHint:false`, `destructiveHint:true`, `idempotentHint:false`, `openWorldHint:false` → PASS
+  - npm packaging: `npm_config_cache=.npm-cache npm pack --dry-run 2>&1 | grep "tasks/"` → `tasks/index.js` included → PASS_WITH_DRIFT
+  - Full suite: `npm test` → Test Suites: 34 passed, 34 total; Tests: 800 passed, 800 total → PASS
+  - Product lint: `git ls-files '*.js' tasks/index.js test/tasks/manage-tasks.test.js | xargs npx eslint` → 25 warnings; 0 errors → PASS_WITH_DRIFT
+  - Whitespace: `git diff --check` → no output → PASS
+  - PR opened: `gh pr create --repo davidb73-hub/outlook-assistant --base docs/phase-0-golive --head feat/89-manage-tasks ...` → https://github.com/davidb73-hub/outlook-assistant/pull/13 → PASS
+Gate: PASSED_WITH_DRIFT
+Notes: Added `Tasks.Read` and `Tasks.ReadWrite` to default delegated scopes, so live use requires owner re-consent after merge. Packaging check used `npm_config_cache=.npm-cache` because the machine's default `~/.npm` cache contains root-owned files and `npm pack --dry-run` failed with EPERM there; the local-cache dry-run passed and confirmed the `tasks/` module ships. Raw `npm run lint` remains polluted by untracked local `.claude/` scaffold files; tracked product lint is clean. Live `list-lists` + dryRun/create/complete verification remains pending until after merge and re-authentication.

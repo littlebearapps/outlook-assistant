@@ -9,6 +9,7 @@ const { contactsTools } = require('../../contacts');
 const { categoriesTools } = require('../../categories');
 const { settingsTools } = require('../../settings');
 const { advancedTools } = require('../../advanced');
+const { tasksTools } = require('../../tasks');
 
 const allTools = [
   ...authTools,
@@ -20,6 +21,7 @@ const allTools = [
   ...categoriesTools,
   ...settingsTools,
   ...advancedTools,
+  ...tasksTools,
 ];
 
 const expectedAnnotations = {
@@ -159,11 +161,18 @@ const expectedAnnotations = {
     idempotentHint: true,
     openWorldHint: false,
   },
+  'manage-tasks': {
+    title: 'Tasks',
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
 };
 
 describe('tool annotations', () => {
   test('pin expected annotations for all tools', () => {
-    expect(allTools).toHaveLength(23);
+    expect(allTools).toHaveLength(24);
 
     const toolsByName = Object.fromEntries(
       allTools.map((tool) => [tool.name, tool])

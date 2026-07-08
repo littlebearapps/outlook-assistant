@@ -41,6 +41,7 @@ Follow the full walkthrough in the [Azure Setup Guide](../../guides/azure-setup.
    - `Mail.Read`, `Mail.ReadWrite`, `Mail.Send` — email operations
    - `Calendars.Read`, `Calendars.ReadWrite` — calendar operations
    - `Contacts.Read`, `Contacts.ReadWrite` — contact management
+   - `Tasks.Read`, `Tasks.ReadWrite` — Microsoft To Do task management
    - `MailboxSettings.ReadWrite` — settings, categories, auto-replies
    - `People.Read` — people search
 
@@ -195,4 +196,4 @@ If you see your recent emails, everything is connected.
 - [Azure Setup Guide](../../guides/azure-setup.md) — full Azure walkthrough with screenshots
 - [Verify Your Connection](verify-your-connection.md) — check auth status and re-authenticate
 - [Find Emails](../email/find-emails.md) — your first search after connecting
-- [Tools Reference](../../quickrefs/tools-reference.md) — all 23 tools with parameters
+- [Tools Reference](../../quickrefs/tools-reference.md) — all 24 tools with parameters

@@ -56,7 +56,7 @@ Use this workflow:
 Use this workflow:
 1. Call \`search-emails\` for recent important or unread messages in the last ${days} day(s).
 2. Call \`list-events\` for the same period and identify major meetings, conflicts, and follow-ups.
-3. If \`manage-tasks\` is available, check outstanding tasks; if it is not available, infer likely tasks only from email and calendar evidence and label them as inferred.
+3. Call \`manage-tasks\` to check outstanding tasks and recently completed items.
 4. Produce sections for accomplishments, open loops, upcoming commitments, blockers, and suggested next actions.
 5. Do not send email or mutate mailbox state while preparing the summary.`),
       ];

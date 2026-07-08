@@ -29,6 +29,7 @@ const { contactsTools } = require('./contacts');
 const { categoriesTools } = require('./categories');
 const { settingsTools } = require('./settings');
 const { advancedTools } = require('./advanced');
+const { tasksTools } = require('./tasks');
 const { listPrompts, getPrompt } = require('./prompts');
 
 // Log startup information
@@ -59,6 +60,7 @@ const TOOLS = [
   ...categoriesTools,
   ...settingsTools,
   ...advancedTools,
+  ...tasksTools,
 ];
 
 // Set dynamic tool count for auth about handler

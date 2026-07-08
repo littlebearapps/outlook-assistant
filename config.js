@@ -96,6 +96,8 @@ module.exports = {
       'Contacts.Read',
       'Contacts.ReadWrite',
       'People.Read',
+      'Tasks.Read',
+      'Tasks.ReadWrite',
       'MailboxSettings.ReadWrite',
       ...parseExtraScopes(process.env.OUTLOOK_EXTRA_SCOPES),
       // Org-dependent scopes (work/school accounts only):

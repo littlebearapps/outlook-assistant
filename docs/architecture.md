@@ -32,6 +32,7 @@ rules/                # 1 tool: manage-rules (action: list|create|update|reorder
   ├── update.js           # Rule modification (rename, conditions, actions, exceptions)
   └── list.js             # Rule listing with full condition/action/exception display
 contacts/             # 2 tools: manage-contact (full CRUD), search-people
+tasks/                # 1 tool: manage-tasks (Microsoft To Do lists/tasks)
 categories/           # 3 tools: manage-category, apply-category, manage-focused-inbox
 settings/             # 1 tool: mailbox-settings (action: get|set-auto-replies|set-working-hours)
 advanced/             # 3 tools: access-shared-mailbox, find-meeting-rooms, find-meeting-times
@@ -56,6 +57,7 @@ The server consolidated 55 original tools into 22 action-based tools to save ~11
 | export-email, batch-export-emails, export-conversation, get-mime-content | `export` | `target` param |
 | decline-event, cancel-event, delete-event | `manage-event` | `action` param |
 | list/search/get/create/update/delete-contact | `manage-contact` | `action` param |
+| list task lists, list/create/update/complete/delete tasks | `manage-tasks` | `action` param |
 | list/create/update/delete-category | `manage-category` | `action` param |
 | get/set-focused-inbox-overrides | `manage-focused-inbox` | `action` param |
 | get-mailbox-settings, get/set-automatic-replies, get/set-working-hours | `mailbox-settings` | `action` param |

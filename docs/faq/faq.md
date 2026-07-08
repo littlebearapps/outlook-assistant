@@ -48,6 +48,7 @@ Outlook Assistant uses delegated Microsoft Graph permissions — it accesses you
 - **`Calendars.Read`, `Calendars.ReadWrite`** — events listing, creation, and management
 - **`Calendars.Read.Shared`** — optional work/school-only scope for `find-meeting-times` across attendees
 - **`Contacts.Read`, `Contacts.ReadWrite`** — contact CRUD via `manage-contact`
+- **`Tasks.Read`, `Tasks.ReadWrite`** — Microsoft To Do task lists and tasks via `manage-tasks`
 - **`MailboxSettings.ReadWrite`** — auto-replies, working hours, master categories, Focused Inbox overrides
 - **`People.Read`** — `search-people` relevance-ranked lookups
 - **`User.Read.All`** — optional work/school-only scope for `search-people` manager and direct reports lookups

@@ -20,7 +20,7 @@ const {
 const { coerceArgsAgainstSchema } = require('./utils/schema-coerce');
 
 // Import module tools
-const { authTools, setToolCount } = require('./auth');
+const { authTools, setToolCount, validateActiveAuthConfig } = require('./auth');
 const { calendarTools } = require('./calendar');
 const { emailTools } = require('./email');
 const { folderTools } = require('./folder');
@@ -35,6 +35,13 @@ const { listPrompts, getPrompt } = require('./prompts');
 // Log startup information
 console.error(`STARTING ${config.SERVER_NAME.toUpperCase()} MCP SERVER`);
 console.error(`Test mode is ${config.USE_TEST_MODE ? 'enabled' : 'disabled'}`);
+
+try {
+  validateActiveAuthConfig();
+} catch (error) {
+  console.error(`Configuration error: ${error.message}`);
+  process.exit(1);
+}
 
 // F-1 / F-48: warn at startup when safety belts are unset. Mirrors the
 // warning surfaced by `auth action=about`. Visible to operators reading

@@ -24,10 +24,12 @@ If you discover a security vulnerability, please report it responsibly:
 - OAuth tokens are stored locally at `~/.outlook-assistant-tokens.json`
 - Ensure this file has appropriate permissions (readable only by owner): `chmod 600 ~/.outlook-assistant-tokens.json`
 - Never commit token files to version control
+- Client credentials auth does not store refresh tokens; it reads certificate/private-key PEM files and caches short-lived app-only access tokens in memory only
 
 ### Environment Variables
 
 - Store `OUTLOOK_CLIENT_ID` and `OUTLOOK_CLIENT_SECRET` securely
+- Store `OUTLOOK_CERT_PATH` and `OUTLOOK_KEY_PATH` securely for app-only deployments; private keys should be owner-readable only (`chmod 600`)
 - Use `.env` files locally (never commit to git)
 - Use secure secret management in production
 
@@ -41,11 +43,23 @@ This server requests the following Microsoft Graph delegated permissions:
 - `Mail.Read.Shared` — Shared mailbox access
 - `Calendars.Read`, `Calendars.ReadWrite` — Calendar management
 - `Contacts.Read`, `Contacts.ReadWrite` — Contact management
+- `Tasks.Read`, `Tasks.ReadWrite` — Microsoft To Do task access
 - `MailboxSettings.Read`, `MailboxSettings.ReadWrite` — Settings access
 - `People.Read` — People search
+- `User.Read.All` — Optional organisation hierarchy lookup
 - `Place.Read.All` — Meeting room search
 
 Only grant permissions that are necessary for your use case.
+
+### Client Credentials App-Only Auth
+
+`OUTLOOK_AUTH_METHOD=client-credentials` uses Microsoft Graph application permissions rather than delegated user permissions. This is useful for unattended Microsoft 365 deployments, but the risk is higher:
+
+- Application permissions can apply across the tenant by default.
+- Tenant-admin consent is required.
+- Personal Microsoft accounts are not supported.
+- You must scope the app to the intended mailbox using Exchange RBAC for Applications or Application Access Policies before production use.
+- Keep `OUTLOOK_ALLOWED_RECIPIENTS` and `OUTLOOK_MAX_EMAILS_PER_SESSION` configured for any app-only deployment that can send mail.
 
 ## Best Practices
 

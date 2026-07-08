@@ -25,6 +25,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `manage-tasks`, a Microsoft To Do tool for listing task lists,
   listing tasks, creating/updating tasks with dry-run previews, completing
   tasks, and deleting tasks. (#89)
+- Added optional certificate-based client credentials authentication for
+  Microsoft 365 app-only deployments, including in-memory token caching and
+  transparent `/me` to `/users/{OUTLOOK_TARGET_USER}` Graph routing. (#123)
+
+### Documentation
+
+- Added a client credentials setup guide covering certificate generation,
+  tenant-admin consent, Exchange mailbox scoping, and mandatory send guards for
+  app-only deployments. (#123)
 
 ### Fixed
 

@@ -20,6 +20,7 @@
 Outlook Assistant connects AI assistants to your Microsoft Outlook account through the [Model Context Protocol](https://modelcontextprotocol.io/). Ask your AI assistant to search your inbox, send emails, schedule meetings, manage contacts, and configure mailbox settings — without leaving the conversation. Works with Claude, Cursor, Windsurf, and any MCP-compatible client.
 
 **Works with personal Outlook.com and work/school Microsoft 365 accounts.**
+Optional client-credentials app-only auth is available for Microsoft 365 work/school tenants that need unattended operation.
 
 <div align="center">
   <br />
@@ -114,6 +115,7 @@ Outlook Assistant works with both personal and work/school Microsoft accounts, b
 | Org hierarchy lookup | Not available | Requires `User.Read.All` |
 | Shared mailboxes | Not available | Requires `Mail.Read.Shared` |
 | Meeting room search | Not available | Requires `Place.Read.All` + admin consent |
+| Client credentials app-only auth | Not available | Requires certificate, application permissions, admin consent, and mailbox scoping |
 
 > **Note**: On personal accounts, Microsoft's `$search` API has limited support for free-text queries. Outlook Assistant handles this automatically with progressive search — if your query returns no results, it falls back through OData filters, boolean filters, and recent message listing to find your emails. For the most direct results on personal accounts, use the structured filter parameters (`from`, `subject`, `to`, `receivedAfter`).
 
@@ -149,6 +151,8 @@ Outlook Assistant is designed with safety-first principles for AI-driven email a
 > }
 > ```
 
+> **App-only deployments**: if you use `OUTLOOK_AUTH_METHOD=client-credentials`, treat these send guards as mandatory and also scope the app to the target mailbox in Exchange. Application permissions can otherwise apply tenant-wide.
+
 **Draft protections** — The `draft` tool shares `send-email` safety controls: dry-run preview, recipient allowlist, mail-tips validation, and rate limiting. The `send` action shares the `send-email` rate limit counter, preventing circumvention via the draft-then-send pathway.
 
 **Token-optimised architecture** — Tools are consolidated using the STRAP (Single Tool, Resource, Action Pattern) approach. 24 tools instead of 55 reduces per-turn overhead by ~11,000 tokens (~64%), keeping more of the AI's context window available for your actual conversation. Fewer tools also means the AI selects the right tool more accurately — research shows tool selection degrades beyond ~40 tools.
@@ -179,6 +183,8 @@ You need a Microsoft Azure app registration to authenticate. See the **[Azure Se
 4. Under Authentication > **Add a platform** > **Mobile and desktop applications** — check `nativeclient` URI
 5. Enable **"Allow public client flows"** in Authentication > Advanced settings
 6. _(Optional)_ Set redirect URI to `http://localhost:3333/auth/callback` — only needed for browser auth flow
+
+For unattended Microsoft 365 deployments, see [Client Credentials App-Only Setup](docs/guides/client-credentials-setup.md). It uses a certificate instead of a client secret and requires application permissions, tenant-admin consent, and mailbox scoping.
 
 ### 3. Configure Your MCP Client
 
@@ -407,6 +413,12 @@ This starts a local server on port 3333 to handle the OAuth callback.
 3. Sign in and grant permissions — tokens are saved automatically
 
 > **Note**: The auth server reads `OUTLOOK_CLIENT_ID` and `OUTLOOK_CLIENT_SECRET` from environment variables. Your MCP client's `"env"` config only applies to the MCP server process, not a separately-started auth server.
+
+### Client Credentials Flow (Microsoft 365 App-Only)
+
+For unattended deployments, set `OUTLOOK_AUTH_METHOD=client-credentials` and configure `OUTLOOK_TENANT_ID`, `OUTLOOK_CERT_PATH`, `OUTLOOK_KEY_PATH`, and `OUTLOOK_TARGET_USER`. App-only tokens are cached in memory and re-fetched before expiry; no refresh token is stored.
+
+Use this only after tenant-admin consent and Exchange mailbox scoping are in place. See [Client Credentials App-Only Setup](docs/guides/client-credentials-setup.md).
 
 ## Directory Structure
 

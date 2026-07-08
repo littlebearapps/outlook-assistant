@@ -41,6 +41,8 @@ if (!homeDir) {
  * `OUTLOOK_AUTH_AUDIENCE` to override.
  */
 const AUTH_AUDIENCE = process.env.OUTLOOK_AUTH_AUDIENCE || 'common';
+const DEFAULT_AUTH_METHOD = process.env.OUTLOOK_AUTH_METHOD || 'device-code';
+const CLIENT_CREDENTIALS_SCOPE = 'https://graph.microsoft.com/.default';
 
 function parseExtraScopes(value) {
   if (!value) return [];
@@ -112,8 +114,17 @@ module.exports = {
     deviceCodeEndpoint: `https://login.microsoftonline.com/${AUTH_AUDIENCE}/oauth2/v2.0/devicecode`,
     tokenEndpoint: `https://login.microsoftonline.com/${AUTH_AUDIENCE}/oauth2/v2.0/token`,
     authorizeEndpoint: `https://login.microsoftonline.com/${AUTH_AUDIENCE}/oauth2/v2.0/authorize`,
-    defaultAuthMethod: process.env.OUTLOOK_AUTH_METHOD || 'device-code',
+    defaultAuthMethod: DEFAULT_AUTH_METHOD,
   },
+
+  CLIENT_CREDENTIALS_CONFIG: {
+    tenantId: process.env.OUTLOOK_TENANT_ID || '',
+    certPath: process.env.OUTLOOK_CERT_PATH || '',
+    keyPath: process.env.OUTLOOK_KEY_PATH || '',
+    targetUser: process.env.OUTLOOK_TARGET_USER || '',
+  },
+
+  CLIENT_CREDENTIALS_SCOPE,
 
   // Microsoft Graph API
   GRAPH_API_ENDPOINT: 'https://graph.microsoft.com/v1.0/',

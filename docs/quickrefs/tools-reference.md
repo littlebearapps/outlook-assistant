@@ -11,7 +11,7 @@ Quick reference for all 24 MCP tools across 10 modules, plus 4 built-in MCP prom
 
 | Tool | Actions | Safety | Key Parameters |
 |------|---------|--------|----------------|
-| `auth` | `status` (default), `authenticate`, `device-code-complete`, `about` | moderate write | `method` (`device-code` default, `browser`), `force`. Device code state persists across server restarts (v3.7.2+). |
+| `auth` | `status` (default), `authenticate`, `device-code-complete`, `about` | moderate write | `method` (`device-code` default, `browser`, `client-credentials`), `force`. Device code state persists across server restarts; app-only auth uses certificate env vars and `OUTLOOK_TARGET_USER`. |
 
 ## Email (8 tools)
 

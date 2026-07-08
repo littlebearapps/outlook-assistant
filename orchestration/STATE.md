@@ -500,3 +500,13 @@ Checks:
   - PR opened: `gh pr create --repo davidb73-hub/outlook-assistant --base docs/phase-0-golive --head fix/89-manage-tasks-live-error ...` → https://github.com/davidb73-hub/outlook-assistant/pull/14 → PASS
 Gate: PASSED_WITH_REAUTH_REQUIRED
 Notes: No live task mutation was performed. The live script printed only sanitized booleans/error category and no task data or tokens. Full live create/complete verification remains blocked until owner re-authenticates with the new To Do scopes.
+
+## [2026-07-08 15:20] Phase 2.8 — #89 fork PR merge + consent gate
+Branch/PR: feat/89-manage-tasks + fix/89-manage-tasks-live-error / davidb73-hub/outlook-assistant#13 + #14
+Checks:
+  - #89 merge: `gh api -X PUT repos/davidb73-hub/outlook-assistant/pulls/13/merge ...` → merged `true`, merge sha `c614a4860956c97400972d50b85a9d56d244f3a4` → PASS
+  - #89 follow-up merge: `gh api -X PUT repos/davidb73-hub/outlook-assistant/pulls/14/merge ...` → merged `true`, merge sha `19e2f7aa6971a9fec39fcf222c212ef2bb9bf0ef` → PASS
+  - Local base sync: `git pull --ff-only fork docs/phase-0-golive` → fast-forwarded local base from `c614a48` to `19e2f7a` → PASS
+  - Post-merge live read-only check: `manage-tasks {"action":"list-lists","count":5}` attempted token refresh and Microsoft returned `AADSTS65001 consent_required` for the newly requested To Do scopes → BLOCKED_REAUTH
+Gate: BLOCKED_REAUTH(required owner/admin interactive consent for `Tasks.Read` and `Tasks.ReadWrite`)
+Notes: No live task mutation was performed. The To Do implementation and follow-up live request-shape fix are merged. Full `list-lists` + dryRun/create/complete live verification is blocked until the owner completes interactive re-auth/consent for the new delegated To Do scopes.

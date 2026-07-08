@@ -485,3 +485,18 @@ Checks:
   - PR opened: `gh pr create --repo davidb73-hub/outlook-assistant --base docs/phase-0-golive --head feat/89-manage-tasks ...` → https://github.com/davidb73-hub/outlook-assistant/pull/13 → PASS
 Gate: PASSED_WITH_DRIFT
 Notes: Added `Tasks.Read` and `Tasks.ReadWrite` to default delegated scopes, so live use requires owner re-consent after merge. Packaging check used `npm_config_cache=.npm-cache` because the machine's default `~/.npm` cache contains root-owned files and `npm pack --dry-run` failed with EPERM there; the local-cache dry-run passed and confirmed the `tasks/` module ships. Raw `npm run lint` remains polluted by untracked local `.claude/` scaffold files; tracked product lint is clean. Live `list-lists` + dryRun/create/complete verification remains pending until after merge and re-authentication.
+
+## [2026-07-08 15:05] Phase 2.8 — #89 live-smoke follow-up fix
+Branch/PR: fix/89-manage-tasks-live-error / davidb73-hub/outlook-assistant#14
+Checks:
+  - Live smoke before fix: `manage-tasks {"action":"list-lists"}` against live Graph returned an uncaught 400 `invalidRequest` from `/me/todo/lists?$top=...&$select=...` → FAIL_FOUND
+  - Root cause: `handleManageTasks` returned async action promises without `await`, so rejected Graph calls escaped the handler catch; To Do list endpoint also reached a valid permission boundary when called without OData query params → PASS
+  - Fix: await all action handlers inside the dispatcher try block; remove To Do list/task OData query params and apply `count` client-side → PASS
+  - Focused tests: `npx jest test/tasks` → 8 tests passed → PASS
+  - Live read-only boundary after fix: `manage-tasks {"action":"list-lists","count":5}` reached handled 403 `Access is denied ... not enough permission`, confirming the remaining blocker is re-auth/consent for `Tasks.Read`/`Tasks.ReadWrite`, not request shape → PASS_WITH_REAUTH_REQUIRED
+  - Full suite: `npm test` → Test Suites: 34 passed, 34 total; Tests: 800 passed, 800 total → PASS
+  - Product lint: `git ls-files '*.js' tasks/index.js test/tasks/manage-tasks.test.js | xargs npx eslint` → 25 warnings; 0 errors → PASS_WITH_DRIFT
+  - Whitespace: `git diff --check` → no output → PASS
+  - PR opened: `gh pr create --repo davidb73-hub/outlook-assistant --base docs/phase-0-golive --head fix/89-manage-tasks-live-error ...` → https://github.com/davidb73-hub/outlook-assistant/pull/14 → PASS
+Gate: PASSED_WITH_REAUTH_REQUIRED
+Notes: No live task mutation was performed. The live script printed only sanitized booleans/error category and no task data or tokens. Full live create/complete verification remains blocked until owner re-authenticates with the new To Do scopes.

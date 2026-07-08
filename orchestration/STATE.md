@@ -459,3 +459,12 @@ Checks:
   - PR opened: `gh pr create --repo davidb73-hub/outlook-assistant --base docs/phase-0-golive --head feat/90-mcp-prompts ...` → https://github.com/davidb73-hub/outlook-assistant/pull/12 → PASS
 Gate: PASSED_WITH_DRIFT
 Notes: Added a new `prompts/` module and hand-wired `prompts/list` plus `prompts/get` into the existing dispatcher without changing the tools array or tool count. `weekly-summary` references `manage-tasks` only as "if available" until #89 lands. Raw `npm run lint` remains polluted by untracked local `.claude/` scaffold files; tracked product lint is clean. No live mailbox call is required for prompts; post-merge verification will use the MCP protocol surface in test mode.
+
+## [2026-07-08 13:55] Phase 2.7 — #90 fork PR merge + protocol verification
+Branch/PR: feat/90-mcp-prompts / davidb73-hub/outlook-assistant#12
+Checks:
+  - Merge: `gh api -X PUT repos/davidb73-hub/outlook-assistant/pulls/12/merge ...` → merged `true`, merge sha `3b4d39f81062afb32ddca2aac7a1d0229d6abd87` → PASS
+  - Local base sync: `git pull --ff-only fork docs/phase-0-golive` → fast-forwarded local base from `9030527` to `3b4d39f` → PASS
+  - Post-merge protocol smoke: stdio `initialize` + `prompts/list` + `prompts/get draft-reply` + `tools/list` under `USE_TEST_MODE=true` → prompts capability present, 4 prompts listed, `draft-reply` contained `dryRun`, tool count remained 23 → PASS
+Gate: PASSED
+Notes: No live mailbox access or mutation was required for this additive MCP protocol feature. Prompt support is now merged into the canonical fork base and verified via the MCP protocol surface.

@@ -7,7 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [3.9.0] - 2026-07
+## [3.9.1] - 2026-08
+
+Packaging hotfix. **Every published release from 3.9.0 back to 3.8.2 is
+unusable when installed from npm** — this restores a working install. No
+behavioural changes; the source tree was never affected.
+
+### Fixed
+
+- **`request-handler.js` is now included in the published tarball.** v3.8.2
+  extracted the `tools/call` dispatcher into `request-handler.js` and
+  `index.js` requires it at load time, but the file was never added to the
+  `files` allowlist in `package.json`. It was therefore excluded from every
+  tarball published since, so a fresh install died immediately with:
+
+  ```
+  Error: Cannot find module './request-handler'
+  ```
+
+  Affected published versions: **3.8.2** and **3.9.0** (3.8.3 was never
+  published). **3.8.1 was the last working release.** Running from a git
+  checkout was unaffected, which is why local testing and CI — both of which
+  run against the working tree, not the packed tarball — did not catch it.
+
+  `npm pack` now emits 62 files (was 61). Verified by installing the packed
+  tarball into a clean directory and completing an MCP `initialize` +
+  `tools/list` handshake: all 22 tools present.
+
+### Notes
+
+- Consider adding a CI job that installs the output of `npm pack` and runs a
+  handshake against it. The existing suite passes 826/826 against the working
+  tree and still missed a broken package for two releases.
 
 Feature release adding nested-folder addressing and making cross-folder email
 search reliable. Validated with a live end-to-end sweep against a personal

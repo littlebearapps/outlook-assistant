@@ -5,6 +5,15 @@
  * A Model Context Protocol server that provides access to
  * Microsoft Outlook through the Microsoft Graph API.
  */
+
+// Handle `--version` / `-v` before requiring anything else so we don't load
+// config, auth modules, or emit MCP startup logging just to print a version.
+if (process.argv.includes('--version') || process.argv.includes('-v')) {
+  const pkg = require('./package.json');
+  process.stdout.write(`${pkg.name} v${pkg.version}\n`);
+  process.exit(0);
+}
+
 const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
 const {
   StdioServerTransport,

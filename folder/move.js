@@ -4,6 +4,7 @@
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { resolveFolder } = require('./resolve');
+const { buildMailboxPrefix } = require('../utils/mailbox');
 
 /**
  * Move emails handler
@@ -15,6 +16,7 @@ async function handleMoveEmails(args) {
   const targetFolder = args.targetFolder || '';
   const targetFolderId = args.targetFolderId || '';
   const sourceFolder = args.sourceFolder || '';
+  const sharedMailbox = args.sharedMailbox || args.email || null;
 
   if (!emailIds) {
     return {
@@ -63,7 +65,7 @@ async function handleMoveEmails(args) {
     const result = await moveEmailsToFolder(
       accessToken,
       ids,
-      { name: targetFolder, id: targetFolderId },
+      { name: targetFolder, id: targetFolderId, mailbox: sharedMailbox },
       sourceFolder
     );
 
@@ -74,6 +76,12 @@ async function handleMoveEmails(args) {
           text: result.message,
         },
       ],
+      _meta: {
+        // Graph assigns a NEW message ID on move (unless immutable IDs are
+        // enabled) — surface the mapping so callers can keep addressing them.
+        moved: result.results?.successful || [],
+        failed: result.results?.failed || [],
+      },
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
@@ -102,7 +110,7 @@ async function handleMoveEmails(args) {
  * Move emails to a folder
  * @param {string} accessToken - Access token
  * @param {Array<string>} emailIds - Array of email IDs to move
- * @param {{name?: string, id?: string}} targetSpec - Target folder name/path or ID
+ * @param {{name?: string, id?: string, mailbox?: string|null}} targetSpec - Target folder name/path or ID, plus optional shared mailbox
  * @param {string} sourceFolderName - Name of the source folder (optional)
  * @returns {Promise<object>} - Result object with status and message
  */
@@ -112,6 +120,7 @@ async function moveEmailsToFolder(
   targetSpec,
   _sourceFolderName
 ) {
+  const prefix = buildMailboxPrefix(targetSpec.mailbox);
   try {
     // Resolve the target folder (supports "Parent/Child" paths, aliases, and
     // explicit IDs — nested folders are now addressable). (#216)
@@ -133,12 +142,20 @@ async function moveEmailsToFolder(
     // Process each email one by one to handle errors independently
     for (const emailId of emailIds) {
       try {
-        // Move the email
-        await callGraphAPI(accessToken, 'POST', `me/messages/${emailId}/move`, {
-          destinationId: targetFolderId,
-        });
+        // Move the email. The response carries the moved message, whose id
+        // changes unless immutable IDs are enabled — keep it, the old id is
+        // dead afterwards.
+        const moved = await callGraphAPI(
+          accessToken,
+          'POST',
+          `${prefix}/messages/${emailId}/move`,
+          { destinationId: targetFolderId }
+        );
 
-        results.successful.push(emailId);
+        results.successful.push({
+          oldId: emailId,
+          newId: moved?.id || emailId,
+        });
       } catch (error) {
         console.error(`Error moving email ${emailId}: ${error.message}`);
         results.failed.push({
@@ -153,6 +170,14 @@ async function moveEmailsToFolder(
 
     if (results.successful.length > 0) {
       message += `Successfully moved ${results.successful.length} email(s) to "${targetLabel}".`;
+      // Small batches: show the id mapping inline so the caller can address
+      // the moved messages without a re-search.
+      if (results.successful.length <= 5) {
+        message += '\n\nNew message IDs (old -> new):';
+        for (const { oldId, newId } of results.successful) {
+          message += `\n- ${oldId} -> ${newId}`;
+        }
+      }
     }
 
     if (results.failed.length > 0) {

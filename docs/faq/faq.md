@@ -38,6 +38,22 @@ Yes. Outlook Assistant supports both personal Microsoft accounts (Outlook.com, H
 
 On personal accounts, Microsoft's `$search` API has limited support for free-text queries, so Outlook Assistant falls back through up to four progressive search strategies (server `$search` → `contains(subject)` → client-side body/subject/from scan → recent message listing) and exposes which strategy ran in the response's `_meta.searchMetadata` block. For the most direct results, use structured filters (`from`, `subject`, `to`, `receivedAfter`) where possible. The full per-feature compatibility matrix is in the [README's Account Compatibility section](../README.md#account-compatibility).
 
+## How do I access custom subfolders of a shared mailbox?
+
+Shared/delegated mailbox tools reach **custom subfolders and localized folder names**, not just Microsoft's well-known folders (Inbox, Sent, Archive, etc.). Four entry points:
+
+1. **Discover the folder tree.** Call `access-shared-mailbox` with `listFolders: true` (or `folders action=list, sharedMailbox: "shared@company.com"`) to enumerate the reachable folders with their names, full paths, IDs, and item counts. The listing is best-effort: if a branch can't be traversed (depth limit, throttling, or a per-folder permission error), the output says so explicitly — check for traversal warnings before concluding a folder doesn't exist.
+2. **Read a custom folder.** Pass `folder` as a display name (`Archiv`), a nested path (`Inbox/Vendors/Acme`), or a raw `folderId` to `access-shared-mailbox`. Localized and case-insensitive names resolve correctly.
+3. **Search within a custom folder.** `search-emails` accepts `sharedMailbox` (alias `email`) alongside `folder` (name or path) or `searchAllFolders: true`.
+
+This requires the work/school **`Mail.Read.Shared`** permission and delegate access to the mailbox (admin-configured in Exchange). Earlier versions only resolved well-known folder names, so custom folders returned an `ErrorInvalidIdMalformed` error — that gap is closed.
+
+4. **Open an individual message.** Message IDs are *mailbox-scoped*, so once you have an ID from `access-shared-mailbox` or `search-emails`, pass the **same** `sharedMailbox` (alias `email`) to `read-email` (full body or `headersMode` forensic headers), `attachments` (list/view/download), and `export` (`message`, `messages`, `conversation`, or `mime`) to open it. Conversation retrieval (`search-emails` with `conversationId` or `groupByConversation`) is mailbox-aware too. Omitting it makes the tool look the ID up in *your* mailbox, where it doesn't exist — the source of the `404 ErrorInvalidMailboxItemId` error.
+
+You can also **organise** a shared mailbox — move messages between its folders (`folders action=move, sharedMailbox: …`), create folders (`folders action=create`), apply categories (`apply-category`), and flag/mark-read (`update-email`) all accept `sharedMailbox` (alias `email`). These writes additionally need the **`Mail.ReadWrite.Shared`** permission; after adding it in Azure you must re-authenticate so the refreshed token carries the new scope. Without it, the write stays scoped to the shared mailbox and fails (typically 403 access denied) until the scope and delegate access are in place — it never silently lands in your own mailbox. (Separately, *omitting* `sharedMailbox` on the write call targets your own mailbox, where the shared message ID doesn't exist — that's the source of `404 ErrorInvalidMailboxItemId`.)
+
+Shared-mailbox support stops at reading and organising: **sending, drafts, replies, and forwards from a shared mailbox are not supported.** `send-email` and `draft` (create/update/send/delete, reply, reply-all, forward) always act on the signed-in user's own mailbox, and `Mail.Send.Shared` is not requested. Send-as / send-on-behalf for shared mailboxes is a roadmap item.
+
 ## What Microsoft Graph permissions does Outlook Assistant need, and why?
 
 Outlook Assistant uses delegated Microsoft Graph permissions — it accesses your mailbox on your behalf, never with elevated rights:
@@ -50,7 +66,7 @@ Outlook Assistant uses delegated Microsoft Graph permissions — it accesses you
 - **`MailboxSettings.ReadWrite`** — auto-replies, working hours, master categories, Focused Inbox overrides
 - **`People.Read`** — `search-people` relevance-ranked lookups
 
-Two permissions are work/school only and optional: **`Mail.Read.Shared`** for shared mailboxes and **`Place.Read.All`** (admin consent required) for meeting room search. You grant these once during initial sign-in; they're scoped to your account and revocable any time at <https://account.live.com/consent/manage> (personal) or in your tenant admin console (work/school).
+Three permissions are work/school only and optional: **`Mail.Read.Shared`** to read shared mailboxes, **`Mail.ReadWrite.Shared`** to write to them (move/categorize/flag/mark-read), and **`Place.Read.All`** (admin consent required) for meeting room search. You grant these once during initial sign-in; they're scoped to your account and revocable any time at <https://account.live.com/consent/manage> (personal) or in your tenant admin console (work/school). The two `.Shared` scopes are requested automatically for everyone, but personal Microsoft accounts can't consent to them — so the **device-code flow** detects that rejection and **automatically retries with the base scopes**, no manual scope editing or `OUTLOOK_AUTH_AUDIENCE` change required: a personal-account sign-in just issues one extra device code before completing. The **browser flow** (`npm run auth-server`) does not auto-retry — it shows the error page; re-run authentication with a work/school account or use the device-code flow. Work/school accounts can normally consent on the first try, unless your tenant requires admin consent (`AADSTS65001`) — that error is surfaced with remediation steps rather than silently downgrading your scopes.
 
 ## Where are my tokens stored, and what happens when they expire?
 

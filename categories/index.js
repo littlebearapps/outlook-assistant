@@ -5,6 +5,7 @@
  */
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
+const { buildMailboxPrefix } = require('../utils/mailbox');
 
 // Category color presets (Outlook uses these names)
 const CATEGORY_COLORS = [
@@ -436,6 +437,7 @@ async function handleDeleteCategory(args) {
  */
 async function handleApplyCategory(args) {
   const { messageId, messageIds, categories, action } = args;
+  const mailbox = args.sharedMailbox || args.email || null;
 
   // Support single ID or array
   const ids = messageIds || (messageId ? [messageId] : []);
@@ -477,6 +479,9 @@ async function handleApplyCategory(args) {
   }
 
   try {
+    // Inside the try so an invalid mailbox returns the handler's normal
+    // error object instead of a rejected promise.
+    const prefix = buildMailboxPrefix(mailbox);
     const accessToken = await ensureAuthenticated();
 
     const results = [];
@@ -491,7 +496,7 @@ async function handleApplyCategory(args) {
           const current = await callGraphAPI(
             accessToken,
             'GET',
-            `me/messages/${id}`,
+            `${prefix}/messages/${id}`,
             null,
             { $select: 'categories' }
           );
@@ -507,7 +512,7 @@ async function handleApplyCategory(args) {
           }
         }
 
-        await callGraphAPI(accessToken, 'PATCH', `me/messages/${id}`, {
+        await callGraphAPI(accessToken, 'PATCH', `${prefix}/messages/${id}`, {
           categories: newCategories,
         });
 
@@ -901,7 +906,7 @@ const categoriesTools = [
   {
     name: 'apply-category',
     description:
-      "Tag or untag email messages with master categories (those created via `manage-category`). action=`set` (default) replaces the message's category set with the supplied `categories` array. action=`add` appends categories to whatever's already on the message. action=`remove` removes only the named categories, leaving the rest. Accepts either `messageId` (single) or `messageIds` (batch via Graph `$batch`). `categories` are matched by display name — names must already exist in the master list (create via `manage-category` first). Returns per-message confirmation.",
+      "Tag or untag email messages with master categories (those created via `manage-category`). action=`set` (default) replaces the message's category set with the supplied `categories` array. action=`add` appends categories to whatever's already on the message. action=`remove` removes only the named categories, leaving the rest. Accepts either `messageId` (single) or `messageIds` (batch via Graph `$batch`). `categories` are matched by display name — names must already exist in the target mailbox's master list. For your own mailbox, create them via `manage-category` first; for a shared mailbox, the names must already exist there (`manage-category` only manages the signed-in account's master list). Pass `sharedMailbox` (or alias `email`) to categorise messages in a shared/delegated mailbox instead of the signed-in account (requires Mail.ReadWrite.Shared + delegate access). Returns per-message confirmation.",
     annotations: {
       title: 'Apply Categories',
       readOnlyHint: false,
@@ -930,6 +935,15 @@ const categoriesTools = [
           enum: ['set', 'add', 'remove'],
           description:
             'set (replace all), add (append), remove (remove specific). Default: set',
+        },
+        sharedMailbox: {
+          type: 'string',
+          description:
+            'Email address of a shared/delegated mailbox whose messages to categorise instead of the signed-in account. Requires delegate access + Mail.ReadWrite.Shared.',
+        },
+        email: {
+          type: 'string',
+          description: 'Alias for `sharedMailbox`.',
         },
       },
       additionalProperties: false,

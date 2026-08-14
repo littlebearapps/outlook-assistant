@@ -143,6 +143,50 @@ describe('TokenStorage.refreshAccessToken — client_secret handling', () => {
     expect(postData).toContain('client_secret=test-secret');
   });
 
+  test('should refresh using granted_scopes, not the full configured set', async () => {
+    const storage = new TokenStorage({
+      clientId: 'test-client-id',
+      clientSecret: 'test-secret',
+      tokenEndpoint:
+        'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+      // Configured (attempt) set includes .Shared ...
+      scopes: [
+        'offline_access',
+        'User.Read',
+        'Mail.Read',
+        'Mail.Read.Shared',
+        'Mail.ReadWrite.Shared',
+      ],
+    });
+
+    // ... but the account only got base scopes granted (personal account)
+    storage.tokens = {
+      access_token: 'expired_access',
+      refresh_token: 'valid_refresh',
+      expires_at: Date.now() - 60000,
+      auth_method: 'device-code',
+      granted_scopes: ['offline_access', 'User.Read', 'Mail.Read'],
+    };
+
+    storage._saveTokensToFile = jest.fn().mockResolvedValue(undefined);
+
+    const { getCapturedPostData } = mockHttpsResponse(200, {
+      access_token: 'new_access_token',
+      refresh_token: 'new_refresh_token',
+      expires_in: 3600,
+    });
+
+    await storage.refreshAccessToken();
+
+    const postData = getCapturedPostData();
+    const params = new URLSearchParams(postData);
+    const requestedScopes = params.get('scope');
+    expect(requestedScopes).toBe('offline_access User.Read Mail.Read');
+    // Must NOT re-request the .Shared scopes the account couldn't consent to
+    expect(requestedScopes).not.toContain('Mail.Read.Shared');
+    expect(requestedScopes).not.toContain('Mail.ReadWrite.Shared');
+  });
+
   test('should preserve auth_method after refresh', async () => {
     const storage = new TokenStorage({
       clientId: 'test-client-id',

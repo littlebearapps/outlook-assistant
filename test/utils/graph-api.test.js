@@ -118,6 +118,23 @@ describe('callGraphAPI', () => {
       expect(calledUrl).toContain('Inbox%20%26%20Stuff');
     });
 
+    it('should encode a shared-mailbox prefix exactly once', async () => {
+      // Regression: buildMailboxPrefix used to pre-encode, so `+` became
+      // `%252B` after the per-segment encoding here.
+      mockHttpsRequest(200, {});
+
+      await callGraphAPI(
+        'token',
+        'GET',
+        'users/sales+alerts@company.com/messages'
+      );
+
+      const calledUrl = https.request.mock.calls[0][0];
+      expect(calledUrl).toBe(
+        'https://graph.microsoft.com/v1.0/users/sales%2Balerts%40company.com/messages'
+      );
+    });
+
     it('should use full URL directly when path starts with https://', async () => {
       const nextLink =
         'https://graph.microsoft.com/v1.0/me/messages?$skip=10&$top=10';
@@ -512,6 +529,17 @@ describe('callGraphAPIRaw', () => {
       const calledUrl = https.request.mock.calls[0][0];
       expect(calledUrl).toContain('me/messages/');
       expect(calledUrl).toContain('/$value');
+    });
+
+    it('should encode a shared-mailbox prefix exactly once', async () => {
+      mockHttpsRequest(200, 'content');
+
+      await callGraphAPIRaw('token', 'msg-1', 'users/sales+alerts@company.com');
+
+      const calledUrl = https.request.mock.calls[0][0];
+      expect(calledUrl).toContain(
+        'users/sales%2Balerts%40company.com/messages'
+      );
     });
 
     it('should set Accept header to message/rfc822', async () => {

@@ -1,6 +1,6 @@
 # CLAUDE.md - Outlook Assistant
 
-MCP server for Microsoft Outlook via Graph API (v3.9.0). 22 tools across 9 modules.
+MCP server for Microsoft Outlook via Graph API (v3.9.1). 22 tools across 9 modules.
 
 ## Commands
 
@@ -33,7 +33,12 @@ Full walkthrough: [`docs/how-to/getting-started/connect-outlook-to-claude.md`](d
 - Enable "Allow public client flows" in Authentication > Advanced settings
 - Use a **private/incognito browser** for `microsoft.com/devicelogin` (avoids cached session interference)
 
-**Token refresh**: Tokens auto-refresh when expired (via `token-storage.js`). Re-authentication only needed when the refresh token expires (~90 days).
+**Browser flow (alternative, for localhost only):**
+Start the auth server with `npm run auth-server` — needs `OUTLOOK_CLIENT_ID`/`OUTLOOK_CLIENT_SECRET` as env vars. The MCP server itself reads credentials from `.mcp.json` inline `kc_get` calls. Full walkthrough: [`docs/how-to/getting-started/connect-outlook-to-claude.md`](docs/how-to/getting-started/connect-outlook-to-claude.md).
+
+**Token refresh**: Tokens auto-refresh when expired (via `token-storage.js`). Re-authentication only needed when the refresh token expires (~90 days). Refresh re-requests only the **granted** scopes (persisted as `granted_scopes`), not the full configured set.
+
+**Scope fallback**: Auth attempts the full scope set (`BASE_SCOPES` + `SHARED_SCOPES`, defined in `config.js`). Personal Microsoft accounts can't consent to the `.Shared` scopes, so `handleDeviceCodeComplete` (`auth/tools.js`) detects the rejection via `isScopeConsentError` (`auth/device-code.js`) and automatically re-issues a device code with `AUTH_CONFIG.fallbackScopes` (base only) — one extra code for personal accounts; work/school accounts consent on the first try (unless the tenant requires admin consent, AADSTS65001, which is surfaced with remediation instead of downgrading scopes). The `auth/oauth-server.js` Express module mirrors the fallback via a one-shot `/auth?fallback=1` redirect, but the standalone `npm run auth-server` (`outlook-auth-server.js`) does **not** auto-retry — personal accounts should use device-code auth. No `OUTLOOK_AUTH_AUDIENCE` change needed.
 
 ## Architecture
 

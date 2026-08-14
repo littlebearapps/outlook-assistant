@@ -113,6 +113,7 @@ Outlook Assistant needs permission to access your mailbox data. These are **dele
 | Permission | What It Allows |
 |------------|----------------|
 | `Mail.Read.Shared` | Read shared mailboxes (only if you use the `access-shared-mailbox` tool) |
+| `Mail.ReadWrite.Shared` | Organise shared mailboxes — move/categorize/flag/mark-read/create folders via `sharedMailbox` (re-authenticate after adding). Sending/drafting from a shared mailbox isn't supported, so `Mail.Send.Shared` is not requested |
 | `Place.Read.All` | Search for meeting rooms (only if you use the `find-meeting-rooms` tool) |
 
 > **Tip**: You can add all permissions now, or start with the required ones and add optional ones later. You'll need to re-authenticate after adding new permissions.

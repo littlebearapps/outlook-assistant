@@ -441,6 +441,59 @@ describe('handleSearchEmails — kqlQuery silent-drop prevention (#169)', () => 
 });
 
 // ──────────────────────────────────────────────────
+// handleSearchEmails — shared mailbox scoping
+// ──────────────────────────────────────────────────
+describe('handleSearchEmails — shared mailbox', () => {
+  test('passes sharedMailbox through to folder resolution', async () => {
+    resolveFolderPath.mockResolvedValue(
+      'users/shared@company.com/mailFolders/archiv-id/messages'
+    );
+    callGraphAPIPaginated.mockResolvedValue({ value: [mockEmail()] });
+
+    await handleSearchEmails({
+      sharedMailbox: 'shared@company.com',
+      folder: 'Archiv',
+    });
+
+    expect(resolveFolderPath).toHaveBeenCalledWith(
+      mockAccessToken,
+      'Archiv',
+      'shared@company.com'
+    );
+  });
+
+  test('accepts email as an alias for sharedMailbox', async () => {
+    resolveFolderPath.mockResolvedValue(
+      'users/shared@company.com/mailFolders/inbox/messages'
+    );
+    callGraphAPIPaginated.mockResolvedValue({ value: [] });
+
+    await handleSearchEmails({ email: 'shared@company.com', folder: 'inbox' });
+
+    expect(resolveFolderPath).toHaveBeenCalledWith(
+      mockAccessToken,
+      'inbox',
+      'shared@company.com'
+    );
+  });
+
+  test('searchAllFolders targets the shared mailbox messages endpoint', async () => {
+    callGraphAPIPaginated.mockResolvedValue({ value: [] });
+
+    await handleSearchEmails({
+      sharedMailbox: 'shared@company.com',
+      searchAllFolders: true,
+    });
+
+    // First positional arg index 2 is the endpoint passed to Graph
+    const endpoint = callGraphAPIPaginated.mock.calls[0][2];
+    expect(endpoint).toBe('users/shared@company.com/messages');
+    // Folder resolution should be skipped in all-folders mode
+    expect(resolveFolderPath).not.toHaveBeenCalled();
+  });
+});
+
+// ──────────────────────────────────────────────────
 // handleSearchEmails — Bug 2: Client-side to filter
 // ──────────────────────────────────────────────────
 describe('handleSearchEmails — client-side to filter', () => {

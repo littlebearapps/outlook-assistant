@@ -72,6 +72,160 @@ describe('handleAccessSharedMailbox', () => {
     expect(result._meta.count).toBe(2);
   });
 
+  it('should resolve a well-known folder against the shared mailbox endpoint', async () => {
+    callGraphAPI
+      // resolveFolder → well-known lookup, scoped to the shared mailbox
+      .mockResolvedValueOnce({ id: 'archive-id', displayName: 'Archive' })
+      // messages fetch
+      .mockResolvedValueOnce({ value: mockMessages });
+
+    await handleAccessSharedMailbox({
+      sharedMailbox: 'shared@company.com',
+      folder: 'archive',
+    });
+
+    expect(callGraphAPI.mock.calls[0][2]).toBe(
+      'users/shared@company.com/mailFolders/archive'
+    );
+    const messagesCall = callGraphAPI.mock.calls.find(
+      (c) => typeof c[2] === 'string' && c[2].endsWith('/messages')
+    );
+    expect(messagesCall[2]).toBe(
+      'users/shared@company.com/mailFolders/archive-id/messages'
+    );
+  });
+
+  it('should resolve a custom subfolder name to its ID before reading', async () => {
+    callGraphAPI
+      // resolveFolder → top-level folder listing in the shared mailbox
+      .mockResolvedValueOnce({
+        value: [{ id: 'archiv-id', displayName: 'Archiv' }],
+      })
+      // messages fetch
+      .mockResolvedValueOnce({ value: mockMessages });
+
+    const result = await handleAccessSharedMailbox({
+      sharedMailbox: 'shared@company.com',
+      folder: 'Archiv',
+    });
+
+    expect(result._meta.count).toBe(2);
+    const messagesCall = callGraphAPI.mock.calls.find(
+      (c) => typeof c[2] === 'string' && c[2].endsWith('/messages')
+    );
+    expect(messagesCall[2]).toBe(
+      'users/shared@company.com/mailFolders/archiv-id/messages'
+    );
+  });
+
+  it('should use folderId directly without a name search', async () => {
+    callGraphAPI
+      // resolveFolder → direct ID lookup (no name/tree search)
+      .mockResolvedValueOnce({
+        id: 'explicit-folder-id',
+        displayName: 'Explicit',
+      })
+      .mockResolvedValueOnce({ value: mockMessages });
+
+    await handleAccessSharedMailbox({
+      sharedMailbox: 'shared@company.com',
+      folderId: 'explicit-folder-id',
+    });
+
+    expect(callGraphAPI).toHaveBeenCalledTimes(2);
+    expect(callGraphAPI.mock.calls[0][2]).toBe(
+      'users/shared@company.com/mailFolders/explicit-folder-id'
+    );
+    expect(callGraphAPI.mock.calls[1][2]).toBe(
+      'users/shared@company.com/mailFolders/explicit-folder-id/messages'
+    );
+  });
+
+  it('should report a helpful error when a custom folder cannot be resolved', async () => {
+    // top-level list empty → nothing to match, nothing to descend into
+    callGraphAPI
+      .mockResolvedValueOnce({ value: [] })
+      .mockResolvedValueOnce({ value: [] });
+
+    const result = await handleAccessSharedMailbox({
+      sharedMailbox: 'shared@company.com',
+      folder: 'DoesNotExist',
+    });
+
+    expect(result.content[0].text).toContain('not found');
+    expect(result.content[0].text).toContain('listFolders');
+  });
+
+  it('should enumerate folders with listFolders: true', async () => {
+    callGraphAPI
+      .mockResolvedValueOnce({
+        value: [
+          {
+            id: 'inbox-id',
+            displayName: 'Inbox',
+            parentFolderId: 'root',
+            childFolderCount: 1,
+            totalItemCount: 10,
+            unreadItemCount: 2,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        value: [
+          {
+            id: 'sub-id',
+            displayName: 'Vendors',
+            parentFolderId: 'inbox-id',
+            childFolderCount: 0,
+            totalItemCount: 3,
+            unreadItemCount: 0,
+          },
+        ],
+      });
+
+    const result = await handleAccessSharedMailbox({
+      sharedMailbox: 'shared@company.com',
+      listFolders: true,
+    });
+
+    expect(result.content[0].text).toContain('Shared Mailbox Folders');
+    expect(result.content[0].text).toContain('Inbox');
+    expect(result.content[0].text).toContain('Vendors');
+    expect(result._meta.folderCount).toBe(2);
+    const vendors = result._meta.folders.find(
+      (f) => f.displayName === 'Vendors'
+    );
+    expect(vendors.folderPath).toBe('Inbox/Vendors');
+    expect(result._meta.partial).toBe(false);
+  });
+
+  it('should mark the folder listing partial when a branch fails', async () => {
+    callGraphAPI
+      .mockResolvedValueOnce({
+        value: [
+          {
+            id: 'inbox-id',
+            displayName: 'Inbox',
+            parentFolderId: 'root',
+            childFolderCount: 1,
+            totalItemCount: 10,
+            unreadItemCount: 2,
+          },
+        ],
+      })
+      .mockRejectedValueOnce(new Error('403 Access is denied'));
+
+    const result = await handleAccessSharedMailbox({
+      sharedMailbox: 'shared@company.com',
+      listFolders: true,
+    });
+
+    expect(result._meta.partial).toBe(true);
+    expect(result._meta.warnings[0]).toContain('Inbox');
+    expect(result.content[0].text).toContain('(partial)');
+    expect(result.content[0].text).toContain('Partial listing');
+  });
+
   it('should handle minimal verbosity', async () => {
     callGraphAPI.mockResolvedValue({ value: mockMessages });
 
@@ -263,6 +417,28 @@ describe('handleSetMessageFlag', () => {
     expect(result._meta.failed).toBe(1);
   });
 
+  it('should target a shared mailbox when sharedMailbox is provided', async () => {
+    callGraphAPI.mockResolvedValue({});
+
+    await handleSetMessageFlag({
+      messageId: 'msg-1',
+      sharedMailbox: 'shared@company.com',
+    });
+
+    expect(callGraphAPI.mock.calls[0][1]).toBe('PATCH');
+    expect(callGraphAPI.mock.calls[0][2]).toBe(
+      'users/shared@company.com/messages/msg-1'
+    );
+  });
+
+  it('should default to the signed-in mailbox (me) when no shared mailbox', async () => {
+    callGraphAPI.mockResolvedValue({});
+
+    await handleSetMessageFlag({ messageId: 'msg-1' });
+
+    expect(callGraphAPI.mock.calls[0][2]).toBe('me/messages/msg-1');
+  });
+
   it('should require message IDs', async () => {
     const result = await handleSetMessageFlag({});
 
@@ -287,6 +463,20 @@ describe('handleClearMessageFlag', () => {
 
     expect(result.content[0].text).toContain('1 message(s) cleared');
     expect(result._meta.action).toBe('cleared');
+  });
+
+  it('should target a shared mailbox when email alias is provided', async () => {
+    callGraphAPI.mockResolvedValue({});
+
+    await handleClearMessageFlag({
+      messageId: 'msg-1',
+      email: 'shared@company.com',
+    });
+
+    expect(callGraphAPI.mock.calls[0][1]).toBe('PATCH');
+    expect(callGraphAPI.mock.calls[0][2]).toBe(
+      'users/shared@company.com/messages/msg-1'
+    );
   });
 
   it('should mark messages as complete', async () => {

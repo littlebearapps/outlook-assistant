@@ -7,6 +7,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Delegated shared-mailbox read and organization support (`sharedMailbox`,
+  alias `email`)** — every read/organize Graph path that takes a message ID,
+  conversation ID, or folder is now mailbox-aware via a single optional
+  parameter routed through `buildMailboxPrefix` (`utils/mailbox.js`: `me` ->
+  `users/{email}`). No new tools, no breaking changes -- purely additive
+  parameters plus one new optional scope.
+  - **Out of scope:** compose paths remain personal-mailbox-only. `send-email`
+    and `draft` (create/update/send/delete, reply, reply-all, forward) take no
+    `sharedMailbox` parameter and always act on the signed-in user's own
+    mailbox; `Mail.Send.Shared` is deliberately not requested. Mailbox settings,
+    rules, and Focused Inbox are likewise personal-mailbox-only.
+  - `folder/resolve.js` (the shared path-aware resolver added in v3.9.0) takes an
+    optional `mailbox`, so nested paths (`Inbox/Vendors/Acme`), custom and
+    localized display names, well-known aliases, ambiguity reporting, and
+    explicit folder IDs all work inside a shared mailbox exactly as they do in
+    the signed-in account.
+  - `folders` -- all five actions (`list`, `create`, `move`, `stats`, `delete`)
+    accept `sharedMailbox`.
+  - `search-emails` -- list/search, `searchAllFolders`, `deltaMode`,
+    `conversationId`, `groupByConversation`, and `internetMessageId` lookup.
+  - `read-email` (body and `headersMode` forensic headers), `attachments`
+    (list/view/download), `update-email` (mark-read/mark-unread/flag/unflag/
+    complete), `apply-category`, and every `export` target (`message`,
+    `messages` batch, `conversation`, `mime`).
+  - `access-shared-mailbox` resolves `folder` as a well-known name, a custom or
+    localized display name, or a nested path; accepts a raw `folderId`; and
+    supports `listFolders: true` to enumerate the mailbox's folder tree (names,
+    paths, IDs, item counts).
+  - Adds the **`Mail.ReadWrite.Shared`** delegated scope alongside
+    `Mail.Read.Shared`. Re-authenticate after granting it.
+
+### Changed
+
+- **Automatic OAuth scope fallback (personal accounts)** — scopes are split into
+  `BASE_SCOPES` (consentable by any account) and `SHARED_SCOPES`
+  (`Mail.Read.Shared` + `Mail.ReadWrite.Shared`). Auth attempts
+  `BASE_SCOPES + SHARED_SCOPES` and, when an account can't consent to `.Shared`,
+  automatically retries with `AUTH_CONFIG.fallbackScopes` (base only).
+  Work/school accounts consent on the first try; personal accounts incur one
+  extra device code (or browser redirect). No `OUTLOOK_AUTH_AUDIENCE` change or
+  manual scope editing required. Rejection is classified by `isScopeConsentError`
+  (`auth/device-code.js`); the browser flow mirrors the fallback via a one-shot
+  `/auth?fallback=1` redirect (`auth/oauth-server.js`).
+- **Refresh uses granted scopes** — `token-storage.js` persists `granted_scopes`
+  and refreshes with them (not the full configured set), so a base-only fallback
+  session isn't logged out ~1h later by re-requesting `.Shared`.
+
+### Fixed
+
+- **`404 ErrorInvalidMailboxItemId` on shared-mailbox reads** — message IDs are
+  mailbox-scoped, but the item-scoped readers and exporters hard-coded the
+  `me/messages/...` prefix. An ID surfaced by `search-emails` /
+  `access-shared-mailbox` against a shared mailbox therefore 404'd when passed to
+  `read-email`, `attachments`, conversation retrieval, or `export`. All now route
+  to `users/{mailbox}/messages/...` when `sharedMailbox` is supplied. The raw-MIME
+  helper (`callGraphAPIRaw`) gained an optional mailbox-prefix argument so
+  EML/MBOX/MIME exports follow suit.
+- **Shared-mailbox writes silently landing in the wrong mailbox** — move,
+  categorize, flag, mark-read, folder create, and folder delete ignored the
+  shared-mailbox flag and targeted the signed-in user (a destructive
+  wrong-mailbox operation in the case of `delete`). All now honour
+  `sharedMailbox`/`email`; the protected-folder guard still applies.
+- **`ErrorInvalidIdMalformed` on custom shared-mailbox folders** — an
+  unrecognized folder name was forwarded to Graph as a folder ID. Custom and
+  nested folders in a shared mailbox now resolve through the shared resolver.
+
 ## [3.9.1] - 2026-08
 
 Packaging hotfix. **Every published release from 3.9.0 back to 3.8.2 is

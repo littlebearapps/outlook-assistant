@@ -7,6 +7,7 @@ const _config = require('../config'); // Reserved for future use
 const { callGraphAPI, callGraphAPIPaginated } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { resolveFolderPath } = require('./folder-utils');
+const { buildMailboxPrefix } = require('../utils/mailbox');
 const {
   formatEmailList,
   VERBOSITY,
@@ -70,6 +71,9 @@ async function handleSearchEmails(args) {
   // Trim so a whitespace-only value doesn't send `$search: '""'`. (#169)
   const kqlQuery =
     (args.searchExpression || '').trim() || (args.kqlQuery || '').trim();
+  // Optional: scope the search to a shared/delegated mailbox rather than the
+  // signed-in account. Accepts a custom/localized folder name or nested path.
+  const sharedMailbox = args.sharedMailbox || args.email || null;
 
   // Select fields based on verbosity
   const selectFields = getEmailFields(
@@ -80,13 +84,16 @@ async function handleSearchEmails(args) {
     // Get access token
     const accessToken = await ensureAuthenticated();
 
-    // Determine endpoint - search all folders or specific folder
+    // Determine endpoint - search all folders or specific folder, scoped to
+    // the signed-in account or a shared mailbox.
     let endpoint;
     if (searchAllFolders) {
-      endpoint = 'me/messages';
-      console.error('Searching across all mail folders');
+      endpoint = `${buildMailboxPrefix(sharedMailbox)}/messages`;
+      console.error(
+        `Searching across all mail folders${sharedMailbox ? ` in ${sharedMailbox}` : ''}`
+      );
     } else {
-      endpoint = await resolveFolderPath(accessToken, folder);
+      endpoint = await resolveFolderPath(accessToken, folder, sharedMailbox);
       console.error(`Using endpoint: ${endpoint} for folder: ${folder}`);
     }
 
@@ -1007,6 +1014,8 @@ function formatSearchResults(response, folder, verbosity) {
 async function handleSearchByMessageId(args) {
   const messageId = args.messageId;
   const verbosity = args.outputVerbosity || VERBOSITY.STANDARD;
+  // Optional: scope the lookup to a shared/delegated mailbox.
+  const prefix = buildMailboxPrefix(args.sharedMailbox || args.email || null);
 
   if (!messageId) {
     return {
@@ -1042,7 +1051,7 @@ async function handleSearchByMessageId(args) {
     const response = await callGraphAPI(
       accessToken,
       'GET',
-      'me/messages',
+      `${prefix}/messages`,
       null,
       params
     );

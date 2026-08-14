@@ -4,6 +4,7 @@
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { resolveFolder, listChildFolders } = require('./resolve');
+const { buildMailboxPrefix } = require('../utils/mailbox');
 
 /**
  * Create folder handler
@@ -14,6 +15,7 @@ async function handleCreateFolder(args) {
   const folderName = (args.name || '').trim();
   const parentFolder = args.parentFolder || '';
   const parentFolderId = args.parentFolderId || '';
+  const sharedMailbox = args.sharedMailbox || args.email || null;
 
   if (!folderName) {
     return {
@@ -34,6 +36,7 @@ async function handleCreateFolder(args) {
     const result = await createMailFolder(accessToken, folderName, {
       name: parentFolder,
       id: parentFolderId,
+      mailbox: sharedMailbox,
     });
 
     return {
@@ -74,10 +77,12 @@ async function handleCreateFolder(args) {
  * Create a new mail folder
  * @param {string} accessToken - Access token
  * @param {string} folderName - Name of the folder to create
- * @param {{name?: string, id?: string}} parentSpec - Parent folder name/path or ID
+ * @param {{name?: string, id?: string, mailbox?: string|null}} parentSpec - Parent folder name/path or ID, plus optional shared mailbox
  * @returns {Promise<object>} - Result object with status and message
  */
 async function createMailFolder(accessToken, folderName, parentSpec) {
+  const mailbox = parentSpec.mailbox || null;
+  const prefix = buildMailboxPrefix(mailbox);
   try {
     // Resolve the parent folder if one was specified (supports "Parent/Child"
     // paths and explicit IDs). Leaf name (folderName) is created, not
@@ -98,7 +103,9 @@ async function createMailFolder(accessToken, folderName, parentSpec) {
     // mailbox — a name may legitimately exist under a different parent. (#216)
     const siblings = await listChildFolders(
       accessToken,
-      parent ? parent.id : null
+      parent ? parent.id : null,
+      undefined,
+      mailbox
     );
     const lower = folderName.toLowerCase();
     if (siblings.some((f) => f.displayName.toLowerCase() === lower)) {
@@ -111,8 +118,8 @@ async function createMailFolder(accessToken, folderName, parentSpec) {
     }
 
     const endpoint = parent
-      ? `me/mailFolders/${parent.id}/childFolders`
-      : 'me/mailFolders';
+      ? `${prefix}/mailFolders/${parent.id}/childFolders`
+      : `${prefix}/mailFolders`;
 
     // Create the folder
     const folderData = {

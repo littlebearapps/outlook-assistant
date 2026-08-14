@@ -286,11 +286,12 @@ async function callGraphAPIBatch(accessToken, requests) {
  * In test mode (USE_TEST_MODE=true), returns mock MIME content instead of calling the real API.
  * @param {string} accessToken - The access token for authentication
  * @param {string} emailId - The email ID to export
+ * @param {string} [mailboxPrefix] - Resource prefix (`me` or `users/{email}`) for shared mailboxes. Defaults to `me`.
  * @returns {Promise<string>} - Raw MIME content as string
  * @throws {Error} 'UNAUTHORIZED' if the server returns HTTP 401 (token expired or invalid)
  * @throws {Error} If the HTTP status is outside 2xx or a network error occurs
  */
-async function callGraphAPIRaw(accessToken, emailId) {
+async function callGraphAPIRaw(accessToken, emailId, mailboxPrefix = 'me') {
   // Test mode: return mock MIME content
   if (config.USE_TEST_MODE && accessToken.startsWith('test_access_token_')) {
     return mockData.getMockMimeContent
@@ -299,7 +300,11 @@ async function callGraphAPIRaw(accessToken, emailId) {
   }
 
   return new Promise((resolve, reject) => {
-    const path = `me/messages/${encodeURIComponent(emailId)}/$value`;
+    const encodedPrefix = mailboxPrefix
+      .split('/')
+      .map((segment) => encodeURIComponent(segment))
+      .join('/');
+    const path = `${encodedPrefix}/messages/${encodeURIComponent(emailId)}/$value`;
     const finalUrl = `${config.GRAPH_API_ENDPOINT}${path}`;
 
     const options = {

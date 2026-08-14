@@ -11,6 +11,7 @@ const {
   VERBOSITY,
 } = require('../utils/response-formatter');
 const { getEmailFields } = require('../utils/field-presets');
+const { buildMailboxPrefix } = require('../utils/mailbox');
 
 /**
  * Get field preset based on verbosity and options
@@ -45,6 +46,9 @@ async function handleReadEmail(args) {
   const emailId = args.id;
   const verbosity = args.outputVerbosity || VERBOSITY.STANDARD;
   const includeHeaders = args.includeHeaders || false;
+  // Message IDs are mailbox-scoped: an ID issued by a shared/delegated mailbox
+  // is not resolvable under /me. Route to /users/{mailbox} when supplied.
+  const prefix = buildMailboxPrefix(args.sharedMailbox || args.email || null);
 
   if (!emailId) {
     return {
@@ -66,7 +70,7 @@ async function handleReadEmail(args) {
     const selectFields = getEmailFields(fieldPreset);
 
     // Make API call to get email details
-    const endpoint = `me/messages/${emailId}`;
+    const endpoint = `${prefix}/messages/${emailId}`;
     const queryParams = {
       $select: selectFields,
     };

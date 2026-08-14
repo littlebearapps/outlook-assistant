@@ -17,14 +17,16 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
-| `search-emails` | Search, list, delta sync, conversations | read-only | `query`, `from`, `to`, `folder` (name or nested path), `searchAllFolders`, `searchExpression`, `deltaMode`, `conversationId`, `groupByConversation`, `internetMessageId` |
-| `read-email` | Read content or forensic headers | read-only | `id`, `headersMode`, `groupByType`, `importantOnly` |
+| `search-emails` | Search, list, delta sync, conversations | read-only | `query`, `from`, `to`, `folder` (name or nested path), `searchAllFolders`, `searchExpression`, `deltaMode`, `conversationId`, `groupByConversation`, `internetMessageId`, `sharedMailbox` (alias `email`) |
+| `read-email` | Read content or forensic headers | read-only | `id`, `headersMode`, `groupByType`, `importantOnly`, `sharedMailbox` (alias `email`) |
 | `send-email` | Send email with safety controls | **destructive** | `to`, `subject`, `body`, `dryRun`, `checkRecipients`, `cc`, `bcc`, `importance` |
 | `draft` | Create, update, send, delete, reply, forward drafts | **destructive** | `action` (required), `id`, `to`, `subject`, `body`, `comment`, `dryRun`, `checkRecipients` |
 | `get-mail-tips` | Pre-send recipient validation | read-only | `recipients`, `tipTypes` |
-| `update-email` | Mark read/unread, flag/unflag/complete | idempotent | `action` (required), `id`, `ids`, `dueDateTime` |
-| `attachments` | List, view, or download attachments | moderate write | `action` (`list`/`view`/`download`), `messageId`, `attachmentId` |
-| `export` | Export emails to various formats | moderate write | `target` (`message`/`messages`/`conversation`/`mime`), `id`, `format`, `outputDir` |
+| `update-email` | Mark read/unread, flag/unflag/complete | idempotent | `action` (required), `id`, `ids`, `dueDateTime`, `sharedMailbox` (alias `email`) |
+| `attachments` | List, view, or download attachments | moderate write | `action` (`list`/`view`/`download`), `messageId`, `attachmentId`, `sharedMailbox` (alias `email`) |
+| `export` | Export emails to various formats | moderate write | `target` (`message`/`messages`/`conversation`/`mime`), `id`, `format`, `outputDir`, `sharedMailbox` (alias `email`) |
+
+> **`sharedMailbox` is read/organise only.** `send-email` and `draft` (create/update/send/delete, reply, reply-all, forward) deliberately take no `sharedMailbox` parameter — they always act on the signed-in user's own mailbox, and `Mail.Send.Shared` is not requested.
 
 ### search-emails modes
 
@@ -90,7 +92,7 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 
 | Tool | Actions | Safety | Key Parameters |
 |------|---------|--------|----------------|
-| `folders` | `list` (default), `create`, `move`, `stats`, `delete` | **destructive** | `name`, `parentFolder`/`parentFolderId` (create), `emailIds`, `targetFolder`/`targetFolderId` (move), `folder`/`folderId` (stats), `folderName`/`folderId` (delete), `outputVerbosity`. Folders addressable by nested path (`Parent/Child`) or ID; `list` shows full paths + IDs |
+| `folders` | `list` (default), `create`, `move`, `stats`, `delete` | **destructive** | `name`, `parentFolder`/`parentFolderId` (create), `emailIds`, `targetFolder`/`targetFolderId` (move), `folder`/`folderId` (stats), `folderName`/`folderId` (delete), `outputVerbosity`. Folders addressable by nested path (`Parent/Child`) or ID; `list` shows full paths + IDs. All actions accept `sharedMailbox` (alias `email`) |
 
 ## Rules (1 tool)
 
@@ -110,7 +112,7 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
 | `manage-category` | CRUD: `list` (default), `create`, `update`/`set` (alias), `delete` | moderate write | `action`, `displayName`, `color`, `id` (or deprecated alias `categoryId`) |
-| `apply-category` | Apply/add/remove categories on messages | moderate write | `messageId`/`messageIds`, `categories`, `action` |
+| `apply-category` | Apply/add/remove categories on messages. With `sharedMailbox`, category names must already exist in that mailbox's master list (`manage-category` manages the signed-in account only) | moderate write | `messageId`/`messageIds`, `categories`, `action`, `sharedMailbox` (alias `email`) |
 | `manage-focused-inbox` | Focused Inbox overrides: `list` (default), `set`, `delete` | moderate write | `action`, `emailAddress`, `classifyAs` |
 
 ### Category colours
@@ -127,7 +129,7 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
-| `access-shared-mailbox` | Read shared mailbox | read-only | `sharedMailbox` (or alias `email`), `folder`, `count` |
+| `access-shared-mailbox` | Read shared mailbox (incl. custom subfolders) or enumerate its folder tree — no send/draft/reply/forward | read-only | `sharedMailbox` (or alias `email`), `folder` (name/path), `folderId`, `listFolders`, `count` |
 | `find-meeting-rooms` | Search meeting rooms | read-only | `query`, `building`, `capacity` |
 
 ## Safety Annotations
@@ -231,6 +233,18 @@ update-email(action: "flag", id: "...", dueDateTime: "2026-03-01T09:00:00Z")
 
 // Access shared mailbox
 access-shared-mailbox(sharedMailbox: "team@company.com", folder: "inbox")
+
+// Discover a shared mailbox's custom subfolders (names, paths, IDs)
+access-shared-mailbox(sharedMailbox: "team@company.com", listFolders: true)
+
+// Read a custom subfolder of a shared mailbox by path
+access-shared-mailbox(sharedMailbox: "team@company.com", folder: "Inbox/Vendors/Acme")
+
+// List a shared mailbox's folder hierarchy via the folders tool
+folders(action: "list", sharedMailbox: "team@company.com", includeChildren: true)
+
+// Search within a shared mailbox's custom folder
+search-emails(sharedMailbox: "team@company.com", folder: "Archiv", query: "invoice")
 
 // Delta sync (initial — returns emails + deltaToken)
 search-emails(deltaMode: true)

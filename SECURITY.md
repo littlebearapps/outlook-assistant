@@ -38,7 +38,7 @@ This server requests the following Microsoft Graph delegated permissions:
 - `offline_access` — Token refresh
 - `User.Read` — Basic profile
 - `Mail.Read`, `Mail.ReadWrite`, `Mail.Send` — Email access
-- `Mail.Read.Shared` — Shared mailbox access
+- `Mail.Read.Shared`, `Mail.ReadWrite.Shared` — Shared mailbox read/write access
 - `Calendars.Read`, `Calendars.ReadWrite` — Calendar management
 - `Contacts.Read`, `Contacts.ReadWrite` — Contact management
 - `MailboxSettings.Read`, `MailboxSettings.ReadWrite` — Settings access

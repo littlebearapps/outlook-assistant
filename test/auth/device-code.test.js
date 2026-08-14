@@ -2,6 +2,7 @@ const https = require('https');
 const {
   initiateDeviceCodeFlow,
   pollForToken,
+  isScopeConsentError,
 } = require('../../auth/device-code');
 
 jest.mock('https');
@@ -11,6 +12,7 @@ jest.mock('../../config', () => ({
       'https://login.microsoftonline.com/common/oauth2/v2.0/devicecode',
     tokenEndpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
   },
+  SHARED_SCOPES: ['Mail.Read.Shared', 'Mail.ReadWrite.Shared'],
 }));
 
 /**
@@ -186,6 +188,34 @@ describe('device-code', () => {
       await expect(
         pollForToken('test-client', 'dc_123', 0.001, 30)
       ).rejects.toThrow('Something went wrong');
+    });
+
+    // The poll loop handles expired_token / authorization_pending in explicit
+    // cases, so they never reach the classifier — and the errors it does throw
+    // for them must not be mistaken for a scope rejection (which would
+    // silently strip shared-mailbox scopes).
+    it('expired_token throws an error the classifier does not treat as a scope rejection', async () => {
+      mockHttpsResponse(400, { error: 'expired_token' });
+
+      const err = await pollForToken('test-client', 'dc_123', 0.001, 30).catch(
+        (e) => e
+      );
+      expect(err.oauth).toBeUndefined();
+      expect(isScopeConsentError(err)).toBe(false);
+    });
+
+    it('attaches the oauth payload only on the default branch', async () => {
+      mockHttpsResponse(400, {
+        error: 'invalid_grant',
+        error_codes: [50076],
+        error_description: 'AADSTS50076: MFA required',
+      });
+
+      const err = await pollForToken('test-client', 'dc_123', 0.001, 30).catch(
+        (e) => e
+      );
+      expect(err.oauth.error).toBe('invalid_grant');
+      expect(isScopeConsentError(err)).toBe(false);
     });
   });
 });

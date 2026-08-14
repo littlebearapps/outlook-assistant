@@ -133,11 +133,22 @@ async function pollForToken(clientId, deviceCode, interval, expiresIn) {
         throw new Error(
           'Device code expired. Please restart the authentication process.'
         );
-      default:
-        throw new Error(
+      default: {
+        // Attach the raw OAuth payload so callers (e.g. handleDeviceCodeComplete)
+        // can classify the failure — notably scope-consent rejections that should
+        // trigger a base-scopes fallback. Keep the existing message text.
+        const e = new Error(
           body.error_description ||
             `Token polling failed: ${body.error || `status ${statusCode}`}`
         );
+        e.oauth = {
+          error: body.error,
+          error_codes: body.error_codes,
+          suberror: body.suberror,
+          error_description: body.error_description,
+        };
+        throw e;
+      }
     }
   }
 
@@ -146,7 +157,82 @@ async function pollForToken(clientId, deviceCode, interval, expiresIn) {
   );
 }
 
+// AADSTS codes meaning "this scope value isn't supported for this account" —
+// the only signals that justify a SILENT, DURABLE downgrade to base scopes:
+//   650053 — "The application asked for scope '<x>' that doesn't exist on the
+//             resource" (the personal-account `.Shared` rejection)
+//   70011  — invalid scope value
+// Deliberately NOT here:
+//   65001  — consent required (remediable: user/admin consent) → see
+//             isConsentRequiredError; must not silently strip capability
+//   28000  — generic invalid request, not scope-specific
+//   invalid_grant (bare) — MFA/conditional access, revoked grant, tenant policy
+const SCOPE_UNSUPPORTED_AADSTS_CODES = ['650053', '70011'];
+const CONSENT_REQUIRED_AADSTS_CODES = ['65001'];
+
+/**
+ * Does `err` carry one of `codes` in `oauth.error_codes` (array) or as an
+ * `AADSTS<code>` substring in `oauth.error_description` / `err.message`?
+ * @param {Error & {oauth?: object}} err
+ * @param {string[]} codes
+ * @returns {boolean}
+ */
+// The OAuth error payload is attacker-influencable HTTP data — fields may
+// arrive as arrays or objects instead of strings. Coerce before substring
+// checks so `includes` is always String.prototype.includes.
+function asString(value) {
+  return typeof value === 'string' ? value : '';
+}
+
+function hasAadstsCode(err, codes) {
+  const oauth = err.oauth || {};
+  if (Array.isArray(oauth.error_codes)) {
+    const found = oauth.error_codes.map(String);
+    if (found.some((c) => codes.includes(c))) {
+      return true;
+    }
+  }
+  const haystack = `${asString(oauth.error_description)} ${asString(err.message)}`;
+  return codes.some((code) => haystack.includes(`AADSTS${code}`));
+}
+
+/**
+ * Predicate: is this a "requested scope isn't supported for this account"
+ * rejection that warrants falling back to base scopes? Deliberately narrow —
+ * a false positive silently and permanently strips shared-mailbox access.
+ * @param {Error & {oauth?: object}} err
+ * @returns {boolean}
+ */
+function isScopeConsentError(err) {
+  if (!err) {
+    return false;
+  }
+  const oauth = err.oauth || {};
+
+  if (oauth.error === 'invalid_scope') {
+    return true;
+  }
+  if (hasAadstsCode(err, SCOPE_UNSUPPORTED_AADSTS_CODES)) {
+    return true;
+  }
+  // Azure named one of the `.Shared` scopes as the offending value.
+  const description = asString(oauth.error_description);
+  return config.SHARED_SCOPES.some((scope) => description.includes(scope));
+}
+
+/**
+ * Predicate: consent required (AADSTS65001). Remediable via user/admin consent
+ * — surface it, never downgrade the scope set.
+ * @param {Error & {oauth?: object}} err
+ * @returns {boolean}
+ */
+function isConsentRequiredError(err) {
+  return Boolean(err) && hasAadstsCode(err, CONSENT_REQUIRED_AADSTS_CODES);
+}
+
 module.exports = {
   initiateDeviceCodeFlow,
   pollForToken,
+  isScopeConsentError,
+  isConsentRequiredError,
 };

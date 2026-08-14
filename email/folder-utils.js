@@ -3,6 +3,7 @@
  */
 const { callGraphAPI } = require('../utils/graph-api');
 const { resolveFolder } = require('../folder/resolve');
+const { buildMailboxPrefix } = require('../utils/mailbox');
 
 /**
  * Cache of folder information to reduce API calls
@@ -47,30 +48,46 @@ const WELL_KNOWN_FOLDERS = {
 };
 
 /**
+ * Re-point a `me/...` well-known endpoint at a different mailbox.
+ * @param {string} endpoint - A WELL_KNOWN_FOLDERS value
+ * @param {string} prefix - `me` or `users/{email}`
+ * @returns {string}
+ */
+function scope(endpoint, prefix) {
+  return prefix === 'me' ? endpoint : endpoint.replace(/^me\//, `${prefix}/`);
+}
+
+/**
  * Resolve a folder name to its endpoint path
  * @param {string} accessToken - Access token
  * @param {string} folderName - Folder name to resolve
+ * @param {string|null} [mailbox] - Shared mailbox email, or null for the signed-in user
  * @returns {Promise<string>} - Resolved endpoint path
  */
-async function resolveFolderPath(accessToken, folderName) {
+async function resolveFolderPath(accessToken, folderName, mailbox = null) {
+  const prefix = buildMailboxPrefix(mailbox);
+
   // Default to inbox if no folder specified
   if (!folderName) {
-    return WELL_KNOWN_FOLDERS.inbox;
+    return scope(WELL_KNOWN_FOLDERS.inbox, prefix);
   }
 
   // Check if it's a well-known folder (case-insensitive)
   const lowerFolderName = folderName.toLowerCase();
   if (WELL_KNOWN_FOLDERS[lowerFolderName]) {
     console.error(`Using well-known folder path for "${folderName}"`);
-    return WELL_KNOWN_FOLDERS[lowerFolderName];
+    return scope(WELL_KNOWN_FOLDERS[lowerFolderName], prefix);
   }
 
   try {
     // Path-aware resolution: supports nested folders ("Parent/Child"),
     // case-insensitive names, and reports ambiguity — the same shared resolver
     // the `folders` tool uses, so search can now scope to nested folders. (#216)
-    const resolved = await resolveFolder(accessToken, { name: folderName });
-    const path = `me/mailFolders/${resolved.id}/messages`;
+    const resolved = await resolveFolder(accessToken, {
+      name: folderName,
+      mailbox,
+    });
+    const path = `${prefix}/mailFolders/${resolved.id}/messages`;
     console.error(`Resolved folder "${folderName}" to path: ${path}`);
     return path;
   } catch (error) {

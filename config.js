@@ -57,13 +57,44 @@ if (
   !VALID_AUDIENCE_LITERALS.has(AUTH_AUDIENCE) &&
   !TENANT_GUID_RE.test(AUTH_AUDIENCE)
 ) {
-  // eslint-disable-next-line no-console
   console.warn(
     `[outlook-assistant] OUTLOOK_AUTH_AUDIENCE="${AUTH_AUDIENCE}" is not a recognised value. ` +
       `Expected one of: common, consumers, organizations, or a tenant GUID. ` +
       `Proceeding anyway — Microsoft's identity platform will reject it at runtime if invalid.`
   );
 }
+
+// Shared/delegated mailbox access (work/school accounts only). Required to
+// read and organise a shared mailbox via /users/{email}/...; without these
+// every organise operation (move/category/flag/mark-read) falls back to `me`
+// and fails with ErrorInvalidMailboxItemId. Sending/drafts from a shared
+// mailbox are out of scope (Mail.Send.Shared deliberately not requested).
+// The auth flow ATTEMPTS the full set (BASE_SCOPES + SHARED_SCOPES) and falls
+// back to BASE_SCOPES only on errors proving the account can't use `.Shared`
+// scopes (invalid_scope, AADSTS650053/70011, or an error naming a `.Shared`
+// scope — see auth/device-code.js isScopeConsentError); consent-required
+// errors (AADSTS65001) surface remediation instead of downgrading.
+const SHARED_SCOPES = [
+  'Mail.Read.Shared', // access-shared-mailbox (read)
+  'Mail.ReadWrite.Shared', // shared-mailbox writes (move/category/flag/mark-read)
+];
+
+// Base scopes consentable by ANY account type (personal + work/school).
+const BASE_SCOPES = [
+  'offline_access',
+  'User.Read',
+  'Mail.Read',
+  'Mail.ReadWrite',
+  'Mail.Send',
+  'Calendars.Read',
+  'Calendars.ReadWrite',
+  'Contacts.Read',
+  'Contacts.ReadWrite',
+  'People.Read',
+  'MailboxSettings.ReadWrite',
+  // Org-dependent scopes (work/school accounts only):
+  // 'Place.Read.All',     // find-meeting-rooms tool
+];
 
 module.exports = {
   // Server information
@@ -73,27 +104,19 @@ module.exports = {
   // Test mode setting
   USE_TEST_MODE: process.env.USE_TEST_MODE === 'true',
 
+  // OAuth scope sets (exported so tests + the fallback logic can reference them)
+  BASE_SCOPES,
+  SHARED_SCOPES,
+
   // Authentication configuration
   AUTH_CONFIG: {
     clientId: process.env.OUTLOOK_CLIENT_ID || '',
     clientSecret: process.env.OUTLOOK_CLIENT_SECRET || '',
     redirectUri: 'http://localhost:3333/auth/callback',
-    scopes: [
-      'offline_access',
-      'User.Read',
-      'Mail.Read',
-      'Mail.ReadWrite',
-      'Mail.Send',
-      'Calendars.Read',
-      'Calendars.ReadWrite',
-      'Contacts.Read',
-      'Contacts.ReadWrite',
-      'People.Read',
-      'MailboxSettings.ReadWrite',
-      // Org-dependent scopes (work/school accounts only):
-      // 'Mail.Read.Shared',   // access-shared-mailbox tool
-      // 'Place.Read.All',     // find-meeting-rooms tool
-    ],
+    // Preferred/attempt set: base + shared. Auth falls back to fallbackScopes
+    // (base only) when the account rejects the `.Shared` scopes.
+    scopes: [...BASE_SCOPES, ...SHARED_SCOPES],
+    fallbackScopes: BASE_SCOPES,
     tokenStorePath: path.join(homeDir, '.outlook-assistant-tokens.json'),
     authServerUrl: 'http://localhost:3333',
     audience: AUTH_AUDIENCE,

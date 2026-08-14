@@ -51,7 +51,22 @@ const templates = {
     </html>`,
 };
 
+// Scope sets and scope-rejection classification come from the same sources as
+// the device-code flow — config.js is the single source of truth for scopes,
+// device-code.js for "the account can't consent to `.Shared`". The
+// /auth/callback fallback handles that with one extra redirect to the
+// base-only scope set.
+const { BASE_SCOPES, SHARED_SCOPES } = require('../config');
+const { isScopeConsentError } = require('./device-code');
+
+function isScopeConsentCallbackError(error, errorDescription) {
+  return isScopeConsentError({
+    oauth: { error, error_description: errorDescription },
+  });
+}
+
 function createAuthConfig(envPrefix = 'OUTLOOK_') {
+  const fallbackScopes = BASE_SCOPES;
   return {
     clientId:
       process.env[`${envPrefix}CLIENT_ID`] || process.env.MS_CLIENT_ID || '',
@@ -62,9 +77,11 @@ function createAuthConfig(envPrefix = 'OUTLOOK_') {
     redirectUri:
       process.env[`${envPrefix}REDIRECT_URI`] ||
       'http://localhost:3333/auth/callback',
-    scopes: (
-      process.env[`${envPrefix}SCOPES`] || 'offline_access User.Read Mail.Read'
-    ).split(' '),
+    // Default to base + shared; the OUTLOOK_SCOPES override still wins.
+    scopes: process.env[`${envPrefix}SCOPES`]
+      ? process.env[`${envPrefix}SCOPES`].split(' ')
+      : [...BASE_SCOPES, ...SHARED_SCOPES],
+    fallbackScopes,
     tokenEndpoint:
       process.env[`${envPrefix}TOKEN_ENDPOINT`] ||
       'https://login.microsoftonline.com/common/oauth2/v2.0/token',
@@ -103,7 +120,16 @@ function setupOAuthRoutes(
           )
         );
     }
-    const state = crypto.randomBytes(16).toString('hex'); // Generate a random 16-byte string
+    // When ?fallback=1 is set we request only the base scopes (the account
+    // couldn't consent to the `.Shared` scopes). We mark the state with a
+    // `fb.` prefix so /auth/callback can detect we're already in fallback and
+    // not loop if it still fails.
+    const isFallback = req.query.fallback === '1';
+    const scopes = isFallback
+      ? authConfig.fallbackScopes || authConfig.scopes
+      : authConfig.scopes;
+    const stateMarker = isFallback ? 'fb.' : '';
+    const state = stateMarker + crypto.randomBytes(16).toString('hex'); // Random + fallback marker
     // Store state in session or similar mechanism if available.
     // For a server without sessions, this state would need to be passed through and verified differently,
     // or a temporary server-side storage (like a short-lived cache) would be needed.
@@ -117,7 +143,7 @@ function setupOAuthRoutes(
         client_id: authConfig.clientId,
         response_type: 'code',
         redirect_uri: authConfig.redirectUri,
-        scope: authConfig.scopes.join(' '),
+        scope: scopes.join(' '),
         response_mode: 'query',
         state: state,
       }
@@ -171,7 +197,24 @@ function setupOAuthRoutes(
     // }
     // if (req.session) delete req.session.oauthState;
 
+    // A `fb.` state means this code was issued for the base-only scope set;
+    // the redemption below must request the same set.
+    const alreadyFallback =
+      typeof state === 'string' && state.startsWith('fb.');
+
     if (error) {
+      // Scope-consent rejection (e.g. personal account can't consent to the
+      // `.Shared` scopes) → retry once with base scopes via a single redirect,
+      // unless we're already in fallback (state marked `fb.`) — then surface it.
+      if (
+        !alreadyFallback &&
+        isScopeConsentCallbackError(error, error_description)
+      ) {
+        console.error(
+          `[auth] Scope-consent rejection (${error}); retrying with base scopes.`
+        );
+        return res.redirect('/auth?fallback=1');
+      }
       return res
         .status(400)
         .send(templates.authError(error, error_description));
@@ -189,7 +232,12 @@ function setupOAuthRoutes(
     }
 
     try {
-      await tokenStorage.exchangeCodeForTokens(code);
+      await tokenStorage.exchangeCodeForTokens(
+        code,
+        alreadyFallback
+          ? authConfig.fallbackScopes || authConfig.scopes
+          : authConfig.scopes
+      );
       res.send(templates.authSuccess);
     } catch (exchangeError) {
       console.error('Token exchange error:', exchangeError);

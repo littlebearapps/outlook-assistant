@@ -4,6 +4,28 @@ const path = require('path');
 const https = require('https');
 const querystring = require('querystring');
 
+/**
+ * Decide which scopes a refresh request should use. Prefer the scopes that were
+ * actually GRANTED (so a base-only fallback never re-requests `.Shared` on
+ * refresh and gets logged out ~1h later). Falls back to the parsed `scope`
+ * string, then to the configured scopes for back-compat with token files
+ * written before granted_scopes existed.
+ * @param {object|null} tokens - Stored token object
+ * @param {string[]} configScopes - Configured scope set (back-compat fallback)
+ * @returns {string[]} - Scopes to send in the refresh request
+ */
+function resolveRefreshScopes(tokens, configScopes) {
+  if (tokens) {
+    if (Array.isArray(tokens.granted_scopes) && tokens.granted_scopes.length) {
+      return tokens.granted_scopes;
+    }
+    if (typeof tokens.scope === 'string' && tokens.scope.trim()) {
+      return tokens.scope.split(' ').filter(Boolean);
+    }
+  }
+  return configScopes;
+}
+
 class TokenStorage {
   constructor(config) {
     this.config = {
@@ -172,7 +194,9 @@ class TokenStorage {
       client_id: this.config.clientId,
       grant_type: 'refresh_token',
       refresh_token: this.tokens.refresh_token,
-      scope: this.config.scopes.join(' '),
+      // Use the GRANTED scopes, not the full configured set. After a base-only
+      // fallback, re-requesting `.Shared` here would fail and log the user out.
+      scope: resolveRefreshScopes(this.tokens, this.config.scopes).join(' '),
     };
     if (!isDeviceCode) {
       refreshParams.client_secret = this.config.clientSecret;
@@ -256,20 +280,25 @@ class TokenStorage {
     return this._refreshPromise.then((tokens) => tokens.access_token);
   }
 
-  async exchangeCodeForTokens(authCode) {
+  async exchangeCodeForTokens(authCode, scopes = null) {
     if (!this.config.clientId || !this.config.clientSecret) {
       throw new Error(
         'Client ID or Client Secret is not configured. Cannot exchange code for tokens.'
       );
     }
     console.log('Exchanging authorization code for tokens...');
+    // The redemption request must use the same scope set the authorization
+    // code was issued for — a fallback (base-only) code redeemed with the
+    // full configured set would re-request the rejected `.Shared` scopes.
+    const requestedScopes =
+      Array.isArray(scopes) && scopes.length ? scopes : this.config.scopes;
     const postData = querystring.stringify({
       client_id: this.config.clientId,
       client_secret: this.config.clientSecret,
       grant_type: 'authorization_code',
       code: authCode,
       redirect_uri: this.config.redirectUri,
-      scope: this.config.scopes.join(' '),
+      scope: requestedScopes.join(' '),
     });
 
     const requestOptions = {
@@ -297,6 +326,15 @@ class TokenStorage {
                   expires_in: responseBody.expires_in,
                   expires_at: Date.now() + responseBody.expires_in * 1000,
                   scope: responseBody.scope,
+                  // Persist granted scopes so refresh re-requests exactly what
+                  // was granted (mirrors the device-code path). If the token
+                  // response omits `scope`, fall back to what we requested so
+                  // a fallback session never refreshes with `.Shared` again.
+                  granted_scopes:
+                    typeof responseBody.scope === 'string' &&
+                    responseBody.scope.trim()
+                      ? responseBody.scope.split(' ').filter(Boolean)
+                      : requestedScopes,
                   token_type: responseBody.token_type,
                 };
                 try {
@@ -368,4 +406,5 @@ class TokenStorage {
 }
 
 module.exports = TokenStorage;
+module.exports.resolveRefreshScopes = resolveRefreshScopes;
 // Adding a newline at the end of the file as requested by Gemini Code Assist

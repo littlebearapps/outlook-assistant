@@ -353,6 +353,68 @@ describe('handleApplyCategory', () => {
     expect(result.content[0].text).toContain('removed from 1 message');
   });
 
+  it('should target a shared mailbox when sharedMailbox is provided', async () => {
+    callGraphAPI.mockResolvedValue({});
+
+    await handleApplyCategory({
+      messageId: 'msg-1',
+      categories: ['Important'],
+      sharedMailbox: 'shared@company.com',
+    });
+
+    expect(callGraphAPI).toHaveBeenCalledWith(
+      mockAccessToken,
+      'PATCH',
+      'users/shared@company.com/messages/msg-1',
+      { categories: ['Important'] }
+    );
+  });
+
+  it('should accept email as an alias and prefix the add-GET too', async () => {
+    callGraphAPI
+      .mockResolvedValueOnce({ categories: ['Old'] })
+      .mockResolvedValueOnce({});
+
+    await handleApplyCategory({
+      messageId: 'msg-1',
+      categories: ['New'],
+      action: 'add',
+      email: 'shared@company.com',
+    });
+
+    expect(callGraphAPI).toHaveBeenNthCalledWith(
+      1,
+      mockAccessToken,
+      'GET',
+      'users/shared@company.com/messages/msg-1',
+      null,
+      { $select: 'categories' }
+    );
+    expect(callGraphAPI).toHaveBeenNthCalledWith(
+      2,
+      mockAccessToken,
+      'PATCH',
+      'users/shared@company.com/messages/msg-1',
+      { categories: ['Old', 'New'] }
+    );
+  });
+
+  it('should default to the signed-in mailbox (me) when no shared mailbox', async () => {
+    callGraphAPI.mockResolvedValue({});
+
+    await handleApplyCategory({
+      messageId: 'msg-1',
+      categories: ['Important'],
+    });
+
+    expect(callGraphAPI).toHaveBeenCalledWith(
+      mockAccessToken,
+      'PATCH',
+      'me/messages/msg-1',
+      { categories: ['Important'] }
+    );
+  });
+
   it('should require message IDs', async () => {
     const result = await handleApplyCategory({ categories: ['Test'] });
 

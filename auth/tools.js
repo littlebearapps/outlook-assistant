@@ -5,7 +5,12 @@ const config = require('../config');
 const fs = require('fs');
 const path = require('path');
 const tokenManager = require('./token-manager');
-const { initiateDeviceCodeFlow, pollForToken } = require('./device-code');
+const {
+  initiateDeviceCodeFlow,
+  pollForToken,
+  isScopeConsentError,
+  isConsentRequiredError,
+} = require('./device-code');
 
 // Path for persisting device code state across MCP server restarts
 const DEVICE_CODE_STATE_PATH = path.join(
@@ -208,6 +213,22 @@ async function handleDeviceCodeAuth() {
   }
 
   console.error('[AUTH] Starting device code flow...');
+  // Attempt the full scope set (base + shared) first. If the account can't
+  // consent to `.Shared`, handleDeviceCodeComplete re-issues with base scopes.
+  return initiateDeviceCode(config.AUTH_CONFIG.scopes, 'full');
+}
+
+/**
+ * Shared helper: request a device code for a given scope set, persist the
+ * pending state (tagging which scope set was used so the completion step can
+ * decide whether a fallback is still available), and build the MCP response.
+ * @param {string[]} scopes - OAuth scopes to request
+ * @param {'full'|'base'} scopesUsed - Label recording which scope set was used
+ * @param {string} [prefix] - Optional leading line (used for the fallback case)
+ * @returns {Promise<object>} - MCP response
+ */
+async function initiateDeviceCode(scopes, scopesUsed, prefix) {
+  const clientId = config.AUTH_CONFIG.clientId;
 
   // #213 — initiation can throw (blocked network egress in a sandboxed
   // connector, AADSTS9002331 audience mismatch, invalid_client, non-JSON
@@ -217,10 +238,7 @@ async function handleDeviceCodeAuth() {
   // (handleDeviceCodeComplete) already has, and surface actionable hints.
   let response;
   try {
-    response = await initiateDeviceCodeFlow(
-      clientId,
-      config.AUTH_CONFIG.scopes
-    );
+    response = await initiateDeviceCodeFlow(clientId, scopes);
   } catch (error) {
     return buildDeviceCodeErrorResponse(error);
   }
@@ -231,24 +249,31 @@ async function handleDeviceCodeAuth() {
     interval: response.interval,
     expiresIn: response.expiresIn,
     expiresAt: Date.now() + response.expiresIn * 1000,
+    scopesUsed,
   };
   saveDeviceCodeState(pendingDeviceCode);
 
   console.error(
-    `[AUTH] Device code: ${response.userCode}, expires in ${response.expiresIn}s`
+    `[AUTH] Device code (${scopesUsed} scopes): ${response.userCode}, expires in ${response.expiresIn}s`
+  );
+
+  const lines = [];
+  if (prefix) {
+    lines.push(prefix, '');
+  }
+  lines.push(
+    `## Device Code Authentication\n`,
+    `Visit: **${response.verificationUri}**`,
+    `Enter code: **${response.userCode}**\n`,
+    `The code expires in ${Math.floor(response.expiresIn / 60)} minutes.\n`,
+    `After entering the code and signing in, call this tool again with \`action=device-code-complete\` to finish authentication.`
   );
 
   return {
     content: [
       {
         type: 'text',
-        text: [
-          `## Device Code Authentication\n`,
-          `Visit: **${response.verificationUri}**`,
-          `Enter code: **${response.userCode}**\n`,
-          `The code expires in ${Math.floor(response.expiresIn / 60)} minutes.\n`,
-          `After entering the code and signing in, call this tool again with \`action=device-code-complete\` to finish authentication.`,
-        ].join('\n'),
+        text: lines.join('\n'),
       },
     ],
   };
@@ -341,6 +366,14 @@ async function handleDeviceCodeComplete() {
   }
 
   const clientId = config.AUTH_CONFIG.clientId;
+  // Capture which scope set this pending flow attempted, before any mutation.
+  const scopesUsed = pendingDeviceCode.scopesUsed || 'full';
+  // The scopes we attempted — used as the granted_scopes fallback when the
+  // token response omits `scope`.
+  const attemptedScopes =
+    scopesUsed === 'base'
+      ? config.AUTH_CONFIG.fallbackScopes
+      : config.AUTH_CONFIG.scopes;
 
   try {
     console.error('[AUTH] Polling for device code completion...');
@@ -364,12 +397,20 @@ async function handleDeviceCodeComplete() {
       tokenEndpoint: config.AUTH_CONFIG.tokenEndpoint,
     });
 
+    // Persist the GRANTED scopes so token refresh re-requests exactly what was
+    // granted (not the full configured set) — otherwise a base-only fallback
+    // would re-request `.Shared` on refresh ~1h later and log the user out.
+    const grantedScopes = tokenResponse.scope
+      ? tokenResponse.scope.split(' ').filter(Boolean)
+      : attemptedScopes;
+
     tokenStorage.tokens = {
       access_token: tokenResponse.access_token,
       refresh_token: tokenResponse.refresh_token,
       expires_in: tokenResponse.expires_in,
       expires_at: Date.now() + tokenResponse.expires_in * 1000,
       scope: tokenResponse.scope,
+      granted_scopes: grantedScopes,
       token_type: tokenResponse.token_type,
       auth_method: 'device-code',
     };
@@ -386,8 +427,63 @@ async function handleDeviceCodeComplete() {
       ],
     };
   } catch (error) {
+    // Scope-consent rejection while attempting the FULL set → re-issue with
+    // base scopes. This is the personal-account path: one extra device code.
+    if (isScopeConsentError(error) && scopesUsed === 'full') {
+      console.error(
+        '[AUTH] Shared-mailbox scopes rejected; falling back to base scopes.'
+      );
+      // Do NOT clear pendingDeviceCode — initiateDeviceCode replaces it.
+      try {
+        const fallbackResponse = await initiateDeviceCode(
+          config.AUTH_CONFIG.fallbackScopes,
+          'base',
+          "Your account doesn't support shared-mailbox access; enter this new code to finish signing in."
+        );
+        // initiateDeviceCode reports its own failures as { isError: true }
+        // instead of throwing. Clear the rejected full-scope pending state so
+        // a later completion attempt doesn't retry it.
+        if (fallbackResponse && fallbackResponse.isError) {
+          pendingDeviceCode = null;
+          saveDeviceCodeState(null);
+        }
+        return fallbackResponse;
+      } catch (reissueError) {
+        pendingDeviceCode = null;
+        saveDeviceCodeState(null);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Authentication failed: ${reissueError.message}`,
+            },
+          ],
+        };
+      }
+    }
+
     pendingDeviceCode = null;
     saveDeviceCodeState(null);
+
+    // Consent required (AADSTS65001) — remediable, so surface it instead of
+    // silently downgrading to base scopes (which would strip shared-mailbox
+    // access for every future refresh).
+    if (isConsentRequiredError(error)) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: [
+              'Authentication failed: consent was not granted (AADSTS65001).',
+              '',
+              'An administrator may need to grant consent for the shared-mailbox scopes (Mail.Read.Shared, Mail.ReadWrite.Shared), or re-run `auth action=authenticate` and approve every requested permission.',
+              'No scopes were changed — your configured capability is unchanged.',
+            ].join('\n'),
+          },
+        ],
+      };
+    }
+
     return {
       content: [
         {

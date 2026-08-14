@@ -12,38 +12,44 @@ const { listChildFolders } = require('./resolve');
 async function handleListFolders(args) {
   const includeItemCounts = args.includeItemCounts === true;
   const includeChildren = args.includeChildren === true;
+  // Target a shared/delegated mailbox instead of the signed-in account.
+  const sharedMailbox = args.sharedMailbox || args.email || null;
 
   try {
     // Get access token
     const accessToken = await ensureAuthenticated();
 
     // Get all mail folders
-    const folders = await getAllFoldersHierarchy(
+    const { folders, warnings } = await getAllFoldersHierarchy(
       accessToken,
-      includeItemCounts
+      includeItemCounts,
+      sharedMailbox
     );
 
-    // If including children, format as hierarchy
-    if (includeChildren) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: formatFolderHierarchy(folders, includeItemCounts),
-          },
-        ],
-      };
-    } else {
-      // Otherwise, format as flat list
-      return {
-        content: [
-          {
-            type: 'text',
-            text: formatFolderList(folders, includeItemCounts),
-          },
-        ],
-      };
+    let heading = sharedMailbox ? `\n\nMailbox: ${sharedMailbox}` : '';
+    // The walk can skip branches (permission errors, depth cap) — say so
+    // instead of presenting a partial tree as complete.
+    if (warnings.length > 0) {
+      heading += `\n\n**Partial listing — ${warnings.length} branch(es) incomplete:**\n${warnings.map((w) => `- ${w}`).join('\n')}`;
     }
+
+    const body = includeChildren
+      ? formatFolderHierarchy(folders, includeItemCounts)
+      : formatFolderList(folders, includeItemCounts);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: body + heading,
+        },
+      ],
+      _meta: {
+        folderCount: folders.length,
+        partial: warnings.length > 0,
+        warnings,
+      },
+    };
   } catch (error) {
     if (error.message === 'Authentication required') {
       return {
@@ -71,9 +77,14 @@ async function handleListFolders(args) {
  * Get all mail folders with hierarchy information
  * @param {string} accessToken - Access token
  * @param {boolean} includeItemCounts - Include item counts in response
- * @returns {Promise<Array>} - Array of folder objects with hierarchy
+ * @param {string|null} [sharedMailbox] - Shared mailbox email, or null for the signed-in account
+ * @returns {Promise<{folders: Array, warnings: Array<string>}>} - Folders plus any reasons the tree is incomplete
  */
-async function getAllFoldersHierarchy(accessToken, includeItemCounts) {
+async function getAllFoldersHierarchy(
+  accessToken,
+  includeItemCounts,
+  sharedMailbox = null
+) {
   // Determine select fields based on whether to include counts
   const selectFields = includeItemCounts
     ? 'id,displayName,parentFolderId,childFolderCount,totalItemCount,unreadItemCount'
@@ -81,8 +92,14 @@ async function getAllFoldersHierarchy(accessToken, includeItemCounts) {
 
   // Full recursive, paginated walk so nested folders at ANY depth appear with
   // their complete path (not just one level). (#216 review)
-  const top = await listChildFolders(accessToken, null, selectFields);
+  const top = await listChildFolders(
+    accessToken,
+    null,
+    selectFields,
+    sharedMailbox
+  );
   const all = [];
+  const warnings = [];
   const visited = new Set();
   const queue = top.map((folder) => ({
     folder,
@@ -100,13 +117,27 @@ async function getAllFoldersHierarchy(accessToken, includeItemCounts) {
     visited.add(folder.id);
     all.push({ ...folder, path, parentFolder: parentPath, isTopLevel });
 
+    if (folder.childFolderCount > 0 && depth >= 20) {
+      warnings.push(
+        `Depth limit (20) reached at "${path}" [id: ${folder.id}] — its subfolders were not listed.`
+      );
+    }
+
     if (folder.childFolderCount > 0 && depth < 20) {
       let children;
       try {
-        children = await listChildFolders(accessToken, folder.id, selectFields);
+        children = await listChildFolders(
+          accessToken,
+          folder.id,
+          selectFields,
+          sharedMailbox
+        );
       } catch (error) {
         console.error(
           `Error getting child folders for "${folder.displayName}": ${error.message}`
+        );
+        warnings.push(
+          `Could not list subfolders of "${path}" [id: ${folder.id}]: ${error.message}`
         );
         continue;
       }
@@ -121,7 +152,7 @@ async function getAllFoldersHierarchy(accessToken, includeItemCounts) {
       }
     }
   }
-  return all;
+  return { folders: all, warnings };
 }
 
 /**
@@ -272,3 +303,6 @@ function formatFolderHierarchy(folders, includeItemCounts) {
 }
 
 module.exports = handleListFolders;
+// Named export so the shared-mailbox folder listing in `access-shared-mailbox`
+// reuses this walk instead of carrying its own copy.
+module.exports.getAllFoldersHierarchy = getAllFoldersHierarchy;

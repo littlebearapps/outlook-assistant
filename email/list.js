@@ -51,13 +51,20 @@ async function handleListEmails(args) {
   const requestedCount =
     args.count ?? args.maxResults ?? DEFAULT_LIMITS.listEmails;
   const verbosity = args.outputVerbosity || VERBOSITY.STANDARD;
+  // `search-emails` falls through to list mode when no filters are supplied,
+  // so the shared-mailbox scope has to be honoured here too.
+  const sharedMailbox = args.sharedMailbox || args.email || null;
 
   try {
     // Get access token
     const accessToken = await ensureAuthenticated();
 
     // Resolve the folder path
-    const endpoint = await resolveFolderPath(accessToken, folder);
+    const endpoint = await resolveFolderPath(
+      accessToken,
+      folder,
+      sharedMailbox
+    );
 
     // Select fields based on verbosity level
     const fieldPreset = getFieldPresetForVerbosity(verbosity);

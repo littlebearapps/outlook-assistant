@@ -45,7 +45,8 @@ Follow the full walkthrough in the [Azure Setup Guide](../../guides/azure-setup.
    - `People.Read` — people search
 
 **Optional** (work/school accounts only):
-   - `Mail.Read.Shared` — shared mailbox access
+   - `Mail.Read.Shared` — shared mailbox read access
+   - `Mail.ReadWrite.Shared` — shared mailbox writes (move/categorize/flag/mark-read)
    - `Place.Read.All` — meeting room search (requires admin consent)
 
 > **Common mistake**: Copy the secret **Value**, not the Secret ID. Using the wrong one causes `AADSTS7000215` errors.

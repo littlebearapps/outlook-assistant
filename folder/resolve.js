@@ -16,8 +16,14 @@
  *
  * `/` is the path separator, so a folder whose display name literally contains
  * `/` cannot be addressed by path — use its folderId (documented on the tool).
+ *
+ * Every function takes an optional `mailbox` (a shared/delegated mailbox email
+ * address). It only changes the Graph path prefix — `me` vs `users/{mailbox}` —
+ * so the same resolution logic reaches custom subfolders and localized folder
+ * names in a shared mailbox exactly as it does in the signed-in account.
  */
 const { callGraphAPI } = require('../utils/graph-api');
+const { buildMailboxPrefix } = require('../utils/mailbox');
 
 // Alias → Graph well-known folder name (usable directly as a path segment).
 const WELL_KNOWN = {
@@ -73,11 +79,17 @@ function ambiguousError(spec, candidates) {
  * @odata.nextLink so folders with many children resolve completely.
  * @returns {Promise<Array<{id, displayName, parentFolderId, childFolderCount}>>}
  */
-async function listChildFolders(accessToken, parentId, select = FOLDER_SELECT) {
+async function listChildFolders(
+  accessToken,
+  parentId,
+  select = FOLDER_SELECT,
+  mailbox = null
+) {
+  const prefix = buildMailboxPrefix(mailbox);
   const all = [];
   let path = parentId
-    ? `me/mailFolders/${parentId}/childFolders`
-    : 'me/mailFolders';
+    ? `${prefix}/mailFolders/${parentId}/childFolders`
+    : `${prefix}/mailFolders`;
   let params = { $top: 100, $select: select };
   // Follow pagination; nextLink already encodes params. Guard against a
   // repeated/malformed nextLink so a bad server response can't loop forever.
@@ -108,22 +120,22 @@ function toRecord(folder, path) {
   };
 }
 
-async function resolveWellKnown(accessToken, alias) {
+async function resolveWellKnown(accessToken, alias, mailbox) {
   const resp = await callGraphAPI(
     accessToken,
     'GET',
-    `me/mailFolders/${WELL_KNOWN[alias]}`,
+    `${buildMailboxPrefix(mailbox)}/mailFolders/${WELL_KNOWN[alias]}`,
     null,
     { $select: FOLDER_SELECT }
   );
   return toRecord(resp, resp.displayName);
 }
 
-async function resolveById(accessToken, id) {
+async function resolveById(accessToken, id, mailbox) {
   const resp = await callGraphAPI(
     accessToken,
     'GET',
-    `me/mailFolders/${id}`,
+    `${buildMailboxPrefix(mailbox)}/mailFolders/${id}`,
     null,
     { $select: FOLDER_SELECT }
   );
@@ -134,8 +146,9 @@ async function resolveById(accessToken, id) {
  * Build a flat list of every folder with its full path, breadth-first.
  * Accepts an already-fetched top-level list to avoid re-fetching.
  */
-async function buildTree(accessToken, topLevel) {
-  const top = topLevel || (await listChildFolders(accessToken, null));
+async function buildTree(accessToken, topLevel, mailbox = null) {
+  const top =
+    topLevel || (await listChildFolders(accessToken, null, undefined, mailbox));
   const out = [];
   const visited = new Set();
   const queue = top.map((f) => ({ folder: f, path: f.displayName, depth: 1 }));
@@ -164,7 +177,12 @@ async function buildTree(accessToken, topLevel) {
             'use an explicit folder path or folderId.'
         );
       }
-      const children = await listChildFolders(accessToken, folder.id);
+      const children = await listChildFolders(
+        accessToken,
+        folder.id,
+        undefined,
+        mailbox
+      );
       for (const child of children) {
         queue.push({
           folder: child,
@@ -186,8 +204,8 @@ function matchName(folders, name) {
  * Resolve a bare display name: a unique top-level match wins (fast path,
  * back-compat); otherwise search the whole tree, reporting ambiguity.
  */
-async function resolveByName(accessToken, name) {
-  const top = await listChildFolders(accessToken, null);
+async function resolveByName(accessToken, name, mailbox) {
+  const top = await listChildFolders(accessToken, null, undefined, mailbox);
   const topMatches = matchName(top, name);
   if (topMatches.length === 1) {
     return toRecord(topMatches[0], topMatches[0].displayName);
@@ -199,7 +217,7 @@ async function resolveByName(accessToken, name) {
     );
   }
   // Not top-level — search nested folders.
-  const tree = await buildTree(accessToken, top);
+  const tree = await buildTree(accessToken, top, mailbox);
   const matches = matchName(tree, name);
   if (matches.length === 0) {
     throw notFoundError(name);
@@ -213,13 +231,13 @@ async function resolveByName(accessToken, name) {
 /**
  * Resolve a path (segments already split/trimmed) by traversing childFolders.
  */
-async function resolvePath(accessToken, segments) {
+async function resolvePath(accessToken, segments, mailbox) {
   let current;
   const first = segments[0];
   if (WELL_KNOWN[first.toLowerCase()]) {
-    current = await resolveWellKnown(accessToken, first.toLowerCase());
+    current = await resolveWellKnown(accessToken, first.toLowerCase(), mailbox);
   } else {
-    const top = await listChildFolders(accessToken, null);
+    const top = await listChildFolders(accessToken, null, undefined, mailbox);
     const matches = matchName(top, first);
     if (matches.length === 0) {
       throw notFoundError(first);
@@ -235,7 +253,12 @@ async function resolvePath(accessToken, segments) {
 
   for (let i = 1; i < segments.length; i++) {
     const seg = segments[i];
-    const children = await listChildFolders(accessToken, current.id);
+    const children = await listChildFolders(
+      accessToken,
+      current.id,
+      undefined,
+      mailbox
+    );
     const matches = matchName(children, seg);
     if (matches.length === 0) {
       throw notFoundError(`${current.path}/${seg}`);
@@ -262,16 +285,17 @@ async function resolvePath(accessToken, segments) {
 /**
  * Resolve a folder from a name/path and/or explicit ID.
  * @param {string} accessToken
- * @param {{name?: string, id?: string}} spec
+ * @param {{name?: string, id?: string, mailbox?: string|null}} spec
  * @returns {Promise<{id: string, displayName: string, parentId: string|null, path: string}>}
  *   `path` is the full slash-separated path when resolved by name/path/alias;
  *   when resolved by ID it is the folder's display name only (ancestors are not
  *   fetched).
  */
 async function resolveFolder(accessToken, spec = {}) {
+  const mailbox = spec.mailbox || null;
   const id = (spec.id || '').trim();
   if (id) {
-    return resolveById(accessToken, id);
+    return resolveById(accessToken, id, mailbox);
   }
   const name = (spec.name || '').trim();
   if (!name) {
@@ -297,14 +321,14 @@ async function resolveFolder(accessToken, spec = {}) {
       );
     }
     if (segments.length === 1) {
-      return resolveFolder(accessToken, { name: segments[0] });
+      return resolveFolder(accessToken, { name: segments[0], mailbox });
     }
-    return resolvePath(accessToken, segments);
+    return resolvePath(accessToken, segments, mailbox);
   }
   if (WELL_KNOWN[name.toLowerCase()]) {
-    return resolveWellKnown(accessToken, name.toLowerCase());
+    return resolveWellKnown(accessToken, name.toLowerCase(), mailbox);
   }
-  return resolveByName(accessToken, name);
+  return resolveByName(accessToken, name, mailbox);
 }
 
 module.exports = {

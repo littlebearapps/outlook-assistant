@@ -64,7 +64,11 @@ describe('handleListEmails', () => {
       const result = await handleListEmails({});
 
       expect(ensureAuthenticated).toHaveBeenCalledTimes(1);
-      expect(resolveFolderPath).toHaveBeenCalledWith(mockAccessToken, 'inbox');
+      expect(resolveFolderPath).toHaveBeenCalledWith(
+        mockAccessToken,
+        'inbox',
+        null
+      );
       expect(callGraphAPIPaginated).toHaveBeenCalledWith(
         mockAccessToken,
         'GET',
@@ -90,7 +94,8 @@ describe('handleListEmails', () => {
 
       expect(resolveFolderPath).toHaveBeenCalledWith(
         mockAccessToken,
-        customFolder
+        customFolder,
+        null
       );
       expect(callGraphAPIPaginated).toHaveBeenCalledWith(
         mockAccessToken,
@@ -253,7 +258,11 @@ describe('handleListEmails', () => {
 
       await handleListEmails({ folder: 'inbox' });
 
-      expect(resolveFolderPath).toHaveBeenCalledWith(mockAccessToken, 'inbox');
+      expect(resolveFolderPath).toHaveBeenCalledWith(
+        mockAccessToken,
+        'inbox',
+        null
+      );
       expect(callGraphAPIPaginated).toHaveBeenCalledWith(
         mockAccessToken,
         'GET',

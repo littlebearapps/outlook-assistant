@@ -12,7 +12,8 @@ const mockAuthConfig = {
   clientId: 'test-client-id',
   clientSecret: 'test-client-secret',
   redirectUri: 'http://localhost:3334/auth/callback', // Use a different port or path for testing
-  scopes: ['test_scope', 'openid'],
+  scopes: ['test_scope', 'openid', 'Mail.Read.Shared'],
+  fallbackScopes: ['test_scope', 'openid'],
   tokenEndpoint: 'https://login.example.com/token',
   authEndpoint: 'https://login.example.com/authorize',
 };
@@ -104,7 +105,25 @@ describe('OAuth Server Routes', () => {
 
       expect(
         mockTokenStorageInstance.exchangeCodeForTokens
-      ).toHaveBeenCalledWith(mockAuthCode);
+      ).toHaveBeenCalledWith(mockAuthCode, mockAuthConfig.scopes);
+      expect(response.status).toBe(200);
+      expect(response.text).toContain('Authentication Successful');
+    });
+
+    it('should redeem a fallback (fb.) code with the fallback scope set', async () => {
+      // Regression: a code issued for base-only scopes (state marked `fb.`)
+      // must not be redeemed with the full set including `.Shared`.
+      mockTokenStorageInstance.exchangeCodeForTokens.mockResolvedValue({
+        access_token: 'mock_access_token',
+      });
+
+      const response = await request(app).get(
+        `/auth/callback?code=${mockAuthCode}&state=fb.abc123`
+      );
+
+      expect(
+        mockTokenStorageInstance.exchangeCodeForTokens
+      ).toHaveBeenCalledWith(mockAuthCode, mockAuthConfig.fallbackScopes);
       expect(response.status).toBe(200);
       expect(response.text).toContain('Authentication Successful');
     });
@@ -259,11 +278,14 @@ describe('OAuth Server Routes', () => {
       expect(config.clientId).toBe('');
       expect(config.clientSecret).toBe('');
       expect(config.redirectUri).toBe('http://localhost:3333/auth/callback');
-      expect(config.scopes).toEqual([
-        'offline_access',
-        'User.Read',
-        'Mail.Read',
-      ]);
+      // Defaults to base + shared scopes now (OUTLOOK_SCOPES override still wins).
+      expect(config.scopes).toContain('Mail.Read.Shared');
+      expect(config.scopes).toContain('Mail.ReadWrite.Shared');
+      expect(config.scopes).toContain('offline_access');
+      // fallbackScopes is base-only (no .Shared).
+      expect(config.fallbackScopes).not.toContain('Mail.Read.Shared');
+      expect(config.fallbackScopes).not.toContain('Mail.ReadWrite.Shared');
+      expect(config.fallbackScopes).toContain('Mail.Read');
       expect(config.tokenEndpoint).toBe(
         'https://login.microsoftonline.com/common/oauth2/v2.0/token'
       );

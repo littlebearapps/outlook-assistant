@@ -7,6 +7,102 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.10.0] - 2026-09
+
+Search-correctness release. Four bugs in `email/search.js`, all found by
+investigating a claim that "`from:` search works, only `to:` and
+`searchExpression` are broken". `to` turned out to have been working since
+v3.7.1 — the claim came from the tool's own stale advice — while two further
+bugs surfaced along the way. Validated with a live end-to-end sweep against a
+personal Outlook.com account.
+
+### Fixed
+
+- **Field-scoped `searchExpression` now reaches your mail on personal
+  accounts** (#217). `from:`, `to:` and `subject:` expressions were reported
+  as returning nothing even when matching mail plainly existed. Personal
+  Outlook.com accounts reject field-scoped `$search` outright —
+  `400 BadRequest: Syntax error: character ':' is not valid` — and the
+  deliberately terminal `raw-kql` branch (#169 V37-F-1) surfaced that as an
+  empty result. Recognised expressions are now translated into the equivalent
+  OData filters and retried down the normal ladder, reported as strategy
+  `raw-kql-translated`, with `searchMetadata.kqlTranslatedTo` recording the
+  rewrite. Unscoped `$search` was never affected and is unchanged. Expressions
+  that cannot be reproduced exactly — free text, `AND`/`OR`, parentheses,
+  unknown prefixes, a repeated field — are still not retried, preserving the
+  no-silent-fallthrough guarantee #169 shipped.
+
+- **Searches combining two filters no longer return a superset** (#229).
+  When Graph rejected the combined `$filter`, the ladder returned the first
+  single term that yielded results and silently discarded the rest, while
+  `searchMetadata.filterApplied` still reported `true`. `from=X` plus
+  `subject=Y` returned every email from X. Three paths shared the defect —
+  the single-term walk, the client-side `to` fallback, and the boolean/date
+  filter step, where `from=X` plus `unreadOnly` could return every unread
+  message in the mailbox. Remaining terms are now applied locally before
+  returning, and `searchMetadata.droppedFilters` reports anything that could
+  not be honoured, with `filterApplied` false whenever it is non-empty. This
+  is the partial-fallback analogue of #138, which fixed the total case.
+
+- **Contextual no-results guidance** (#231). Every empty search printed the
+  same four suggestions, one of which — "use `from` filter instead of `to`
+  (more reliable on personal accounts)" — had been false since v3.7.1 added
+  the client-side `to` fallback (#139). That line is the traceable origin of
+  a "`to:` search is broken" belief that propagated into another agent's
+  stored notes and cost a full investigation to disprove. Guidance is now
+  derived from what the caller actually supplied and what the ladder actually
+  attempted: no `searchAllFolders` advice when it was already set, no
+  `to`-related advice when `to` was never used, and an explicit report of any
+  client-side fallback including how many messages it examined.
+
+### Security
+
+- **`from` and `to` filter values are now OData-escaped** (#230).
+  `buildFromFilter` and `buildToFilter` interpolated caller values straight
+  into the `$filter` string across all six branches. A legitimate apostrophe
+  (`O'Brien`, `d'angelo@example.com`) produced a malformed filter, a Graph
+  400, and a swallowed "No emails found" for mail that exists; a crafted value
+  such as `x' or startswith(subject,'` closed the literal and rewrote the
+  filter's semantics. Scope was bounded — these queries are already
+  `me/messages` under `Mail.Read`, so nothing crossed the mailbox boundary —
+  but it changed which of the user's own messages were returned. Now routed
+  through the existing `escapeODataString` helper, along with the four inline
+  escaping copies that had drifted alongside it.
+
+- **Production dependency audit gate cleared** (#215). Two HIGH advisories
+  were live: `fast-uri` 3.1.4, where our own override floor sat inside the
+  vulnerable range, and `ip-address` 10.2.0 via
+  `@modelcontextprotocol/sdk` → `express-rate-limit` with no override at all.
+  Plus moderates in `hono`, `@hono/node-server` and `qs`. Every bump stays
+  inside the major its parent declares. Because `npm audit --omit=dev
+  --audit-level=high` is a required CI job, this had been blocking every pull
+  request.
+
+### Added
+
+- **Weekly security-audit watchdog** (`.github/workflows/scheduled-audit.yml`).
+  Runs the production audit gate on a schedule and opens — or comments on — a
+  `security` issue when it fails. The gate in `ci.yml` only fires on push and
+  pull request, so a pinned override floor rotting back into a newly published
+  advisory range produced no signal until an unrelated PR failed. That is how
+  #215 happened twice.
+
+### Notes
+
+- Test suite grew from 826 to 867 across 33 suites. Two existing tests were
+  retargeted rather than deleted: the #169 no-fallthrough test used a
+  field-scoped expression to assert termination, which is now deliberately
+  translated, so it was pointed at a free-form expression — the case the
+  invariant is actually about — and a parameterised test now covers all five
+  non-translatable shapes.
+- The `searchExpression` tool description no longer tells callers that
+  field-scoped search "may return nothing — prefer `query` there". That text
+  is what an AI caller reads when choosing a parameter, so leaving it stale
+  would have kept steering callers away from a path that now works.
+- `CHANGELOG.md` was missing its `## [3.9.0]` heading; the 3.9.0 notes were
+  orphaned inside the 3.9.1 section, so anyone tracing "which release fixed
+  #169" read them as part of 3.9.1. Heading restored.
+
 ## [3.9.1] - 2026-08
 
 Packaging hotfix. **Every published release from 3.9.0 back to 3.8.2 is
@@ -39,6 +135,8 @@ behavioural changes; the source tree was never affected.
 - Consider adding a CI job that installs the output of `npm pack` and runs a
   handshake against it. The existing suite passes 826/826 against the working
   tree and still missed a broken package for two releases.
+
+## [3.9.0] - 2026-07
 
 Feature release adding nested-folder addressing and making cross-folder email
 search reliable. Validated with a live end-to-end sweep against a personal

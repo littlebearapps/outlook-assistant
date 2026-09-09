@@ -201,6 +201,64 @@ function parseFieldScopedExpression(expression) {
 }
 
 /**
+ * Retry a field-scoped `searchExpression` as OData filters, down the normal
+ * ladder. Returns null when the expression is not translatable, which keeps
+ * the terminal no-fallthrough behaviour #169 V37-F-1 shipped. (#217)
+ *
+ * @param {object} ctx - Everything the retry needs from the raw-KQL branch
+ * @returns {Promise<object|null>} - A merged response, or null if untranslatable
+ */
+async function retryFieldScopedExpression(ctx) {
+  const {
+    endpoint,
+    accessToken,
+    trimmedKql,
+    kqlForSearch,
+    searchTerms,
+    filterTerms,
+    maxCount,
+    selectFields,
+    searchAttempts,
+  } = ctx;
+
+  const translated = parseFieldScopedExpression(trimmedKql);
+  if (!translated) return null;
+
+  console.error(
+    `Retrying field-scoped searchExpression as OData filters: ${JSON.stringify(translated)}`
+  );
+  const retry = await progressiveSearch(
+    endpoint,
+    accessToken,
+    translated,
+    filterTerms,
+    maxCount,
+    selectFields
+  );
+  const retryCount = retry.value?.length || 0;
+  const strategies = [
+    ...searchAttempts,
+    ...(retry._searchInfo?.strategies || []),
+    // Last, so finalStrategy names the translation rather than whichever rung
+    // of the ladder happened to answer it.
+    'raw-kql-translated',
+  ];
+  retry._searchInfo = {
+    ...retry._searchInfo,
+    attemptsCount: strategies.length,
+    strategies,
+    // Report what the caller actually asked for, not the rewrite.
+    originalTerms: searchTerms,
+    filterTerms,
+    kqlApplied: kqlForSearch,
+    kqlTranslatedTo: translated,
+    appliedTerms: ['kqlQuery'],
+    noResults: retryCount === 0,
+  };
+  return retry;
+}
+
+/**
  * Execute a search with progressively simpler fallback strategies
  * @param {string} endpoint - API endpoint
  * @param {string} accessToken - Access token
@@ -230,27 +288,42 @@ async function progressiveSearch(
   //    would drop the user's filter and return unrelated recent emails
   //    with a misleading "combined-search" strategy line. (#169)
   if (searchTerms.kqlQuery) {
-    try {
-      // Pass the user's KQL through as-is. The user is responsible for
-      // their own phrase quoting (e.g. `subject:"foo bar"`); we do NOT
-      // auto-wrap, which previously produced broken nested quotes like
-      // `"subject:"foo bar""` on Graph $search and silently returned
-      // recent unfiltered messages. (#169 V37-F-1)
-      const trimmedKql = searchTerms.kqlQuery.trim();
-      const alreadyQuoted =
-        trimmedKql.startsWith('"') && trimmedKql.endsWith('"');
-      const looksLikeExpression =
-        trimmedKql.includes(':') || /\s/.test(trimmedKql);
-      // Already-quoted phrases and KQL-looking expressions (field syntax
-      // or multi-word) are passed through as-is; only bare single tokens
-      // are wrapped so Graph treats them as phrase searches.
-      let kqlForSearch;
-      if (alreadyQuoted || looksLikeExpression) {
-        kqlForSearch = trimmedKql;
-      } else {
-        kqlForSearch = `"${trimmedKql}"`;
-      }
+    // Pass the user's KQL through as-is. The user is responsible for
+    // their own phrase quoting (e.g. `subject:"foo bar"`); we do NOT
+    // auto-wrap, which previously produced broken nested quotes like
+    // `"subject:"foo bar""` on Graph $search and silently returned
+    // recent unfiltered messages. (#169 V37-F-1)
+    const trimmedKql = searchTerms.kqlQuery.trim();
+    const alreadyQuoted =
+      trimmedKql.startsWith('"') && trimmedKql.endsWith('"');
+    const looksLikeExpression =
+      trimmedKql.includes(':') || /\s/.test(trimmedKql);
+    // Already-quoted phrases and KQL-looking expressions (field syntax
+    // or multi-word) are passed through as-is; only bare single tokens
+    // are wrapped so Graph treats them as phrase searches.
+    let kqlForSearch;
+    if (alreadyQuoted || looksLikeExpression) {
+      kqlForSearch = trimmedKql;
+    } else {
+      kqlForSearch = `"${trimmedKql}"`;
+    }
 
+    // Graph rejects field-scoped expressions outright on personal accounts
+    // ("Syntax error: character ':' is not valid"), so the translated retry
+    // has to be reachable from the catch as well as the empty-result path.
+    const translationContext = {
+      endpoint,
+      accessToken,
+      trimmedKql,
+      kqlForSearch,
+      searchTerms,
+      filterTerms,
+      maxCount,
+      selectFields,
+      searchAttempts,
+    };
+
+    try {
       console.error(`Attempting raw KQL search: ${kqlForSearch}`);
       searchAttempts.push('raw-kql');
 
@@ -284,51 +357,11 @@ async function progressiveSearch(
         // with no guidance.
         noResults: matched === 0,
       };
-      // A field-scoped expression that Graph answered with 0 is the #217
-      // case: unscoped $search works on personal accounts, but `from:`,
-      // `to:` and `subject:` forms come back empty even though the OData
-      // filters reach the very same messages. Translate and retry down the
-      // normal ladder, which also picks up the client-side `to` fallback.
-      //
-      // Anything the parser does not fully understand returns null and keeps
-      // the terminal behaviour below — translating a half-understood
-      // expression would reintroduce #169 V37-F-1.
-      const translated =
-        matched === 0 ? parseFieldScopedExpression(trimmedKql) : null;
-      if (translated) {
-        console.error(
-          `Raw KQL returned 0; retrying as OData filters: ${JSON.stringify(translated)}`
-        );
-        searchAttempts.push('raw-kql-translated');
-        const retry = await progressiveSearch(
-          endpoint,
-          accessToken,
-          translated,
-          filterTerms,
-          maxCount,
-          selectFields
-        );
-        const retryCount = retry.value?.length || 0;
-        const strategies = [
-          ...searchAttempts.filter((a) => a !== 'raw-kql-translated'),
-          ...(retry._searchInfo?.strategies || []),
-          // Last, so finalStrategy names the translation rather than whichever
-          // rung of the ladder happened to answer it.
-          'raw-kql-translated',
-        ];
-        retry._searchInfo = {
-          ...retry._searchInfo,
-          attemptsCount: strategies.length,
-          strategies,
-          // Report what the caller actually asked for, not the rewrite.
-          originalTerms: searchTerms,
-          filterTerms: filterTerms,
-          kqlApplied: kqlForSearch,
-          kqlTranslatedTo: translated,
-          appliedTerms: ['kqlQuery'],
-          noResults: retryCount === 0,
-        };
-        return retry;
+      // Empty-but-successful is the other #217 shape: some tenants answer a
+      // field-scoped expression with 0 rather than a 400.
+      if (matched === 0) {
+        const retry = await retryFieldScopedExpression(translationContext);
+        if (retry) return retry;
       }
 
       // Otherwise always return — never silently fall through to a path that
@@ -336,8 +369,23 @@ async function progressiveSearch(
       return response;
     } catch (error) {
       console.error(`Raw KQL search failed: ${error.message}`);
-      // Surface the failure rather than masking it with unrelated results.
       searchAttempts.push('raw-kql-error');
+
+      // A field-scoped expression is what Graph rejects here on personal
+      // accounts. Translating and retrying beats reporting mail that plainly
+      // exists as absent — the same messages come back from the equivalent
+      // OData filter. Anything untranslatable still surfaces the error. (#217)
+      try {
+        const retry = await retryFieldScopedExpression(translationContext);
+        if (retry) {
+          retry._searchInfo.kqlError = error.message;
+          return retry;
+        }
+      } catch (retryError) {
+        console.error(`Translated retry also failed: ${retryError.message}`);
+      }
+
+      // Surface the failure rather than masking it with unrelated results.
       return {
         value: [],
         _searchInfo: {

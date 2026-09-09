@@ -1324,6 +1324,69 @@ describe('handleSearchEmails — field-scoped searchExpression (#217)', () => {
     }
   );
 
+  // Graph does not answer a field-scoped expression with 0 on a personal
+  // account — it rejects the request outright:
+  //   400 BadRequest "Syntax error: character ':' is not valid at position 4
+  //   in 'from:info@sbdh.org.au'."
+  // Verified live 2026-09-09. The error path is the one that actually fires.
+
+  test('should translate after Graph rejects a field-scoped expression', async () => {
+    callGraphAPIPaginated
+      .mockRejectedValueOnce(
+        new Error(
+          `API call failed with status 400: {"error":{"code":"BadRequest","message":"Syntax error: character ':' is not valid at position 4 in 'from:info@sbdh.org.au'."}}`
+        )
+      )
+      .mockResolvedValueOnce({ value: sbdh });
+
+    const result = await handleSearchEmails({
+      searchExpression: 'from:info@sbdh.org.au',
+    });
+
+    expect(result._meta.returned).toBe(1);
+    expect(result._meta.searchMetadata.finalStrategy).toBe(
+      'raw-kql-translated'
+    );
+    expect(result._meta.searchMetadata.strategiesAttempted).toContain(
+      'raw-kql-error'
+    );
+    const [, , , retryParams] = callGraphAPIPaginated.mock.calls[1];
+    expect(retryParams.$filter).toContain('info@sbdh.org.au');
+  });
+
+  test('should still surface the error for an untranslatable expression', async () => {
+    callGraphAPIPaginated.mockRejectedValue(
+      new Error('API call failed with status 400: invalid $search syntax')
+    );
+
+    const result = await handleSearchEmails({
+      searchExpression: 'invoice OR receipt',
+    });
+
+    expect(callGraphAPIPaginated).toHaveBeenCalledTimes(1);
+    expect(result._meta.searchMetadata.finalStrategy).toBe('raw-kql-error');
+    expect(result._meta.returned).toBe(0);
+  });
+
+  test('should surface the original error when the translated retry finds nothing', async () => {
+    callGraphAPIPaginated
+      .mockRejectedValueOnce(
+        new Error("Syntax error: character ':' is not valid")
+      )
+      // translated ladder finds nothing anywhere
+      .mockResolvedValue({ value: [] });
+
+    const result = await handleSearchEmails({
+      searchExpression: 'from:nobody@nowhere.invalid',
+    });
+
+    expect(result._meta.returned).toBe(0);
+    expect(result._meta.searchMetadata.finalStrategy).toBe(
+      'raw-kql-translated'
+    );
+    expect(result.content[0].text).toContain('filters: searchExpression');
+  });
+
   test('should not translate when the raw expression already found matches', async () => {
     callGraphAPIPaginated.mockResolvedValue({ value: sbdh });
 

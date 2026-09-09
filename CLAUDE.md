@@ -1,6 +1,6 @@
 # CLAUDE.md - Outlook Assistant
 
-MCP server for Microsoft Outlook via Graph API (v3.11.0). 22 tools across 9 modules.
+MCP server for Microsoft Outlook via Graph API (v3.11.1). 22 tools across 9 modules.
 
 ## Commands
 
@@ -150,7 +150,7 @@ Use `Edit` (not `Write`) to revise individual Q&A pairs — the `Write` guard is
 ## See Also
 
 - [`README.md`](README.md) - Full documentation, Azure setup, tool reference
-- [`ROADMAP.md`](ROADMAP.md) - Active milestones (v3.11.1, v3.8.x, v3.12.0+) and recent releases
+- [`ROADMAP.md`](ROADMAP.md) - Active milestones (v3.11.2, v3.8.x, v3.12.0+) and recent releases
 - [`docs/architecture.md`](docs/architecture.md) - Module layout, file tree, tool-consolidation map, history
 - [`docs/troubleshooting.md`](docs/troubleshooting.md) - Common issues and fixes
 - [`docs/quickrefs/tools-reference.md`](docs/quickrefs/tools-reference.md) - Tools quick reference

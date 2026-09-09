@@ -72,9 +72,16 @@ async function handleSearchEmails(args) {
   const kqlQuery =
     (args.searchExpression || '').trim() || (args.kqlQuery || '').trim();
 
-  // Select fields based on verbosity
+  // Select fields based on verbosity — but never at the cost of correctness.
+  // When more than one search term is supplied, the ladder may satisfy one
+  // server-side and narrow by the rest locally (#229), and those matchers read
+  // `toRecipients` and `bodyPreview`, which the `list` preset omits. Without
+  // this, a `from`+`to` search would drop every row at default verbosity and
+  // return "No emails found" — making `outputVerbosity`, a presentation
+  // parameter, decide which messages are found.
+  const searchTermCount = [query, from, to, subject].filter(Boolean).length;
   const selectFields = getEmailFields(
-    verbosity === VERBOSITY.FULL ? 'search' : 'list'
+    verbosity === VERBOSITY.FULL || searchTermCount > 1 ? 'search' : 'list'
   );
 
   try {
@@ -194,6 +201,10 @@ function parseFieldScopedExpression(expression) {
     }
 
     if (!value) return null;
+    // Wildcards and grouping mean something in KQL that an OData `eq` or
+    // `contains` does not reproduce. Rather than translate them literally,
+    // decline the whole expression.
+    if (/[()*]/.test(value)) return null;
     terms[field] = value;
   }
 
@@ -360,8 +371,15 @@ async function progressiveSearch(
       // Empty-but-successful is the other #217 shape: some tenants answer a
       // field-scoped expression with 0 rather than a 400.
       if (matched === 0) {
-        const retry = await retryFieldScopedExpression(translationContext);
-        if (retry) return retry;
+        // Guarded like the error path below: if the translated ladder threw,
+        // an unguarded call here would land in the catch and run the whole
+        // retry a second time.
+        try {
+          const retry = await retryFieldScopedExpression(translationContext);
+          if (retry) return retry;
+        } catch (retryError) {
+          console.error(`Translated retry failed: ${retryError.message}`);
+        }
       }
 
       // Otherwise always return — never silently fall through to a path that
@@ -528,7 +546,7 @@ async function progressiveSearch(
           console.error(
             `Search with ${term} successful: found ${matched.length} results${narrowing}`
           );
-          response.value = matched;
+          narrowResponse(response, matched);
           response._searchInfo = {
             attemptsCount: searchAttempts.length,
             strategies: searchAttempts,
@@ -541,6 +559,7 @@ async function progressiveSearch(
           };
           return response;
         }
+        recordNarrowingMiss(scanState, response.value.length);
         console.error(
           `Search with ${term} found ${response.value.length} results, but none also satisfied ${secondaryApplied.join(', ')} — continuing`
         );
@@ -622,7 +641,7 @@ async function progressiveSearch(
         null
       );
       if (matched.length > 0 || secondaryApplied.length === 0) {
-        response.value = matched;
+        narrowResponse(response, matched);
         response._searchInfo = {
           attemptsCount: searchAttempts.length,
           strategies: searchAttempts,
@@ -635,6 +654,7 @@ async function progressiveSearch(
         };
         return response;
       }
+      recordNarrowingMiss(scanState, response.value.length);
       console.error(
         `Boolean filter search found ${response.value.length} results, but none satisfied ${secondaryApplied.join(', ')} — continuing`
       );
@@ -661,18 +681,28 @@ async function progressiveSearch(
             searchTerms,
             null
           );
-          response.value = matched;
-          response._searchInfo = {
-            attemptsCount: searchAttempts.length,
-            strategies: searchAttempts,
-            originalTerms: searchTerms,
-            filterTerms: filterTerms,
-            appliedTerms: secondaryApplied,
-            ...(secondaryApplied.length > 0 && {
-              clientSideTerms: secondaryApplied,
-            }),
-          };
-          return response;
+          // Same guard as the primary boolean path above: an empty set here
+          // means the search terms went unsatisfied, so fall through to the
+          // no-results rung rather than returning 0 with filterApplied true
+          // and no guidance.
+          if (matched.length > 0 || secondaryApplied.length === 0) {
+            narrowResponse(response, matched);
+            response._searchInfo = {
+              attemptsCount: searchAttempts.length,
+              strategies: searchAttempts,
+              originalTerms: searchTerms,
+              filterTerms: filterTerms,
+              appliedTerms: secondaryApplied,
+              ...(secondaryApplied.length > 0 && {
+                clientSideTerms: secondaryApplied,
+              }),
+            };
+            return response;
+          }
+          recordNarrowingMiss(scanState, response.value.length);
+          console.error(
+            `Boolean filter retry found ${response.value.length} results, but none satisfied ${secondaryApplied.join(', ')} — continuing`
+          );
         } catch (retryError) {
           console.error(
             `Boolean filter retry also failed: ${retryError.message}`
@@ -711,6 +741,11 @@ async function progressiveSearch(
           candidatesScanned: scanState.candidatesScanned,
           scanLimit: scanState.scanLimit,
           truncated: scanState.truncated,
+        }),
+        // A local narrowing pass that matched nothing looked only at the page
+        // the winning filter returned, so say how much that was. (#229)
+        ...(scanState.narrowedCandidates !== undefined && {
+          narrowedCandidates: scanState.narrowedCandidates,
         }),
       },
     };
@@ -872,12 +907,33 @@ const SEARCH_TERM_KEYS = ['from', 'to', 'subject', 'query'];
  * @returns {Array} - Matching messages
  */
 function filterFromClientSide(messages, fromValue) {
+  // Mirror buildFromFilter branch for branch. A plain substring test over both
+  // address and name diverges from the server in both directions: it misses
+  // `@example.com` against `alerts@mail.example.com` (the server strips the
+  // leading @ and does contains), and it wrongly keeps `bbob@x.com` for
+  // `bob@x.com` (the server uses eq).
+  const type = classifyEmailFilter(fromValue);
+
+  if (type === 'domain') {
+    const domain = (
+      fromValue.startsWith('@') ? fromValue.slice(1) : fromValue
+    ).toLowerCase();
+    return messages.filter((m) =>
+      (m.from?.emailAddress?.address || '').toLowerCase().includes(domain)
+    );
+  }
+
+  if (type === 'email') {
+    const needle = fromValue.toLowerCase();
+    return messages.filter(
+      (m) => (m.from?.emailAddress?.address || '').toLowerCase() === needle
+    );
+  }
+
   const needle = fromValue.toLowerCase();
-  return messages.filter((m) => {
-    const addr = (m.from?.emailAddress?.address || '').toLowerCase();
-    const name = (m.from?.emailAddress?.name || '').toLowerCase();
-    return addr.includes(needle) || name.includes(needle);
-  });
+  return messages.filter((m) =>
+    (m.from?.emailAddress?.name || '').toLowerCase().includes(needle)
+  );
 }
 
 /**
@@ -914,16 +970,56 @@ const CLIENT_SIDE_TERM_MATCHERS = {
  * "find the email from X about Y", a confident superset is strictly worse
  * than returning nothing.
  *
- * Narrowing locally can only ever remove messages the caller did not ask for,
- * so it cannot introduce false positives. It can miss a match that sits beyond
- * the server-side page — the ladder simply continues to the next strategy in
- * that case, and the bounded-scan disclosure already covers the rest.
+ * Narrowing runs over the rows the winning strategy already fetched, so it can
+ * miss a match beyond that page; the ladder continues to the next strategy when
+ * it comes up empty, and `recordNarrowingMiss` records how much was examined so
+ * the no-results response can disclose it rather than implying the mailbox was
+ * exhausted.
+ *
+ * The local matchers mirror their server-side counterparts but are not
+ * identical to them — `filterQueryClientSide` searches the body preview, and a
+ * display-name match is a substring test either side — so a narrowed set is a
+ * close approximation of the combined filter, not a formal equivalent.
  *
  * @param {Array} messages - Messages returned by the winning strategy
  * @param {object} searchTerms - All search terms the caller supplied
  * @param {string|null} appliedTerm - The term already satisfied server-side
  * @returns {{matched: Array, secondaryApplied: string[]}}
  */
+/**
+ * Replace a response's rows with the narrowed subset, keeping the reported
+ * totals honest. `@odata.count` was set from the pre-narrowing page, so
+ * leaving it makes `_meta.totalAvailable` claim matches that do not exist and
+ * invites a caller to paginate for them. (#229)
+ *
+ * @param {object} response - The Graph response being narrowed in place
+ * @param {Array} matched - The rows that survived narrowing
+ */
+function narrowResponse(response, matched) {
+  const dropped = (response.value || []).length !== matched.length;
+  response.value = matched;
+  if (dropped) {
+    delete response['@odata.count'];
+    delete response['@odata.nextLink'];
+  }
+}
+
+/**
+ * Note that a narrowing pass examined rows and matched none of them, so the
+ * eventual no-results response can say how much was actually looked at rather
+ * than implying the mailbox was exhausted. (#229)
+ *
+ * @param {object} scanState - Side-channel carried to the no-results rung
+ * @param {number} examined - How many rows the narrowing pass saw
+ */
+function recordNarrowingMiss(scanState, examined) {
+  if (!scanState) return;
+  scanState.narrowedCandidates = Math.max(
+    scanState.narrowedCandidates || 0,
+    examined
+  );
+}
+
 function applySecondarySearchTerms(messages, searchTerms, appliedTerm) {
   const secondary = SEARCH_TERM_KEYS.filter(
     (t) => t !== appliedTerm && searchTerms[t]
@@ -1257,6 +1353,15 @@ function buildNoResultsSuggestions(searchInfo, searchAllFolders) {
       }
     }
     suggestions.push(note);
+  }
+
+  // A narrowing pass that matched nothing saw only the page the winning
+  // server-side filter returned — a much weaker basis for "none exists" than
+  // the bounded client-side scan, so say so rather than implying otherwise.
+  if (searchInfo.narrowedCandidates) {
+    suggestions.push(
+      `The other filters were applied locally to the ${searchInfo.narrowedCandidates} message${searchInfo.narrowedCandidates === 1 ? '' : 's'} the server-side filter returned, so a match beyond that page would not have been seen — raise \`count\`, or narrow with \`receivedAfter\``
+    );
   }
 
   if (filters.kqlQuery) {

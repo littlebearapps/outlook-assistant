@@ -1309,6 +1309,9 @@ describe('handleSearchEmails — field-scoped searchExpression (#217)', () => {
     ['an unknown field prefix', 'body:test'],
     ['a scoped term mixed with free text', 'from:x@y.com hello'],
     ['a repeated field', 'from:a@b.com from:c@d.com'],
+    ['a wildcard value', 'from:*@b.com'],
+    ['a trailing wildcard', 'from:a@b.com*'],
+    ['a grouped value', 'subject:(foo)'],
   ])(
     'should NOT translate %s — terminates after the single raw-kql call',
     async (_label, expression) => {
@@ -1396,5 +1399,168 @@ describe('handleSearchEmails — field-scoped searchExpression (#217)', () => {
 
     expect(callGraphAPIPaginated).toHaveBeenCalledTimes(1);
     expect(result._meta.searchMetadata.finalStrategy).toBe('raw-kql');
+  });
+});
+
+// ──────────────────────────────────────────────────
+// Review follow-ups on the #229 narrowing
+// ──────────────────────────────────────────────────
+describe('handleSearchEmails — narrowing correctness follow-ups', () => {
+  test('should request the fields the local matchers read when narrowing is possible', async () => {
+    callGraphAPIPaginated.mockResolvedValue({ value: [] });
+
+    await handleSearchEmails({ from: 'a@x.com', to: 'b@y.com' });
+
+    // `outputVerbosity` is a presentation parameter. If a multi-term search
+    // used the `list` preset, `filterToClientSide` would see no
+    // `toRecipients` on any row and drop every result.
+    const [, , , params] = callGraphAPIPaginated.mock.calls[0];
+    expect(params.$select).toContain('toRecipients');
+    expect(params.$select).toContain('bodyPreview');
+  });
+
+  test('should keep the lean preset for a single-term search', async () => {
+    callGraphAPIPaginated.mockResolvedValue({ value: [] });
+
+    await handleSearchEmails({ from: 'a@x.com' });
+
+    const [, , , params] = callGraphAPIPaginated.mock.calls[0];
+    expect(params.$select).not.toContain('toRecipients');
+  });
+
+  test('should find the same message at default verbosity as at full verbosity', async () => {
+    const wanted = mockEmail({
+      id: 'v1',
+      from: { emailAddress: { name: 'Alice', address: 'alice@corp.com' } },
+      toRecipients: [
+        { emailAddress: { name: 'Bob', address: 'bob@corp.com' } },
+      ],
+    });
+
+    const run = async (outputVerbosity) => {
+      jest.resetAllMocks();
+      ensureAuthenticated.mockResolvedValue(mockAccessToken);
+      resolveFolderPath.mockResolvedValue(INBOX_ENDPOINT);
+      callGraphAPIPaginated
+        // combined-search → empty
+        .mockResolvedValueOnce({ value: [] })
+        // single-term-from → the match
+        .mockResolvedValueOnce({ value: [wanted] });
+      const r = await handleSearchEmails({
+        from: 'alice@corp.com',
+        to: 'bob@corp.com',
+        ...(outputVerbosity && { outputVerbosity }),
+      });
+      return r._meta.returned;
+    };
+
+    expect(await run(undefined)).toBe(1);
+    expect(await run('full')).toBe(1);
+  });
+
+  test('should not claim filterApplied on an empty InefficientFilter retry', async () => {
+    callGraphAPIPaginated
+      // combined-search → empty
+      .mockResolvedValueOnce({ value: [] })
+      // single-term-subject → empty
+      .mockResolvedValueOnce({ value: [] })
+      // boolean-filters-only → InefficientFilter
+      .mockRejectedValueOnce(new Error('InefficientFilter'))
+      // retry without $orderby → unread mail that does not match the subject
+      .mockResolvedValueOnce({
+        value: [mockEmail({ id: 'u1', subject: 'Something else' })],
+      })
+      .mockResolvedValue({ value: [] });
+
+    const result = await handleSearchEmails({
+      subject: 'NOPE',
+      unreadOnly: true,
+    });
+
+    expect(result._meta.returned).toBe(0);
+    expect(result._meta.searchMetadata.filterApplied).toBe(false);
+    // Must reach the no-results rung so the #231 guidance actually renders.
+    expect(result.content[0].text).toContain('**Suggestions:**');
+  });
+
+  test('should not report a totalAvailable that survived narrowing', async () => {
+    const from = { emailAddress: { name: 'Alice', address: 'alice@corp.com' } };
+    const page = [
+      mockEmail({ id: 'n1', subject: 'Quarterly Report', from }),
+      mockEmail({ id: 'n2', subject: 'Lunch', from }),
+      mockEmail({ id: 'n3', subject: 'Parking', from }),
+    ];
+
+    callGraphAPIPaginated
+      .mockResolvedValueOnce({ value: [] })
+      .mockResolvedValueOnce({ value: page, '@odata.count': 3 });
+
+    const result = await handleSearchEmails({
+      from: 'alice@corp.com',
+      subject: 'Report',
+    });
+
+    expect(result._meta.returned).toBe(1);
+    // Reporting 3 would invite a caller to paginate for two matches that
+    // do not exist.
+    expect(result._meta.totalAvailable).not.toBe(3);
+    expect(result._meta.hasMore).toBe(false);
+  });
+
+  test('should disclose how many messages a failed narrowing examined', async () => {
+    const from = { emailAddress: { name: 'Alice', address: 'alice@corp.com' } };
+    callGraphAPIPaginated
+      .mockResolvedValueOnce({ value: [] })
+      .mockResolvedValueOnce({
+        value: [
+          mockEmail({ id: 'd1', subject: 'Lunch', from }),
+          mockEmail({ id: 'd2', subject: 'Parking', from }),
+        ],
+      })
+      .mockResolvedValue({ value: [] });
+
+    const result = await handleSearchEmails({
+      from: 'alice@corp.com',
+      subject: 'Report',
+    });
+
+    expect(result._meta.returned).toBe(0);
+    expect(result.content[0].text).toContain(
+      'applied locally to the 2 messages'
+    );
+  });
+});
+
+describe('filterFromClientSide — parity with buildFromFilter', () => {
+  const msg = (address, name = 'Someone') => ({
+    id: address,
+    from: { emailAddress: { name, address } },
+  });
+
+  test('should match a subdomain sender for an @domain value', () => {
+    // buildFromFilter('@example.com') strips the @ and does contains(), so a
+    // substring test on the raw '@example.com' would wrongly exclude this.
+    const matched = filterFromClientSide(
+      [msg('alerts@mail.example.com')],
+      '@example.com'
+    );
+    expect(matched).toHaveLength(1);
+  });
+
+  test('should not match a longer local-part for an exact address', () => {
+    // buildFromFilter uses `eq` for a full address.
+    expect(filterFromClientSide([msg('bbob@x.com')], 'bob@x.com')).toEqual([]);
+    expect(filterFromClientSide([msg('bob@x.com')], 'bob@x.com')).toHaveLength(
+      1
+    );
+  });
+
+  test('should not match a display name for a domain value', () => {
+    // buildFromFilter's domain branch only looks at the address.
+    const matched = filterFromClientSide(
+      [msg('noreply@other.net', 'Example.com Support')],
+      'example.com'
+    );
+    expect(matched).toEqual([]);
   });
 });

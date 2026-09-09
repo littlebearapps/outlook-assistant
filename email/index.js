@@ -73,7 +73,7 @@ const emailTools = [
         searchExpression: {
           type: 'string',
           description:
-            'Raw Microsoft Graph `$search` expression for advanced server-side search, e.g. `subject:"invoice"`, `from:github.com`, or `foo OR bar`. Quote your own phrases; a single bare token is auto-quoted. Pair with `searchAllFolders: true` for cross-folder search. Bypasses other search params. NOTE: personal Outlook.com accounts reject field-scoped `$search` outright; since v3.10.0 recognised `from:`/`to:`/`subject:` expressions are translated into the equivalent OData filters and retried automatically (reported as strategy `raw-kql-translated`). Expressions that cannot be translated exactly — free text, `AND`/`OR`, unknown prefixes — are not retried, so use `query` for those there.',
+            'Raw Microsoft Graph `$search` expression for advanced server-side search, e.g. `subject:"invoice"`, `from:github.com`, or `foo OR bar`. Quote your own phrases; a single bare token is auto-quoted. Pair with `searchAllFolders: true` for cross-folder search. Bypasses other search params. NOTE: personal Outlook.com accounts reject field-scoped `$search` outright; since v3.10.0 recognised `from:`/`to:`/`subject:` expressions are translated into the closest equivalent OData filters and retried automatically (a `subject:` term becomes a substring match, so it is close but not identical) (reported as strategy `raw-kql-translated`). Expressions that cannot be translated exactly — free text, `AND`/`OR`, unknown prefixes — are not retried, so use `query` for those there.',
         },
         kqlQuery: {
           type: 'string',

@@ -13,6 +13,7 @@ const {
   DEFAULT_LIMITS,
 } = require('../utils/response-formatter');
 const { getEmailFields } = require('../utils/field-presets');
+const { escapeODataString } = require('../utils/odata-helpers');
 
 // Upper bound on how many recent messages the client-side fallback scans
 // before giving up. Deliberately DECOUPLED from the requested result count so
@@ -311,7 +312,9 @@ async function progressiveSearch(
         simplifiedParams.$filter = buildToFilter(searchTerms[term]);
       } else if (term === 'subject') {
         // Use $filter with contains() — $search silently fails on personal MS accounts
-        simplifiedParams.$filter = `contains(subject, '${searchTerms[term].replace(/'/g, "''")}')`;
+        simplifiedParams.$filter = `contains(subject, '${escapeODataString(
+          searchTerms[term]
+        )}')`;
       } else if (term === 'query') {
         // On personal accounts, $search fails with 503. Use $filter with
         // contains(subject) as a best-effort fallback for free-text queries.
@@ -324,7 +327,7 @@ async function progressiveSearch(
           .split(/\s+/)
           .filter(Boolean);
         simplifiedParams.$filter = queryWords
-          .map((w) => `contains(subject, '${w.replace(/'/g, "''")}')`)
+          .map((w) => `contains(subject, '${escapeODataString(w)}')`)
           .join(' and ');
       }
 
@@ -546,11 +549,13 @@ function buildFromFilter(val) {
   if (type === 'domain') {
     // Use contains() — endswith() not supported on personal accounts
     const domain = val.startsWith('@') ? val : `@${val}`;
-    return `contains(from/emailAddress/address, '${domain.substring(1)}')`;
+    return `contains(from/emailAddress/address, '${escapeODataString(
+      domain.substring(1)
+    )}')`;
   } else if (type === 'email') {
-    return `from/emailAddress/address eq '${val}'`;
+    return `from/emailAddress/address eq '${escapeODataString(val)}'`;
   }
-  return `contains(from/emailAddress/name, '${val}')`;
+  return `contains(from/emailAddress/name, '${escapeODataString(val)}')`;
 }
 
 /**
@@ -563,11 +568,17 @@ function buildToFilter(val) {
   if (type === 'domain') {
     const domain = val.startsWith('@') ? val : `@${val}`;
     // Use contains() — endswith() not supported on personal accounts
-    return `toRecipients/any(r: contains(r/emailAddress/address, '${domain.substring(1)}'))`;
+    return `toRecipients/any(r: contains(r/emailAddress/address, '${escapeODataString(
+      domain.substring(1)
+    )}'))`;
   } else if (type === 'email') {
-    return `toRecipients/any(r: r/emailAddress/address eq '${val}')`;
+    return `toRecipients/any(r: r/emailAddress/address eq '${escapeODataString(
+      val
+    )}')`;
   }
-  return `toRecipients/any(r: contains(r/emailAddress/name, '${val}'))`;
+  return `toRecipients/any(r: contains(r/emailAddress/name, '${escapeODataString(
+    val
+  )}'))`;
 }
 
 /**
@@ -785,7 +796,7 @@ function buildSearchParams(searchTerms, filterTerms, count, selectFields) {
   // Use $filter for subject — $search silently fails on personal MS accounts
   if (searchTerms.subject) {
     filterConditions.push(
-      `contains(subject, '${searchTerms.subject.replace(/'/g, "''")}')`
+      `contains(subject, '${escapeODataString(searchTerms.subject)}')`
     );
   }
 
@@ -1029,7 +1040,7 @@ async function handleSearchByMessageId(args) {
 
     // Build filter - need to escape the Message-ID properly
     // Graph API expects: internetMessageId eq '<value>'
-    const escapedMessageId = messageId.replace(/'/g, "''");
+    const escapedMessageId = escapeODataString(messageId);
 
     const params = {
       $filter: `internetMessageId eq '${escapedMessageId}'`,

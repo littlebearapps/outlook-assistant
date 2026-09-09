@@ -87,6 +87,34 @@ describe('buildFromFilter', () => {
     const filter = buildFromFilter('John');
     expect(filter).toBe("contains(from/emailAddress/name, 'John')");
   });
+
+  // ── #230: single quotes must be OData-escaped (doubled) ──
+
+  test('should escape single quotes in an email address', () => {
+    const filter = buildFromFilter("o'brien@example.com");
+    expect(filter).toBe("from/emailAddress/address eq 'o''brien@example.com'");
+  });
+
+  test('should escape single quotes in a display name', () => {
+    const filter = buildFromFilter("O'Brien");
+    expect(filter).toBe("contains(from/emailAddress/name, 'O''Brien')");
+  });
+
+  test('should escape single quotes in a domain', () => {
+    const filter = buildFromFilter("d'angelo.com");
+    expect(filter).toBe("contains(from/emailAddress/address, 'd''angelo.com')");
+  });
+
+  test('should neutralise an OData injection attempt', () => {
+    const filter = buildFromFilter("x' or startswith(subject,'");
+    // Every quote doubled, so the payload stays inside the string literal
+    // rather than closing it and appending a new clause.
+    expect(filter).toBe(
+      "contains(from/emailAddress/name, 'x'' or startswith(subject,''')"
+    );
+    // The raw, literal-terminating form must not survive.
+    expect(filter).not.toContain("'x' or");
+  });
 });
 
 // ──────────────────────────────────────────────────
@@ -112,6 +140,37 @@ describe('buildToFilter', () => {
     expect(filter).toBe(
       "toRecipients/any(r: contains(r/emailAddress/name, 'Jane'))"
     );
+  });
+
+  // ── #230: single quotes must be OData-escaped (doubled) ──
+
+  test('should escape single quotes in an email address', () => {
+    const filter = buildToFilter("o'brien@example.com");
+    expect(filter).toBe(
+      "toRecipients/any(r: r/emailAddress/address eq 'o''brien@example.com')"
+    );
+  });
+
+  test('should escape single quotes in a display name', () => {
+    const filter = buildToFilter("O'Brien");
+    expect(filter).toBe(
+      "toRecipients/any(r: contains(r/emailAddress/name, 'O''Brien'))"
+    );
+  });
+
+  test('should escape single quotes in a domain', () => {
+    const filter = buildToFilter("d'angelo.com");
+    expect(filter).toBe(
+      "toRecipients/any(r: contains(r/emailAddress/address, 'd''angelo.com'))"
+    );
+  });
+
+  test('should neutralise an OData injection attempt', () => {
+    const filter = buildToFilter("x' or startswith(subject,'");
+    expect(filter).toBe(
+      "toRecipients/any(r: contains(r/emailAddress/name, 'x'' or startswith(subject,'''))"
+    );
+    expect(filter).not.toContain("'x' or");
   });
 });
 

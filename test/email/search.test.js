@@ -1588,3 +1588,220 @@ describe('filterFromClientSide — parity with buildFromFilter', () => {
     expect(matched).toEqual([]);
   });
 });
+
+// ──────────────────────────────────────────────────
+// Filter composition — a filtered search must never return a superset
+//
+// Regression cover for the defect report of 2026-09-09: `to` combined with a
+// date window returned the date-window superset, framed as a filtered result.
+// Root cause was `addBooleanFilters` assigning `params.$filter` over the term
+// filter the single-term rung had just built.
+//
+// These assert on the RESULT SET (every row satisfies every supplied filter),
+// not merely that the call succeeded — the whole family of defects here return
+// HTTP 200 and well-formed output.
+// ──────────────────────────────────────────────────
+describe('handleSearchEmails — filter composition (superset prevention)', () => {
+  /**
+   * Mock Graph faithfully enough to catch $select-dependent defects: project
+   * every returned row down to the requested $select, exactly as Graph does.
+   * A mock that returns full objects regardless of $select hides any bug where
+   * a client-side matcher reads a field the request never asked for.
+   */
+  function mockGraphWithProjection({ rows, rejectLambda = true }) {
+    // Not `async`: the call sites all `await` inside a try/catch, so a
+    // synchronous throw models a Graph rejection just as faithfully.
+    callGraphAPIPaginated.mockImplementation(
+      (_token, _method, _endpoint, params) => {
+        const filter = params.$filter || '';
+
+        // Personal Outlook.com rejects toRecipients/any() lambdas.
+        if (rejectLambda && filter.includes('toRecipients/any')) {
+          throw new Error(
+            'InefficientFilter: The restriction or sort order is too complex.'
+          );
+        }
+
+        let value = rows;
+        // Honour a date-range filter so the "date window applied, term dropped"
+        // shape is reproducible.
+        const after = /receivedDateTime ge ([^\s]+)/.exec(filter);
+        const before = /receivedDateTime le ([^\s]+)/.exec(filter);
+        if (after) {
+          value = value.filter(
+            (m) => Date.parse(m.receivedDateTime) >= Date.parse(after[1])
+          );
+        }
+        if (before) {
+          value = value.filter(
+            (m) => Date.parse(m.receivedDateTime) <= Date.parse(before[1])
+          );
+        }
+
+        const select = params.$select;
+        const projected = value.map((m) => {
+          if (!select) return m;
+          const out = {};
+          for (const key of select.split(',').map((s) => s.trim())) {
+            if (key in m) out[key] = m[key];
+          }
+          return out;
+        });
+        return { value: projected, '@odata.count': projected.length };
+      }
+    );
+  }
+
+  const TARGET = 'third-party@example.com';
+
+  // Four inbound newsletters inside a June 2023 window, addressed to the
+  // mailbox owner — never to TARGET.
+  const newslettersInWindow = [
+    mockEmail({
+      id: 'n1',
+      subject: 'ORDER UPDATE: Magnetic Car Window',
+      from: { emailAddress: { name: 'eBay', address: 'ebay@ebay.com' } },
+      toRecipients: [
+        { emailAddress: { name: 'Owner', address: 'owner@example.com' } },
+      ],
+      receivedDateTime: '2023-06-01T00:09:00Z',
+    }),
+    mockEmail({
+      id: 'n2',
+      subject: 'EastLink Transaction Receipt',
+      from: {
+        emailAddress: {
+          name: 'EastLink',
+          address: 'do-not-reply@breeze.com.au',
+        },
+      },
+      toRecipients: [
+        { emailAddress: { name: 'Owner', address: 'owner@example.com' } },
+      ],
+      receivedDateTime: '2023-06-01T02:20:00Z',
+    }),
+  ];
+
+  test('should not return a date-window superset when `to` cannot be applied', async () => {
+    mockGraphWithProjection({ rows: newslettersInWindow });
+
+    const result = await handleSearchEmails({
+      to: TARGET,
+      searchAllFolders: true,
+      receivedAfter: '2023-06-01T00:00:00Z',
+      receivedBefore: '2023-07-01T00:00:00Z',
+      count: 4,
+      outputVerbosity: 'standard',
+    });
+
+    const text = result.content[0].text;
+    // Not one of these was addressed to TARGET.
+    expect(text).not.toContain('ORDER UPDATE');
+    expect(text).not.toContain('EastLink');
+    expect(text).toContain('No emails found');
+  });
+
+  test('should keep the `to` predicate in the request when a date window is also supplied', async () => {
+    mockGraphWithProjection({ rows: [], rejectLambda: false });
+
+    await handleSearchEmails({
+      to: TARGET,
+      receivedAfter: '2023-06-01T00:00:00Z',
+      receivedBefore: '2023-07-01T00:00:00Z',
+    });
+
+    // Every request that carried the date window must ALSO carry the `to`
+    // predicate, until the ladder deliberately drops to the date-only rung.
+    const termRungs = callGraphAPIPaginated.mock.calls.filter(([, , , p]) =>
+      (p.$filter || '').includes('toRecipients')
+    );
+    expect(termRungs.length).toBeGreaterThan(0);
+    for (const [, , , params] of termRungs) {
+      expect(params.$filter).toContain('receivedDateTime ge');
+      expect(params.$filter).toContain('receivedDateTime le');
+    }
+  });
+
+  test('should return only messages actually addressed to `to` within the window', async () => {
+    const wanted = mockEmail({
+      id: 'want-1',
+      subject: 'Another transfer',
+      toRecipients: [
+        { emailAddress: { name: 'Third Party', address: TARGET } },
+      ],
+      receivedDateTime: '2023-06-15T01:26:00Z',
+    });
+    mockGraphWithProjection({ rows: [...newslettersInWindow, wanted] });
+
+    const result = await handleSearchEmails({
+      to: TARGET,
+      searchAllFolders: true,
+      receivedAfter: '2023-06-01T00:00:00Z',
+      receivedBefore: '2023-07-01T00:00:00Z',
+    });
+
+    const text = result.content[0].text;
+    expect(text).toContain('Another transfer');
+    expect(text).not.toContain('ORDER UPDATE');
+    expect(text).not.toContain('EastLink');
+  });
+
+  test('should not drop `from` when a date window is supplied', async () => {
+    mockGraphWithProjection({ rows: [], rejectLambda: false });
+
+    await handleSearchEmails({
+      from: 'alice@corp.com',
+      receivedAfter: '2023-06-01T00:00:00Z',
+    });
+
+    const fromRungs = callGraphAPIPaginated.mock.calls.filter(([, , , p]) =>
+      (p.$filter || '').includes('from/emailAddress')
+    );
+    expect(fromRungs.length).toBeGreaterThan(0);
+    for (const [, , , params] of fromRungs) {
+      expect(params.$filter).toContain('receivedDateTime ge');
+    }
+  });
+
+  test('should not drop `subject` when a boolean filter is supplied', async () => {
+    mockGraphWithProjection({ rows: [], rejectLambda: false });
+
+    await handleSearchEmails({ subject: 'invoice', unreadOnly: true });
+
+    const subjectRungs = callGraphAPIPaginated.mock.calls.filter(([, , , p]) =>
+      (p.$filter || '').includes('contains(subject')
+    );
+    expect(subjectRungs.length).toBeGreaterThan(0);
+    for (const [, , , params] of subjectRungs) {
+      expect(params.$filter).toContain('isRead eq false');
+    }
+  });
+
+  test('should request toRecipients for a single-term `to` search so local narrowing can match', async () => {
+    mockGraphWithProjection({ rows: [], rejectLambda: false });
+
+    await handleSearchEmails({
+      to: TARGET,
+      receivedAfter: '2023-06-01T00:00:00Z',
+    });
+
+    // Every rung that could feed a local `to` narrowing pass must have asked
+    // for the field that matcher reads.
+    for (const [, , , params] of callGraphAPIPaginated.mock.calls) {
+      expect(params.$select).toContain('toRecipients');
+    }
+  });
+
+  test('should request bodyPreview for a single-term `query` search', async () => {
+    mockGraphWithProjection({ rows: [], rejectLambda: false });
+
+    await handleSearchEmails({
+      query: 'invoice',
+      receivedAfter: '2023-06-01T00:00:00Z',
+    });
+
+    for (const [, , , params] of callGraphAPIPaginated.mock.calls) {
+      expect(params.$select).toContain('bodyPreview');
+    }
+  });
+});

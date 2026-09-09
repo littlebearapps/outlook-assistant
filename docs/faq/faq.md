@@ -7,7 +7,7 @@ description: "Common questions about Outlook Assistant: installation, supported 
 
 > Quick answers to the questions users ask most often. Also surfaced at <https://littlebearapps.com/help/outlook-assistant/faq/>.
 
-For full setup steps, see [Getting Started](how-to/getting-started/connect-outlook-to-claude.md). For known issues and recovery steps, see [Troubleshooting](troubleshooting.md).
+For full setup steps, see [Getting Started](../how-to/getting-started/connect-outlook-to-claude.md). For known issues and recovery steps, see [Troubleshooting](../troubleshooting.md).
 
 ## How do I install Outlook Assistant?
 
@@ -28,15 +28,19 @@ The fastest path is to use `npx` directly in your MCP client config — no globa
 }
 ```
 
-If you prefer a global install, `npm install -g @littlebearapps/outlook-assistant`. From source, clone the repo and run `npm install`. You also need a Microsoft Azure app registration (free tier is sufficient) — see the [Azure Setup Guide](guides/azure-setup.md) for a full walkthrough including first-time Azure account creation.
+If you prefer a global install, `npm install -g @littlebearapps/outlook-assistant`. From source, clone the repo and run `npm install`. You also need a Microsoft Azure app registration (free tier is sufficient) — see the [Azure Setup Guide](../guides/azure-setup.md) for a full walkthrough including first-time Azure account creation.
 
-Configuration snippets for Claude Desktop, Claude Code, Cursor, Windsurf, VS Code, Codex CLI, Gemini CLI, and OpenCode are in the [README](../README.md#3-configure-your-mcp-client).
+Configuration snippets for Claude Desktop, Claude Code, Cursor, Windsurf, VS Code, Codex CLI, Gemini CLI, and OpenCode are in the [README](../../README.md#3-configure-your-mcp-client).
 
 ## Does Outlook Assistant work with personal Outlook.com accounts?
 
 Yes. Outlook Assistant supports both personal Microsoft accounts (Outlook.com, Hotmail, Live.com) and work/school Microsoft 365 accounts. A few features are 365-only because Microsoft Graph itself doesn't expose them on personal accounts — meeting room search (`find-meeting-rooms`), shared mailbox access (`access-shared-mailbox`), pre-send mail tips (`get-mail-tips`), and Focused Inbox routing.
 
-On personal accounts, Microsoft's `$search` API has limited support for free-text queries, so Outlook Assistant falls back through up to four progressive search strategies (server `$search` → `contains(subject)` → client-side body/subject/from scan → recent message listing) and exposes which strategy ran in the response's `_meta.searchMetadata` block. For the most direct results, use structured filters (`from`, `subject`, `to`, `receivedAfter`) where possible. The full per-feature compatibility matrix is in the [README's Account Compatibility section](../README.md#account-compatibility).
+On personal accounts, Microsoft's `$search` API has limited support for free-text queries, so Outlook Assistant falls back through up to four progressive search strategies (server `$search` → `contains(subject)` → client-side body/subject/from scan → recent message listing) and exposes which strategy ran in the response's `_meta.searchMetadata` block. For the most direct results, use structured filters (`from`, `subject`, `to`, `receivedAfter`) where possible. The full per-feature compatibility matrix is in the [README's Account Compatibility section](../../README.md#account-compatibility).
+
+Personal accounts also reject **field-scoped** `$search` expressions outright — `searchExpression="from:someone@example.com"` returns a Graph syntax error, even though the mail is there. From v3.10.0 expressions built purely from `from:`, `to:` and `subject:` terms are translated into the closest equivalent OData filters and retried automatically, reported as strategy `raw-kql-translated` (#217) — the translation is close rather than identical, since a `subject:` term becomes a substring match. Unscoped expressions like `searchExpression="invoice"` were never affected. Expressions that can't be reproduced exactly — free text, `AND`/`OR`, grouping, wildcards, unknown field prefixes — are deliberately not retried, because guessing at their meaning would return mail you didn't ask for.
+
+When a search returns nothing, `_meta.searchMetadata.droppedFilters` tells you whether every filter you supplied was actually honoured. It should always be empty; anything else means the response is broader than your query (#229).
 
 ## What Microsoft Graph permissions does Outlook Assistant need, and why?
 
@@ -70,7 +74,7 @@ The pending-auth file (also at `~/.outlook-assistant-pending-auth.json`, also `0
 Yes. Two layers of control let you scope what Outlook Assistant can do:
 
 1. **Azure permissions.** When you register the app, request only the read scopes — `Mail.Read`, `Calendars.Read`, `Contacts.Read`, `User.Read`, `offline_access` — and skip the `*ReadWrite` and `Mail.Send` scopes. Tools that need write access will fail at the Graph layer, which is the correct behaviour.
-2. **Send-safety belts.** Even with full permissions, you can configure `OUTLOOK_MAX_EMAILS_PER_SESSION` (rate cap on `send-email` + `draft send`) and `OUTLOOK_ALLOWED_RECIPIENTS` (allowlist of approved addresses or domains). `auth action=about` reports their state and prints a setup hint when unset. See the [Recommended setup snippet](../README.md#safety--token-efficiency) in the README and [`.mcp.json.example`](../.mcp.json.example) for the copy-paste template.
+2. **Send-safety belts.** Even with full permissions, you can configure `OUTLOOK_MAX_EMAILS_PER_SESSION` (rate cap on `send-email` + `draft send`) and `OUTLOOK_ALLOWED_RECIPIENTS` (allowlist of approved addresses or domains). `auth action=about` reports their state and prints a setup hint when unset. See the [Recommended setup snippet](../../README.md#safety--token-efficiency) in the README and [`.mcp.json.example`](../../.mcp.json.example) for the copy-paste template.
 
 Every tool also carries [MCP annotations](https://modelcontextprotocol.io/docs/concepts/tools#annotations) (`readOnlyHint`, `destructiveHint`, `idempotentHint`, and `openWorldHint`) so AI clients can auto-approve safe reads and prompt for confirmation on destructive operations. Tools whose output can include content authored by external senders — `search-emails`, `read-email`, `search-people`, `access-shared-mailbox`, `attachments`, `export` — set `openWorldHint: true`, signalling clients to treat that content with appropriate caution (e.g. prompt-injection defences).
 
@@ -78,7 +82,7 @@ Every tool also carries [MCP annotations](https://modelcontextprotocol.io/docs/c
 
 Microsoft Graph (the API behind Outlook, Teams, OneDrive, etc.) requires every client application to be registered in Microsoft Entra ID before it can request delegated access on a user's behalf. The app registration gives Microsoft three things: (1) a client ID so they know which application is asking, (2) a redirect URI / public-client mode for the OAuth flow, and (3) a list of scopes the app may request. Without registration, OAuth would have no entry point.
 
-Microsoft does not offer a "shared multi-tenant client ID" that any open-source project can reuse — every published Outlook MCP server has the same requirement. We're tracking [#147](https://github.com/littlebearapps/outlook-assistant/issues/147) (publisher-verified shared multi-tenant app) for a future release where Little Bear Apps publishes a verified shared app users can authorise without creating their own registration. Until then, the [Azure Setup Guide](guides/azure-setup.md) walks through the process in about 10 minutes.
+Microsoft does not offer a "shared multi-tenant client ID" that any open-source project can reuse — every published Outlook MCP server has the same requirement. We're tracking [#147](https://github.com/littlebearapps/outlook-assistant/issues/147) (publisher-verified shared multi-tenant app) for a future release where Little Bear Apps publishes a verified shared app users can authorise without creating their own registration. Until then, the [Azure Setup Guide](../guides/azure-setup.md) walks through the process in about 10 minutes.
 
 ## What's the difference between device code and browser authentication?
 
@@ -90,11 +94,11 @@ Most users should pick device code unless they have a specific reason to use the
 
 ## How do I update Outlook Assistant?
 
-Outlook Assistant is published to npm as **`@littlebearapps/outlook-assistant`**. The simplest path is to let your MCP client pick up the latest version automatically — most clients call `npx @littlebearapps/outlook-assistant` which fetches the latest published version on each spawn. To pin a version, replace `@littlebearapps/outlook-assistant` with `@littlebearapps/outlook-assistant@3.9.0` (or whichever version) in your MCP client config.
+Outlook Assistant is published to npm as **`@littlebearapps/outlook-assistant`**. The simplest path is to let your MCP client pick up the latest version automatically — most clients call `npx @littlebearapps/outlook-assistant` which fetches the latest published version on each spawn. To pin a version, replace `@littlebearapps/outlook-assistant` with `@littlebearapps/outlook-assistant@3.10.0` (or whichever version) in your MCP client config.
 
 If you installed globally, `npm update -g @littlebearapps/outlook-assistant` (or `npm install -g @littlebearapps/outlook-assistant@latest`). If you cloned from source, `git pull && npm install`. After updating, restart your MCP client so the running server picks up the new code — Node module caching means the previously-loaded source stays in memory until the server process is recycled.
 
-For a list of what's in each version, see [`CHANGELOG.md`](../CHANGELOG.md). Active and upcoming work is in [`ROADMAP.md`](../ROADMAP.md).
+For a list of what's in each version, see [`CHANGELOG.md`](../../CHANGELOG.md). Active and upcoming work is in [`ROADMAP.md`](../../ROADMAP.md).
 
 ## How do I uninstall Outlook Assistant?
 
@@ -118,6 +122,6 @@ What your MCP client (Claude Desktop, Claude Code, Cursor, Windsurf, etc.) does 
 ## Where can I get help, report a bug, or request a feature?
 
 - **Bugs and feature requests** — open an issue at <https://github.com/littlebearapps/outlook-assistant/issues>. Include the version (`auth action=about`), the tool call that failed, and the exact error text.
-- **Security concerns** — see the [Security Policy](../SECURITY.md). Don't open public issues for vulnerabilities.
-- **General usage questions** — the [How-To Guides](how-to/index.md) cover 29 practical scenarios across email, calendar, contacts, settings, and AI agents.
-- **What's coming next** — [`ROADMAP.md`](../ROADMAP.md) is the active milestone snapshot; the [GitHub milestones page](https://github.com/littlebearapps/outlook-assistant/milestones) is authoritative.
+- **Security concerns** — see the [Security Policy](../../SECURITY.md). Don't open public issues for vulnerabilities.
+- **General usage questions** — the [How-To Guides](../how-to/index.md) cover 29 practical scenarios across email, calendar, contacts, settings, and AI agents.
+- **What's coming next** — [`ROADMAP.md`](../../ROADMAP.md) is the active milestone snapshot; the [GitHub milestones page](https://github.com/littlebearapps/outlook-assistant/milestones) is authoritative.

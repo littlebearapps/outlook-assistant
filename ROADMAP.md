@@ -37,11 +37,11 @@ v3.8.0 shipped the `manage-event update` action (#124) and two community-contrib
 
 - **#90** Add MCP prompts for common email workflows
 
-## v3.10.0+ — New Graph APIs & Platform Maturity
+## v3.11.0+ — New Graph APIs & Platform Maturity
 
-Larger surface-area additions and platform hardening. (v3.9.0 shipped nested
-folder addressing and cross-folder search reliability — see "Recently shipped"
-— so these larger items carry forward to the next feature slot.)
+Larger surface-area additions and platform hardening. None of these shipped in
+v3.10.0, which was a search-correctness bugfix release (see "Recently
+shipped"), so they carry forward to the next feature slot.
 
 - **#147** Publisher-verified shared multi-tenant app (one-click setup for read-only scopes)
 - **#133** MCP OAuth 2.1 / PKCE auth flow
@@ -53,6 +53,23 @@ folder addressing and cross-folder search reliability — see "Recently shipped"
 
 ## Recently shipped
 
+- **v3.10.0** (Sep 2026) — **search correctness**, four bugs found by
+  investigating a stale "`to:` search is broken" claim. Field-scoped
+  `searchExpression` (`from:`, `to:`, `subject:`) is rejected outright by
+  Graph on personal accounts; expressions built purely from `from:`, `to:` and
+  `subject:` terms are now translated into the closest equivalent OData filters
+  and retried, reported as `raw-kql-translated` (#217). Searches combining two filters no longer return the single-term
+  superset when Graph rejects the combined filter — remaining terms are applied
+  locally and `searchMetadata.droppedFilters` reports anything unhonoured
+  (#229). Single quotes in `from`/`to` are OData-escaped, so `O'Brien` no
+  longer produces a swallowed Graph 400, and filter values can no longer rewrite
+  the query (#230). No-results guidance is derived from what was actually
+  supplied and attempted, dropping a suggestion that had been false since
+  v3.7.1 (#231). Also cleared the `npm audit` CI gate and added a weekly
+  watchdog for it (#215). Validated with a live E2E sweep.
+- **v3.9.1** (Aug 2026) — packaging hotfix: `request-handler.js` was missing
+  from the published tarball, so every install from 3.8.2 through 3.9.0 failed
+  at load with `Cannot find module './request-handler'` (#223).
 - **v3.9.0** (Jul 2026) — **nested folder addressing** (#216): the `folders`
   tool resolves folders by slash-path (`Triage/Delete`), explicit ID, or bare
   name (ambiguous names return candidate paths + IDs); `folders list` surfaces

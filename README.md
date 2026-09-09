@@ -100,7 +100,7 @@ Outlook Assistant works with both personal and work/school Microsoft accounts, b
 | Contacts CRUD | Full support | Full support |
 | Inbox rules | Full support | Full support |
 | Folders | Full support | Full support |
-| Free-text `query` search | Limited — use `subject`, `from`, `to` filters instead | Full KQL support |
+| Free-text `query` search | Limited — progressive fallback; `subject`, `from`, `to` filters are more direct | Full `$search` support |
 | Categories | Full support | Full support |
 | Mailbox settings | Full support | Full support |
 | Focused Inbox | API works (overrides stored) but mail routing not affected | Full support |
@@ -111,7 +111,7 @@ Outlook Assistant works with both personal and work/school Microsoft accounts, b
 
 ### What Makes This Different
 
-- **Progressive search** — on accounts where Microsoft's `$search` API is limited, Outlook Assistant automatically falls back through up to 4 search strategies to find your emails. Most Graph API wrappers fail silently; this one adapts.
+- **Progressive search** — on accounts where Microsoft's `$search` API is limited, Outlook Assistant automatically falls back through up to 4 search strategies to find your emails, and reports which one answered in `_meta.searchMetadata` along with any filter it could not honour (`droppedFilters`). Most Graph API wrappers fail silently; this one adapts and tells you.
 - **Email forensics** — raw header access for DKIM, SPF, DMARC, delivery chain, X-Mailer, X-Originating-IP, and spam scores. Returns the full data so you can investigate phishing, audit compliance, or trace delivery issues. (Auto-verdict is on the roadmap; today the data is surfaced and analysed in-conversation.)
 - **Delta sync** — incremental inbox monitoring returns only what changed since your last check, with tokens for continuous polling. Designed for agent workflows that need to watch a mailbox.
 - **Batch operations** — flag, move, export, or categorise multiple emails in a single call. Search-driven export lets you batch-export results without collecting IDs manually.
@@ -497,7 +497,7 @@ USE_TEST_MODE=true npm start
 | [Getting Started](docs/how-to/getting-started/connect-outlook-to-claude.md) | Install, configure, and authenticate — start here |
 | [Azure Setup Guide](docs/guides/azure-setup.md) | Azure account creation, app registration, permissions, and secrets |
 | [How-To Guides](docs/how-to/index.md) | 29 practical guides for email, calendar, contacts, and settings |
-| [Roadmap](ROADMAP.md) | Active milestones (v3.7.5, v3.8.x, v3.10.0+) and recent releases |
+| [Roadmap](ROADMAP.md) | Active milestones (v3.7.5, v3.8.x, v3.11.0+) and recent releases |
 | [Troubleshooting & FAQ](docs/how-to/getting-started/verify-your-connection.md#common-connection-problems) | Common problems, re-authentication, and frequently asked questions |
 | [Tools Reference](docs/quickrefs/tools-reference.md) | All 22 tools with parameters |
 | [AI Agent Guide](docs/how-to/ai-agents/using-outlook-assistant-in-agents.md) | Tool selection and workflow patterns for AI agents |
@@ -506,7 +506,7 @@ Full documentation: [docs/](docs/README.md)
 
 ## Known Limitations
 
-- **Personal account search**: Free-text `query` and the raw `searchExpression` (formerly `kqlQuery`) rely on Microsoft's `$search` API, which has limited support on personal Outlook.com accounts — field-scoped raw `$search` (e.g. `subject:"…"`) may return nothing there. `query` mitigates this with progressive fallback (OData filters, then client-side), so for reliable personal-account search prefer structured filters (`from`, `subject`, `to`, `receivedAfter`) or `query`. Cross-folder search (`searchAllFolders: true`) returns a superset of inbox-only results.
+- **Personal account search**: Free-text `query` and the raw `searchExpression` (formerly `kqlQuery`) rely on Microsoft's `$search` API, which has limited support on personal Outlook.com accounts. `query` mitigates this with progressive fallback (OData filters, boolean filters, then a client-side scan). Field-scoped `$search` (e.g. `subject:"…"`) is rejected outright there; since v3.10.0 `from:`/`to:`/`subject:` expressions are translated into the closest equivalent OData filters and retried, but boolean operators, grouping, wildcards and other field prefixes are not — those still terminate with an explicit no-results rather than a silent broader search. Structured filters (`from`, `subject`, `to`, `receivedAfter`) remain the most direct route. Cross-folder search (`searchAllFolders: true`) returns a superset of inbox-only results.
 - **Focused Inbox**: Only available on work/school Microsoft 365 accounts.
 - **Shared mailboxes**: Require `Mail.Read.Shared` permission and a work/school account.
 - **Meeting room search**: Requires `Place.Read.All` permission with admin consent (work/school accounts only).

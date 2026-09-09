@@ -1225,6 +1225,30 @@ describe('handleSearchEmails — field-scoped searchExpression (#217)', () => {
     expect(retryParams.$filter).toContain('info@sbdh.org.au');
   });
 
+  test('should report the rewrite in searchMetadata.kqlTranslatedTo', async () => {
+    callGraphAPIPaginated
+      .mockResolvedValueOnce({ value: [] })
+      .mockResolvedValueOnce({ value: sbdh });
+
+    const result = await handleSearchEmails({
+      searchExpression: 'from:info@sbdh.org.au',
+    });
+
+    // A translated retry answers a rewritten query, so the rewrite has to be
+    // inspectable rather than something the caller takes on trust. (#217)
+    expect(result._meta.searchMetadata.kqlTranslatedTo).toEqual({
+      from: 'info@sbdh.org.au',
+    });
+  });
+
+  test('should omit kqlTranslatedTo when no translation ran', async () => {
+    callGraphAPIPaginated.mockResolvedValueOnce({ value: sbdh });
+
+    const result = await handleSearchEmails({ from: 'info@sbdh.org.au' });
+
+    expect(result._meta.searchMetadata).not.toHaveProperty('kqlTranslatedTo');
+  });
+
   test('should translate a quoted subject: expression', async () => {
     callGraphAPIPaginated
       .mockResolvedValueOnce({ value: [] })

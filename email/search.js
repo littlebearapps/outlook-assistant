@@ -1439,6 +1439,13 @@ function formatSearchResults(response, folder, verbosity, searchAllFolders) {
         clientSideFilters: response._searchInfo.clientSideTerms,
       }),
       originalFilters: response._searchInfo.originalTerms,
+      // A field-scoped `searchExpression` that personal accounts reject is
+      // retried as OData filters, which is a rewrite of what the caller asked
+      // for. Report the rewrite, so `raw-kql-translated` is inspectable rather
+      // than something the caller has to take on trust. (#217)
+      ...(response._searchInfo.kqlTranslatedTo && {
+        kqlTranslatedTo: response._searchInfo.kqlTranslatedTo,
+      }),
       // Surface client-side scan coverage so callers can tell when a fallback
       // result may be incomplete (older matches beyond the scan budget). (#169)
       ...(response._searchInfo.candidatesScanned !== undefined && {

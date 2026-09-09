@@ -35,6 +35,13 @@ process.env.HOME = '/mock/home';
 
 const TOKEN_ENDPOINT =
   'https://login.microsoftonline.com/common/oauth2/v2.0/token';
+const LOGIN_HOST = 'login.microsoftonline.com';
+const GRAPH_HOST = 'graph.microsoft.com';
+
+/** Exact host of a URL — never a substring match, which is bypassable. */
+function hostOf(url) {
+  return new URL(String(url)).hostname;
+}
 
 const baseConfig = {
   clientId: 'test-client-id',
@@ -61,9 +68,9 @@ describe('token refresh round trip', () => {
   let tokenStorage;
   /** Every https.request call, in order: { url, options, body, req }. */
   let calls;
-  /** url -> () => ({ statusCode, body }) */
+  /** hostname -> () => ({ statusCode, body }) */
   let routes;
-  /** urls that should fail with a socket error instead of responding */
+  /** hostnames that should fail with a socket error instead of responding */
   let networkFailures;
 
   beforeEach(() => {
@@ -90,17 +97,12 @@ describe('token refresh round trip', () => {
         end: jest.fn(() => {
           // Respond asynchronously, as a real socket would.
           setImmediate(() => {
-            const key = Object.keys(networkFailures).find((k) =>
-              entry.url.startsWith(k)
-            );
-            if (key) {
-              entry.errorHandler(networkFailures[key]);
+            const host = hostOf(entry.url);
+            if (networkFailures[host]) {
+              entry.errorHandler(networkFailures[host]);
               return;
             }
-            const routeKey = Object.keys(routes).find((k) =>
-              entry.url.startsWith(k)
-            );
-            const { statusCode, body } = routes[routeKey]();
+            const { statusCode, body } = routes[host]();
             callback({
               statusCode,
               on: (event, cb) => {
@@ -126,7 +128,7 @@ describe('token refresh round trip', () => {
 
   /** The refresh endpoint issues a rotated token pair. */
   function refreshSucceeds() {
-    routes[TOKEN_ENDPOINT] = () => ({
+    routes[LOGIN_HOST] = () => ({
       statusCode: 200,
       body: {
         access_token: 'FRESH_ACCESS_TOKEN',
@@ -137,7 +139,7 @@ describe('token refresh round trip', () => {
   }
 
   function graphSucceeds() {
-    routes['https://graph.microsoft.com'] = () => ({
+    routes[GRAPH_HOST] = () => ({
       statusCode: 200,
       body: { value: [{ id: 'msg-1' }] },
     });
@@ -196,9 +198,7 @@ describe('token refresh round trip', () => {
       const token = await tokenStorage.getValidAccessToken();
       await callGraphAPI(token, 'GET', 'me/messages');
 
-      const graphCall = calls.find((c) =>
-        c.url.startsWith('https://graph.microsoft.com')
-      );
+      const graphCall = calls.find((c) => hostOf(c.url) === GRAPH_HOST);
       expect(graphCall.options.headers.Authorization).toBe(
         'Bearer FRESH_ACCESS_TOKEN'
       );
@@ -232,7 +232,7 @@ describe('token refresh round trip', () => {
         'FRESH_ACCESS_TOKEN',
         'FRESH_ACCESS_TOKEN',
       ]);
-      expect(calls.filter((x) => x.url === TOKEN_ENDPOINT)).toHaveLength(1);
+      expect(calls.filter((x) => hostOf(x.url) === LOGIN_HOST)).toHaveLength(1);
     });
   });
 
@@ -253,7 +253,7 @@ describe('token refresh round trip', () => {
   describe('network failure during refresh', () => {
     beforeEach(() => {
       fs.readFile.mockResolvedValue(expiredTokensOnDisk());
-      networkFailures[TOKEN_ENDPOINT] = Object.assign(
+      networkFailures[LOGIN_HOST] = Object.assign(
         new Error('getaddrinfo ENOTFOUND login.microsoftonline.com'),
         { code: 'ENOTFOUND' }
       );
@@ -274,7 +274,7 @@ describe('token refresh round trip', () => {
     it('recovers on a later attempt once the network returns', async () => {
       await tokenStorage.getValidAccessToken();
 
-      delete networkFailures[TOKEN_ENDPOINT];
+      delete networkFailures[LOGIN_HOST];
       refreshSucceeds();
       // Fresh process would reload from the untouched file; simulate that.
       tokenStorage.tokens = null;
@@ -289,7 +289,7 @@ describe('token refresh round trip', () => {
   describe('refresh token rejected by Microsoft', () => {
     beforeEach(() => {
       fs.readFile.mockResolvedValue(expiredTokensOnDisk());
-      routes[TOKEN_ENDPOINT] = () => ({
+      routes[LOGIN_HOST] = () => ({
         statusCode: 400,
         body: {
           error: 'invalid_grant',

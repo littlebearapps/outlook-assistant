@@ -1,6 +1,6 @@
 # CLAUDE.md - Outlook Assistant
 
-MCP server for Microsoft Outlook via Graph API (v3.10.0). 22 tools across 9 modules.
+MCP server for Microsoft Outlook via Graph API (v3.11.0). 22 tools across 9 modules.
 
 ## Commands
 
@@ -12,6 +12,7 @@ npm test                 # Run Jest tests
 npm run test-mode        # Start with mock data (USE_TEST_MODE=true)
 npm run inspect          # MCP Inspector for interactive testing
 npx kill-port 3333       # Kill auth server if port blocked
+node index.js --version  # Print version and exit (also -v); --help for usage
 ```
 
 ### Authentication
@@ -59,6 +60,7 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 | `utils/schema-coerce.js` | MCP-boundary param coercion + validation (string→array/boolean/number, `additionalProperties: false`, required, enums) |
 | `auth/token-storage.js` | Token storage with auto-refresh at `~/.outlook-assistant-tokens.json` (includes `auth_method` field) |
 | `auth/device-code.js` | Device code flow for headless/remote authentication |
+| `auth/auth-errors.js` | AADSTS error → remediation hint table (shared by token-storage and the device-code path) |
 | `auth/tools.js` | Auth tool handlers; persists device code state to `~/.outlook-assistant-pending-auth.json` |
 | `utils/graph-api.js` | All Graph API calls go through here (includes $batch) |
 | `email/mail-tips.js` | Pre-send recipient validation |
@@ -148,7 +150,7 @@ Use `Edit` (not `Write`) to revise individual Q&A pairs — the `Write` guard is
 ## See Also
 
 - [`README.md`](README.md) - Full documentation, Azure setup, tool reference
-- [`ROADMAP.md`](ROADMAP.md) - Active milestones (v3.7.5, v3.8.x, v3.11.0+) and recent releases
+- [`ROADMAP.md`](ROADMAP.md) - Active milestones (v3.11.1, v3.8.x, v3.12.0+) and recent releases
 - [`docs/architecture.md`](docs/architecture.md) - Module layout, file tree, tool-consolidation map, history
 - [`docs/troubleshooting.md`](docs/troubleshooting.md) - Common issues and fixes
 - [`docs/quickrefs/tools-reference.md`](docs/quickrefs/tools-reference.md) - Tools quick reference

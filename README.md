@@ -161,6 +161,17 @@ Or run directly without installing:
 npx @littlebearapps/outlook-assistant
 ```
 
+To check which version you have, or to see the available options:
+
+```bash
+outlook-assistant --version     # prints e.g. 3.11.0
+outlook-assistant --help        # usage, options and key environment variables
+```
+
+With no arguments the server speaks the Model Context Protocol over stdio. It's
+normally launched by your MCP client rather than run by hand — started from a
+terminal it will simply wait on stdin.
+
 ### 2. Register an Azure App
 
 You need a Microsoft Azure app registration to authenticate. See the **[Azure Setup Guide](docs/guides/azure-setup.md)** for a detailed walkthrough (including first-time Azure account creation), or if you've done this before:
@@ -277,6 +288,17 @@ git clone https://github.com/littlebearapps/outlook-assistant.git
 cd outlook-assistant
 npm install
 ```
+
+### CLI options
+
+| Option | What it does |
+|--------|-------------|
+| `-v`, `--version` | Print the version to stdout and exit 0 |
+| `-h`, `--help` | Print usage, options and key environment variables, and exit 0 |
+| _(none)_ | Start the MCP server on stdio — the normal mode, invoked by your MCP client |
+
+An unrecognised argument is reported on stderr and exits 1, rather than starting
+a server that would ignore it.
 
 ## Azure App Registration
 
@@ -446,7 +468,11 @@ npm run auth-server
 
 ### "Invalid client secret" (AADSTS7000215)
 
-You're using the Secret **ID** instead of the Secret **Value**. Go to Azure Portal > Certificates & secrets and copy the **Value** column.
+You're using the Secret **ID** instead of the Secret **Value**. Go to Azure Portal > Certificates & secrets and copy the **Value** column into `OUTLOOK_CLIENT_SECRET`.
+
+The Value is shown only once, when the secret is created — if you've navigated away it can't be read again, so create a new secret. An **expired** secret produces this same error, so check the Expires column too.
+
+Since v3.11.0 the server detects this error and explains it in place, so you'll see this remediation alongside Microsoft's raw message rather than having to look it up.
 
 ### Authentication URL doesn't work
 
@@ -497,7 +523,7 @@ USE_TEST_MODE=true npm start
 | [Getting Started](docs/how-to/getting-started/connect-outlook-to-claude.md) | Install, configure, and authenticate — start here |
 | [Azure Setup Guide](docs/guides/azure-setup.md) | Azure account creation, app registration, permissions, and secrets |
 | [How-To Guides](docs/how-to/index.md) | 29 practical guides for email, calendar, contacts, and settings |
-| [Roadmap](ROADMAP.md) | Active milestones (v3.7.5, v3.8.x, v3.11.0+) and recent releases |
+| [Roadmap](ROADMAP.md) | Active milestones (v3.11.1, v3.8.x, v3.12.0+) and recent releases |
 | [Troubleshooting & FAQ](docs/how-to/getting-started/verify-your-connection.md#common-connection-problems) | Common problems, re-authentication, and frequently asked questions |
 | [Tools Reference](docs/quickrefs/tools-reference.md) | All 22 tools with parameters |
 | [AI Agent Guide](docs/how-to/ai-agents/using-outlook-assistant-in-agents.md) | Tool selection and workflow patterns for AI agents |

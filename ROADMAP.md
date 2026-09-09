@@ -4,14 +4,19 @@ Active milestones for the Outlook Assistant MCP server. Items may shift or be cu
 
 For shipped work, see [`CHANGELOG.md`](CHANGELOG.md).
 
-## v3.7.5 — Fixes & Polish
+## v3.11.1 — Tool description audit
 
-Carry-over polish, docs, and small enhancements deferred from earlier patch slots. The next patch after v3.7.4.
+The last item from the old `v3.7.5 — Fixes & Polish` slate. Everything else in
+that milestone shipped in v3.11.0 (see "Recently shipped"); this one is held
+back deliberately because it touches all 22 tool definitions plus the `llms.txt`
+tool categories and the description column of
+[`docs/quickrefs/tools-reference.md`](docs/quickrefs/tools-reference.md), and is
+not worth half-doing inside a polish release.
 
 - **#93** docs: audit and improve all tool descriptions
-- **#72** Add integration test for token refresh flow (good first issue)
-- **#69** Improve error message when client secret is wrong (good first issue)
-- **#68** Add `--version` CLI flag (good first issue)
+
+The `search-emails` and `searchExpression` descriptions were rewritten in
+v3.10.0 and are current — use them as the reference style.
 
 ## v3.8.x — Task Integration & Auth (carry-over)
 
@@ -37,11 +42,11 @@ v3.8.0 shipped the `manage-event update` action (#124) and two community-contrib
 
 - **#90** Add MCP prompts for common email workflows
 
-## v3.11.0+ — New Graph APIs & Platform Maturity
+## v3.12.0+ — New Graph APIs & Platform Maturity
 
 Larger surface-area additions and platform hardening. None of these shipped in
-v3.10.0, which was a search-correctness bugfix release (see "Recently
-shipped"), so they carry forward to the next feature slot.
+v3.10.0 (search correctness) or v3.11.0 (fixes & polish), so they carry forward
+to the next feature slot.
 
 - **#147** Publisher-verified shared multi-tenant app (one-click setup for read-only scopes)
 - **#133** MCP OAuth 2.1 / PKCE auth flow
@@ -53,6 +58,17 @@ shipped"), so they carry forward to the next feature slot.
 
 ## Recently shipped
 
+- **v3.11.0** (Sep 2026) — **fixes & polish**, clearing the old v3.7.5 slate.
+  `--version` / `--help` CLI flags: previously any argument was ignored and the
+  process booted the MCP server and hung on stdin (#68). `AADSTS7000215` — the
+  Secret ID versus Secret Value mistake, the most common setup failure — now
+  explains itself instead of passing Microsoft's raw error through, via a single
+  shared AADSTS hint table that the device-code path also reads so the two
+  cannot drift (#69). The token-refresh round trip is covered end to end, disk
+  through to the `Authorization` header on the next Graph call (#72). All 17
+  development-dependency advisories cleared, including the critical
+  `shell-quote` one; `npm audit` now reports zero at every severity, not just in
+  the production scope. 37 suites / 937 tests.
 - **v3.10.0** (Sep 2026) — **search correctness**, four bugs found by
   investigating a stale "`to:` search is broken" claim. Field-scoped
   `searchExpression` (`from:`, `to:`, `subject:`) is rejected outright by

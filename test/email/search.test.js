@@ -5,6 +5,8 @@ const {
   classifyEmailFilter,
   filterToClientSide,
   filterQueryClientSide,
+  filterFromClientSide,
+  filterSubjectClientSide,
 } = require('../../email/search');
 const { callGraphAPIPaginated } = require('../../utils/graph-api');
 const { ensureAuthenticated } = require('../../auth');
@@ -952,5 +954,227 @@ describe('handleSearchEmails — contextual no-results guidance (#231)', () => {
 
     expect(text).toContain('filters: searchExpression');
     expect(text).not.toContain('instead of');
+  });
+});
+
+// ──────────────────────────────────────────────────
+// handleSearchEmails — partial-filter superset prevention (#229)
+// ──────────────────────────────────────────────────
+describe('handleSearchEmails — partial-filter superset prevention (#229)', () => {
+  const sbdhEmails = [
+    mockEmail({
+      id: 's1',
+      subject: 'Weekly update',
+      from: {
+        emailAddress: { name: 'SBDH', address: 'info@sbdh.org.au' },
+      },
+    }),
+    mockEmail({
+      id: 's2',
+      subject: 'Newsletter',
+      from: {
+        emailAddress: { name: 'SBDH', address: 'info@sbdh.org.au' },
+      },
+    }),
+  ];
+
+  test('should not return the from-only superset when subject also supplied', async () => {
+    callGraphAPIPaginated
+      // combined-search → empty (personal account rejects the combined filter)
+      .mockResolvedValueOnce({ value: [] })
+      // single-term-from → the from-only set, none matching the subject
+      .mockResolvedValueOnce({ value: sbdhEmails })
+      // single-term-subject → empty
+      .mockResolvedValueOnce({ value: [] });
+
+    const result = await handleSearchEmails({
+      from: 'info@sbdh.org.au',
+      subject: 'Zebra Quokka Nonexistent',
+    });
+
+    expect(result._meta.returned).toBe(0);
+    expect(result.content[0].text).toContain('No emails found');
+    expect(result._meta.searchMetadata.filterApplied).toBe(false);
+  });
+
+  test('should narrow the from-only set by subject rather than dropping it', async () => {
+    const matching = mockEmail({
+      id: 's3',
+      subject: 'Your Order Confirmation',
+      from: { emailAddress: { name: 'SBDH', address: 'info@sbdh.org.au' } },
+    });
+
+    callGraphAPIPaginated
+      .mockResolvedValueOnce({ value: [] })
+      .mockResolvedValueOnce({ value: [...sbdhEmails, matching] });
+
+    const result = await handleSearchEmails({
+      from: 'info@sbdh.org.au',
+      subject: 'Order',
+    });
+
+    expect(result._meta.returned).toBe(1);
+    expect(result.content[0].text).toContain('Your Order Confirmation');
+    expect(result._meta.searchMetadata.clientSideFilters).toContain('subject');
+    expect(result._meta.searchMetadata.droppedFilters).toEqual([]);
+    expect(result._meta.searchMetadata.filterApplied).toBe(true);
+  });
+
+  test('should not return the from-only superset when to also supplied', async () => {
+    callGraphAPIPaginated
+      .mockResolvedValueOnce({ value: [] })
+      // single-term-from wins, but none of them went to the requested recipient
+      .mockResolvedValueOnce({ value: sbdhEmails })
+      // single-term-to → empty
+      .mockResolvedValueOnce({ value: [] })
+      // client-side-to candidate scan → nothing matching either
+      .mockResolvedValueOnce({ value: sbdhEmails });
+
+    const result = await handleSearchEmails({
+      from: 'info@sbdh.org.au',
+      to: 'zzznonexistent@nowhere.invalid',
+    });
+
+    expect(result._meta.returned).toBe(0);
+    expect(result._meta.searchMetadata.filterApplied).toBe(false);
+  });
+
+  test('should not let the boolean-only step drop the from filter', async () => {
+    const unreadFromSomeoneElse = mockEmail({
+      id: 'u1',
+      subject: 'Unrelated unread',
+      from: {
+        emailAddress: { name: 'Someone', address: 'someone@other.example' },
+      },
+      isRead: false,
+    });
+
+    callGraphAPIPaginated
+      // combined-search → empty
+      .mockResolvedValueOnce({ value: [] })
+      // single-term-from → empty
+      .mockResolvedValueOnce({ value: [] })
+      // boolean-filters-only → unread mail from a completely different sender
+      .mockResolvedValueOnce({ value: [unreadFromSomeoneElse] });
+
+    const result = await handleSearchEmails({
+      from: 'info@sbdh.org.au',
+      unreadOnly: true,
+    });
+
+    expect(result._meta.returned).toBe(0);
+    expect(result.content[0].text).not.toContain('Unrelated unread');
+    expect(result._meta.searchMetadata.filterApplied).toBe(false);
+  });
+
+  test('should also narrow the client-side to fallback by the other terms', async () => {
+    const wanted = mockEmail({
+      id: 'w1',
+      subject: 'Invoice 42',
+      toRecipients: [
+        { emailAddress: { name: 'Nathan', address: 'nathan@live.com' } },
+      ],
+    });
+    const sameRecipientWrongSubject = mockEmail({
+      id: 'w2',
+      subject: 'Something else entirely',
+      toRecipients: [
+        { emailAddress: { name: 'Nathan', address: 'nathan@live.com' } },
+      ],
+    });
+
+    callGraphAPIPaginated
+      // combined-search → empty
+      .mockResolvedValueOnce({ value: [] })
+      // single-term-to → empty, pushes us to the client-side fallback
+      .mockResolvedValueOnce({ value: [] })
+      // client-side-to candidate scan
+      .mockResolvedValueOnce({
+        value: [wanted, sameRecipientWrongSubject],
+      });
+
+    const result = await handleSearchEmails({
+      to: 'nathan@live.com',
+      subject: 'Invoice',
+    });
+
+    expect(result._meta.returned).toBe(1);
+    expect(result.content[0].text).toContain('Invoice 42');
+    expect(result.content[0].text).not.toContain('Something else entirely');
+    expect(result._meta.searchMetadata.droppedFilters).toEqual([]);
+  });
+
+  test('should report no dropped filters on a clean combined search', async () => {
+    callGraphAPIPaginated.mockResolvedValue({
+      value: [mockEmail({ id: 'c1' })],
+    });
+
+    const result = await handleSearchEmails({
+      from: 'john@example.com',
+      subject: 'Test',
+    });
+
+    expect(result._meta.searchMetadata.finalStrategy).toBe('combined-search');
+    expect(result._meta.searchMetadata.droppedFilters).toEqual([]);
+    expect(result._meta.searchMetadata.filterApplied).toBe(true);
+  });
+});
+
+// ──────────────────────────────────────────────────
+// filterFromClientSide / filterSubjectClientSide (#229)
+// ──────────────────────────────────────────────────
+describe('filterFromClientSide', () => {
+  const messages = [
+    mockEmail({
+      id: 'a',
+      from: { emailAddress: { name: 'SBDH', address: 'info@sbdh.org.au' } },
+    }),
+    mockEmail({
+      id: 'b',
+      from: { emailAddress: { name: 'Other', address: 'x@other.example' } },
+    }),
+  ];
+
+  test('should match on the sender address', () => {
+    expect(filterFromClientSide(messages, 'info@sbdh.org.au')).toHaveLength(1);
+  });
+
+  test('should match on a bare domain', () => {
+    expect(filterFromClientSide(messages, 'sbdh.org.au')).toHaveLength(1);
+  });
+
+  test('should match on the display name, case-insensitively', () => {
+    expect(filterFromClientSide(messages, 'sbdh')).toHaveLength(1);
+  });
+
+  test('should return nothing when no sender matches', () => {
+    expect(filterFromClientSide(messages, 'nobody@nowhere.invalid')).toEqual(
+      []
+    );
+  });
+});
+
+describe('filterSubjectClientSide', () => {
+  const messages = [
+    mockEmail({ id: 'a', subject: 'Your Order Confirmation' }),
+    mockEmail({ id: 'b', subject: 'Weekly update' }),
+    // mockEmail() substitutes a default subject, so build this one by hand.
+    { id: 'c' },
+  ];
+
+  test('should match a case-insensitive substring', () => {
+    const matched = filterSubjectClientSide(messages, 'order');
+    expect(matched).toHaveLength(1);
+    expect(matched[0].id).toBe('a');
+  });
+
+  test('should return all messages for an empty needle', () => {
+    expect(filterSubjectClientSide(messages, '   ')).toHaveLength(3);
+  });
+
+  test('should not throw on a message with no subject field', () => {
+    expect(messages[2].subject).toBeUndefined();
+    expect(() => filterSubjectClientSide(messages, 'zzz')).not.toThrow();
+    expect(filterSubjectClientSide(messages, 'zzz')).toEqual([]);
   });
 });

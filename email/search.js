@@ -211,6 +211,7 @@ async function progressiveSearch(
         originalTerms: searchTerms,
         filterTerms: filterTerms,
         kqlApplied: kqlForSearch,
+        appliedTerms: ['kqlQuery'],
         // noResults flips on the helpful "Suggestions" block in the
         // formatter — without it, an empty kqlQuery result would render
         // the bare "No emails found matching your search criteria" line
@@ -232,6 +233,7 @@ async function progressiveSearch(
           originalTerms: searchTerms,
           filterTerms: filterTerms,
           kqlError: error.message,
+          appliedTerms: ['kqlQuery'],
           noResults: true,
         },
       };
@@ -279,6 +281,8 @@ async function progressiveSearch(
           strategies: searchAttempts,
           originalTerms: searchTerms,
           filterTerms: filterTerms,
+          // The combined $filter carried every supplied term. (#229)
+          appliedTerms: SEARCH_TERM_KEYS.filter((t) => searchTerms[t]),
         };
         return response;
       }
@@ -347,16 +351,38 @@ async function progressiveSearch(
         maxCount
       );
       if (response.value && response.value.length > 0) {
-        console.error(
-          `Search with ${term} successful: found ${response.value.length} results`
+        // This $filter carried only `term`. Apply every other supplied search
+        // term locally before returning — otherwise we hand back the
+        // single-term superset while claiming the filter was applied. (#229)
+        const { matched, secondaryApplied } = applySecondarySearchTerms(
+          response.value,
+          searchTerms,
+          term
         );
-        response._searchInfo = {
-          attemptsCount: searchAttempts.length,
-          strategies: searchAttempts,
-          originalTerms: searchTerms,
-          filterTerms: filterTerms,
-        };
-        return response;
+        if (matched.length > 0) {
+          const narrowing =
+            secondaryApplied.length > 0
+              ? ` after local ${secondaryApplied.join(', ')} narrowing of ${response.value.length}`
+              : '';
+          console.error(
+            `Search with ${term} successful: found ${matched.length} results${narrowing}`
+          );
+          response.value = matched;
+          response._searchInfo = {
+            attemptsCount: searchAttempts.length,
+            strategies: searchAttempts,
+            originalTerms: searchTerms,
+            filterTerms: filterTerms,
+            appliedTerms: [term, ...secondaryApplied],
+            ...(secondaryApplied.length > 0 && {
+              clientSideTerms: secondaryApplied,
+            }),
+          };
+          return response;
+        }
+        console.error(
+          `Search with ${term} found ${response.value.length} results, but none also satisfied ${secondaryApplied.join(', ')} — continuing`
+        );
       }
     } catch (error) {
       console.error(`Search with ${term} failed: ${error.message}`);
@@ -426,13 +452,31 @@ async function progressiveSearch(
       console.error(
         `Boolean filter search found ${response.value?.length || 0} results`
       );
-      response._searchInfo = {
-        attemptsCount: searchAttempts.length,
-        strategies: searchAttempts,
-        originalTerms: searchTerms,
-        filterTerms: filterTerms,
-      };
-      return response;
+      // This step applied only the boolean/date filters. Narrow by the
+      // caller's search terms rather than returning "every unread email" as
+      // though it were "every unread email from X". (#229)
+      const { matched, secondaryApplied } = applySecondarySearchTerms(
+        response.value || [],
+        searchTerms,
+        null
+      );
+      if (matched.length > 0 || secondaryApplied.length === 0) {
+        response.value = matched;
+        response._searchInfo = {
+          attemptsCount: searchAttempts.length,
+          strategies: searchAttempts,
+          originalTerms: searchTerms,
+          filterTerms: filterTerms,
+          appliedTerms: secondaryApplied,
+          ...(secondaryApplied.length > 0 && {
+            clientSideTerms: secondaryApplied,
+          }),
+        };
+        return response;
+      }
+      console.error(
+        `Boolean filter search found ${response.value.length} results, but none satisfied ${secondaryApplied.join(', ')} — continuing`
+      );
     } catch (error) {
       console.error(`Boolean filter search failed: ${error.message}`);
       // Retry without $orderby if it was the issue
@@ -451,11 +495,21 @@ async function progressiveSearch(
             retryParams,
             maxCount
           );
+          const { matched, secondaryApplied } = applySecondarySearchTerms(
+            response.value || [],
+            searchTerms,
+            null
+          );
+          response.value = matched;
           response._searchInfo = {
             attemptsCount: searchAttempts.length,
             strategies: searchAttempts,
             originalTerms: searchTerms,
             filterTerms: filterTerms,
+            appliedTerms: secondaryApplied,
+            ...(secondaryApplied.length > 0 && {
+              clientSideTerms: secondaryApplied,
+            }),
           };
           return response;
         } catch (retryError) {
@@ -637,6 +691,89 @@ function filterQueryClientSide(messages, queryText) {
   });
 }
 
+/** Relabel internal keys to the caller-facing param names. (#169) */
+const FILTER_LABELS = { kqlQuery: 'searchExpression' };
+
+/** Every filter key a caller can supply, including the terminal raw-KQL one. */
+const SEARCH_FILTER_KEYS = ['from', 'to', 'subject', 'query', 'kqlQuery'];
+
+/**
+ * The search terms a caller can supply, in ladder-priority order. `kqlQuery`
+ * is handled by the terminal raw-KQL branch and never mixes with these.
+ */
+const SEARCH_TERM_KEYS = ['from', 'to', 'subject', 'query'];
+
+/**
+ * Client-side matcher for a `from` value. Mirrors filterToClientSide, matching
+ * either the sender address or the display name. (#229)
+ * @param {Array} messages - Messages to filter
+ * @param {string} fromValue - The from filter value
+ * @returns {Array} - Matching messages
+ */
+function filterFromClientSide(messages, fromValue) {
+  const needle = fromValue.toLowerCase();
+  return messages.filter((m) => {
+    const addr = (m.from?.emailAddress?.address || '').toLowerCase();
+    const name = (m.from?.emailAddress?.name || '').toLowerCase();
+    return addr.includes(needle) || name.includes(needle);
+  });
+}
+
+/**
+ * Client-side matcher for a `subject` value — the local equivalent of the
+ * server-side `contains(subject, '…')`. (#229)
+ * @param {Array} messages - Messages to filter
+ * @param {string} subjectValue - The subject filter value
+ * @returns {Array} - Matching messages
+ */
+function filterSubjectClientSide(messages, subjectValue) {
+  const needle = subjectValue.toLowerCase().trim();
+  if (!needle) return messages;
+  return messages.filter((m) =>
+    (m.subject || '').toLowerCase().includes(needle)
+  );
+}
+
+const CLIENT_SIDE_TERM_MATCHERS = {
+  from: filterFromClientSide,
+  to: filterToClientSide,
+  subject: filterSubjectClientSide,
+  query: filterQueryClientSide,
+};
+
+/**
+ * Narrow a result set by every supplied search term that the winning strategy
+ * did NOT apply server-side. (#229)
+ *
+ * Steps 2 and 3 of the ladder each satisfy at most one search term — step 2
+ * returns on the first single term that yields results, and step 3 applies
+ * only the boolean/date filters. Both used to return that set verbatim, so
+ * `from=X` + `subject=Y` handed back every email from X while
+ * `searchMetadata.filterApplied` still said `true`. For an AI caller asking
+ * "find the email from X about Y", a confident superset is strictly worse
+ * than returning nothing.
+ *
+ * Narrowing locally can only ever remove messages the caller did not ask for,
+ * so it cannot introduce false positives. It can miss a match that sits beyond
+ * the server-side page — the ladder simply continues to the next strategy in
+ * that case, and the bounded-scan disclosure already covers the rest.
+ *
+ * @param {Array} messages - Messages returned by the winning strategy
+ * @param {object} searchTerms - All search terms the caller supplied
+ * @param {string|null} appliedTerm - The term already satisfied server-side
+ * @returns {{matched: Array, secondaryApplied: string[]}}
+ */
+function applySecondarySearchTerms(messages, searchTerms, appliedTerm) {
+  const secondary = SEARCH_TERM_KEYS.filter(
+    (t) => t !== appliedTerm && searchTerms[t]
+  );
+  let matched = messages;
+  for (const term of secondary) {
+    matched = CLIENT_SIDE_TERM_MATCHERS[term](matched, searchTerms[term]);
+  }
+  return { matched, secondaryApplied: secondary };
+}
+
 /**
  * Fetch a window of recent messages for the client-side filtering fallback.
  * Uses the 'search' field preset (includes toRecipients and bodyPreview).
@@ -750,7 +887,14 @@ async function runClientSideFallback(
     kind === 'to'
       ? filterToClientSide(messages, searchTerms.to)
       : filterQueryClientSide(messages, searchTerms.query);
-  const matched = applyBooleanDateFilters(termMatched, filterTerms);
+  // The local matcher covers only `kind`; narrow by the caller's other search
+  // terms too, or this path returns the same superset step 2 used to. (#229)
+  const { matched: narrowed, secondaryApplied } = applySecondarySearchTerms(
+    termMatched,
+    searchTerms,
+    kind
+  );
+  const matched = applyBooleanDateFilters(narrowed, filterTerms);
   if (matched.length === 0) {
     return null;
   }
@@ -764,6 +908,8 @@ async function runClientSideFallback(
       strategies: searchAttempts,
       originalTerms: searchTerms,
       filterTerms,
+      appliedTerms: [kind, ...secondaryApplied],
+      ...(secondaryApplied.length > 0 && { clientSideTerms: secondaryApplied }),
       candidatesScanned,
       scanLimit: CLIENT_SCAN_LIMIT,
       truncated,
@@ -1005,10 +1151,27 @@ function formatSearchResults(response, folder, verbosity, searchAllFolders) {
       response._searchInfo.strategies[
         response._searchInfo.strategies.length - 1
       ];
+    // Which supplied filters actually reached the result set, and which the
+    // winning strategy could not honour. `droppedFilters` is normally empty;
+    // a non-empty value means the response is a superset of what was asked
+    // for, and `filterApplied` must not claim otherwise. (#229)
+    const suppliedTerms = SEARCH_FILTER_KEYS.filter(
+      (k) => response._searchInfo.originalTerms?.[k]
+    );
+    const appliedTerms = response._searchInfo.appliedTerms ?? suppliedTerms;
+    const droppedFilters = suppliedTerms
+      .filter((k) => !appliedTerms.includes(k))
+      .map((k) => FILTER_LABELS[k] || k);
+
     meta.searchMetadata = {
       strategiesAttempted: response._searchInfo.strategies,
       finalStrategy: finalStrategy,
-      filterApplied: !response._searchInfo.noResults,
+      filterApplied:
+        !response._searchInfo.noResults && droppedFilters.length === 0,
+      droppedFilters,
+      ...(response._searchInfo.clientSideTerms && {
+        clientSideFilters: response._searchInfo.clientSideTerms,
+      }),
       originalFilters: response._searchInfo.originalTerms,
       // Surface client-side scan coverage so callers can tell when a fallback
       // result may be incomplete (older matches beyond the scan budget). (#169)
@@ -1025,8 +1188,6 @@ function formatSearchResults(response, folder, verbosity, searchAllFolders) {
     // Actionable guidance when filters were specified but matched nothing
     if (response._searchInfo?.noResults) {
       const filters = response._searchInfo.originalTerms || {};
-      // Relabel internal keys to the caller-facing param names. (#169)
-      const FILTER_LABELS = { kqlQuery: 'searchExpression' };
       const activeFilters = Object.entries(filters)
         .filter(([, v]) => v)
         .map(([k]) => FILTER_LABELS[k] || k);
@@ -1208,4 +1369,6 @@ module.exports = {
   classifyEmailFilter,
   filterToClientSide,
   filterQueryClientSide,
+  filterFromClientSide,
+  filterSubjectClientSide,
 };

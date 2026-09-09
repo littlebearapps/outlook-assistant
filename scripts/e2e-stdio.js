@@ -44,7 +44,7 @@ const requests = [
     params: { name: toolName, arguments: toolArgs },
   },
 ];
-child.stdin.write(requests.map((r) => JSON.stringify(r)).join('\n') + '\n');
+child.stdin.write(`${requests.map((r) => JSON.stringify(r)).join('\n')}\n`);
 
 let buffer = '';
 let done = false;

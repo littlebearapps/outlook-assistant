@@ -4,7 +4,7 @@ Active milestones for the Outlook Assistant MCP server. Items may shift or be cu
 
 For shipped work, see [`CHANGELOG.md`](CHANGELOG.md).
 
-## v3.11.1 — Tool description audit
+## v3.11.2 — Tool description audit
 
 The last item from the old `v3.7.5 — Fixes & Polish` slate. Everything else in
 that milestone shipped in v3.11.0 (see "Recently shipped"); this one is held
@@ -16,7 +16,12 @@ not worth half-doing inside a polish release.
 - **#93** docs: audit and improve all tool descriptions
 
 The `search-emails` and `searchExpression` descriptions were rewritten in
-v3.10.0 and are current — use them as the reference style.
+v3.10.0 and revised again in v3.11.1 (the `query` versus `searchExpression`
+divergence and the `to` scan cap) — use them as the reference style.
+
+> Renumbered from v3.11.1, which was taken by the search/export correctness
+> release. #93 is documentation-only and was not worth blocking two critical
+> defect fixes behind.
 
 ## v3.8.x — Task Integration & Auth (carry-over)
 
@@ -57,6 +62,19 @@ to the next feature slot.
 - **#128** Message Trace API for email delivery tracking
 
 ## Recently shipped
+
+- **v3.11.1** (Sep 2026) — **search and export correctness**. A search term
+  combined with a date or boolean filter was silently dropped: the single-term
+  rung built its predicate and then had it overwritten, so the request carried
+  only the date window and the whole window came back reported as a filtered
+  result (`filterApplied: true`, `droppedFilters: []`). Batch export named files
+  `<date>_<subject>`, so a same-day reply chain overwrote itself on disk while
+  the summary reported `Failed 0` — filenames now carry the time, collisions get
+  a numeric suffix instead of clobbering, and a manifest maps each requested ID
+  to the file actually written. A truncated local scan is now disclosed when it
+  matched, not only when it returned nothing. Both critical defects returned
+  HTTP 200 with well-formed output, so the new tests assert result sets rather
+  than that the call succeeded.
 
 - **v3.11.0** (Sep 2026) — **fixes & polish**, clearing the old v3.7.5 slate.
   `--version` / `--help` CLI flags: previously any argument was ignored and the

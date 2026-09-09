@@ -7,6 +7,82 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.11.1] - 2026-09
+
+Correctness release for two critical defects found during heavy real-world use
+against a personal Outlook.com mailbox of ~56,000 archived messages, plus the
+documentation half of a third. Both critical defects returned HTTP 200 with
+well-formed output and a success summary — neither was visible without
+independently reconciling the results against what was asked for. No API
+change; every fix is behavioural.
+
+### Fixed
+
+- **`search-emails` no longer returns a superset when a search term is combined
+  with a date or boolean filter.** `addBooleanFilters` assigned `params.$filter`
+  rather than composing with the filter already built, so the single-term rung
+  constructed its term predicate (`toRecipients/any(...)`,
+  `contains(subject, ...)`) and then had it silently overwritten by the date
+  window. The request went out carrying only the date/boolean predicate and the
+  entire window came back labelled `single-term-to` with `filterApplied: true`
+  and `droppedFilters: []`. Verified live: a `to` search for an address that
+  appears nowhere in the mailbox, bounded by a one-month window, returned four
+  unrelated newsletters; it now returns no results with accurate guidance.
+  `from`, `subject` and `query` were affected by the same line.
+- **`search-emails` no longer drops every row of a single-term `to` or `query`
+  narrowing pass.** The lean `list` field preset omits `toRecipients` and
+  `bodyPreview`, which are exactly the fields the local matchers read. The
+  preset widened only when more than one search term was supplied, but the
+  date/boolean rung narrows locally for a single term too — so once filter
+  composition was fixed, a legitimate `to` + date-window search would have
+  returned nothing. `outputVerbosity` is a presentation parameter and must not
+  decide which messages are found.
+- **`export target=messages` no longer loses messages to filename collisions.**
+  Per-message files were named `<date>_<subject>`, so every message in a
+  same-day reply chain resolved to one path and all but the last were
+  overwritten, while the summary still reported `Failed 0`. Filenames now carry
+  the message time; a name already taken — on disk or by another message in the
+  same batch — gets a `_2`/`_3` suffix instead of clobbering; and `_meta.manifest`
+  maps each requested ID to the path actually written so callers can reconcile
+  without listing the directory. Attachment naming had the same defect, since
+  `emailId.substring(0, 8)` is a prefix shared across a mailbox rather than a
+  disambiguator. Single-message export gets the same treatment when the
+  destination is a directory; an explicit `savePath` file still wins. Extends
+  #82, which covered only the aggregated CSV.
+- **A truncated local scan is now disclosed even when it matched.** #231 added
+  scan-coverage guidance to empty results only. A `to` scan that fills its
+  500-message budget and returns three hits is exactly as incomplete but reads
+  as authoritative — on a large archive that silently caps every historical
+  search.
+
+### Notes
+
+- **`searchExpression` returning different — and sometimes stranger — results
+  than `query` is expected behaviour, now documented.** The two issue
+  structurally different Graph requests rather than the same request ranked
+  differently: an untranslated `searchExpression` is answered by `$search` over
+  the whole message including the body, ranked by relevance with no date sort,
+  while `query` on a personal account falls back to a subject substring match
+  that never reads bodies. Confirmed live — a `searchExpression` search for
+  `Telstra` surfaced a genuine Telstra billing email that the `query` search
+  missed entirely, because the term is not in that message's subject. The
+  `search-emails` description, the `query`/`to`/`searchExpression` parameter
+  descriptions, `docs/quickrefs/tools-reference.md` and `docs/troubleshooting.md`
+  now say which to reach for.
+- **The `to` scan cap is documented.** Personal Outlook.com rejects the
+  server-side recipient filter, so `to` is matched locally over the 500 most
+  recent messages (`OUTLOOK_SEARCH_SCAN_LIMIT`, max 5000). That was not stated
+  anywhere a caller would see it.
+- Tests assert result sets — every returned message satisfies every supplied
+  filter, N requested exports produce N distinct files — rather than that the
+  call succeeded. All three defects returned HTTP 200, so success-shaped
+  assertions could not have caught any of them. Suite: 961 tests.
+- `scripts/e2e-stdio.js` (dev-only, not published) spawns a fresh server per
+  invocation so a working-tree change can be A/B'd against another checkout on
+  the same mailbox. A running MCP server holds the code it started with, which
+  makes in-session tool calls useless for verifying a fix.
+
+
 ## [3.11.0] - 2026-09
 
 Polish release clearing the `v3.7.5 — Fixes & Polish` milestone: the three

@@ -38,6 +38,10 @@ Yes. Outlook Assistant supports both personal Microsoft accounts (Outlook.com, H
 
 On personal accounts, Microsoft's `$search` API has limited support for free-text queries, so Outlook Assistant falls back through up to four progressive search strategies (server `$search` → `contains(subject)` → client-side body/subject/from scan → recent message listing) and exposes which strategy ran in the response's `_meta.searchMetadata` block. For the most direct results, use structured filters (`from`, `subject`, `to`, `receivedAfter`) where possible. The full per-feature compatibility matrix is in the [README's Account Compatibility section](../README.md#account-compatibility).
 
+Personal accounts also reject **field-scoped** `$search` expressions outright — `searchExpression="from:someone@example.com"` returns a Graph syntax error, even though the mail is there. From v3.10.0 those expressions are translated into the equivalent OData filters and retried automatically, reported as strategy `raw-kql-translated` (#217). Unscoped expressions like `searchExpression="invoice"` were never affected. Expressions that can't be translated exactly — free text, `AND`/`OR`, unknown field prefixes — are deliberately not retried, because guessing at their meaning would return mail you didn't ask for.
+
+When a search returns nothing, `_meta.searchMetadata.droppedFilters` tells you whether every filter you supplied was actually honoured. It should always be empty; anything else means the response is broader than your query (#229).
+
 ## What Microsoft Graph permissions does Outlook Assistant need, and why?
 
 Outlook Assistant uses delegated Microsoft Graph permissions — it accesses your mailbox on your behalf, never with elevated rights:
@@ -90,7 +94,7 @@ Most users should pick device code unless they have a specific reason to use the
 
 ## How do I update Outlook Assistant?
 
-Outlook Assistant is published to npm as **`@littlebearapps/outlook-assistant`**. The simplest path is to let your MCP client pick up the latest version automatically — most clients call `npx @littlebearapps/outlook-assistant` which fetches the latest published version on each spawn. To pin a version, replace `@littlebearapps/outlook-assistant` with `@littlebearapps/outlook-assistant@3.9.0` (or whichever version) in your MCP client config.
+Outlook Assistant is published to npm as **`@littlebearapps/outlook-assistant`**. The simplest path is to let your MCP client pick up the latest version automatically — most clients call `npx @littlebearapps/outlook-assistant` which fetches the latest published version on each spawn. To pin a version, replace `@littlebearapps/outlook-assistant` with `@littlebearapps/outlook-assistant@3.10.0` (or whichever version) in your MCP client config.
 
 If you installed globally, `npm update -g @littlebearapps/outlook-assistant` (or `npm install -g @littlebearapps/outlook-assistant@latest`). If you cloned from source, `git pull && npm install`. After updating, restart your MCP client so the running server picks up the new code — Node module caching means the previously-loaded source stays in memory until the server process is recycled.
 

@@ -1588,3 +1588,338 @@ describe('filterFromClientSide — parity with buildFromFilter', () => {
     expect(matched).toEqual([]);
   });
 });
+
+// ──────────────────────────────────────────────────
+// Filter composition — a filtered search must never return a superset
+//
+// Regression cover for the defect report of 2026-09-09: `to` combined with a
+// date window returned the date-window superset, framed as a filtered result.
+// Root cause was `addBooleanFilters` assigning `params.$filter` over the term
+// filter the single-term rung had just built.
+//
+// These assert on the RESULT SET (every row satisfies every supplied filter),
+// not merely that the call succeeded — the whole family of defects here return
+// HTTP 200 and well-formed output.
+// ──────────────────────────────────────────────────
+describe('handleSearchEmails — filter composition (superset prevention)', () => {
+  /**
+   * Mock Graph faithfully enough to catch $select-dependent defects: project
+   * every returned row down to the requested $select, exactly as Graph does.
+   * A mock that returns full objects regardless of $select hides any bug where
+   * a client-side matcher reads a field the request never asked for.
+   */
+  function mockGraphWithProjection({ rows, rejectLambda = true }) {
+    // Not `async`: the call sites all `await` inside a try/catch, so a
+    // synchronous throw models a Graph rejection just as faithfully.
+    callGraphAPIPaginated.mockImplementation(
+      (_token, _method, _endpoint, params) => {
+        const filter = params.$filter || '';
+
+        // Personal Outlook.com rejects toRecipients/any() lambdas.
+        if (rejectLambda && filter.includes('toRecipients/any')) {
+          throw new Error(
+            'InefficientFilter: The restriction or sort order is too complex.'
+          );
+        }
+
+        let value = rows;
+        // Honour a date-range filter so the "date window applied, term dropped"
+        // shape is reproducible.
+        const after = /receivedDateTime ge ([^\s]+)/.exec(filter);
+        const before = /receivedDateTime le ([^\s]+)/.exec(filter);
+        if (after) {
+          value = value.filter(
+            (m) => Date.parse(m.receivedDateTime) >= Date.parse(after[1])
+          );
+        }
+        if (before) {
+          value = value.filter(
+            (m) => Date.parse(m.receivedDateTime) <= Date.parse(before[1])
+          );
+        }
+
+        const select = params.$select;
+        const projected = value.map((m) => {
+          if (!select) return m;
+          const out = {};
+          for (const key of select.split(',').map((s) => s.trim())) {
+            if (key in m) out[key] = m[key];
+          }
+          return out;
+        });
+        return { value: projected, '@odata.count': projected.length };
+      }
+    );
+  }
+
+  const TARGET = 'third-party@example.com';
+
+  // Four inbound newsletters inside a June 2023 window, addressed to the
+  // mailbox owner — never to TARGET.
+  const newslettersInWindow = [
+    mockEmail({
+      id: 'n1',
+      subject: 'ORDER UPDATE: Magnetic Car Window',
+      from: { emailAddress: { name: 'eBay', address: 'ebay@ebay.com' } },
+      toRecipients: [
+        { emailAddress: { name: 'Owner', address: 'owner@example.com' } },
+      ],
+      receivedDateTime: '2023-06-01T00:09:00Z',
+    }),
+    mockEmail({
+      id: 'n2',
+      subject: 'EastLink Transaction Receipt',
+      from: {
+        emailAddress: {
+          name: 'EastLink',
+          address: 'do-not-reply@breeze.com.au',
+        },
+      },
+      toRecipients: [
+        { emailAddress: { name: 'Owner', address: 'owner@example.com' } },
+      ],
+      receivedDateTime: '2023-06-01T02:20:00Z',
+    }),
+  ];
+
+  test('should not return a date-window superset when `to` cannot be applied', async () => {
+    mockGraphWithProjection({ rows: newslettersInWindow });
+
+    const result = await handleSearchEmails({
+      to: TARGET,
+      searchAllFolders: true,
+      receivedAfter: '2023-06-01T00:00:00Z',
+      receivedBefore: '2023-07-01T00:00:00Z',
+      count: 4,
+      outputVerbosity: 'standard',
+    });
+
+    const text = result.content[0].text;
+    // Not one of these was addressed to TARGET.
+    expect(text).not.toContain('ORDER UPDATE');
+    expect(text).not.toContain('EastLink');
+    expect(text).toContain('No emails found');
+  });
+
+  test('should keep the `to` predicate in the request when a date window is also supplied', async () => {
+    mockGraphWithProjection({ rows: [], rejectLambda: false });
+
+    await handleSearchEmails({
+      to: TARGET,
+      receivedAfter: '2023-06-01T00:00:00Z',
+      receivedBefore: '2023-07-01T00:00:00Z',
+    });
+
+    // Every request that carried the date window must ALSO carry the `to`
+    // predicate, until the ladder deliberately drops to the date-only rung.
+    const termRungs = callGraphAPIPaginated.mock.calls.filter(([, , , p]) =>
+      (p.$filter || '').includes('toRecipients')
+    );
+    expect(termRungs.length).toBeGreaterThan(0);
+    for (const [, , , params] of termRungs) {
+      expect(params.$filter).toContain('receivedDateTime ge');
+      expect(params.$filter).toContain('receivedDateTime le');
+    }
+  });
+
+  test('should return only messages actually addressed to `to` within the window', async () => {
+    const wanted = mockEmail({
+      id: 'want-1',
+      subject: 'Another transfer',
+      toRecipients: [
+        { emailAddress: { name: 'Third Party', address: TARGET } },
+      ],
+      receivedDateTime: '2023-06-15T01:26:00Z',
+    });
+    mockGraphWithProjection({ rows: [...newslettersInWindow, wanted] });
+
+    const result = await handleSearchEmails({
+      to: TARGET,
+      searchAllFolders: true,
+      receivedAfter: '2023-06-01T00:00:00Z',
+      receivedBefore: '2023-07-01T00:00:00Z',
+    });
+
+    const text = result.content[0].text;
+    expect(text).toContain('Another transfer');
+    expect(text).not.toContain('ORDER UPDATE');
+    expect(text).not.toContain('EastLink');
+  });
+
+  test('should not drop `from` when a date window is supplied', async () => {
+    mockGraphWithProjection({ rows: [], rejectLambda: false });
+
+    await handleSearchEmails({
+      from: 'alice@corp.com',
+      receivedAfter: '2023-06-01T00:00:00Z',
+    });
+
+    const fromRungs = callGraphAPIPaginated.mock.calls.filter(([, , , p]) =>
+      (p.$filter || '').includes('from/emailAddress')
+    );
+    expect(fromRungs.length).toBeGreaterThan(0);
+    for (const [, , , params] of fromRungs) {
+      expect(params.$filter).toContain('receivedDateTime ge');
+    }
+  });
+
+  test('should not drop `subject` when a boolean filter is supplied', async () => {
+    mockGraphWithProjection({ rows: [], rejectLambda: false });
+
+    await handleSearchEmails({ subject: 'invoice', unreadOnly: true });
+
+    const subjectRungs = callGraphAPIPaginated.mock.calls.filter(([, , , p]) =>
+      (p.$filter || '').includes('contains(subject')
+    );
+    expect(subjectRungs.length).toBeGreaterThan(0);
+    for (const [, , , params] of subjectRungs) {
+      expect(params.$filter).toContain('isRead eq false');
+    }
+  });
+
+  test('should request toRecipients for a single-term `to` search so local narrowing can match', async () => {
+    mockGraphWithProjection({ rows: [], rejectLambda: false });
+
+    await handleSearchEmails({
+      to: TARGET,
+      receivedAfter: '2023-06-01T00:00:00Z',
+    });
+
+    // Every rung that could feed a local `to` narrowing pass must have asked
+    // for the field that matcher reads.
+    for (const [, , , params] of callGraphAPIPaginated.mock.calls) {
+      expect(params.$select).toContain('toRecipients');
+    }
+  });
+
+  test('should request bodyPreview for a single-term `query` search', async () => {
+    mockGraphWithProjection({ rows: [], rejectLambda: false });
+
+    await handleSearchEmails({
+      query: 'invoice',
+      receivedAfter: '2023-06-01T00:00:00Z',
+    });
+
+    for (const [, , , params] of callGraphAPIPaginated.mock.calls) {
+      expect(params.$select).toContain('bodyPreview');
+    }
+  });
+});
+
+// ──────────────────────────────────────────────────
+// `searchExpression` vs `query` — different mechanisms, not a dropped filter
+//
+// The defect report of 2026-09-09 measured `searchExpression` returning
+// irrelevant top hits where `query` returned the obviously-correct message
+// (`Bunnings`, `Telstra`), and could not establish whether that was bad
+// relevance ranking or residual filter-dropping.
+//
+// It is neither a drop nor the same request ranked differently: the two
+// parameters issue structurally DIFFERENT Graph requests.
+//   - `searchExpression` goes out as `$search`, which Graph answers over the
+//     whole message including the body, ranked by relevance, not by date.
+//   - `query` on a personal account falls back to `contains(subject, ...)`,
+//     a precise substring match over the subject only.
+// So `query` looks "correct" for a term that appears in a subject line, and
+// `searchExpression` surfaces body matches the caller did not expect.
+//
+// These tests pin that divergence so the documented guidance stays true.
+// ──────────────────────────────────────────────────
+describe('handleSearchEmails — searchExpression vs query request shape', () => {
+  test('searchExpression issues a $search and never a subject contains()', async () => {
+    callGraphAPIPaginated.mockResolvedValue({ value: [] });
+
+    await handleSearchEmails({
+      searchExpression: '"Bunnings"',
+      searchAllFolders: true,
+      count: 5,
+    });
+
+    const [, , , params] = callGraphAPIPaginated.mock.calls[0];
+    expect(params.$search).toBe('"Bunnings"');
+    expect(params.$filter).toBeUndefined();
+    // Relevance order is Graph's; we do not impose a date sort on $search.
+    expect(params.$orderby).toBeUndefined();
+  });
+
+  test('query falls back to a subject contains() when $search fails', async () => {
+    // Personal Outlook.com: the $search rung errors, the ladder continues.
+    callGraphAPIPaginated.mockImplementation((_t, _m, _e, params) => {
+      if (params.$search) {
+        throw new Error(
+          'The $search query parameter is currently not supported'
+        );
+      }
+      return Promise.resolve({ value: [] });
+    });
+
+    await handleSearchEmails({ query: 'Bunnings', searchAllFolders: true });
+
+    const filters = callGraphAPIPaginated.mock.calls
+      .map(([, , , p]) => p.$filter)
+      .filter(Boolean);
+    expect(
+      filters.some((f) => f.includes("contains(subject, 'Bunnings')"))
+    ).toBe(true);
+  });
+
+  test('an unmatched searchExpression returns no results rather than recent mail', async () => {
+    // The control that rules out a total filter drop: if $search were being
+    // ignored, this would come back full of unrelated recent messages.
+    callGraphAPIPaginated.mockResolvedValue({ value: [] });
+
+    const result = await handleSearchEmails({
+      searchExpression: '"zzzznonexistentterm"',
+      searchAllFolders: true,
+    });
+
+    expect(result.content[0].text).toContain('No emails found');
+    expect(result._meta.searchMetadata.finalStrategy).toBe('raw-kql');
+  });
+});
+
+// ──────────────────────────────────────────────────
+// Bounded-scan disclosure on the SUCCESS path
+//
+// The #231 guidance only fires when a search returns nothing. A client-side
+// `to` scan that fills its 500-message budget and returns three hits reads as
+// a complete answer — on a 56,000-message mailbox it is nothing of the kind,
+// and the caller has no way to know. Disclose the cap whenever it bound the
+// result, not only when it produced zero.
+// ──────────────────────────────────────────────────
+describe('handleSearchEmails — bounded scan disclosure with results', () => {
+  test('should disclose truncated scan coverage when the local fallback matched', async () => {
+    const wanted = mockEmail({
+      id: 'hit-1',
+      subject: 'Invoice attached',
+      toRecipients: [
+        { emailAddress: { name: 'Third Party', address: 'third@example.com' } },
+      ],
+    });
+    // Fill the scan budget so `truncated` is true, with one match in it.
+    const filler = Array.from({ length: 499 }, (_, i) =>
+      mockEmail({
+        id: `filler-${i}`,
+        toRecipients: [
+          { emailAddress: { name: 'Owner', address: 'owner@example.com' } },
+        ],
+      })
+    );
+
+    callGraphAPIPaginated.mockImplementation((_t, _m, _e, params) => {
+      // Server-side toRecipients lambda is rejected on personal accounts.
+      if ((params.$filter || '').includes('toRecipients/any')) {
+        throw new Error('InefficientFilter');
+      }
+      return Promise.resolve({ value: [wanted, ...filler] });
+    });
+
+    const result = await handleSearchEmails({ to: 'third@example.com' });
+
+    expect(result.content[0].text).toContain('Invoice attached');
+    expect(result._meta.searchMetadata.truncated).toBe(true);
+    // The caller must be told the answer is bounded, not exhaustive.
+    expect(result.content[0].text).toMatch(/500/);
+    expect(result.content[0].text).toMatch(/older|not.*seen|receivedAfter/i);
+  });
+});

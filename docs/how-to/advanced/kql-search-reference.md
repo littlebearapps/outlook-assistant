@@ -109,6 +109,8 @@ searchExpression: "isRead:false"
 > **Important**: On personal Outlook.com accounts, `query` and `searchExpression` use Microsoft's `$search` API, which is not fully supported. `query` falls back through OData filters, boolean filters, and a client-side scan. `searchExpression` falls back only for the expressions it can reproduce exactly (`from:`, `to:`, `subject:` — see below); anything else deliberately terminates with an explicit "no results" rather than quietly running a broader search you didn't ask for. Structured filter parameters (`from`, `subject`, `to`, `receivedAfter`, `hasAttachments`, `unreadOnly`) use OData `$filter` and work reliably on all account types — they remain the most direct route.
 >
 > Whatever runs, `_meta.searchMetadata` tells you which strategy answered and `droppedFilters` lists any filter that could not be honoured. `droppedFilters` should always be empty; anything else means the result set is broader than your query (#229).
+>
+> **Unscoped expressions are a different search from `query`, not a synonym.** `searchExpression: "invoice"` reaches Graph `$search` untouched, which matches the **whole message including the body** and orders results by **relevance**, not by date. `query: "invoice"` on a personal account becomes a subject substring match that never reads bodies. So the same term can legitimately produce two different result sets: `searchExpression` may return a message whose subject looks unrelated (the term is in its body), and `query` may miss a message that is obviously about the term (it isn't in the subject). Neither is a dropped filter. Reach for `query` when your term is in a subject line, `searchExpression` when you need body content.
 
 ## Which expressions translate on personal accounts
 

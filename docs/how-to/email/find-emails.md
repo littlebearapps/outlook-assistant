@@ -60,7 +60,7 @@ params:
   query: "budget approval"
 ```
 
-The `query` parameter searches across subject, body, and other fields.
+The `query` parameter searches across subject, body, and other fields **on work/school Microsoft 365 accounts**. On personal Outlook.com accounts Graph `$search` is unavailable, so `query` falls back to a subject substring match (every word must appear in the subject) — precise, but it does not read message bodies. Use `searchExpression` when you need body content there.
 
 > **Personal accounts**: Free-text `query` search uses Microsoft's `$search` API, which has limited support on personal Outlook.com accounts. Outlook Assistant handles this automatically — if `$search` returns no results, it progressively falls back to OData filters (`from`, `subject`, `to`), then boolean filters, then recent message listing. For the most direct results on personal accounts, use the structured filter parameters below. See [Account Compatibility](../../../README.md#account-compatibility) for details.
 
@@ -144,7 +144,9 @@ params:
   hasAttachments: true
 ```
 
-> **Personal accounts**: Free-text `query` searches use Microsoft's `$search` API, which has limited support on personal Outlook.com accounts. Use structured filters (`to`, `subject`, `receivedAfter`, `hasAttachments`) for the most reliable results in any folder. These use `$filter` which works consistently across both personal and work accounts.
+> **Personal accounts**: Free-text `query` searches use Microsoft's `$search` API, which has limited support on personal Outlook.com accounts. Use structured filters (`subject`, `receivedAfter`, `hasAttachments`) for the most reliable results in any folder. These use `$filter` which works consistently across both personal and work accounts.
+>
+> `to` is the exception: personal accounts reject the server-side recipient filter, so it is matched **locally over the 500 most recent messages** (`OUTLOOK_SEARCH_SCAN_LIMIT`, max 5000). On a large mailbox that excludes older mail, so pair `to` with `receivedAfter`/`receivedBefore` to reach further back. Since v3.11.1 the response says so whenever that scan was truncated, whether or not it matched.
 
 ## Search Across All Folders
 
@@ -220,7 +222,7 @@ Delta sync is useful for inbox monitoring workflows, audit trails, and notificat
 
 | Parameter | What it does | Example |
 |-----------|-------------|---------|
-| `query` | Free-text search across all fields | `"budget approval"` |
+| `query` | Free-text search across all fields (subject-only on personal accounts — see above) | `"budget approval"` |
 | `from` | Filter by sender email or name | `"sarah@company.com"` |
 | `to` | Filter by recipient | `"team@company.com"` |
 | `subject` | Filter by subject line | `"quarterly report"` |

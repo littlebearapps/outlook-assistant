@@ -141,6 +141,31 @@ params:
 | `order` | `chronological` or `reverse` | `conversation` |
 | `includeAttachments` | Include attachments | `message` (default: true) |
 
+## Output Filenames
+
+Batch export names each file `<message-timestamp>_<subject>.<ext>`, e.g.
+`2023-06-15T01-26-00_Another_transfer.json`.
+
+The **time** matters: before v3.11.1 the name used the date only, so two messages
+from the same day sharing a subject — an ordinary same-day reply chain — resolved
+to one path and the second silently overwrote the first, while the summary still
+reported `Failed 0`.
+
+Two guarantees now hold:
+
+- **Nothing is overwritten.** If a name is already taken, on disk or by another
+  message in the same batch, the exporter appends `_2`, `_3`, ... rather than
+  clobbering. A note in the output tells you when that happened.
+- **Every requested ID is accounted for.** `_meta.manifest` maps each requested
+  message ID to the path actually written, so you can reconcile without listing
+  the directory:
+
+  ```json
+  { "emailId": "AAMk...", "filePath": "/tmp/export/2023-06-15T01-26-00_Another_transfer.json" }
+  ```
+
+Attachment files are named the same way and carry the same guarantee.
+
 ## Tips
 
 - Use `markdown` format for AI-readable exports

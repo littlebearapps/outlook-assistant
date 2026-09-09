@@ -79,9 +79,19 @@ async function handleSearchEmails(args) {
   // this, a `from`+`to` search would drop every row at default verbosity and
   // return "No emails found" — making `outputVerbosity`, a presentation
   // parameter, decide which messages are found.
+  //
+  // A SINGLE term needs the richer preset too when it is `to` or `query`. The
+  // date/boolean rung applies no search term server-side, so it narrows by
+  // every supplied term locally — and `filterToClientSide` reads
+  // `toRecipients` while `filterQueryClientSide` reads `bodyPreview`, neither
+  // of which the `list` preset requests. Left lean, those matchers see
+  // `undefined` on every row and drop the entire result set.
   const searchTermCount = [query, from, to, subject].filter(Boolean).length;
+  const needsMatcherFields = Boolean(to) || Boolean(query);
   const selectFields = getEmailFields(
-    verbosity === VERBOSITY.FULL || searchTermCount > 1 ? 'search' : 'list'
+    verbosity === VERBOSITY.FULL || searchTermCount > 1 || needsMatcherFields
+      ? 'search'
+      : 'list'
   );
 
   try {
@@ -1300,9 +1310,20 @@ function addBooleanFilters(params, filterTerms) {
     }
   }
 
-  // Add $filter parameter if we have any filter conditions
+  // AND onto any $filter the caller already built — never replace it.
+  //
+  // The single-term rung sets `$filter` from the search term (e.g.
+  // `toRecipients/any(...)`) and then calls this to add the date/boolean
+  // window. Assigning here silently dropped that term, so a `to` + date-window
+  // search issued a DATE-ONLY request and returned the whole window labelled
+  // `single-term-to` with `appliedTerms: ['to']` — a superset presented as a
+  // filtered result. Affected `from`, `to`, `subject` and `query` alike.
+  //
+  // Every condition either side is a conjunct, so a flat ' and ' join is
+  // sound; there is no top-level `or` that would need parenthesising.
   if (filterConditions.length > 0) {
-    params.$filter = filterConditions.join(' and ');
+    const added = filterConditions.join(' and ');
+    params.$filter = params.$filter ? `${params.$filter} and ${added}` : added;
   }
 }
 
@@ -1505,6 +1526,17 @@ function formatSearchResults(response, folder, verbosity, searchAllFolders) {
       searchNote = `\n\n_Search strategy: ${strategy} (filtered locally due to personal account API limitations)_`;
     } else {
       searchNote = `\n\n_Search strategy: ${strategy}_`;
+    }
+
+    // A local scan that filled its budget did not see the whole mailbox, so
+    // these results are a bounded sample rather than the complete set. #231
+    // says so only when the search returns nothing; a truncated scan that
+    // DID match is exactly as incomplete and reads as authoritative. On a
+    // large archive that silently caps historical searches.
+    if (response._searchInfo.truncated) {
+      const scanned = response._searchInfo.candidatesScanned;
+      const limit = response._searchInfo.scanLimit;
+      searchNote += `\n\n> **Partial coverage**: matched locally within the ${scanned} most recent messages, hitting the ${limit} scan limit — older matches were not seen. Narrow with \`receivedAfter\`/\`receivedBefore\` to search further back.`;
     }
   }
 

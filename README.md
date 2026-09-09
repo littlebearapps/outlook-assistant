@@ -164,7 +164,7 @@ npx @littlebearapps/outlook-assistant
 To check which version you have, or to see the available options:
 
 ```bash
-outlook-assistant --version     # prints e.g. 3.11.0
+outlook-assistant --version     # prints e.g. 3.11.1
 outlook-assistant --help        # usage, options and key environment variables
 ```
 
@@ -366,6 +366,7 @@ USE_TEST_MODE=false
 | `OUTLOOK_DEFAULT_TIMEZONE` | IANA timezone applied to calendar events when callers don't pass one (e.g. `Europe/London`, `America/New_York`). | `Australia/Melbourne` |
 | `OUTLOOK_MAX_EMAILS_PER_SESSION` | Cap on `send-email` + `draft send` per MCP server lifetime. | unlimited |
 | `OUTLOOK_ALLOWED_RECIPIENTS` | Comma-separated allowlist of domains/addresses for sends, drafts, and rule forwards. | unrestricted |
+| `OUTLOOK_SEARCH_SCAN_LIMIT` | How many recent messages the client-side search fallback scans. Personal accounts match `to` locally within this window, so the default caps how far back a `to` search reaches. Max 5000. | `500` |
 
 ### MCP Client Configuration
 
@@ -523,7 +524,7 @@ USE_TEST_MODE=true npm start
 | [Getting Started](docs/how-to/getting-started/connect-outlook-to-claude.md) | Install, configure, and authenticate — start here |
 | [Azure Setup Guide](docs/guides/azure-setup.md) | Azure account creation, app registration, permissions, and secrets |
 | [How-To Guides](docs/how-to/index.md) | 29 practical guides for email, calendar, contacts, and settings |
-| [Roadmap](ROADMAP.md) | Active milestones (v3.11.1, v3.8.x, v3.12.0+) and recent releases |
+| [Roadmap](ROADMAP.md) | Active milestones (v3.11.2, v3.8.x, v3.12.0+) and recent releases |
 | [Troubleshooting & FAQ](docs/how-to/getting-started/verify-your-connection.md#common-connection-problems) | Common problems, re-authentication, and frequently asked questions |
 | [Tools Reference](docs/quickrefs/tools-reference.md) | All 22 tools with parameters |
 | [AI Agent Guide](docs/how-to/ai-agents/using-outlook-assistant-in-agents.md) | Tool selection and workflow patterns for AI agents |
@@ -532,7 +533,8 @@ Full documentation: [docs/](docs/README.md)
 
 ## Known Limitations
 
-- **Personal account search**: Free-text `query` and the raw `searchExpression` (formerly `kqlQuery`) rely on Microsoft's `$search` API, which has limited support on personal Outlook.com accounts. `query` mitigates this with progressive fallback (OData filters, boolean filters, then a client-side scan). Field-scoped `$search` (e.g. `subject:"…"`) is rejected outright there; since v3.10.0 `from:`/`to:`/`subject:` expressions are translated into the closest equivalent OData filters and retried, but boolean operators, grouping, wildcards and other field prefixes are not — those still terminate with an explicit no-results rather than a silent broader search. Structured filters (`from`, `subject`, `to`, `receivedAfter`) remain the most direct route. Cross-folder search (`searchAllFolders: true`) returns a superset of inbox-only results.
+- **Personal account search**: Free-text `query` and the raw `searchExpression` (formerly `kqlQuery`) rely on Microsoft's `$search` API, which has limited support on personal Outlook.com accounts. `query` mitigates this with progressive fallback (OData filters, boolean filters, then a client-side scan). Field-scoped `$search` (e.g. `subject:"…"`) is rejected outright there; since v3.10.0 `from:`/`to:`/`subject:` expressions are translated into the closest equivalent OData filters and retried, but boolean operators, grouping, wildcards and other field prefixes are not — those still terminate with an explicit no-results rather than a silent broader search. Structured filters (`from`, `subject`, `to`, `receivedAfter`) remain the most direct route. Cross-folder search (`searchAllFolders: true`) returns a superset of inbox-only results. Note that `query` and `searchExpression` are not interchangeable there: `searchExpression` goes to `$search`, which matches the whole message including the body and ranks by relevance rather than date, while `query` falls back to a subject substring match that never reads bodies.
+- **`to` search depth on personal accounts**: the server-side recipient filter is rejected, so `to` is matched locally over the 500 most recent messages (`OUTLOOK_SEARCH_SCAN_LIMIT`, max 5000). On a large archive that excludes older mail — pair `to` with `receivedAfter`/`receivedBefore`. Since v3.11.1 the response says so whenever the scan was truncated, whether or not it matched.
 - **Focused Inbox**: Only available on work/school Microsoft 365 accounts.
 - **Shared mailboxes**: Require `Mail.Read.Shared` permission and a work/school account.
 - **Meeting room search**: Requires `Place.Read.All` permission with admin consent (work/school accounts only).

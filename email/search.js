@@ -103,7 +103,12 @@ async function handleSearchEmails(args) {
 
     // Label the scope accurately — a cross-folder search is not "inbox". (#169)
     const scopeLabel = searchAllFolders ? 'all folders' : folder;
-    return formatSearchResults(response, scopeLabel, verbosity);
+    return formatSearchResults(
+      response,
+      scopeLabel,
+      verbosity,
+      searchAllFolders
+    );
   } catch (error) {
     // Handle authentication errors
     if (error.message === 'Authentication required') {
@@ -899,13 +904,93 @@ function addBooleanFilters(params, filterTerms) {
 }
 
 /**
+ * Build no-results guidance from what the caller actually supplied and what the
+ * progressive-search ladder actually attempted, rather than printing the same
+ * four lines on every empty search. (#231)
+ *
+ * The previous fixed list included "use `from` filter instead of `to` (more
+ * reliable on personal accounts)", which has been untrue since v3.7.1 added the
+ * client-side `to` fallback (#139 / PR #141). The tool was teaching its callers
+ * something false about itself.
+ *
+ * @param {object} searchInfo - The _searchInfo block from progressiveSearch
+ * @param {boolean} searchAllFolders - Whether the search already spanned all folders
+ * @returns {string[]} - Ordered suggestion lines, without the leading bullet
+ */
+function buildNoResultsSuggestions(searchInfo, searchAllFolders) {
+  const filters = searchInfo.originalTerms || {};
+  const strategies = searchInfo.strategies || [];
+  const suggestions = [];
+
+  // Scope — only worth suggesting when it isn't already what we just did.
+  if (searchAllFolders) {
+    suggestions.push(
+      'All folders were already searched, so no message in this mailbox matches these filters'
+    );
+  } else {
+    suggestions.push(
+      'Try `searchAllFolders: true` to search across all folders including Archive'
+    );
+    suggestions.push(
+      'Specify the correct folder if emails have been moved (use the `folders` tool to list folders)'
+    );
+  }
+
+  // Report the fallback the ladder actually took, instead of guessing at one.
+  const clientSide = strategies.filter((s) => s.startsWith('client-side-'));
+  if (clientSide.length > 0) {
+    const fields = clientSide
+      .map((s) => `\`${s.slice('client-side-'.length)}\``)
+      .join(', ');
+    let note = `${fields} was matched locally after the server-side filter came back empty`;
+    if (searchInfo.candidatesScanned) {
+      note += ` — ${searchInfo.candidatesScanned} recent messages examined`;
+      if (searchInfo.truncated) {
+        note += `, hitting the ${searchInfo.scanLimit} scan limit, so older matches were not seen (narrow with \`receivedAfter\`)`;
+      }
+    }
+    suggestions.push(note);
+  }
+
+  if (filters.kqlQuery) {
+    suggestions.push(
+      'Structured filters (`from`, `to`, `subject`) reach messages that `searchExpression` cannot on personal accounts'
+    );
+  }
+
+  if (filters.query) {
+    suggestions.push(
+      'Free-text `query` falls back to a subject match on personal accounts — try `subject` directly, or fewer words'
+    );
+  }
+
+  if (filters.subject) {
+    suggestions.push(
+      '`subject` is a substring match — try a shorter, more distinctive fragment'
+    );
+  }
+
+  const applied = ['from', 'to', 'subject', 'query', 'kqlQuery'].filter(
+    (k) => filters[k]
+  );
+  if (applied.length > 1) {
+    suggestions.push(
+      `All ${applied.length} filters must match the same message — try removing one`
+    );
+  }
+
+  return suggestions;
+}
+
+/**
  * Format search results into Markdown using response-formatter utilities
  * @param {object} response - The API response object
  * @param {string} folder - Folder that was searched
  * @param {string} verbosity - Output verbosity level
+ * @param {boolean} [searchAllFolders] - Whether the search spanned all folders
  * @returns {object} - MCP response object
  */
-function formatSearchResults(response, folder, verbosity) {
+function formatSearchResults(response, folder, verbosity, searchAllFolders) {
   // Build metadata
   const meta = {
     returned: (response.value || []).length,
@@ -950,13 +1035,13 @@ function formatSearchResults(response, folder, verbosity) {
           ? ` (filters: ${activeFilters.join(', ')})`
           : '';
 
-      const text =
-        `No emails found matching your filters in "${folder}"${filterDesc}.\n\n` +
-        '**Suggestions:**\n' +
-        '- Try `searchAllFolders: true` to search across all folders including Archive\n' +
-        '- Specify the correct folder if emails have been moved (use `folders` tool to list folders)\n' +
-        '- Use `from` filter instead of `to` (more reliable on personal accounts)\n' +
-        '- Use `searchExpression` with `searchAllFolders: true` for cross-folder search';
+      const suggestions = buildNoResultsSuggestions(
+        response._searchInfo,
+        searchAllFolders
+      );
+
+      const bullets = suggestions.map((line) => `- ${line}`).join('\n');
+      const text = `No emails found matching your filters in "${folder}"${filterDesc}.\n\n**Suggestions:**\n${bullets}`;
 
       return {
         content: [{ type: 'text', text }],

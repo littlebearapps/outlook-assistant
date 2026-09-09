@@ -865,3 +865,92 @@ describe('handleSearchEmails — client-side fallback hardening (#169)', () => {
     expect(strategies).not.toContain('raw-kql');
   });
 });
+
+// ──────────────────────────────────────────────────
+// handleSearchEmails — contextual no-results guidance (#231)
+// ──────────────────────────────────────────────────
+describe('handleSearchEmails — contextual no-results guidance (#231)', () => {
+  test('should not repeat the stale "use from instead of to" advice', async () => {
+    callGraphAPIPaginated.mockResolvedValue({ value: [] });
+
+    const result = await handleSearchEmails({ to: 'nobody@example.com' });
+    const text = result.content[0].text;
+
+    // Untrue since v3.7.1 (#139 / PR #141 added the client-side-to fallback).
+    expect(text).not.toContain('instead of');
+    expect(text).not.toContain('more reliable on personal accounts');
+  });
+
+  test('should not suggest searchAllFolders when it is already enabled', async () => {
+    callGraphAPIPaginated.mockResolvedValue({ value: [] });
+
+    const result = await handleSearchEmails({
+      from: 'nobody@example.com',
+      searchAllFolders: true,
+    });
+    const text = result.content[0].text;
+
+    expect(text).toContain('No emails found');
+    expect(text).not.toContain('Try `searchAllFolders: true`');
+    expect(text).toContain('All folders were already searched');
+  });
+
+  test('should not offer to-related advice when the caller never used to', async () => {
+    callGraphAPIPaginated.mockResolvedValue({ value: [] });
+
+    const result = await handleSearchEmails({ from: 'nobody@example.com' });
+
+    expect(result.content[0].text).not.toContain('`to`');
+  });
+
+  test('should report the client-side fallback the ladder actually used', async () => {
+    callGraphAPIPaginated
+      // combined-search → empty
+      .mockResolvedValueOnce({ value: [] })
+      // single-term-to → empty
+      .mockResolvedValueOnce({ value: [] })
+      // client-side-to candidate fetch → nothing matching
+      .mockResolvedValueOnce({
+        value: [
+          mockEmail({
+            id: 'x',
+            toRecipients: [
+              { emailAddress: { name: 'Bob', address: 'bob@other.com' } },
+            ],
+          }),
+        ],
+      });
+
+    const result = await handleSearchEmails({ to: 'nobody@example.com' });
+    const text = result.content[0].text;
+
+    expect(result._meta.searchMetadata.strategiesAttempted).toContain(
+      'client-side-to'
+    );
+    expect(text).toContain('matched locally');
+    expect(text).toContain('`to`');
+  });
+
+  test('should point out that combined filters must all match', async () => {
+    callGraphAPIPaginated.mockResolvedValue({ value: [] });
+
+    const result = await handleSearchEmails({
+      from: 'someone@example.com',
+      subject: 'Nonexistent',
+    });
+
+    expect(result.content[0].text).toContain('must match the same message');
+  });
+
+  test('should tailor advice to a searchExpression call', async () => {
+    callGraphAPIPaginated.mockResolvedValue({ value: [] });
+
+    const result = await handleSearchEmails({
+      searchExpression: 'totally-absent-token',
+    });
+    const text = result.content[0].text;
+
+    expect(text).toContain('filters: searchExpression');
+    expect(text).not.toContain('instead of');
+  });
+});

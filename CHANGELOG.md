@@ -29,7 +29,7 @@ are at the CLI entry point and in how authentication failures are explained.
 
 ### Fixed
 
-- **`AADSTS7000215` now explains itself instead of passing through raw** (#69).
+- **`AADSTS7000215` now explains itself** (#69).
   Pasting the Azure client secret's **ID** instead of its **Value** is the most
   common setup failure — it is the first row of `docs/troubleshooting.md` — but
   nothing in the code said so. Microsoft's raw `error_description` went straight

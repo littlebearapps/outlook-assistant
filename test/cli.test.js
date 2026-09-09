@@ -86,6 +86,39 @@ describe('CLI flags', () => {
     });
   });
 
+  describe('a recognised flag does not excuse an unrecognised one', () => {
+    it('rejects `--version --nope` instead of printing the version', async () => {
+      const { code, stdout, stderr } = await runCli(['--version', '--nope']);
+      expect(code).toBe(1);
+      expect(stdout.trim()).toBe('');
+      expect(stderr).toContain('--nope');
+    });
+
+    it('rejects `--nope --version` too', async () => {
+      const { code, stderr } = await runCli(['--nope', '--version']);
+      expect(code).toBe(1);
+      expect(stderr).toContain('--nope');
+    });
+
+    it('rejects `--help --nope` instead of printing usage', async () => {
+      const { code, stdout } = await runCli(['--help', '--nope']);
+      expect(code).toBe(1);
+      expect(stdout.trim()).toBe('');
+    });
+
+    it('names the offending argument, not merely the first one', async () => {
+      const { stderr } = await runCli(['--version', '--bogus']);
+      expect(stderr).toContain('--bogus');
+    });
+
+    it('still accepts several recognised flags together', async () => {
+      // --version wins over --help when both are given; neither is an error.
+      const { code, stdout } = await runCli(['--version', '--help']);
+      expect(code).toBe(0);
+      expect(stdout.trim()).toBe(PKG_VERSION);
+    });
+  });
+
   describe('unknown flags', () => {
     it('exits non-zero with a message on stderr naming the flag', async () => {
       const { code, stderr } = await runCli(['--nope']);

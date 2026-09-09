@@ -102,6 +102,16 @@ describe('token refresh round trip', () => {
               entry.errorHandler(networkFailures[host]);
               return;
             }
+            if (!routes[host]) {
+              // Without this the throw below would happen inside setImmediate:
+              // neither callback nor errorHandler would run, the request promise
+              // would stay pending, and the test would die on Jest's timeout
+              // without ever naming the unmatched URL.
+              entry.errorHandler(
+                new Error(`No mock route registered for host ${host}`)
+              );
+              return;
+            }
             const { statusCode, body } = routes[host]();
             callback({
               statusCode,

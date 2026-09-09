@@ -6,7 +6,7 @@ Common issues and their fixes. For getting-started guidance, see [`docs/how-to/g
 
 | Issue | Solution |
 |-------|----------|
-| `AADSTS7000215` (invalid secret) | Use the secret **VALUE**, not the Secret ID, from Azure > Certificates & secrets. The Value is shown only once at creation — if you navigated away, create a new secret. An **expired** secret gives the same error. Since v3.11.0 the server explains this in place rather than passing Microsoft's raw error through (#69) |
+| `AADSTS7000215` (invalid secret) | Use the secret **VALUE**, not the Secret ID, from Azure > Certificates & secrets. The Value is shown only once at creation — if you navigated away, create a new secret. An **expired** secret gives the same error. Since v3.11.0 the server keeps Microsoft's original error text and appends this remediation to it, so you no longer have to look the code up (#69) |
 | `AADSTS9002331` ("configured for Microsoft Account users only … use /consumers") | Your Azure app is registered as "Personal Microsoft accounts only". Set `OUTLOOK_AUTH_AUDIENCE=consumers` in your MCP client `env` block (v3.8.0+). Single-tenant apps need their tenant GUID; multi-tenant apps can use the default (`common`). |
 | `EADDRINUSE :3333` | `npx kill-port 3333` then restart auth server |
 | Module not found | Run `npm install` |

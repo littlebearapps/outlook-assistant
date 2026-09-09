@@ -41,22 +41,27 @@ Key environment variables:
 
 Documentation: https://github.com/littlebearapps/outlook-assistant`;
 
+  const KNOWN_FLAGS = new Set(['--version', '-v', '--help', '-h']);
+
+  // Validate every argument before acting on any of them. Checking for a
+  // recognised flag first would let `--version --nope` succeed and silently
+  // swallow the typo — an unrecognised argument is a user error regardless of
+  // what else is on the command line.
+  const unknown = cliArgs.find((arg) => !KNOWN_FLAGS.has(arg));
+  if (unknown) {
+    console.error(
+      `outlook-assistant: unrecognised argument '${unknown}'\nRun 'outlook-assistant --help' for usage.`
+    );
+    process.exit(1);
+  }
+
   if (cliArgs.includes('--version') || cliArgs.includes('-v')) {
     console.log(require('./config').SERVER_VERSION);
     process.exit(0);
   }
 
-  if (cliArgs.includes('--help') || cliArgs.includes('-h')) {
-    console.log(HELP_TEXT);
-    process.exit(0);
-  }
-
-  // Unrecognised arguments are a user error, not a reason to boot a server that
-  // will then silently ignore them.
-  console.error(
-    `outlook-assistant: unrecognised argument '${cliArgs[0]}'\nRun 'outlook-assistant --help' for usage.`
-  );
-  process.exit(1);
+  console.log(HELP_TEXT);
+  process.exit(0);
 }
 
 const { Server } = require('@modelcontextprotocol/sdk/server/index.js');

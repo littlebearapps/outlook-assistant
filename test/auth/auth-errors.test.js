@@ -64,8 +64,10 @@ describe('getAuthErrorHints', () => {
     });
 
     it('maps AADSTS700016 (unknown application) to a client-id hint', () => {
+      // Deliberately not an alternation — this table feeds real auth error
+      // responses, and `/A|B/` would let a future wrong hint pass CI.
       expect(getAuthErrorHints('AADSTS700016').join('\n')).toMatch(
-        /OUTLOOK_CLIENT_ID|public client flows/i
+        /OUTLOOK_CLIENT_ID/
       );
     });
 

@@ -472,7 +472,7 @@ You're using the Secret **ID** instead of the Secret **Value**. Go to Azure Port
 
 The Value is shown only once, when the secret is created — if you've navigated away it can't be read again, so create a new secret. An **expired** secret produces this same error, so check the Expires column too.
 
-Since v3.11.0 the server detects this error and explains it in place, so you'll see this remediation alongside Microsoft's raw message rather than having to look it up.
+Since v3.11.0 the server detects this error and appends the explanation to Microsoft's original message, so you see both the raw error code and what to do about it.
 
 ### Authentication URL doesn't work
 

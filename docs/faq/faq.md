@@ -94,7 +94,7 @@ Most users should pick device code unless they have a specific reason to use the
 
 ## How do I update Outlook Assistant?
 
-Outlook Assistant is published to npm as **`@littlebearapps/outlook-assistant`**. The simplest path is to let your MCP client pick up the latest version automatically — most clients call `npx @littlebearapps/outlook-assistant` which fetches the latest published version on each spawn. To pin a version, replace `@littlebearapps/outlook-assistant` with `@littlebearapps/outlook-assistant@3.11.0` (or whichever version) in your MCP client config.
+Outlook Assistant is published to npm as **`@littlebearapps/outlook-assistant`**. The simplest path is to let your MCP client pick up the latest version automatically — most clients call `npx @littlebearapps/outlook-assistant`, which resolves to the latest published version subject to npm's cache — if you need a guaranteed registry check, add `--prefer-online`. To pin a version, replace `@littlebearapps/outlook-assistant` with `@littlebearapps/outlook-assistant@3.11.0` (or whichever version) in your MCP client config.
 
 To check which version you currently have, run `outlook-assistant --version` (v3.11.0 and later). Earlier versions have no `--version` flag and will start the MCP server instead, so if the command appears to hang you are on an older build. You can also ask your AI assistant to call the `auth` tool with `action=about`, which reports the running server's version.
 

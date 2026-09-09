@@ -2,6 +2,7 @@
  * Authentication-related tools for the Outlook Assistant server
  */
 const config = require('../config');
+const { getAuthErrorHints } = require('./auth-errors');
 const fs = require('fs');
 const path = require('path');
 const tokenManager = require('./token-manager');
@@ -264,20 +265,10 @@ async function handleDeviceCodeAuth() {
 function buildDeviceCodeErrorResponse(error) {
   const msg = (error && error.message) || String(error);
   const code = error && error.code;
-  const hints = [];
+  // Shared AADSTS hint table (#69) so this path and the token-endpoint paths in
+  // token-storage.js cannot drift apart.
+  const hints = getAuthErrorHints(msg);
 
-  if (/AADSTS9002331/i.test(msg) || /personal.*account/i.test(msg)) {
-    hints.push(
-      'This app registration appears to accept personal Microsoft accounts only. Set `OUTLOOK_AUTH_AUDIENCE=consumers` (or the correct tenant GUID) in your MCP env and retry.'
-    );
-  }
-  if (
-    /invalid_client|unauthorized_client|AADSTS7000218|AADSTS700016/i.test(msg)
-  ) {
-    hints.push(
-      "Enable 'Allow public client flows' under Azure → App registration → Authentication → Advanced settings, and add the `nativeclient` redirect URI (Mobile and desktop applications platform)."
-    );
-  }
   if (
     code === 'ENOTFOUND' ||
     code === 'ETIMEDOUT' ||

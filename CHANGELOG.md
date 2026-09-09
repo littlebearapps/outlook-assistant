@@ -7,6 +7,91 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.11.0] - 2026-09
+
+Polish release clearing the `v3.7.5 — Fixes & Polish` milestone: the three
+long-standing "good first issue" items plus a full development-dependency
+advisory sweep. No behavioural change to any of the 22 tools — the additions
+are at the CLI entry point and in how authentication failures are explained.
+
+### Added
+
+- **`--version` and `--help` CLI flags** (#68). `npx @littlebearapps/outlook-assistant --version`
+  previously started the MCP server and hung on stdin instead of printing a
+  version — `index.js` had no `process.argv` handling at all. Argv handling now
+  runs as the very first statement, before the SDK imports and before the
+  startup banner writes to stderr, so output is clean and the process exits
+  immediately. `--version`/`-v` print the version to stdout; `--help`/`-h`
+  print usage, options and the key environment variables; an unrecognised
+  argument goes to stderr and exits 1 rather than booting a server that would
+  ignore it. The version is read from `config.SERVER_VERSION`, which reads
+  `package.json` — still a single source of truth.
+
+### Fixed
+
+- **`AADSTS7000215` now explains itself** (#69).
+  Pasting the Azure client secret's **ID** instead of its **Value** is the most
+  common setup failure — it is the first row of `docs/troubleshooting.md` — but
+  nothing in the code said so. Microsoft's raw `error_description` went straight
+  to the user, correlation ID and all, with no indication of what to change. A
+  new `auth/auth-errors.js` holds one AADSTS hint table; the 7000215 hint names
+  Secret ID versus Secret Value, names `OUTLOOK_CLIENT_SECRET`, says where in
+  Azure to look, notes the Value is displayed only once, and flags expiry as
+  producing the identical symptom. Wired into both token-endpoint failure paths
+  (`exchangeCodeForTokens` and `refreshAccessToken`). The raw Azure error is
+  always preserved, so searching for the code still works, and unknown errors
+  are returned untouched rather than guessed at.
+
+- **One hint table instead of two.** `buildDeviceCodeErrorResponse` carried its
+  own duplicate copy of the AADSTS remediation logic; it now reads the shared
+  table, so the two cannot drift apart. `invalid_client` is suppressed when
+  `AADSTS7000215` is present — the same HTTP error with the opposite cause, and
+  showing the "enable public client flows" hint there sent people the wrong way.
+
+- **Browser-flow error pages keep their line breaks.** The OAuth error page
+  rendered the message inline, which collapsed multi-line remediation text into
+  one unreadable run. It now renders in a `pre-wrap` block.
+
+### Security
+
+- **All 17 development-dependency advisories cleared** (1 critical, 11 high,
+  4 moderate, 1 low). Every one was `scope=development` — eslint, babel, jest
+  and prettier toolchain transitives — so the required CI gate
+  (`npm audit --omit=dev --audit-level=high`) and the weekly watchdog were both
+  already passing; neither was blocking. A critical-severity alert on the
+  default branch is still worth clearing. `npm audit fix` resolved all of them
+  without `--force`, so `package.json` is untouched and only the lockfile moves:
+  33 transitive entries, notably `shell-quote` 1.8.3 → 1.9.0 (the critical),
+  `js-yaml` 3.14.2 → 3.15.2 and 4.1.1 → 4.3.2, `ws` 8.20.0 → 8.21.3,
+  `brace-expansion` 5.0.5 → 5.0.9, `form-data` 4.0.5 → 4.0.6 and the
+  `@babel/*` set. `npm audit` now reports 0 vulnerabilities at every severity,
+  not just in the production scope.
+
+### Notes
+
+- **Token-refresh round trip is now covered end to end** (#72). The issue was
+  stale — `test/auth/token-refresh.test.js` existed but only asserted whether
+  `client_secret` is sent per auth method, and `token-storage.test.js` already
+  covered expiry detection and `invalid_grant`. The untested part was the join:
+  expired tokens on disk → load → detect → refresh over the wire → persist →
+  use the **new** access token on the next Graph call. A single HTTPS mock now
+  serves both the Microsoft token endpoint and the Graph endpoint, routed by
+  URL, so the outgoing `Authorization: Bearer …` header is asserted rather than
+  inferred. Also covers rotated-refresh-token persistence, `0600` file mode,
+  concurrent callers coalescing into one request, and the network-failure path.
+
+- **A misleading comment corrected, not the behaviour.** `getValidAccessToken`
+  read `this.tokens = null; await this._saveTokensToFile(); // Persist invalidation`,
+  but `_saveTokensToFile` returns early when `tokens` is null, so nothing was
+  ever persisted. The behaviour is correct — a transient network blip must not
+  erase a still-valid refresh token from disk — but the comment claimed the
+  opposite. Now documented as the deliberate no-op it is, and pinned by a test.
+
+- **Test suite: 37 suites / 937 tests**, up from 33 / 881.
+
+- **#93** (audit all 22 tool descriptions) is deliberately **not** in this
+  release. It touches every module and is scoped as its own piece of work.
+
 ## [3.10.0] - 2026-09
 
 Search-correctness release. Four bugs in `email/search.js`, all found by

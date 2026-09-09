@@ -1527,6 +1527,17 @@ function formatSearchResults(response, folder, verbosity, searchAllFolders) {
     } else {
       searchNote = `\n\n_Search strategy: ${strategy}_`;
     }
+
+    // A local scan that filled its budget did not see the whole mailbox, so
+    // these results are a bounded sample rather than the complete set. #231
+    // says so only when the search returns nothing; a truncated scan that
+    // DID match is exactly as incomplete and reads as authoritative. On a
+    // large archive that silently caps historical searches.
+    if (response._searchInfo.truncated) {
+      const scanned = response._searchInfo.candidatesScanned;
+      const limit = response._searchInfo.scanLimit;
+      searchNote += `\n\n> **Partial coverage**: matched locally within the ${scanned} most recent messages, hitting the ${limit} scan limit — older matches were not seen. Narrow with \`receivedAfter\`/\`receivedBefore\` to search further back.`;
+    }
   }
 
   // Format results using shared formatter

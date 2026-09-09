@@ -68,12 +68,13 @@ const emailTools = [
         // Search/list params
         query: {
           type: 'string',
-          description: 'Search query text. Omit for list mode.',
+          description:
+            'Search query text. Omit for list mode. On personal Outlook.com accounts Graph `$search` is unavailable, so this falls back to a subject substring match (all words must appear in the subject) — precise, but it does NOT search message bodies. Use `searchExpression` when you need body content.',
         },
         searchExpression: {
           type: 'string',
           description:
-            'Raw Microsoft Graph `$search` expression for advanced server-side search, e.g. `subject:"invoice"`, `from:github.com`, or `foo OR bar`. Quote your own phrases; a single bare token is auto-quoted. Pair with `searchAllFolders: true` for cross-folder search. Bypasses other search params. NOTE: personal Outlook.com accounts reject field-scoped `$search` outright; since v3.10.0 recognised `from:`/`to:`/`subject:` expressions are translated into the closest equivalent OData filters and retried automatically (a `subject:` term becomes a substring match, so it is close but not identical) (reported as strategy `raw-kql-translated`). Expressions that cannot be translated exactly — free text, `AND`/`OR`, unknown prefixes — are not retried, so use `query` for those there.',
+            'Raw Microsoft Graph `$search` expression for advanced server-side search, e.g. `subject:"invoice"`, `from:github.com`, or `foo OR bar`. Quote your own phrases; a single bare token is auto-quoted. Pair with `searchAllFolders: true` for cross-folder search. Bypasses other search params. NOTE: personal Outlook.com accounts reject field-scoped `$search` outright; since v3.10.0 recognised `from:`/`to:`/`subject:` expressions are translated into the closest equivalent OData filters and retried automatically (a `subject:` term becomes a substring match, so it is close but not identical) (reported as strategy `raw-kql-translated`). Expressions that cannot be translated exactly — free text, `AND`/`OR`, unknown prefixes — are not retried, so use `query` for those there. RELEVANCE, NOT RECENCY: an untranslated expression is answered by Graph `$search` over the whole message including the body, ranked by relevance and not sorted by date, so top hits can look unrelated to a caller expecting a subject match. `query` is the more predictable choice for a term you expect in a subject line; `searchExpression` is the one that reaches body text.',
         },
         kqlQuery: {
           type: 'string',
@@ -90,7 +91,8 @@ const emailTools = [
         },
         to: {
           type: 'string',
-          description: 'Filter by recipient email/name',
+          description:
+            'Filter by recipient email/name. Personal Outlook.com accounts reject the server-side recipient filter, in which case this is matched locally over the 500 most recent messages only (raise with `OUTLOOK_SEARCH_SCAN_LIMIT`). On a large archive, pair `to` with `receivedAfter`/`receivedBefore` to reach older mail; the response says so when the scan was truncated.',
         },
         subject: {
           type: 'string',

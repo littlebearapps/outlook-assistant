@@ -189,9 +189,10 @@ describe('OAuth Server Routes', () => {
 
       expect(response.status).toBe(500);
       expect(response.text).toContain('Token Exchange Failed');
-      expect(response.text).toContain(
-        `Error:</strong> ${exchangeError.message}`
-      );
+      // The message is rendered in a pre-wrap block rather than inline so that
+      // multi-line remediation hints stay readable (#69).
+      expect(response.text).toContain('<strong>Error:</strong>');
+      expect(response.text).toContain(exchangeError.message);
     });
   });
 

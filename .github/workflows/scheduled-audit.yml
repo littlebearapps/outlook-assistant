@@ -21,6 +21,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          # This job holds an issues:write token and runs `npm ci`, which
+          # executes dependency lifecycle scripts. Don't leave the token in
+          # .git/config where those scripts could read it.
+          persist-credentials: false
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: '20'
@@ -50,12 +55,16 @@ jobs:
         with:
           script: |
             const title = 'Security audit gate failing on main (production deps)';
-            const { data: existing } = await github.rest.issues.listForRepo({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open',
-              labels: 'security',
-            });
+            const existing = await github.paginate(
+              github.rest.issues.listForRepo,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                labels: 'security',
+                per_page: 100,
+              }
+            );
             const body = [
               '`npm audit --omit=dev --audit-level=high` is failing on `main`.',
               'This blocks every pull request, because the same command is a required',
@@ -70,7 +79,10 @@ jobs:
               '',
               `Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
             ].join('\n');
-            const match = existing.find((i) => i.title === title);
+            // listForRepo returns pull requests too — skip them.
+            const match = existing.find(
+              (i) => !i.pull_request && i.title === title
+            );
             if (match) {
               await github.rest.issues.createComment({
                 owner: context.repo.owner,

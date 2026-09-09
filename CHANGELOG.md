@@ -24,12 +24,17 @@ personal Outlook.com account.
   Outlook.com accounts reject field-scoped `$search` outright —
   `400 BadRequest: Syntax error: character ':' is not valid` — and the
   deliberately terminal `raw-kql` branch (#169 V37-F-1) surfaced that as an
-  empty result. Recognised expressions are now translated into the equivalent
-  OData filters and retried down the normal ladder, reported as strategy
-  `raw-kql-translated`, with `searchMetadata.kqlTranslatedTo` recording the
-  rewrite. Unscoped `$search` was never affected and is unchanged. Expressions
-  that cannot be reproduced exactly — free text, `AND`/`OR`, parentheses,
-  unknown prefixes, a repeated field — are still not retried, preserving the
+  empty result. Expressions built purely from `from:`, `to:` and `subject:`
+  terms are now translated into the closest equivalent OData filters and
+  retried down the normal ladder, reported as strategy `raw-kql-translated`,
+  with `searchMetadata.kqlTranslatedTo` recording the rewrite — a translated
+  retry answers a rewritten query, so the rewrite is inspectable rather than
+  something the caller takes on trust. Close, not
+  identical — a KQL `subject:` term becomes a substring match — and the tool
+  description says so rather than calling the result equivalent. Unscoped
+  `$search` was never affected and is unchanged. Expressions that cannot be
+  reproduced exactly — free text, `AND`/`OR`, parentheses, wildcards, unknown
+  prefixes, a repeated field — are still not retried, preserving the
   no-silent-fallthrough guarantee #169 shipped.
 
 - **Searches combining two filters no longer return a superset** (#229).
@@ -43,6 +48,20 @@ personal Outlook.com account.
   returning, and `searchMetadata.droppedFilters` reports anything that could
   not be honoured, with `filterApplied` false whenever it is non-empty. This
   is the partial-fallback analogue of #138, which fixed the total case.
+
+  The local narrowing is honest about its own limits. It reads
+  `toRecipients` and `bodyPreview`, which the default `list` field preset
+  omits, so a multi-term search now selects the `search` preset — otherwise
+  `outputVerbosity`, a presentation parameter, would have decided which
+  messages were found. It runs only over the page the winning filter
+  returned, so a narrowing pass that matches nothing reports how many rows it
+  examined (`searchMetadata.narrowedCandidates`) rather than implying the
+  mailbox was searched. `@odata.count` and `@odata.nextLink` are dropped when
+  a result set is narrowed, so `totalAvailable` can no longer invite you to
+  paginate for matches that do not exist. And the `from` matcher mirrors
+  `buildFromFilter` branch for branch — bare domains use `contains`, full
+  addresses use `eq` — instead of a substring test that both missed and
+  over-matched.
 
 - **Contextual no-results guidance** (#231). Every empty search printed the
   same four suggestions, one of which — "use `from` filter instead of `to`
@@ -89,7 +108,7 @@ personal Outlook.com account.
 
 ### Notes
 
-- Test suite grew from 826 to 867 across 33 suites. Two existing tests were
+- Test suite grew from 826 to 881 across 33 suites. Two existing tests were
   retargeted rather than deleted: the #169 no-fallthrough test used a
   field-scoped expression to assert termination, which is now deliberately
   translated, so it was pointed at a free-form expression — the case the
@@ -102,6 +121,18 @@ personal Outlook.com account.
 - `CHANGELOG.md` was missing its `## [3.9.0]` heading; the 3.9.0 notes were
   orphaned inside the 3.9.1 section, so anyone tracing "which release fixed
   #169" read them as part of 3.9.1. Heading restored.
+
+- Documentation was swept for claims this release falsified. The KQL Search
+  Reference still told readers field-scoped `$search` was "best-effort (no
+  fallback)" on personal accounts, and now carries a table of exactly which
+  expression shapes translate and which do not. The README's known-limitation
+  and account-compatibility entries, `llms.txt`, the AI-agent guide's search
+  tip (which still said `kqlQuery`), the find-emails guide and the
+  troubleshooting table were all updated to match shipped behaviour. Separately,
+  every relative link in `docs/faq/faq.md` was one directory level short — the
+  file moved to `docs/faq/` in v3.8.1 and the links were never repointed, so
+  each one 404'd on GitHub. All eleven fixed, along with a dead
+  `docs/faq/index.md` reference in the docs index.
 
 ## [3.9.1] - 2026-08
 

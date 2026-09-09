@@ -159,7 +159,7 @@ params:
 
 Cross-folder search is a strict **superset** of an inbox-only search — it never returns fewer results than searching the inbox alone (v3.9.0). Multi-word queries also match when the words aren't adjacent in the subject, and if nothing turns up the result explicitly reports that it searched **all folders**.
 
-> **Personal accounts**: `searchAllFolders` uses the same `$search` API, so pair it with a plain-text `query` (which falls back to filters) rather than a field-scoped `searchExpression` for the most reliable coverage.
+> **Personal accounts**: `searchAllFolders` uses the same `$search` API, so pair it with a plain-text `query` (which falls back to filters) or the structured filters for the most reliable coverage. Field-scoped `searchExpression` works too as of v3.10.0 — `from:`/`to:`/`subject:` expressions are translated to the equivalent filters and retried — but expressions using `AND`/`OR`, grouping or other field prefixes are not translated there.
 
 ## Combine Filters
 
@@ -175,6 +175,8 @@ params:
   hasAttachments: true
   receivedAfter: "2026-02-24"
 ```
+
+Every filter you supply is honoured. If Microsoft Graph rejects a combined filter, Outlook Assistant applies the remaining terms locally rather than returning the broader single-filter result set, and reports anything it could not honour in `_meta.searchMetadata.droppedFilters` (v3.10.0). That field should always be empty — if it isn't, the results are wider than what you asked for.
 
 ## Control the Number of Results
 
@@ -229,7 +231,7 @@ Delta sync is useful for inbox monitoring workflows, audit trails, and notificat
 | `receivedBefore` | Received before this date | `"2026-02-01"` |
 | `searchAllFolders` | Search every folder | `true` |
 | `count` | Number of results to return | `10` |
-| `searchExpression` | Raw Graph `$search` expression for advanced queries (formerly `kqlQuery`) | `"from:ceo AND hasAttachment:true"` |
+| `searchExpression` | Raw Graph `$search` expression for advanced queries (formerly `kqlQuery`) — see the [KQL Search Reference](../advanced/kql-search-reference.md) for personal-account support | `"subject:\"quarterly report\""` |
 | `outputVerbosity` | Detail level: minimal, standard, full | `"minimal"` |
 
 ## Tips

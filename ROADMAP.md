@@ -56,9 +56,9 @@ shipped"), so they carry forward to the next feature slot.
 - **v3.10.0** (Sep 2026) — **search correctness**, four bugs found by
   investigating a stale "`to:` search is broken" claim. Field-scoped
   `searchExpression` (`from:`, `to:`, `subject:`) is rejected outright by
-  Graph on personal accounts; recognised forms are now translated into the
-  equivalent OData filters and retried, reported as `raw-kql-translated`
-  (#217). Searches combining two filters no longer return the single-term
+  Graph on personal accounts; expressions built purely from `from:`, `to:` and
+  `subject:` terms are now translated into the closest equivalent OData filters
+  and retried, reported as `raw-kql-translated` (#217). Searches combining two filters no longer return the single-term
   superset when Graph rejects the combined filter — remaining terms are applied
   locally and `searchMetadata.droppedFilters` reports anything unhonoured
   (#229). Single quotes in `from`/`to` are OData-escaped, so `O'Brien` no

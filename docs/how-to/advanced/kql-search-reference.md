@@ -38,9 +38,11 @@ searchExpression: "budget approval"
 | Body | `body:action required` |
 | CC | `cc:manager@company.com` |
 
-> **Personal accounts (issue [#217](https://github.com/littlebearapps/outlook-assistant/issues/217))**: Field-scoped `$search` expressions like `subject:"invoice"` or `from:github.com` are **best-effort** on personal Outlook.com accounts — they often return zero results even when matching emails exist, because the raw `searchExpression` branch does not fall back to other strategies. For reliable personal-account search, prefer the `query` parameter (progressive OData plus client-side fallback) or the structured filters (`from`, `subject`, `to`, `receivedAfter`).
+> **Personal accounts (issue [#217](https://github.com/littlebearapps/outlook-assistant/issues/217))**: Personal Outlook.com accounts reject field-scoped `$search` outright — Graph answers `subject:"invoice"` or `from:github.com` with a syntax error or an empty set even when the mail is plainly there. Since **v3.10.0**, expressions built purely from `from:`, `to:` and `subject:` terms are translated into the closest equivalent OData filters and retried down the normal fallback ladder, reported as strategy `raw-kql-translated` with the rewrite recorded in `_meta.searchMetadata.kqlTranslatedTo`. The translation is close rather than identical — a KQL `subject:` term becomes a substring match. `body:`, `cc:`, `received:`, `hasAttachment:` and `isRead:` are **not** translated. See [Which expressions translate](#which-expressions-translate-on-personal-accounts) below.
 
 ## Combine Conditions
+
+> These operators are a **work/school account** feature. On a personal Outlook.com account Graph rejects them and Outlook Assistant will not guess at a rewrite — use the structured filter parameters instead. See [Which expressions translate](#which-expressions-translate-on-personal-accounts).
 
 ### AND — both must match
 
@@ -102,18 +104,38 @@ searchExpression: "isRead:false"
 |----------|-----------------|---------------------|-------------|
 | Filter params (`from`, `subject`, etc.) | Full support | Full support | **Recommended default** — reliable on all accounts |
 | `query` param | Limited (auto-fallback) | Full support | Free-text search; falls back to filters on personal accounts |
-| `searchExpression` param | Best-effort (no fallback) | Full support | Complex queries: AND/OR/NOT, date ranges, multi-field (work accounts only) |
+| `searchExpression` param | Field-scoped `from:`/`to:`/`subject:` translated to filters and retried (v3.10.0); everything else terminates with an explicit no-results | Full support | Complex queries: AND/OR/NOT, date ranges, multi-field (work accounts only) |
 
-> **Important**: On personal Outlook.com accounts, `query` and `searchExpression` use Microsoft's `$search` API, which is not fully supported and may silently return no results. Unlike `query` — which falls back to OData filters when `$search` comes up empty — the raw `searchExpression` branch does **not** fall back (see issue [#217](https://github.com/littlebearapps/outlook-assistant/issues/217)). Always prefer structured filter parameters (`from`, `subject`, `to`, `receivedAfter`, `hasAttachments`, `unreadOnly`) — these use OData `$filter` and work reliably on all account types.
+> **Important**: On personal Outlook.com accounts, `query` and `searchExpression` use Microsoft's `$search` API, which is not fully supported. `query` falls back through OData filters, boolean filters, and a client-side scan. `searchExpression` falls back only for the expressions it can reproduce exactly (`from:`, `to:`, `subject:` — see below); anything else deliberately terminates with an explicit "no results" rather than quietly running a broader search you didn't ask for. Structured filter parameters (`from`, `subject`, `to`, `receivedAfter`, `hasAttachments`, `unreadOnly`) use OData `$filter` and work reliably on all account types — they remain the most direct route.
 >
-> If you must use `searchExpression`, test with a simple expression first to confirm it works with your account type.
+> Whatever runs, `_meta.searchMetadata` tells you which strategy answered and `droppedFilters` lists any filter that could not be honoured. `droppedFilters` should always be empty; anything else means the result set is broader than your query (#229).
+
+## Which expressions translate on personal accounts
+
+The translator is deliberately strict — it declines anything whose meaning it cannot reproduce exactly, because guessing would return mail you didn't ask for.
+
+| Expression | Personal account behaviour |
+|------------|---------------------------|
+| `from:sarah@company.com` | Translated → `from` filter |
+| `to:team@company.com` | Translated → `to` filter |
+| `subject:"quarterly report"` | Translated → `subject` substring filter |
+| `from:sarah subject:review` | Translated → both filters combined |
+| `budget approval` (unscoped) | Sent to `$search` unchanged — never affected by #217 |
+| `from:sarah AND subject:review` | **Not** translated — boolean operators |
+| `(from:sarah OR from:james)` | **Not** translated — grouping |
+| `from:sar*` | **Not** translated — wildcards |
+| `body:urgent`, `cc:manager@x.com` | **Not** translated — field outside `from`/`to`/`subject` |
+| `received>=2026-01-01` | **Not** translated — use the `receivedAfter` parameter |
+| `from:a from:b` | **Not** translated — repeated field is ambiguous |
+
+For anything in the "not translated" rows on a personal account, use the structured filter parameters instead — they express the same intent through `$filter` and work everywhere.
 
 ## Tips
 
 - Enclose multi-word phrases in escaped quotes: `subject:\"Project Alpha\"`
 - Graph `$search` matching is case-insensitive
 - Date format is `YYYY-MM-DD`
-- If a `searchExpression` returns no results, try the simpler `query` parameter first — it's more forgiving
+- If a `searchExpression` returns no results, check `_meta.searchMetadata.finalStrategy` — then try the simpler `query` parameter or the structured filters, which are more forgiving
 
 ## Related
 

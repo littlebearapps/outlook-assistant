@@ -134,6 +134,72 @@ async function handleSearchEmails(args) {
   }
 }
 
+/** Field prefixes a `searchExpression` can be translated into OData filters. */
+const TRANSLATABLE_KQL_FIELDS = new Set(['from', 'to', 'subject']);
+
+/**
+ * Parse a `searchExpression` that consists purely of recognised field-scoped
+ * terms, e.g. `from:info@example.com` or `subject:"Quarterly Report"`. (#217)
+ *
+ * Unscoped `$search` works fine on personal Outlook.com accounts; only the
+ * field-scoped forms come back empty. Those same messages are reachable
+ * through the OData filters the ladder already builds, so a recognised
+ * expression can be translated and retried rather than reported as absent.
+ *
+ * This parser is deliberately strict, and returns null for anything it does
+ * not fully understand — free text, `AND`/`OR`/`NOT`, parentheses, unknown
+ * prefixes, a repeated field, or free text mixed in with a scoped term. That
+ * keeps the terminal no-fallthrough behaviour for every expression whose
+ * meaning we cannot reproduce exactly, which is what #169 V37-F-1 shipped to
+ * guarantee. Translating a half-understood expression would reintroduce it.
+ *
+ * @param {string} expression - The trimmed raw search expression
+ * @returns {object|null} - Search terms to retry with, or null if not translatable
+ */
+function parseFieldScopedExpression(expression) {
+  const trimmed = (expression || '').trim();
+  if (!trimmed) return null;
+
+  const terms = {};
+  let i = 0;
+
+  while (i < trimmed.length) {
+    while (i < trimmed.length && /\s/.test(trimmed[i])) i++;
+    if (i >= trimmed.length) break;
+
+    // Every token must be `field:value`. A token without a colon is free
+    // text; a colon further along belongs to a later token, and the slice
+    // then carries whitespace or an operator, which fails the field check.
+    const colon = trimmed.indexOf(':', i);
+    if (colon === -1) return null;
+
+    const field = trimmed.slice(i, colon).toLowerCase();
+    if (!TRANSLATABLE_KQL_FIELDS.has(field)) return null;
+    if (terms[field]) return null; // repeated field — ambiguous, don't guess
+    i = colon + 1;
+
+    let value;
+    if (trimmed[i] === '"') {
+      const end = trimmed.indexOf('"', i + 1);
+      if (end === -1) return null; // unbalanced quote
+      value = trimmed.slice(i + 1, end);
+      i = end + 1;
+      // A quoted value must be followed by whitespace or end-of-string.
+      if (i < trimmed.length && !/\s/.test(trimmed[i])) return null;
+    } else {
+      let end = i;
+      while (end < trimmed.length && !/\s/.test(trimmed[end])) end++;
+      value = trimmed.slice(i, end);
+      i = end;
+    }
+
+    if (!value) return null;
+    terms[field] = value;
+  }
+
+  return Object.keys(terms).length > 0 ? terms : null;
+}
+
 /**
  * Execute a search with progressively simpler fallback strategies
  * @param {string} endpoint - API endpoint
@@ -218,7 +284,54 @@ async function progressiveSearch(
         // with no guidance.
         noResults: matched === 0,
       };
-      // Always return — never silently fall through to a path that
+      // A field-scoped expression that Graph answered with 0 is the #217
+      // case: unscoped $search works on personal accounts, but `from:`,
+      // `to:` and `subject:` forms come back empty even though the OData
+      // filters reach the very same messages. Translate and retry down the
+      // normal ladder, which also picks up the client-side `to` fallback.
+      //
+      // Anything the parser does not fully understand returns null and keeps
+      // the terminal behaviour below — translating a half-understood
+      // expression would reintroduce #169 V37-F-1.
+      const translated =
+        matched === 0 ? parseFieldScopedExpression(trimmedKql) : null;
+      if (translated) {
+        console.error(
+          `Raw KQL returned 0; retrying as OData filters: ${JSON.stringify(translated)}`
+        );
+        searchAttempts.push('raw-kql-translated');
+        const retry = await progressiveSearch(
+          endpoint,
+          accessToken,
+          translated,
+          filterTerms,
+          maxCount,
+          selectFields
+        );
+        const retryCount = retry.value?.length || 0;
+        const strategies = [
+          ...searchAttempts.filter((a) => a !== 'raw-kql-translated'),
+          ...(retry._searchInfo?.strategies || []),
+          // Last, so finalStrategy names the translation rather than whichever
+          // rung of the ladder happened to answer it.
+          'raw-kql-translated',
+        ];
+        retry._searchInfo = {
+          ...retry._searchInfo,
+          attemptsCount: strategies.length,
+          strategies,
+          // Report what the caller actually asked for, not the rewrite.
+          originalTerms: searchTerms,
+          filterTerms: filterTerms,
+          kqlApplied: kqlForSearch,
+          kqlTranslatedTo: translated,
+          appliedTerms: ['kqlQuery'],
+          noResults: retryCount === 0,
+        };
+        return retry;
+      }
+
+      // Otherwise always return — never silently fall through to a path that
       // would ignore kqlQuery and return unrelated emails.
       return response;
     } catch (error) {

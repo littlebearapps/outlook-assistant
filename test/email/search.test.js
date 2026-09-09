@@ -414,10 +414,15 @@ describe('handleSearchEmails — kqlQuery silent-drop prevention (#169)', () => 
     // The bug: previous behaviour would call Graph $search, get [],
     // then *fall through* to combined-search, which would run
     // *without* the kqlQuery filter and return unrelated recent emails.
+    //
+    // Uses a free-form expression deliberately. Field-scoped expressions are
+    // now translated into OData filters and retried (#217), which preserves
+    // the caller's intent; this invariant is about expressions whose meaning
+    // cannot be reproduced, where terminating is the only honest option.
     callGraphAPIPaginated.mockResolvedValue({ value: [] });
 
     const result = await handleSearchEmails({
-      kqlQuery: 'subject:"personal access token"',
+      kqlQuery: 'personal access token',
       searchAllFolders: true,
     });
 
@@ -764,7 +769,12 @@ describe('handleSearchEmails — searchExpression alias (#169)', () => {
 
     const [, , , params] = callGraphAPIPaginated.mock.calls[0];
     expect(params.$search).toBe('subject:PR');
-    expect(result._meta.searchMetadata.finalStrategy).toBe('raw-kql');
+    // The alias must route into the raw-KQL branch. `subject:PR` is
+    // field-scoped, so a zero-result run now continues into the #217
+    // translated retry — assert the branch, not the terminal label.
+    expect(result._meta.searchMetadata.strategiesAttempted).toContain(
+      'raw-kql'
+    );
   });
 });
 
@@ -1176,5 +1186,152 @@ describe('filterSubjectClientSide', () => {
     expect(messages[2].subject).toBeUndefined();
     expect(() => filterSubjectClientSide(messages, 'zzz')).not.toThrow();
     expect(filterSubjectClientSide(messages, 'zzz')).toEqual([]);
+  });
+});
+
+// ──────────────────────────────────────────────────
+// handleSearchEmails — field-scoped searchExpression translation (#217)
+// ──────────────────────────────────────────────────
+describe('handleSearchEmails — field-scoped searchExpression (#217)', () => {
+  const sbdh = [
+    mockEmail({
+      id: 'p1',
+      subject: 'Small Business Debt Helpline update',
+      from: { emailAddress: { name: 'SBDH', address: 'info@sbdh.org.au' } },
+    }),
+  ];
+
+  test('should translate a from: expression and retry as an OData filter', async () => {
+    callGraphAPIPaginated
+      // raw-kql $search → 0 on a personal account
+      .mockResolvedValueOnce({ value: [] })
+      // translated combined-search → the messages that were there all along
+      .mockResolvedValueOnce({ value: sbdh });
+
+    const result = await handleSearchEmails({
+      searchExpression: 'from:info@sbdh.org.au',
+    });
+
+    expect(result._meta.returned).toBe(1);
+    expect(result._meta.searchMetadata.finalStrategy).toBe(
+      'raw-kql-translated'
+    );
+    expect(result._meta.searchMetadata.strategiesAttempted).toContain(
+      'raw-kql'
+    );
+
+    // The retry must carry the caller's intent as a real filter.
+    const [, , , retryParams] = callGraphAPIPaginated.mock.calls[1];
+    expect(retryParams.$filter).toContain('info@sbdh.org.au');
+  });
+
+  test('should translate a quoted subject: expression', async () => {
+    callGraphAPIPaginated
+      .mockResolvedValueOnce({ value: [] })
+      .mockResolvedValueOnce({ value: sbdh });
+
+    const result = await handleSearchEmails({
+      searchExpression: 'subject:"Small Business Debt Helpline"',
+    });
+
+    expect(result._meta.returned).toBe(1);
+    expect(result._meta.searchMetadata.finalStrategy).toBe(
+      'raw-kql-translated'
+    );
+    const [, , , retryParams] = callGraphAPIPaginated.mock.calls[1];
+    expect(retryParams.$filter).toBe(
+      "contains(subject, 'Small Business Debt Helpline')"
+    );
+  });
+
+  test('should translate a to: expression, reaching the client-side fallback', async () => {
+    const addressed = mockEmail({
+      id: 't1',
+      toRecipients: [
+        { emailAddress: { name: 'Nathan', address: 'nathan@live.com' } },
+      ],
+    });
+
+    callGraphAPIPaginated
+      // raw-kql → 0
+      .mockResolvedValueOnce({ value: [] })
+      // translated combined-search → 0 (personal account rejects the lambda)
+      .mockResolvedValueOnce({ value: [] })
+      // translated single-term-to → 0
+      .mockResolvedValueOnce({ value: [] })
+      // client-side-to candidate scan
+      .mockResolvedValueOnce({ value: [addressed] });
+
+    const result = await handleSearchEmails({
+      searchExpression: 'to:nathan@live.com',
+    });
+
+    expect(result._meta.returned).toBe(1);
+    expect(result._meta.searchMetadata.strategiesAttempted).toContain(
+      'client-side-to'
+    );
+    expect(result._meta.searchMetadata.finalStrategy).toBe(
+      'raw-kql-translated'
+    );
+  });
+
+  test('should translate a multi-field expression into both filters', async () => {
+    callGraphAPIPaginated
+      .mockResolvedValueOnce({ value: [] })
+      .mockResolvedValueOnce({ value: sbdh });
+
+    const result = await handleSearchEmails({
+      searchExpression: 'from:info@sbdh.org.au subject:Small',
+    });
+
+    expect(result._meta.returned).toBe(1);
+    const [, , , retryParams] = callGraphAPIPaginated.mock.calls[1];
+    expect(retryParams.$filter).toContain('info@sbdh.org.au');
+    expect(retryParams.$filter).toContain("contains(subject, 'Small')");
+  });
+
+  test('should still report searchExpression as the caller-facing filter', async () => {
+    callGraphAPIPaginated.mockResolvedValue({ value: [] });
+
+    const result = await handleSearchEmails({
+      searchExpression: 'from:nobody@nowhere.invalid',
+    });
+
+    expect(result._meta.returned).toBe(0);
+    expect(result.content[0].text).toContain('filters: searchExpression');
+  });
+
+  // ── The #169 V37-F-1 guarantee, for everything not field-scoped ──
+
+  test.each([
+    ['free text', 'personal access token'],
+    ['a boolean expression', 'invoice OR receipt'],
+    ['an unknown field prefix', 'body:test'],
+    ['a scoped term mixed with free text', 'from:x@y.com hello'],
+    ['a repeated field', 'from:a@b.com from:c@d.com'],
+  ])(
+    'should NOT translate %s — terminates after the single raw-kql call',
+    async (_label, expression) => {
+      callGraphAPIPaginated.mockResolvedValue({ value: [] });
+
+      const result = await handleSearchEmails({
+        searchExpression: expression,
+      });
+
+      expect(callGraphAPIPaginated).toHaveBeenCalledTimes(1);
+      expect(result._meta.searchMetadata.finalStrategy).toBe('raw-kql');
+      expect(result._meta.returned).toBe(0);
+    }
+  );
+
+  test('should not translate when the raw expression already found matches', async () => {
+    callGraphAPIPaginated.mockResolvedValue({ value: sbdh });
+
+    const result = await handleSearchEmails({
+      searchExpression: 'from:info@sbdh.org.au',
+    });
+
+    expect(callGraphAPIPaginated).toHaveBeenCalledTimes(1);
+    expect(result._meta.searchMetadata.finalStrategy).toBe('raw-kql');
   });
 });

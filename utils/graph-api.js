@@ -6,6 +6,38 @@ const config = require('../config');
 const mockData = require('./mock-data');
 
 /**
+ * Guard for caller-supplied full URLs (nextLink/deltaLink continuations).
+ * The bearer token is attached to every request, so only the configured
+ * Graph host over HTTPS on the default port is allowed (GHSA-mqfm-wfjq-jxq2).
+ * @param {string} url - Full URL about to be requested
+ * @throws {Error} If the URL is malformed or not the Graph host
+ */
+function assertGraphUrl(url) {
+  const allowed = new URL(config.GRAPH_API_ENDPOINT);
+  let target;
+  try {
+    target = new URL(url);
+  } catch {
+    target = null;
+  }
+
+  const ok =
+    target &&
+    target.protocol === 'https:' &&
+    target.hostname === allowed.hostname &&
+    target.port === '' &&
+    target.username === '' &&
+    target.password === '';
+
+  if (!ok) {
+    throw new Error(
+      'Refusing to call non-Graph URL: continuation links must be https://' +
+        `${allowed.hostname}/ (check the deltaToken or nextLink value)`
+    );
+  }
+}
+
+/**
  * Makes a request to the Microsoft Graph API
  * In test mode (USE_TEST_MODE=true), routes to mock data instead of the real API.
  * @param {string} accessToken - The access token for authentication
@@ -36,6 +68,7 @@ async function callGraphAPI(
     let finalUrl;
     if (path.startsWith('http://') || path.startsWith('https://')) {
       // Path is already a full URL (from pagination nextLink)
+      assertGraphUrl(path);
       finalUrl = path;
     } else {
       // Build URL from path and queryParams

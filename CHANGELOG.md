@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.11.2] - 2026-09-30
+
+Security release. Upgrading is recommended for everyone on 3.11.1 or earlier.
+
+### Security
+
+- **Attachment downloads can no longer write outside `outputDir`**
+  ([GHSA-755c-c45g-69rv](https://github.com/littlebearapps/outlook-assistant/security/advisories/GHSA-755c-c45g-69rv)).
+  The saved filename came straight from the email sender, so a name such as
+  `../../.bashrc` escaped the download folder. Names are now reduced to a safe
+  basename, and an existing file or planted symlink is never overwritten or
+  followed; a collision gets a numbered suffix (`invoice-1.pdf`).
+- **The access token is only ever sent to Microsoft Graph**
+  ([GHSA-mqfm-wfjq-jxq2](https://github.com/littlebearapps/outlook-assistant/security/advisories/GHSA-mqfm-wfjq-jxq2)).
+  A caller-supplied `deltaToken` (or any continuation link) pointing at another
+  host received the `Authorization` header. Full URLs must now be `https` on
+  `graph.microsoft.com`; anything else is refused before a request is built.
+- **Dependencies:** `fast-uri` ≥ 3.1.8 and `ip-address` ≥ 10.7.2 (runtime,
+  moderate advisories); `npm audit` reports 0 vulnerabilities (#252).
+
+### Fixed
+
+- **HTML-to-text conversion decodes entities once and runs in linear time.**
+  `&amp;lt;` now reads `&lt;` rather than `<`, nested fragments such as
+  `<scr<script>ipt>` leave no markup behind, and the conversation Markdown
+  export uses the same helper (#252; CodeQL alerts #8–#10).
+
+### Changed
+
+- CodeQL now also scans the GitHub Actions workflows (#252).
+
 ## [3.11.1] - 2026-09
 
 Correctness release for two critical defects found during heavy real-world use

@@ -3,8 +3,61 @@ const {
   escapeCSV,
   stripZeroWidth,
   formatEmailContent,
+  stripHtml,
   VERBOSITY,
 } = require('../../utils/response-formatter');
+
+describe('stripHtml (CodeQL js/double-escaping, js/incomplete-multi-character-sanitization)', () => {
+  test('decodes each entity exactly once', () => {
+    expect(stripHtml('<p>&amp;lt;b&amp;gt; &amp;amp;</p>')).toBe(
+      '&lt;b&gt; &amp;'
+    );
+  });
+
+  test('decodes the common entities', () => {
+    expect(stripHtml('a&nbsp;&lt;b&gt;&quot;c&quot;&#39;d&#39; &amp; e')).toBe(
+      'a <b>"c"\'d\' & e'
+    );
+  });
+
+  test.each([
+    '<scr<script>ipt>alert(1)</script>',
+    '<<script>script>alert(1)<</script>/script>',
+    '<img src=x onerror=alert(1)//',
+    '<!-- <script> -->x',
+  ])('leaves no markup behind for %j', (html) => {
+    const text = stripHtml(html);
+    expect(text).not.toMatch(/<\/?[a-z!]/i);
+  });
+
+  test('deeply nested angle brackets are handled in linear time', () => {
+    const n = 20000;
+    const html = `${'<'.repeat(n)}x${'>'.repeat(n)}`;
+    const started = Date.now();
+    const text = stripHtml(html);
+    expect(Date.now() - started).toBeLessThan(500);
+    expect(text).not.toContain('<');
+  });
+
+  test('many unterminated tags are handled in linear time', () => {
+    const html = '<a'.repeat(50000);
+    const started = Date.now();
+    const text = stripHtml(html);
+    expect(Date.now() - started).toBeLessThan(500);
+    expect(text).toBe('a'.repeat(50000));
+  });
+
+  test('keeps line breaks from <br> and </p>', () => {
+    expect(stripHtml('one<br>two<br/>three</p>four')).toBe(
+      'one\ntwo\nthree\n\nfour'
+    );
+  });
+
+  test('empty input returns an empty string', () => {
+    expect(stripHtml('')).toBe('');
+    expect(stripHtml(null)).toBe('');
+  });
+});
 
 describe('stripZeroWidth (F-16)', () => {
   it('removes Unicode zero-width characters', () => {

@@ -15,6 +15,7 @@ const { getEmailFields } = require('../utils/field-presets');
 const {
   formatEmailContent,
   formatEmailsAsCSV,
+  stripHtml,
   VERBOSITY,
 } = require('../utils/response-formatter');
 // Note: buildFromFilter/buildToFilter from search.js use OData $filter which causes
@@ -542,16 +543,7 @@ async function handleExportConversation(args) {
           // Body content
           if (msg.body?.content) {
             if (msg.body.contentType === 'html') {
-              // Simple HTML to text conversion
-              const text = msg.body.content
-                .replace(/<br\s*\/?>/gi, '\n')
-                .replace(/<\/p>/gi, '\n\n')
-                .replace(/<[^>]+>/g, '')
-                .replace(/&nbsp;/g, ' ')
-                .replace(/&lt;/g, '<')
-                .replace(/&gt;/g, '>')
-                .replace(/&amp;/g, '&');
-              mdContent.push(text.trim());
+              mdContent.push(stripHtml(msg.body.content));
             } else {
               mdContent.push(msg.body.content);
             }

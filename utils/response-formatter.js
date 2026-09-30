@@ -467,20 +467,34 @@ function truncateText(text, maxLength) {
   return `${text.substring(0, maxLength - 3)}...`;
 }
 
+const HTML_ENTITIES = {
+  nbsp: ' ',
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  '#39': "'",
+};
+
 /**
- * Strips HTML tags (simple implementation)
+ * Strips HTML tags (simple implementation).
+ * Tags are removed until none remain, so nested fragments such as
+ * `<scr<script>ipt>` can't reassemble, and any unterminated `<` left over is
+ * dropped. Entities are decoded in a single pass so `&amp;lt;` becomes
+ * `&lt;`, not `<`.
  */
 function stripHtml(html) {
   if (!html) return '';
-  return html
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n\n')
-    .replace(/<[^>]*>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
+  let text = html.replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n\n');
+  let previous;
+  do {
+    previous = text;
+    text = text.replace(/<[^<>]*>/g, '');
+  } while (text !== previous);
+  return text
+    .replace(/</g, '')
+    .replace(/&(nbsp|amp|lt|gt|quot|apos|#39);/g, (_, e) => HTML_ENTITIES[e])
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }

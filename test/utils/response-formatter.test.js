@@ -30,6 +30,15 @@ describe('stripHtml (CodeQL js/double-escaping, js/incomplete-multi-character-sa
     expect(text).not.toMatch(/<\/?[a-z!]/i);
   });
 
+  test('deeply nested angle brackets are handled in linear time', () => {
+    const n = 20000;
+    const html = `${'<'.repeat(n)}x${'>'.repeat(n)}`;
+    const started = Date.now();
+    const text = stripHtml(html);
+    expect(Date.now() - started).toBeLessThan(500);
+    expect(text).not.toContain('<');
+  });
+
   test('keeps line breaks from <br> and </p>', () => {
     expect(stripHtml('one<br>two<br/>three</p>four')).toBe(
       'one\ntwo\nthree\n\nfour'

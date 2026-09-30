@@ -478,21 +478,18 @@ const HTML_ENTITIES = {
 };
 
 /**
- * Strips HTML tags (simple implementation).
- * Tags are removed until none remain, so nested fragments such as
- * `<scr<script>ipt>` can't reassemble, and any unterminated `<` left over is
- * dropped. Entities are decoded in a single pass so `&amp;lt;` becomes
- * `&lt;`, not `<`.
+ * Strips HTML tags (simple implementation), in linear time.
+ * One pass removes well-formed tags; every `<` still left (from nested
+ * fragments such as `<scr<script>ipt>` or unterminated tags) is then
+ * dropped, so no markup can reassemble. Entities are decoded afterwards in
+ * a single pass so `&amp;lt;` becomes `&lt;`, not `<`.
  */
 function stripHtml(html) {
   if (!html) return '';
-  let text = html.replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n\n');
-  let previous;
-  do {
-    previous = text;
-    text = text.replace(/<[^<>]*>/g, '');
-  } while (text !== previous);
-  return text
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<[^<>]*>/g, '')
     .replace(/</g, '')
     .replace(/&(nbsp|amp|lt|gt|quot|apos|#39);/g, (_, e) => HTML_ENTITIES[e])
     .replace(/\n{3,}/g, '\n\n')

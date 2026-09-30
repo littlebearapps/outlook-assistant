@@ -39,6 +39,14 @@ describe('stripHtml (CodeQL js/double-escaping, js/incomplete-multi-character-sa
     expect(text).not.toContain('<');
   });
 
+  test('many unterminated tags are handled in linear time', () => {
+    const html = '<a'.repeat(50000);
+    const started = Date.now();
+    const text = stripHtml(html);
+    expect(Date.now() - started).toBeLessThan(500);
+    expect(text).toBe('a'.repeat(50000));
+  });
+
   test('keeps line breaks from <br> and </p>', () => {
     expect(stripHtml('one<br>two<br/>three</p>four')).toBe(
       'one\ntwo\nthree\n\nfour'

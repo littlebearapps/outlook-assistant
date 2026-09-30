@@ -478,19 +478,42 @@ const HTML_ENTITIES = {
 };
 
 /**
+ * Removes tags in one linear scan: `<…>` with no `<` inside is dropped
+ * whole, and any other `<` (nested fragments such as `<scr<script>ipt>`,
+ * or an unterminated tag) is dropped on its own, so no markup can
+ * reassemble. A scanner rather than a repeated regex replace keeps deeply
+ * nested input like `<<<…x…>>>` linear.
+ * @param {string} text - HTML fragment
+ * @returns {string} - Text with no `<` remaining
+ */
+function removeTags(text) {
+  let out = '';
+  let i = 0;
+  while (i < text.length) {
+    const lt = text.indexOf('<', i);
+    if (lt === -1) {
+      out += text.slice(i);
+      break;
+    }
+    out += text.slice(i, lt);
+    // Scan only to the next '<' or '>', so each character is visited once.
+    let j = lt + 1;
+    while (j < text.length && text[j] !== '<' && text[j] !== '>') j++;
+    i = text[j] === '>' ? j + 1 : lt + 1;
+  }
+  return out;
+}
+
+/**
  * Strips HTML tags (simple implementation), in linear time.
- * One pass removes well-formed tags; every `<` still left (from nested
- * fragments such as `<scr<script>ipt>` or unterminated tags) is then
- * dropped, so no markup can reassemble. Entities are decoded afterwards in
- * a single pass so `&amp;lt;` becomes `&lt;`, not `<`.
+ * Entities are decoded after tag removal, in a single pass, so `&amp;lt;`
+ * becomes `&lt;`, not `<`.
  */
 function stripHtml(html) {
   if (!html) return '';
-  return html
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n\n')
-    .replace(/<[^<>]*>/g, '')
-    .replace(/</g, '')
+  return removeTags(
+    html.replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n\n')
+  )
     .replace(/&(nbsp|amp|lt|gt|quot|apos|#39);/g, (_, e) => HTML_ENTITIES[e])
     .replace(/\n{3,}/g, '\n\n')
     .trim();

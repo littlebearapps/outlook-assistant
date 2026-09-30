@@ -10,6 +10,65 @@ const _config = require('../config'); // Reserved for future use
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 
+const MAX_FILENAME_LENGTH = 200;
+
+/**
+ * Reduce a sender-controlled attachment name to a safe basename.
+ * Strips any directory part (either separator), control and reserved
+ * characters, and leading dots, then caps the length while keeping the
+ * extension. Falls back to "attachment" when nothing usable remains.
+ * @param {string} name - Attachment name from Graph metadata
+ * @returns {string} - Filename safe to join onto an output directory
+ */
+function safeAttachmentFilename(name) {
+  const base = String(name || '')
+    .split(/[\\/]/)
+    .pop()
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\x00-\x1f\x7f]/g, '')
+    .replace(/[<>:"|?*]/g, '_')
+    .trim()
+    .replace(/^\.+/, '');
+
+  if (!base) return 'attachment';
+  if (base.length <= MAX_FILENAME_LENGTH) return base;
+
+  const ext = path.extname(base).slice(0, 20);
+  return base.slice(0, MAX_FILENAME_LENGTH - ext.length) + ext;
+}
+
+/**
+ * Write a buffer into outputDir without ever overwriting an existing entry
+ * or following a symlink: `wx` fails on any existing path (including a
+ * dangling symlink), so collisions get a numbered suffix instead.
+ * @param {string} outputDir - Target directory
+ * @param {string} filename - Safe basename from safeAttachmentFilename
+ * @param {Buffer} buffer - File contents
+ * @returns {string} - Absolute path actually written
+ */
+function writeUniqueFile(outputDir, filename, buffer) {
+  const root = path.resolve(outputDir);
+  const ext = path.extname(filename);
+  const stem = filename.slice(0, filename.length - ext.length);
+
+  for (let i = 0; i < 1000; i++) {
+    const candidate = path.join(
+      root,
+      i === 0 ? filename : `${stem}-${i}${ext}`
+    );
+    if (path.dirname(candidate) !== root) {
+      throw new Error('Refusing to write attachment outside outputDir');
+    }
+    try {
+      fs.writeFileSync(candidate, buffer, { flag: 'wx' });
+      return candidate;
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+    }
+  }
+  throw new Error(`Too many files named ${filename} in ${root}`);
+}
+
 /**
  * List attachments for a specific email
  * @param {object} args - Tool arguments
@@ -177,13 +236,18 @@ async function handleDownloadAttachment(args) {
       // of cwd so attachments don't silently land in the source tree
       // when the caller forgets to pass outputDir. Auto-create the
       // target directory.
+      // The filename is sender-controlled (GHSA-755c-c45g-69rv): reduce it
+      // to a safe basename and never overwrite or follow a symlink.
       const outputDir = savePath || os.tmpdir();
       fs.mkdirSync(outputDir, { recursive: true });
-      const outputPath = path.join(outputDir, filename);
 
       // Decode base64 and save to file
       const buffer = Buffer.from(contentBytes, 'base64');
-      fs.writeFileSync(outputPath, buffer);
+      const outputPath = writeUniqueFile(
+        outputDir,
+        safeAttachmentFilename(filename),
+        buffer
+      );
 
       const sizeKB = (buffer.length / 1024).toFixed(1);
 

@@ -4,7 +4,7 @@ Active milestones for the Outlook Assistant MCP server. Items may shift or be cu
 
 For shipped work, see [`CHANGELOG.md`](CHANGELOG.md).
 
-## v3.11.2 — Tool description audit
+## v3.11.3 — Tool description audit
 
 The last item from the old `v3.7.5 — Fixes & Polish` slate. Everything else in
 that milestone shipped in v3.11.0 (see "Recently shipped"); this one is held
@@ -20,8 +20,8 @@ v3.10.0 and revised again in v3.11.1 (the `query` versus `searchExpression`
 divergence and the `to` scan cap) — use them as the reference style.
 
 > Renumbered from v3.11.1, which was taken by the search/export correctness
-> release. #93 is documentation-only and was not worth blocking two critical
-> defect fixes behind.
+> release, and again from v3.11.2, which was taken by the security release.
+> #93 is documentation-only and was not worth blocking either behind.
 
 ## v3.8.x — Task Integration & Auth (carry-over)
 
@@ -63,6 +63,13 @@ to the next feature slot.
 
 ## Recently shipped
 
+- **v3.11.2** (Sep 2026) — **security release**. Attachment downloads could be
+  written outside `outputDir` via a sender-chosen filename
+  ([GHSA-755c-c45g-69rv](https://github.com/littlebearapps/outlook-assistant/security/advisories/GHSA-755c-c45g-69rv)),
+  and a caller-supplied `deltaToken` could send the access token to another host
+  ([GHSA-mqfm-wfjq-jxq2](https://github.com/littlebearapps/outlook-assistant/security/advisories/GHSA-mqfm-wfjq-jxq2)).
+  Also clears the open CodeQL alerts (HTML-to-text double decoding) and brings
+  `npm audit` to 0.
 - **v3.11.1** (Sep 2026) — **search and export correctness**. A search term
   combined with a date or boolean filter was silently dropped: the single-term
   rung built its predicate and then had it overwritten, so the request carried

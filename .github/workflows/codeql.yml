@@ -22,6 +22,10 @@ jobs:
         with:
           languages: javascript
       - uses: github/codeql-action/analyze@e46ed2cbd01164d986452f91f178727624ae40d7 # v4.35.3
+        with:
+          # Matches the retired default-setup category so its stale alerts
+          # are re-evaluated (and close) against the current code.
+          category: /language:javascript-typescript
 
   analyze-actions:
     # Re-scans the workflows themselves. The category matches the old

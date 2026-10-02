@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.0] - 2026-10-02
+
 Two community contributions: opt-in shared-mailbox read and organise support
 from **@DiasonD** (#228), and date and subject filters for `list-events` from
 **@taranasus** (#193). Thanks to both! Shared-mailbox support is opt-in, so
@@ -79,12 +81,14 @@ nothing changes at sign-in unless you enable it.
 
 ### Security
 
-- **Resource paths reject `.` and `..` segments.** A caller-supplied ID
+- **Resource paths reject `.` and `..` segments**
+  ([GHSA-p3g3-fg53-jmpj](https://github.com/littlebearapps/outlook-assistant/security/advisories/GHSA-p3g3-fg53-jmpj)). A caller-supplied ID
   containing dot segments could be resolved to a different Graph resource than
   the tool intended. Such paths (including percent-encoded forms, `$batch`
   sub-requests and relative delta tokens) are now refused before any request is
   made.
-- **`export` writes are confined to the output directory.** Exported
+- **`export` writes are confined to the output directory**
+  ([GHSA-3qfj-3m24-ffx7](https://github.com/littlebearapps/outlook-assistant/security/advisories/GHSA-3qfj-3m24-ffx7)). Exported
   attachments and message files are named from sanitised parts, written with
   exclusive create (never overwriting an existing file or following a symlink),
   and kept inside the chosen directory. This extends the

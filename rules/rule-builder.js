@@ -2,7 +2,7 @@
  * Shared rule builder utilities for creating and updating mail rules.
  * Converts flat MCP tool parameters into Microsoft Graph API rule objects.
  */
-const { getFolderIdByName } = require('../email/folder-utils');
+const { resolveFolder, looksLikeFolderId } = require('../folder/resolve');
 const { checkRecipientAllowlist } = require('../utils/safety');
 
 const VALID_IMPORTANCE = ['low', 'normal', 'high'];
@@ -105,6 +105,44 @@ function buildConditions(args) {
 }
 
 /**
+ * Resolve a rule's target folder (ID, well-known alias, nested path such as
+ * "Triage/Delete", or bare name) to a folder ID with the shared resolver. (#248)
+ * Not-found and ambiguous folders become a warning containing "not found", which
+ * create/update treat as fatal when no other action is left; any other failure
+ * (auth, network, Graph outage) is rethrown rather than misreported.
+ * @param {string} accessToken - Graph API access token
+ * @param {string} folder - Folder ID, alias, path, or name
+ * @param {string} label - Warning prefix, e.g. "Target folder"
+ * @returns {Promise<{ folderId?: string, warning?: string }>}
+ */
+async function resolveRuleFolder(accessToken, folder, label) {
+  const spec = looksLikeFolderId(folder)
+    ? { id: folder.trim() }
+    : { name: folder };
+  try {
+    const resolved = await resolveFolder(accessToken, spec);
+    return { folderId: resolved.id };
+  } catch (error) {
+    const message = error.message || '';
+    if (message.includes('ambiguous')) {
+      return {
+        warning: `${label} "${folder}" not found as a single folder. ${message}`,
+      };
+    }
+    if (
+      message.includes('not found') ||
+      message.startsWith('Invalid folder path') ||
+      /status (400|404):/.test(message)
+    ) {
+      return {
+        warning: `${label} "${folder}" not found. Use \`folders\` action=list to see folders (with IDs and full paths), or pass a path like "Parent/Child" or a folderId.`,
+      };
+    }
+    throw error;
+  }
+}
+
+/**
  * Build a Graph API actions object from flat tool parameters.
  * Async because folder resolution requires API calls.
  * @param {object} args - Tool arguments
@@ -115,21 +153,23 @@ async function buildActions(args, accessToken) {
   const actions = {};
   const warnings = [];
 
-  // Folder-based actions (name → ID resolution)
-  if (args.moveToFolder) {
-    const folderId = await getFolderIdByName(accessToken, args.moveToFolder);
-    if (!folderId) {
-      warnings.push(`Target folder "${args.moveToFolder}" not found.`);
-    } else {
-      actions.moveToFolder = folderId;
-    }
-  }
-  if (args.copyToFolder) {
-    const folderId = await getFolderIdByName(accessToken, args.copyToFolder);
-    if (!folderId) {
-      warnings.push(`Copy-to folder "${args.copyToFolder}" not found.`);
-    } else {
-      actions.copyToFolder = folderId;
+  // Folder-based actions (ID, alias, nested path or name → ID)
+  const folderActions = [
+    ['moveToFolder', 'Target folder'],
+    ['copyToFolder', 'Copy-to folder'],
+  ];
+  for (const [param, label] of folderActions) {
+    if (args[param]) {
+      const { folderId, warning } = await resolveRuleFolder(
+        accessToken,
+        args[param],
+        label
+      );
+      if (folderId) {
+        actions[param] = folderId;
+      } else {
+        warnings.push(warning);
+      }
     }
   }
 

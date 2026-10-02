@@ -33,10 +33,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   request, so a large folder pages through completely. `maxResults` is clamped
   to a whole number from 1 to 200 (default 100); previously `0` became 100 and
   negative or fractional values reached Graph.
+- **`manage-rules` could not target nested folders** (#248). `moveToFolder` and
+  `copyToFolder` only matched top-level folder names, so a path such as
+  `Triage/Delete` was always reported as "not found", and a name containing an
+  apostrophe broke the lookup and was misreported as "not found" too. They now
+  use the same resolver as the `folders` tool: a folder ID, well-known name
+  (`archive`, `sent`…), nested path, or bare name (searched through subfolders).
+  An ambiguous name lists the matching folders instead of picking one, and an
+  authentication or network failure is reported as such rather than as a
+  missing folder.
 
 ### Removed
 
 - Unused internal helper `callGraphAPIWithAuth` (#244).
+- Internal top-level-only folder helpers `getFolderIdByName` and `getAllFolders`
+  (#248), superseded by the shared folder resolver.
 
 ## [3.12.0] - 2026-10-02
 

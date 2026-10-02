@@ -229,8 +229,8 @@ All string conditions accept comma-separated values for OR logic.
 
 | Parameter | What it does | Example |
 |-----------|-------------|---------|
-| `moveToFolder` | Move to folder (by name) | `"Archive"` |
-| `copyToFolder` | Copy to folder (by name) | `"Backup"` |
+| `moveToFolder` | Move to folder (name, nested path, or folder ID) | `"Archive"`, `"Triage/Delete"` |
+| `copyToFolder` | Copy to folder (name, nested path, or folder ID) | `"Backup"`, `"Projects/Backup"` |
 | `markAsRead` | Mark as read | `true` |
 | `markImportance` | Set importance level | `"high"`, `"low"` |
 | `forwardTo` | Forward to recipients | `"user@example.com"` |

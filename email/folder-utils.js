@@ -1,7 +1,6 @@
 /**
  * Email folder utilities
  */
-const { callGraphAPI } = require('../utils/graph-api');
 const { resolveFolder, looksLikeFolderId } = require('../folder/resolve');
 const { buildMailboxPrefix } = require('../utils/mailbox');
 
@@ -111,129 +110,7 @@ async function resolveFolderPath(accessToken, folderName, mailbox = null) {
   }
 }
 
-/**
- * Get the ID of a mail folder by its name
- * @param {string} accessToken - Access token
- * @param {string} folderName - Name of the folder to find
- * @returns {Promise<string|null>} - Folder ID or null if not found
- */
-async function getFolderIdByName(accessToken, folderName) {
-  try {
-    // First try with exact match filter
-    console.error(`Looking for folder with name "${folderName}"`);
-    const response = await callGraphAPI(
-      accessToken,
-      'GET',
-      'me/mailFolders',
-      null,
-      { $filter: `displayName eq '${folderName}'` }
-    );
-
-    if (response.value && response.value.length > 0) {
-      console.error(
-        `Found folder "${folderName}" with ID: ${response.value[0].id}`
-      );
-      return response.value[0].id;
-    }
-
-    // If exact match fails, try to get all folders and do a case-insensitive comparison
-    console.error(
-      `No exact match found for "${folderName}", trying case-insensitive search`
-    );
-    const allFoldersResponse = await callGraphAPI(
-      accessToken,
-      'GET',
-      'me/mailFolders',
-      null,
-      { $top: 100 }
-    );
-
-    if (allFoldersResponse.value) {
-      const lowerFolderName = folderName.toLowerCase();
-      const matchingFolder = allFoldersResponse.value.find(
-        (folder) => folder.displayName.toLowerCase() === lowerFolderName
-      );
-
-      if (matchingFolder) {
-        console.error(
-          `Found case-insensitive match for "${folderName}" with ID: ${matchingFolder.id}`
-        );
-        return matchingFolder.id;
-      }
-    }
-
-    console.error(`No folder found matching "${folderName}"`);
-    return null;
-  } catch (error) {
-    console.error(`Error finding folder "${folderName}": ${error.message}`);
-    return null;
-  }
-}
-
-/**
- * Get all mail folders
- * @param {string} accessToken - Access token
- * @returns {Promise<Array>} - Array of folder objects
- */
-async function getAllFolders(accessToken) {
-  try {
-    // Get top-level folders
-    const response = await callGraphAPI(
-      accessToken,
-      'GET',
-      'me/mailFolders',
-      null,
-      {
-        $top: 100,
-        $select:
-          'id,displayName,parentFolderId,childFolderCount,totalItemCount,unreadItemCount',
-      }
-    );
-
-    if (!response.value) {
-      return [];
-    }
-
-    // Get child folders for folders with children
-    const foldersWithChildren = response.value.filter(
-      (f) => f.childFolderCount > 0
-    );
-
-    const childFolderPromises = foldersWithChildren.map(async (folder) => {
-      try {
-        const childResponse = await callGraphAPI(
-          accessToken,
-          'GET',
-          `me/mailFolders/${folder.id}/childFolders`,
-          null,
-          {
-            $select:
-              'id,displayName,parentFolderId,childFolderCount,totalItemCount,unreadItemCount',
-          }
-        );
-
-        return childResponse.value || [];
-      } catch (error) {
-        console.error(
-          `Error getting child folders for "${folder.displayName}": ${error.message}`
-        );
-        return [];
-      }
-    });
-
-    const childFolders = await Promise.all(childFolderPromises);
-
-    // Combine top-level folders and all child folders
-    return [...response.value, ...childFolders.flat()];
-  } catch (error) {
-    console.error(`Error getting all folders: ${error.message}`);
-    return [];
-  }
-}
-
 module.exports = {
   WELL_KNOWN_FOLDERS,
   resolveFolderPath,
-  getFolderIdByName,
-  getAllFolders,
 };

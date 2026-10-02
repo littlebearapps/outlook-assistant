@@ -108,7 +108,7 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 
 | Tool | Actions | Safety | Key Parameters |
 |------|---------|--------|----------------|
-| `manage-rules` | `list` (default), `create`, `update`, `reorder`, `delete` | **destructive** | `name` (or alias `displayName`), `fromAddresses`, `containsSubject`, `bodyContains`, `hasAttachments`, `moveToFolder`, `forwardTo`, `assignCategories`, `dryRun`, `except*`, `ruleName`, `ruleId`, `sequence` |
+| `manage-rules` | `list` (default), `create`, `update`, `reorder`, `delete` | **destructive** | `name` (or alias `displayName`), `fromAddresses`, `containsSubject`, `bodyContains`, `hasAttachments`, `moveToFolder`/`copyToFolder` (name, nested path like `Triage/Delete`, or ID), `forwardTo`, `assignCategories`, `dryRun`, `except*`, `ruleName`, `ruleId`, `sequence` |
 
 ## Contacts (2 tools)
 

@@ -13,12 +13,19 @@ than staying on an older 3.x build.
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability, please report it responsibly:
+If you discover a security vulnerability, please report it privately:
 
-1. **Do not** open a public GitHub issue for security vulnerabilities
-2. Email [hello@littlebearapps.com](mailto:hello@littlebearapps.com) with details of the vulnerability
-3. Include steps to reproduce if possible
-4. Allow reasonable time for a fix before public disclosure
+1. **Do not** open a public GitHub issue, pull request or Discussion for security vulnerabilities.
+2. **Report it through GitHub's private vulnerability reporting:** [**Report a vulnerability**](https://github.com/littlebearapps/outlook-assistant/security/advisories/new) (Security tab → Advisories → Report a vulnerability). This is the preferred channel. Your report, proof-of-concept code and our discussion stay private until a fix ships, and you can be credited on the published advisory.
+3. If you can't use GitHub, email [hello@littlebearapps.com](mailto:hello@littlebearapps.com) with a short description and no exploit code. Mail filters may reject messages that contain exploit payloads, and we'll reply with a private channel for the details.
+4. Include the affected version, steps to reproduce, and the impact you expect.
+5. Allow reasonable time for a fix before public disclosure.
+
+### What to expect
+
+- **Acknowledgement within 7 days.** Private reports are reviewed at least weekly.
+- An initial assessment (valid, duplicate or not a vulnerability) within 14 days.
+- For confirmed issues, a fix in a patch release and a published GitHub Security Advisory crediting you, unless you'd rather not be named.
 
 ## Security Considerations
 

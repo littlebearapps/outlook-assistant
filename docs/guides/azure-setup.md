@@ -8,7 +8,7 @@ This guide walks through the full Azure setup from scratch, including creating a
 
 - A web browser
 - A Microsoft account (personal Outlook.com/Hotmail, or work/school)
-- Node.js 18+ and Outlook Assistant installed ([see README](../../README.md#quick-start))
+- Node.js 18.18+ and Outlook Assistant installed ([see README](../../README.md#quick-start))
 
 ## 1. Create an Azure Account
 
@@ -66,7 +66,7 @@ After registration, you'll see the app's **Overview** page. Copy the **Applicati
 
 This becomes your `OUTLOOK_CLIENT_ID`.
 
-> **What about Directory (tenant) ID?** You don't need it. Outlook Assistant uses the `/common/` endpoint which supports all account types automatically.
+> **What about Directory (tenant) ID?** With the recommended account type you don't need it: Outlook Assistant uses the `/common/` endpoint by default. If you register a single-tenant app instead, set `OUTLOOK_AUTH_AUDIENCE` to your tenant ID (see below).
 
 ### Account Type Explained
 
@@ -78,7 +78,7 @@ The recommended setting — "any organizational directory and personal Microsoft
 | Work/school (Microsoft 365) | Yes |
 | Any organisation's Microsoft 365 | Yes |
 
-If you only use a personal Outlook.com account, you could select "Personal Microsoft accounts only" instead, but the broader setting works for everyone.
+If you only use a personal Outlook.com account, you could select "Personal Microsoft accounts only" instead, but then you must also set `OUTLOOK_AUTH_AUDIENCE=consumers` in your MCP client's `env` block, or sign-in fails with `AADSTS9002331`. Likewise, a work-only ("this organizational directory only") app needs `OUTLOOK_AUTH_AUDIENCE` set to `organizations` or the tenant ID. The broader setting works for everyone without it.
 
 ## 3. Add API Permissions
 
@@ -112,10 +112,11 @@ Outlook Assistant needs permission to access your mailbox data. These are **dele
 
 | Permission | What It Allows |
 |------------|----------------|
-| `Mail.Read.Shared` | Read shared mailboxes (only if you use the `access-shared-mailbox` tool) |
+| `Mail.Read.Shared` | Read shared mailboxes. Requested only when you set `OUTLOOK_SHARED_MAILBOX=read` or `true` (work/school accounts) |
+| `Mail.ReadWrite.Shared` | Organise shared mailboxes — move/categorise/flag/mark-read/create folders via `sharedMailbox`. Requested only with `OUTLOOK_SHARED_MAILBOX=true`. Sending/drafting from a shared mailbox isn't supported, so `Mail.Send.Shared` is not requested |
 | `Place.Read.All` | Search for meeting rooms (only if you use the `find-meeting-rooms` tool) |
 
-> **Tip**: You can add all permissions now, or start with the required ones and add optional ones later. You'll need to re-authenticate after adding new permissions.
+> **Tip**: You can add all permissions now, or start with the required ones and add optional ones later. You'll need to re-authenticate (`auth action=authenticate force=true`) after adding new permissions — a token refresh keeps the scopes you were originally granted. See [Access Shared Mailboxes](../how-to/advanced/access-shared-mailboxes.md) for turning on the `.Shared` scopes.
 
 ### For Work/School Accounts: Admin Consent
 
@@ -214,9 +215,9 @@ Add to your MCP client config (example for Claude Desktop `claude_desktop_config
 }
 ```
 
-### Option B: Environment File
+### Option B: Environment File (auth server only)
 
-If running from source, create a `.env` file:
+The MCP server takes its settings from your MCP client's `env` block and doesn't read `.env` files. The browser-flow auth server does, so if you use that flow from a source checkout, create a `.env` file in the project root:
 
 ```bash
 OUTLOOK_CLIENT_ID=your-application-client-id
@@ -228,38 +229,22 @@ USE_TEST_MODE=false
 
 ## Verify It Works
 
-### 1. Start the Auth Server
+### 1. Authenticate (Device Code Flow)
 
-```bash
-npm run auth-server
-```
+In your AI assistant, use the `auth` tool with `action=authenticate`. With the default device code flow it returns a short code and the URL `microsoft.com/devicelogin`.
 
-> **Note**: The auth server reads `OUTLOOK_CLIENT_ID` and `OUTLOOK_CLIENT_SECRET` from environment variables (or the legacy `MS_CLIENT_ID`/`MS_CLIENT_SECRET` aliases). When running from source, ensure your `.env` file is in the project root. When using an MCP client, the env vars from your MCP config are passed automatically to the server process.
-
-You should see:
-
-```
-Auth server listening on http://localhost:3333
-```
-
-### 2. Authenticate
-
-In your AI assistant, use the `auth` tool with `action=authenticate`. It returns a Microsoft login URL.
-
-1. Open the URL in your browser
-2. Sign in with your Microsoft account
+1. Open the URL in a private/incognito browser window, on any device
+2. Enter the code and sign in with your Microsoft account
 3. Review and accept the requested permissions
-4. You'll see a success message in the browser
+4. Back in your AI assistant, use the `auth` tool with `action=device-code-complete`
 
-Tokens are saved to `~/.outlook-assistant-tokens.json` and refresh automatically.
+Tokens are saved to `~/.outlook-assistant-tokens.json` and refresh automatically. No auth server is needed.
 
-### 3. Verify Access
+> **Browser redirect flow instead?** Start the auth server first (`npm run auth-server` from source, or `node "$(npm root -g)/@littlebearapps/outlook-assistant/outlook-auth-server.js"` from a global install), then use `auth` with `action=authenticate` and `method=browser`. The auth server reads `OUTLOOK_CLIENT_ID` and `OUTLOOK_CLIENT_SECRET` (or the legacy `MS_CLIENT_ID`/`MS_CLIENT_SECRET`) from the environment or a `.env` file in the directory you start it from.
 
-In your AI assistant, use the `auth` tool with `action=status`. You should see:
+### 2. Verify Access
 
-```
-Authenticated as: your.email@outlook.com
-```
+In your AI assistant, use the `auth` tool with `action=status`. You should see "Authenticated and ready" with the token's remaining lifetime. Use `action=about` to see which mailbox is connected and which scopes were granted.
 
 Then try `search-emails` to confirm email access is working.
 
@@ -297,7 +282,7 @@ Then try `search-emails` to confirm email access is working.
 **Fix**:
 1. Check that all required permissions are added (see [Step 3](#3-add-api-permissions))
 2. For work accounts: admin consent may be required — ask your IT admin
-3. Delete `~/.outlook-assistant-tokens.json` and re-authenticate to pick up new permissions
+3. Re-authenticate with `auth action=authenticate force=true` to pick up new permissions, then check `auth action=about` for the granted scopes
 
 ---
 
@@ -305,11 +290,10 @@ Then try `search-emails` to confirm email access is working.
 
 **Cause**: Refresh tokens can expire after extended inactivity (90+ days) or when passwords change.
 
-**Fix**: Delete `~/.outlook-assistant-tokens.json` and re-authenticate:
+**Fix**: Re-authenticate with `auth action=authenticate force=true` (device code flow), then `auth action=device-code-complete`. If the token file itself is corrupted, delete it first:
 
 ```bash
 rm ~/.outlook-assistant-tokens.json
-npm run auth-server
 # Then use the auth tool with action=authenticate in your AI assistant
 ```
 
@@ -332,15 +316,14 @@ npm run auth-server
 
 **Cause**: You added new API permissions in Azure Portal but your existing tokens still have the old scopes.
 
-**Fix**: Delete your token file and re-authenticate to pick up the new permissions:
+**Fix**: Re-authenticate to pick up the new permissions — token refresh never adds scopes:
 
-```bash
-rm ~/.outlook-assistant-tokens.json
-npm run auth-server
-# Then use the auth tool with action=authenticate in your AI assistant
+```
+auth action=authenticate force=true
+auth action=device-code-complete
 ```
 
-After re-authenticating, use the `auth` tool with `action=status` to verify the new scopes appear in the token.
+After re-authenticating, use the `auth` tool with `action=about` to check the new scopes appear under **Granted scopes**. For the `.Shared` scopes, `OUTLOOK_SHARED_MAILBOX` must also be set before you sign in.
 
 ## What's Next?
 

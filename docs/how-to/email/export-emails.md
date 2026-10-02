@@ -8,6 +8,8 @@ tags: [outlook-assistant, email, how-to]
 
 Save individual emails, batches, or entire conversation threads to disk in various formats for archiving, analysis, or migration.
 
+Without `outputDir` (or `savePath` for a single message), files go to your system's temp directory.
+
 ## Export a Single Email
 
 > "Export that email as markdown"
@@ -72,7 +74,7 @@ params:
   outputDir: "/tmp/batch-export/"
 ```
 
-Or export emails matching a search query:
+Or export emails matching a search query (or pass `query: "budget"` as a shortcut for a subject search):
 
 ```
 tool: export
@@ -114,6 +116,26 @@ params:
   id: "AAMkAGR..."
 ```
 
+This returns the raw RFC 822 content rather than writing a file. Add `headersOnly: true` for just the headers, `base64: true` for encoded output, or `maxSize` to change the 1 MB cap.
+
+## Export from a Shared Mailbox
+
+Every target accepts `sharedMailbox` (alias `email`). Pass it whenever the IDs, conversation or search come from a shared mailbox. Without it, ID- and conversation-based exports look in your own mailbox and fail with `404 ErrorInvalidMailboxItemId`, while search-based exports search your own mailbox instead, so they return nothing or matches from the wrong mailbox:
+
+```
+tool: export
+params:
+  target: "messages"
+  sharedMailbox: "support@company.com"
+  searchQuery:
+    folder: "Inbox/Escalated"
+    receivedAfter: "2026-09-01"
+  format: "markdown"
+  outputDir: "/tmp/support-export/"
+```
+
+This needs the opt-in `OUTLOOK_SHARED_MAILBOX` setting on a work/school account — see [Access Shared Mailboxes](../advanced/access-shared-mailboxes.md).
+
 ## Choose the Right Format
 
 | Format | Best for | File type |
@@ -124,7 +146,7 @@ params:
 | `json` | Programmatic processing, data analysis | `.json` |
 | `html` | Viewing in a browser with formatting | `.html` |
 | `csv` | Spreadsheet import, bulk metadata analysis | `.csv` |
-| `mime` | Raw email content, forensics | raw output |
+| `target: "mime"` | Raw email content, forensics | returned in the response, no file (`format: "mime"` is an alias for `eml`) |
 
 ## Parameter Reference
 
@@ -133,13 +155,16 @@ params:
 | `target` | `message`, `messages`, `conversation`, or `mime` | All |
 | `id` | Email ID | `message`, `mime` |
 | `format` | Output format (see table above) | `message`, `messages`, `conversation` |
-| `savePath` | File path for single export | `message` |
-| `outputDir` | Directory for batch/thread export | `messages`, `conversation` |
+| `savePath` | File path or directory for a single export | `message` |
+| `outputDir` | Directory for the export (also accepted for `message`) | `message`, `messages`, `conversation` |
 | `emailIds` | Array of email IDs | `messages` |
-| `searchQuery` | Search criteria for batch export | `messages` |
+| `searchQuery` | Search criteria for batch export (`folder`, `from`, `subject`, `receivedAfter`, `receivedBefore`, `maxResults`) | `messages` |
+| `query` | Shortcut for `searchQuery: { subject: … }` | `messages` |
 | `conversationId` | Thread ID | `conversation` |
 | `order` | `chronological` or `reverse` | `conversation` |
-| `includeAttachments` | Include attachments | `message` (default: true) |
+| `includeAttachments` | Include attachments | `message` (default: true), `messages` (default: false) |
+| `sharedMailbox` | Shared mailbox to export from (alias `email`) | All |
+| `headersOnly`, `base64`, `maxSize` | Raw MIME options | `mime` |
 
 ## Output Filenames
 
@@ -166,6 +191,8 @@ Two guarantees now hold:
 
 Attachment files are named the same way and carry the same guarantee.
 
+- **Files stay in the output directory.** Every name the exporter chooses is built from sanitised parts and written with exclusive create, so it can't escape `outputDir`, overwrite an existing file or follow a planted symlink (v3.12.0). If you pass an explicit file path as `savePath` for a single message, that exact path is used and overwritten if it exists.
+
 ## Tips
 
 - Use `markdown` format for AI-readable exports
@@ -179,4 +206,4 @@ Attachment files are named the same way and carry the same guarantee.
 - [Find Emails](find-emails.md) — search for emails to export
 - [Read Email Threads](read-email-threads.md) — read before exporting
 - [Work with Attachments](work-with-attachments.md) — download attachments separately
-- [Tools Reference — export](../../quickrefs/tools-reference.md#email-6-tools)
+- [Tools Reference — export](../../quickrefs/tools-reference.md#email-8-tools)

@@ -7,6 +7,96 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.0] - 2026-10-02
+
+Two community contributions: opt-in shared-mailbox read and organise support
+from **@DiasonD** (#228), and date and subject filters for `list-events` from
+**@taranasus** (#193). Thanks to both! Shared-mailbox support is opt-in, so
+nothing changes at sign-in unless you enable it.
+
+### Added
+
+- **Shared-mailbox read and organise support (`sharedMailbox`, alias `email`)**
+  — opt-in, work/school accounts only (#228, by @DiasonD). Every read and
+  organise path that takes a message ID, conversation ID or folder can target a
+  shared or delegated mailbox through one optional parameter:
+  - `search-emails` (list/search, `searchAllFolders`, `deltaMode`,
+    `conversationId`, `groupByConversation`, `internetMessageId`),
+    `read-email` (including `headersMode`), `attachments`, `update-email`,
+    `apply-category`, every `export` target, and all five `folders` actions.
+  - Folder names resolve inside the shared mailbox: well-known aliases, custom
+    and localized display names, nested paths (`Inbox/Vendors/Acme`) and
+    explicit folder IDs.
+  - `access-shared-mailbox` gains custom/nested folder names, `folderId`, and
+    `listFolders: true` to enumerate the mailbox's folder tree.
+  - Sending, drafts, replies and forwards stay personal-mailbox-only:
+    `send-email` and `draft` take no `sharedMailbox` parameter, and
+    `Mail.Send.Shared` is never requested. Mailbox settings, rules and Focused
+    Inbox are likewise personal-mailbox-only.
+- **`OUTLOOK_SHARED_MAILBOX`** turns it on. `read` requests `Mail.Read.Shared`;
+  `true` (or `readwrite`/`1`) also requests `Mail.ReadWrite.Shared`. Unset, the
+  sign-in request is identical to 3.11.x. After enabling it, restart and run
+  `auth action=authenticate force=true`. While it's off, `sharedMailbox` calls
+  are refused with these steps, and `access-shared-mailbox` keeps its previous
+  behaviour (a well-known folder name or folder ID).
+- **`auth action=about`** reports shared-mailbox status (which `.Shared` scopes
+  were actually granted) and lists granted scopes alongside configured ones.
+
+- **`list-events` filters** (#193, thanks @taranasus): `startAfter`, `startBefore`
+  and `subject` find past, current or specifically-named events. With no filter
+  the default is unchanged (upcoming events only). Supplying any filter replaces
+  the implicit `start ≥ now` bound; filters are AND-ed. Dates must be ISO 8601
+  with `Z` or a ±hh:mm offset and are normalised to UTC (zone-less, date-only,
+  impossible and pre-1900 dates are rejected). `subject` is case-insensitive,
+  capped at 255 characters and OData-escaped. Backward-looking searches
+  (`startBefore` alone, or `subject` alone) return newest first. Invalid
+  arguments are reported as tool errors before any Graph call.
+
+### Changed
+
+- **Token refresh requests the granted scopes plus `offline_access`** (#241).
+  Refresh used to re-request the full configured scope set. It now uses the
+  scopes recorded at sign-in (`granted_scopes`, or the stored `scope` for older
+  token files) and always adds `offline_access`. Microsoft omits that scope from
+  its response, and a new refresh token is only issued when it is requested.
+- With `OUTLOOK_SHARED_MAILBOX` on, the device-code flow falls back once to the
+  standard scopes if an account can't use `.Shared` (for example a personal
+  account): one extra code, at request or completion time. A consent-required
+  error (`AADSTS65001`) is shown with remediation steps instead; scopes are never
+  silently downgraded on it. The browser flow (`npm run auth-server`) requests
+  the configured scopes with no fallback, so personal-account users who sign in
+  that way shouldn't enable the setting.
+
+### Fixed
+
+- **Shared-mailbox message IDs 404'd outside `access-shared-mailbox`.** Message
+  IDs are mailbox-scoped, but readers and exporters always used `me/...`. With
+  `sharedMailbox` set, they now use `users/{mailbox}/...`, including raw MIME
+  export.
+- **Shared-mailbox organise actions could hit the signed-in mailbox.** Move,
+  categorise, flag, mark-read, folder create and folder delete now honour
+  `sharedMailbox`; the protected-folder guard still applies.
+- **Custom shared-mailbox folders failed with `ErrorInvalidIdMalformed`.** They
+  now resolve through the shared folder resolver.
+
+### Security
+
+- **Resource paths reject `.` and `..` segments**
+  ([GHSA-p3g3-fg53-jmpj](https://github.com/littlebearapps/outlook-assistant/security/advisories/GHSA-p3g3-fg53-jmpj)). A caller-supplied ID
+  containing dot segments could be resolved to a different Graph resource than
+  the tool intended. Such paths (including percent-encoded forms, `$batch`
+  sub-requests and relative delta tokens) are now refused before any request is
+  made.
+- **`export` writes are confined to the output directory**
+  ([GHSA-3qfj-3m24-ffx7](https://github.com/littlebearapps/outlook-assistant/security/advisories/GHSA-3qfj-3m24-ffx7)). Exported
+  attachments and message files are named from sanitised parts, written with
+  exclusive create (never overwriting an existing file or following a symlink),
+  and kept inside the chosen directory. This extends the
+  [GHSA-755c-c45g-69rv](https://github.com/littlebearapps/outlook-assistant/security/advisories/GHSA-755c-c45g-69rv)
+  hardening of the `attachments` tool to `export`.
+- Shared-mailbox addresses must be printable-ASCII email addresses, and
+  `access-shared-mailbox` validates its address up front.
+
 ## [3.11.2] - 2026-09-30
 
 Security release. Upgrading is recommended for everyone on 3.11.1 or earlier.

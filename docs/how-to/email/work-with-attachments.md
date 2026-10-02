@@ -43,10 +43,12 @@ params:
   messageId: "AAMkAGR..."
   action: "download"
   attachmentId: "AAMkAGR-att1..."
-  savePath: "/tmp/"
+  outputDir: "/tmp/attachments/"
 ```
 
-The file is saved with its original filename to the specified directory.
+The directory is created if it doesn't exist. Leave out `outputDir` and the file goes to your system's temp directory. The response tells you the exact path it was saved to.
+
+The filename comes from the sender, so it's reduced to a safe name before saving: path components such as `../` are stripped and the file always lands inside `outputDir`. An existing file is never overwritten and a symlink is never followed; a name that's already taken gets a numbered suffix (`invoice-1.pdf`).
 
 ## Download All Attachments
 
@@ -63,16 +65,19 @@ The attachments will be listed, then downloaded sequentially.
 | `messageId` | The email containing the attachment | Yes |
 | `action` | `list`, `view`, or `download` | No (default: `list`) |
 | `attachmentId` | Specific attachment ID | Yes for `view`/`download` |
-| `savePath` | Directory to save to | No (default: current directory) |
+| `outputDir` | Directory to save to (`download`), created if missing. `savePath` is a deprecated alias | No (default: system temp directory) |
+| `sharedMailbox` | Shared mailbox the message belongs to (alias `email`) | Only for shared-mailbox messages |
 
 ## Tips
 
 - Use `list` first to see attachment names and IDs before downloading
 - `view` works well for text-based files (`.txt`, `.csv`, `.md`) — binary files need `download`
 - Find emails with attachments using `search-emails` with `hasAttachments: true`
+- For a message from a shared mailbox, pass the same `sharedMailbox` you searched with — see [Access Shared Mailboxes](../advanced/access-shared-mailboxes.md)
+- Embedded Outlook items and cloud-link (reference) attachments can't be downloaded as files; the tool tells you when an attachment is one of these
 
 ## Related
 
 - [Find Emails](find-emails.md) — search for emails with attachments
 - [Export Emails](export-emails.md) — export emails with attachments included
-- [Tools Reference — attachments](../../quickrefs/tools-reference.md#email-6-tools)
+- [Tools Reference — attachments](../../quickrefs/tools-reference.md#email-8-tools)

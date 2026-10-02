@@ -2,11 +2,14 @@
 
 ## Supported Versions
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 3.x.x   | :white_check_mark: |
-| 2.x.x   | :white_check_mark: |
-| 1.x.x   | :x:                |
+| Version  | Supported          |
+| -------- | ------------------ |
+| 3.12.x   | :white_check_mark: |
+| < 3.12.0 | :x:                |
+
+Security fixes ship in the latest release only. v3.11.2 and v3.12.0 both
+contain security fixes (see [`CHANGELOG.md`](CHANGELOG.md)), so upgrade rather
+than staying on an older 3.x build.
 
 ## Reporting a Vulnerability
 
@@ -33,17 +36,25 @@ If you discover a security vulnerability, please report it responsibly:
 
 ### API Permissions
 
-This server requests the following Microsoft Graph delegated permissions:
+At sign-in this server requests the following Microsoft Graph delegated permissions:
 
 - `offline_access` — Token refresh
 - `User.Read` — Basic profile
 - `Mail.Read`, `Mail.ReadWrite`, `Mail.Send` — Email access
-- `Mail.Read.Shared` — Shared mailbox access
 - `Calendars.Read`, `Calendars.ReadWrite` — Calendar management
 - `Contacts.Read`, `Contacts.ReadWrite` — Contact management
-- `MailboxSettings.Read`, `MailboxSettings.ReadWrite` — Settings access
+- `MailboxSettings.ReadWrite` — Settings access
 - `People.Read` — People search
-- `Place.Read.All` — Meeting room search
+
+Opt-in, work/school accounts only:
+
+- `Mail.Read.Shared` — shared mailbox reads, requested only when `OUTLOOK_SHARED_MAILBOX=read` or `true`
+- `Mail.ReadWrite.Shared` — shared mailbox organising, requested only when `OUTLOOK_SHARED_MAILBOX=true`
+- `Place.Read.All` — meeting room search; not requested by default, add it in Azure with admin consent if you need `find-meeting-rooms`
+
+`Mail.Send.Shared` is never requested. Token refresh asks only for the scopes
+recorded as granted at sign-in, plus `offline_access`, so a refresh never
+widens access.
 
 Only grant permissions that are necessary for your use case.
 
@@ -71,9 +82,11 @@ Every tool carries [MCP annotations](https://modelcontextprotocol.io/docs/concep
 | `destructiveHint: true` | Tool can cause irreversible changes | Client prompts for explicit confirmation |
 | `idempotentHint: true` | Safe to retry without side effects | Client may auto-retry on failure |
 
-- **6 read-only tools** are auto-approved (search, read, list operations)
-- **2 destructive tools** (`send-email`, `manage-event`) always prompt for confirmation
-- **12 moderate-write tools** follow normal approval flows
+- **7 read-only tools** are auto-approved (search, read, list operations)
+- **6 destructive tools** (`send-email`, `draft`, `manage-event`, `manage-contact`, `folders`, `manage-rules`) prompt for confirmation
+- **9 other tools** (2 idempotent, 7 moderate-write) follow normal approval flows
+
+See the [Tools Reference](docs/quickrefs/tools-reference.md#safety-annotations) for the full list.
 
 ### Send-Email Protections
 
@@ -92,13 +105,26 @@ OUTLOOK_MAX_EMAILS_PER_SESSION=5
 OUTLOOK_ALLOWED_RECIPIENTS=mycompany.com,partner@example.com
 ```
 
+### Input and File Hardening
+
+- Caller-supplied IDs can't contain `.` or `..` path segments (literal or
+  percent-encoded), so an ID can't redirect a request to a different Graph
+  resource.
+- Continuation links (`deltaToken`, `nextLink`) must be `https` URLs on
+  `graph.microsoft.com`; the access token is never sent anywhere else.
+- Attachment downloads and exports write sanitised filenames with exclusive
+  create (no overwriting, no following symlinks) and stay inside the chosen
+  output directory.
+- Shared-mailbox addresses must be printable-ASCII email addresses, and
+  shared-mailbox access is off unless `OUTLOOK_SHARED_MAILBOX` is set.
+
 ### Limitations
 
 These controls are not a substitute for careful oversight:
 
 - Annotations depend on the AI client respecting them — not all clients support MCP annotations
 - Rate limits reset when the MCP server restarts
-- The recipient allowlist only applies to the `send-email` tool — it does not prevent forwarding or replying via other means
+- The recipient allowlist applies to `send-email`, `draft` (create, update, forward) and `manage-rules` forward/redirect targets — it doesn't cover anything done outside Outlook Assistant
 - AI models can still make mistakes in composing email content, selecting recipients, or interpreting instructions
 - No automated system can fully prevent prompt injection attacks or adversarial manipulation
 

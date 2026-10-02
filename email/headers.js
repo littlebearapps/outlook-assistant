@@ -6,6 +6,7 @@
  */
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
+const { buildMailboxPrefix } = require('../utils/mailbox');
 
 /**
  * Important headers to highlight (in order of relevance)
@@ -158,6 +159,9 @@ async function handleGetEmailHeaders(args) {
   const groupByType = args.groupByType || false;
   const importantOnly = args.importantOnly || false;
   const raw = args.raw || false;
+  // Shared-mailbox message IDs aren't resolvable under /me — route to the
+  // owning mailbox when a sharedMailbox/email is supplied.
+  const prefix = buildMailboxPrefix(args.sharedMailbox || args.email || null);
 
   if (!emailId) {
     return {
@@ -187,7 +191,7 @@ async function handleGetEmailHeaders(args) {
       'sentDateTime',
     ].join(',');
 
-    const endpoint = `me/messages/${emailId}`;
+    const endpoint = `${prefix}/messages/${emailId}`;
     const queryParams = {
       $select: selectFields,
     };

@@ -9,7 +9,7 @@ Built by [Little Bear Apps](https://littlebearapps.com).
 - **Package**: `@littlebearapps/outlook-assistant` on npm
 - **Install**: `npm install -g @littlebearapps/outlook-assistant` or `npx @littlebearapps/outlook-assistant`
 - **License**: MIT
-- **Node.js**: >= 18.0.0
+- **Node.js**: >= 18.18.0 (development tooling: >= 22.22.1)
 - **Authentication**: OAuth 2.0 with Microsoft Graph API (requires Azure app registration)
 - **Tools**: 22 tools across 9 modules (reduced from 55 for optimal AI performance)
 
@@ -17,8 +17,9 @@ Built by [Little Bear Apps](https://littlebearapps.com).
 
 - Read, search, send, and export emails directly from Claude instead of switching apps
 - 8 email tools covering search, conversations, attachments, bulk export, pre-send mail tips, and draft management
-- Manage calendar events, contacts, rules, categories, and mailbox settings in one place
-- Export to multiple formats: MIME/EML, MBOX, Markdown, JSON, HTML
+- Manage calendar events (upcoming by default, or past and named events via `startAfter`/`startBefore`/`subject`), contacts, rules, categories, and mailbox settings in one place
+- Export to multiple formats: MIME/EML, MBOX, Markdown, JSON, HTML, CSV
+- Opt-in shared-mailbox read and organise support (`sharedMailbox`, work/school accounts, `OUTLOOK_SHARED_MAILBOX`); sending from a shared mailbox is not supported
 
 ## Key Differentiators
 
@@ -35,6 +36,8 @@ Built by [Little Bear Apps](https://littlebearapps.com).
 - **MCP safety annotations** on all 22 tools — AI clients auto-approve reads and prompt for destructive operations
 - **Send-email protections**: pre-send mail tips, dry-run preview, session rate limiting, recipient allowlist
 - **Rule protections**: dry-run preview on create/update, rate limiting, recipient allowlist on forward/redirect, no permanent-delete action
+- **Input and file hardening**: IDs with `.`/`..` path segments refused, the access token only ever sent to `graph.microsoft.com`, attachment downloads and exports confined to the output directory without overwriting
+- **Shared mailboxes off by default**: `.Shared` scopes are requested only when `OUTLOOK_SHARED_MAILBOX` is set (`read` keeps shared access read-only)
 - **Token-optimised**: 22 tools instead of 55 saves ~11,000 tokens per turn (~64% reduction), improving AI accuracy and context efficiency
 - These safeguards reduce risk but are not foolproof — always review actions before approving
 
@@ -59,15 +62,15 @@ Requires an Azure app registration with Microsoft Graph delegated permissions. S
 
 ## Tool Categories
 
-- **Authentication (1 tool)**: `auth` — OAuth flow, status, about
+- **Authentication (1 tool)**: `auth` — status, authenticate (device code by default), device-code-complete, about (version, granted scopes, shared-mailbox status)
 - **Email (8 tools)**: `search-emails`, `read-email`, `send-email`, `draft`, `update-email`, `attachments`, `export`, `get-mail-tips`
-- **Calendar (3 tools)**: `list-events`, `create-event`, `manage-event`
+- **Calendar (3 tools)**: `list-events` (`startAfter`, `startBefore`, `subject` filters), `create-event`, `manage-event` (update, decline, cancel, delete)
 - **Contacts (2 tools)**: `manage-contact`, `search-people`
 - **Folders (1 tool)**: `folders` — list, create, move, stats, delete; folders addressable by nested path (`Parent/Child`) or ID
 - **Rules (1 tool)**: `manage-rules` — list, create, update, reorder, delete
 - **Categories (3 tools)**: `manage-category`, `apply-category`, `manage-focused-inbox`
 - **Settings (1 tool)**: `mailbox-settings` — get, set auto-replies, set working hours
-- **Advanced (2 tools)**: `access-shared-mailbox`, `find-meeting-rooms`
+- **Advanced (2 tools)**: `access-shared-mailbox` (messages, `listFolders`, `folderId`, nested folder paths), `find-meeting-rooms`
 
 ## Documentation
 
@@ -76,9 +79,10 @@ Requires an Azure app registration with Microsoft Graph delegated permissions. S
 - [Connect Outlook to Claude](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/how-to/getting-started/connect-outlook-to-claude.md): Step-by-step setup guide for Claude Desktop / Claude Code
 - [Verify Your Connection](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/how-to/getting-started/verify-your-connection.md): Test and troubleshoot the connection after installation
 - [Azure Setup](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/guides/azure-setup.md): Azure app registration and API permissions walkthrough
+- [Troubleshooting](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/troubleshooting.md): Known errors and fixes — auth, search, export, shared mailboxes
 - [FAQ](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/faq/faq.md): Frequently asked questions — install, accounts, permissions, tokens, send safety, updates, uninstall (also at <https://littlebearapps.com/help/outlook-assistant/faq/>)
 - [CLAUDE.md](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CLAUDE.md): Quick reference for development
 - [CONTRIBUTING](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CONTRIBUTING.md): Contribution guidelines
-- [CHANGELOG](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CHANGELOG.md): Version history (current: v3.11.2 — security release: attachment downloads confined to `outputDir` (GHSA-755c-c45g-69rv) and the access token only ever sent to Microsoft Graph (GHSA-mqfm-wfjq-jxq2), HTML-to-text entity double-decoding fixed, `npm audit` at 0. Preceded by v3.11.1 — search and export correctness: a search term combined with a date or boolean filter was silently overwritten, so the request carried only the date window and the whole window came back reported as a filtered result; batch export named files `<date>_<subject>`, so a same-day reply chain overwrote itself on disk while the summary reported `Failed 0` — filenames now carry the time, collisions get a numeric suffix instead of clobbering, and a manifest maps each requested ID to the file actually written; a truncated local scan is now disclosed when it matched, not only when it returned nothing; `query` versus `searchExpression` and the 500-message `to` scan cap documented. Preceded by v3.11.0 — fixes & polish: `--version`/`--help` CLI flags (#68), `AADSTS7000215` explaining the Secret ID vs Secret Value mistake via one shared AADSTS hint table (#69), token-refresh round trip covered end to end (#72), and all 17 development-dependency advisories cleared; and v3.10.0 — search correctness: field-scoped `searchExpression` translated to OData filters and retried on personal accounts (#217), two-filter searches no longer returning the single-filter superset (#229), `from`/`to` filter values OData-escaped (#230), no-results guidance derived from what was actually attempted (#231))
-- [ROADMAP](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/ROADMAP.md): Active milestones (v3.11.2 tool description audit, v3.8.x carry-over, v3.12.0+ new Graph APIs)
+- [CHANGELOG](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CHANGELOG.md): Version history (current: v3.12.0 — opt-in shared-mailbox read and organise support via `sharedMailbox` and `OUTLOOK_SHARED_MAILBOX` (#228), `list-events` `startAfter`/`startBefore`/`subject` filters (#193), token refresh requesting the granted scopes plus `offline_access` (#241), and two security fixes: dot segments in resource paths rejected, `export` writes confined to the output directory. Preceded by v3.11.2 — security release: attachment downloads confined to `outputDir` (GHSA-755c-c45g-69rv) and the access token only ever sent to Microsoft Graph (GHSA-mqfm-wfjq-jxq2); v3.11.1 — search and export correctness (filters combined with dates no longer silently dropped, batch export no longer overwrites same-day reply chains); v3.11.0 — `--version`/`--help` CLI flags (#68) and the `AADSTS7000215` Secret ID vs Value explanation (#69); v3.10.0 — search correctness (#217, #229, #230, #231))
+- [ROADMAP](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/ROADMAP.md): Active milestones (v3.12.x tool description audit, v3.8.x carry-over, v3.13.0+ new Graph APIs)
 - [SECURITY](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/SECURITY.md): Security policy, token handling, and MCP safety controls

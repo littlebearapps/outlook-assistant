@@ -91,6 +91,8 @@ Detect emails from specific senders or matching patterns:
 ## Tips
 
 - Delta sync works per-folder (defaults to inbox). Specify `folder` to monitor other folders.
+- To monitor a shared mailbox, add `sharedMailbox` (needs the opt-in `OUTLOOK_SHARED_MAILBOX` setting) and keep passing it with the same `deltaToken` — see [Access Shared Mailboxes](../advanced/access-shared-mailboxes.md).
+- Pass `deltaToken` back exactly as you received it. Tokens that point anywhere other than `https://graph.microsoft.com` are refused, so the access token is never sent elsewhere.
 - Store tokens persistently between agent sessions — they remain valid for extended periods.
 - Use `outputVerbosity: "minimal"` for efficient polling when you only need to detect changes, not read full content.
 - Combine with `read-email` to get full content of specific changed messages after detecting them.
@@ -100,4 +102,4 @@ Detect emails from specific senders or matching patterns:
 
 - [Find Emails](../email/find-emails.md) — search and filter emails
 - [Using Outlook Assistant in Agents](using-outlook-assistant-in-agents.md) — agent workflow patterns
-- [Tools Reference — search-emails](../../quickrefs/tools-reference.md#email-6-tools)
+- [Tools Reference — search-emails](../../quickrefs/tools-reference.md#email-8-tools)

@@ -57,13 +57,71 @@ if (
   !VALID_AUDIENCE_LITERALS.has(AUTH_AUDIENCE) &&
   !TENANT_GUID_RE.test(AUTH_AUDIENCE)
 ) {
-  // eslint-disable-next-line no-console
   console.warn(
     `[outlook-assistant] OUTLOOK_AUTH_AUDIENCE="${AUTH_AUDIENCE}" is not a recognised value. ` +
       `Expected one of: common, consumers, organizations, or a tenant GUID. ` +
       `Proceeding anyway — Microsoft's identity platform will reject it at runtime if invalid.`
   );
 }
+
+// Shared/delegated mailbox access is OPT-IN (work/school accounts only).
+// With OUTLOOK_SHARED_MAILBOX unset, sign-in requests exactly BASE_SCOPES —
+// nobody's consent prompt or token changes unless they enable it:
+//   OUTLOOK_SHARED_MAILBOX=read                 → Mail.Read.Shared
+//   OUTLOOK_SHARED_MAILBOX=true|readwrite|1     → Mail.Read.Shared + Mail.ReadWrite.Shared
+// Sending/drafts from a shared mailbox are out of scope (Mail.Send.Shared is
+// never requested). When enabled, the device-code flow falls back to
+// BASE_SCOPES only on errors proving the account can't use `.Shared` scopes
+// (see auth/device-code.js isScopeConsentError); consent-required errors
+// (AADSTS65001) surface remediation instead of downgrading.
+const ALL_SHARED_SCOPES = ['Mail.Read.Shared', 'Mail.ReadWrite.Shared'];
+
+/**
+ * Parse OUTLOOK_SHARED_MAILBOX into a mode.
+ * @param {string|undefined} raw
+ * @returns {'off'|'read'|'readwrite'}
+ */
+function parseSharedMailboxMode(raw) {
+  const value = String(raw || '')
+    .trim()
+    .toLowerCase();
+  if (value === 'read') return 'read';
+  if (['true', 'readwrite', '1'].includes(value)) return 'readwrite';
+  if (value && !['false', '0', 'off', 'no'].includes(value)) {
+    console.warn(
+      `[outlook-assistant] OUTLOOK_SHARED_MAILBOX="${raw}" is not a recognised value. ` +
+        'Expected read, true/readwrite/1, or unset. Shared-mailbox support stays off.'
+    );
+  }
+  return 'off';
+}
+
+const SHARED_MAILBOX_MODE = parseSharedMailboxMode(
+  process.env.OUTLOOK_SHARED_MAILBOX
+);
+const SHARED_SCOPES_BY_MODE = {
+  off: [],
+  read: ['Mail.Read.Shared'],
+  readwrite: [...ALL_SHARED_SCOPES],
+};
+const SHARED_SCOPES = SHARED_SCOPES_BY_MODE[SHARED_MAILBOX_MODE];
+
+// Base scopes consentable by ANY account type (personal + work/school).
+const BASE_SCOPES = [
+  'offline_access',
+  'User.Read',
+  'Mail.Read',
+  'Mail.ReadWrite',
+  'Mail.Send',
+  'Calendars.Read',
+  'Calendars.ReadWrite',
+  'Contacts.Read',
+  'Contacts.ReadWrite',
+  'People.Read',
+  'MailboxSettings.ReadWrite',
+  // Org-dependent scopes (work/school accounts only):
+  // 'Place.Read.All',     // find-meeting-rooms tool
+];
 
 module.exports = {
   // Server information
@@ -73,27 +131,25 @@ module.exports = {
   // Test mode setting
   USE_TEST_MODE: process.env.USE_TEST_MODE === 'true',
 
+  // OAuth scope sets (exported so tests + the fallback logic can reference them)
+  BASE_SCOPES,
+  // `.Shared` scopes requested at sign-in for the configured mode ([] = off)
+  SHARED_SCOPES,
+  ALL_SHARED_SCOPES,
+  // 'off' | 'read' | 'readwrite' — from OUTLOOK_SHARED_MAILBOX (opt-in)
+  SHARED_MAILBOX_MODE,
+  parseSharedMailboxMode,
+
   // Authentication configuration
   AUTH_CONFIG: {
     clientId: process.env.OUTLOOK_CLIENT_ID || '',
     clientSecret: process.env.OUTLOOK_CLIENT_SECRET || '',
     redirectUri: 'http://localhost:3333/auth/callback',
-    scopes: [
-      'offline_access',
-      'User.Read',
-      'Mail.Read',
-      'Mail.ReadWrite',
-      'Mail.Send',
-      'Calendars.Read',
-      'Calendars.ReadWrite',
-      'Contacts.Read',
-      'Contacts.ReadWrite',
-      'People.Read',
-      'MailboxSettings.ReadWrite',
-      // Org-dependent scopes (work/school accounts only):
-      // 'Mail.Read.Shared',   // access-shared-mailbox tool
-      // 'Place.Read.All',     // find-meeting-rooms tool
-    ],
+    // Base scopes, plus the `.Shared` scopes only when OUTLOOK_SHARED_MAILBOX
+    // opts in. With the flag on, device-code auth falls back to
+    // fallbackScopes (base only) when the account rejects `.Shared`.
+    scopes: [...BASE_SCOPES, ...SHARED_SCOPES],
+    fallbackScopes: BASE_SCOPES,
     tokenStorePath: path.join(homeDir, '.outlook-assistant-tokens.json'),
     authServerUrl: 'http://localhost:3333',
     audience: AUTH_AUDIENCE,

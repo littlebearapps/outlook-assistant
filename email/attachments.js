@@ -9,6 +9,7 @@ const path = require('path');
 const _config = require('../config'); // Reserved for future use
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
+const { buildMailboxPrefix } = require('../utils/mailbox');
 
 const MAX_FILENAME_LENGTH = 200;
 
@@ -77,6 +78,9 @@ function writeUniqueFile(outputDir, filename, buffer) {
  */
 async function handleListAttachments(args) {
   const messageId = args.messageId;
+  // Attachment IDs live under a mailbox-scoped message ID; route to the owning
+  // shared/delegated mailbox when supplied, else the signed-in account.
+  const prefix = buildMailboxPrefix(args.sharedMailbox || args.email || null);
 
   if (!messageId) {
     return {
@@ -93,7 +97,7 @@ async function handleListAttachments(args) {
     const accessToken = await ensureAuthenticated();
 
     // Call Graph API to get attachments
-    const endpoint = `/me/messages/${messageId}/attachments`;
+    const endpoint = `${prefix}/messages/${messageId}/attachments`;
     const params = {
       $select: 'id,name,contentType,size,isInline',
     };
@@ -176,6 +180,7 @@ async function handleDownloadAttachment(args) {
   // tree with downloaded files.
   const { messageId, attachmentId } = args;
   const savePath = args.outputDir || args.savePath;
+  const prefix = buildMailboxPrefix(args.sharedMailbox || args.email || null);
 
   if (!messageId || !attachmentId) {
     return {
@@ -192,7 +197,7 @@ async function handleDownloadAttachment(args) {
     const accessToken = await ensureAuthenticated();
 
     // First, get attachment metadata to get the filename and content
-    const metadataEndpoint = `/me/messages/${messageId}/attachments/${attachmentId}`;
+    const metadataEndpoint = `${prefix}/messages/${messageId}/attachments/${attachmentId}`;
     console.error(`Fetching attachment metadata: ${attachmentId}`);
 
     const metadata = await callGraphAPI(
@@ -326,6 +331,7 @@ async function handleDownloadAttachment(args) {
  */
 async function handleGetAttachmentContent(args) {
   const { messageId, attachmentId } = args;
+  const prefix = buildMailboxPrefix(args.sharedMailbox || args.email || null);
 
   if (!messageId || !attachmentId) {
     return {
@@ -341,7 +347,7 @@ async function handleGetAttachmentContent(args) {
   try {
     const accessToken = await ensureAuthenticated();
 
-    const endpoint = `/me/messages/${messageId}/attachments/${attachmentId}`;
+    const endpoint = `${prefix}/messages/${messageId}/attachments/${attachmentId}`;
     console.error(`Fetching attachment content: ${attachmentId}`);
 
     const response = await callGraphAPI(accessToken, 'GET', endpoint, null, {});
@@ -436,4 +442,8 @@ module.exports = {
   handleListAttachments,
   handleDownloadAttachment,
   handleGetAttachmentContent,
+  // Shared with email/export.js so exported attachments get the same
+  // GHSA-755c-c45g-69rv filename hardening.
+  safeAttachmentFilename,
+  writeUniqueFile,
 };

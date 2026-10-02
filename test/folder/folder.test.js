@@ -103,6 +103,45 @@ describe('handleListFolders', () => {
     expect(result.content[0].text).toContain('[id: del]');
   });
 
+  it('should flag the listing partial when a child fetch fails', async () => {
+    listChildFolders
+      .mockResolvedValueOnce([
+        {
+          id: 'secret',
+          displayName: 'Secret',
+          parentFolderId: 'root',
+          childFolderCount: 2,
+        },
+      ])
+      .mockRejectedValueOnce(new Error('403 Access is denied'));
+
+    const result = await handleListFolders({});
+
+    expect(result._meta.partial).toBe(true);
+    expect(result._meta.warnings[0]).toContain('Secret');
+    expect(result._meta.warnings[0]).toContain('Access is denied');
+    expect(result.content[0].text).toContain('Partial listing');
+  });
+
+  it('should flag the listing partial when the depth cap is hit', async () => {
+    // Every level reports one child, so the walk runs into the depth-20 cap.
+    listChildFolders.mockImplementation((_token, parentId) =>
+      Promise.resolve([
+        {
+          id: `f-${parentId || 'root'}`,
+          displayName: `L${parentId || 'root'}`,
+          parentFolderId: parentId || 'root',
+          childFolderCount: 1,
+        },
+      ])
+    );
+
+    const result = await handleListFolders({});
+
+    expect(result._meta.partial).toBe(true);
+    expect(result._meta.warnings.join('\n')).toContain('Depth limit (20)');
+  });
+
   it('should handle empty folders', async () => {
     listChildFolders.mockResolvedValue([]);
 
@@ -252,6 +291,7 @@ describe('handleMoveEmails', () => {
     expect(resolveFolder).toHaveBeenCalledWith(mockAccessToken, {
       name: '',
       id: 'abc123',
+      mailbox: null,
     });
   });
 
@@ -302,6 +342,43 @@ describe('handleMoveEmails', () => {
 
     expect(result.content[0].text).toContain('Successfully moved 1');
     expect(result.content[0].text).toContain('Failed to move 1');
+  });
+
+  it('should surface the NEW message ID returned by the move', async () => {
+    resolveFolder.mockResolvedValue({
+      id: 'target-id',
+      displayName: 'Archive',
+      path: 'Archive',
+      parentId: null,
+    });
+    callGraphAPI.mockResolvedValue({ id: 'msg-1-new' });
+
+    const result = await handleMoveEmails({
+      emailIds: 'msg-1',
+      targetFolder: 'Archive',
+    });
+
+    expect(result._meta.moved).toEqual([
+      { oldId: 'msg-1', newId: 'msg-1-new' },
+    ]);
+    expect(result.content[0].text).toContain('msg-1 -> msg-1-new');
+  });
+
+  it('should fall back to the old ID when the move returns no body', async () => {
+    resolveFolder.mockResolvedValue({
+      id: 'target-id',
+      displayName: 'Archive',
+      path: 'Archive',
+      parentId: null,
+    });
+    callGraphAPI.mockResolvedValue(undefined);
+
+    const result = await handleMoveEmails({
+      emailIds: 'msg-1',
+      targetFolder: 'Archive',
+    });
+
+    expect(result._meta.moved).toEqual([{ oldId: 'msg-1', newId: 'msg-1' }]);
   });
 
   it('should require email IDs', async () => {
@@ -384,6 +461,7 @@ describe('handleGetFolderStats', () => {
     expect(resolveFolder).toHaveBeenCalledWith(mockAccessToken, {
       name: 'Triage/Delete',
       id: '',
+      mailbox: null,
     });
     expect(result._meta.folderId).toBe('nested-id');
   });

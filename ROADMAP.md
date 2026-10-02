@@ -4,7 +4,7 @@ Active milestones for the Outlook Assistant MCP server. Items may shift or be cu
 
 For shipped work, see [`CHANGELOG.md`](CHANGELOG.md).
 
-## v3.11.3 — Tool description audit
+## v3.12.x — Tool description audit
 
 The last item from the old `v3.7.5 — Fixes & Polish` slate. Everything else in
 that milestone shipped in v3.11.0 (see "Recently shipped"); this one is held
@@ -17,11 +17,14 @@ not worth half-doing inside a polish release.
 
 The `search-emails` and `searchExpression` descriptions were rewritten in
 v3.10.0 and revised again in v3.11.1 (the `query` versus `searchExpression`
-divergence and the `to` scan cap) — use them as the reference style.
+divergence and the `to` scan cap) — use them as the reference style. Known
+drift to fix while you're in there: `list-events` advertises attendees,
+organiser and `webLink` in its output, but returns subject, location, start/end,
+summary and ID.
 
-> Renumbered from v3.11.1, which was taken by the search/export correctness
-> release, and again from v3.11.2, which was taken by the security release.
-> #93 is documentation-only and was not worth blocking either behind.
+> Renumbered from v3.11.1 (taken by the search/export correctness release),
+> v3.11.2 (the security release) and v3.11.3 (overtaken by the v3.12.0 feature
+> release). #93 is documentation-only and was not worth blocking any of them.
 
 ## v3.8.x — Task Integration & Auth (carry-over)
 
@@ -47,11 +50,11 @@ v3.8.0 shipped the `manage-event update` action (#124) and two community-contrib
 
 - **#90** Add MCP prompts for common email workflows
 
-## v3.12.0+ — New Graph APIs & Platform Maturity
+## v3.13.0+ — New Graph APIs & Platform Maturity
 
-Larger surface-area additions and platform hardening. None of these shipped in
-v3.10.0 (search correctness) or v3.11.0 (fixes & polish), so they carry forward
-to the next feature slot.
+Larger surface-area additions and platform hardening. v3.12.0 used the feature
+slot for shared-mailbox support and `list-events` filters (see "Recently
+shipped"), so these carry forward to the next one.
 
 - **#147** Publisher-verified shared multi-tenant app (one-click setup for read-only scopes)
 - **#133** MCP OAuth 2.1 / PKCE auth flow
@@ -63,6 +66,18 @@ to the next feature slot.
 
 ## Recently shipped
 
+- **v3.12.0** (Oct 2026) — **shared mailboxes and calendar search**, two
+  community contributions. Opt-in shared-mailbox read and organise support
+  (#228, by @DiasonD): a `sharedMailbox` parameter (alias `email`) on
+  `search-emails`, `read-email`, `attachments`, `update-email`,
+  `apply-category`, `export` and `folders`, plus `folderId`, `listFolders` and
+  custom/nested folder names on `access-shared-mailbox`. It's off unless you set
+  `OUTLOOK_SHARED_MAILBOX` (`read` or `true`), work/school accounts only, and
+  sending from a shared mailbox stays unsupported. `list-events` gains
+  `startAfter`, `startBefore` and `subject` filters for past, current and named
+  events (#193, by @taranasus). Token refresh now requests the granted scopes
+  plus `offline_access` (#241). Two security fixes: resource paths reject `.`
+  and `..` segments, and `export` writes are confined to the output directory.
 - **v3.11.2** (Sep 2026) — **security release**. Attachment downloads could be
   written outside `outputDir` via a sender-chosen filename
   ([GHSA-755c-c45g-69rv](https://github.com/littlebearapps/outlook-assistant/security/advisories/GHSA-755c-c45g-69rv)),

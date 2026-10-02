@@ -4,6 +4,7 @@
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { resolveFolder, WELL_KNOWN } = require('./resolve');
+const { buildMailboxPrefix } = require('../utils/mailbox');
 
 /**
  * Delete folder handler
@@ -22,6 +23,8 @@ const { resolveFolder, WELL_KNOWN } = require('./resolve');
  */
 async function handleDeleteFolder(args) {
   const { folderId, folderName } = args;
+  const sharedMailbox = args.sharedMailbox || args.email || null;
+  const prefix = buildMailboxPrefix(sharedMailbox);
 
   if (!folderId && !folderName) {
     return {
@@ -56,6 +59,7 @@ async function handleDeleteFolder(args) {
       resolved = await resolveFolder(accessToken, {
         id: folderId,
         name: folderName,
+        mailbox: sharedMailbox,
       });
     } catch (resolveError) {
       return {
@@ -64,7 +68,11 @@ async function handleDeleteFolder(args) {
     }
 
     // Delete the folder
-    await callGraphAPI(accessToken, 'DELETE', `me/mailFolders/${resolved.id}`);
+    await callGraphAPI(
+      accessToken,
+      'DELETE',
+      `${prefix}/mailFolders/${resolved.id}`
+    );
     return {
       content: [
         {

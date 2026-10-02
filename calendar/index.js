@@ -13,7 +13,7 @@ const calendarTools = [
   {
     name: 'list-events',
     description:
-      'List upcoming calendar events for the signed-in user (read-only). Returns an array of events with id, subject, start/end, attendees, location, organiser, and webLink. Use `count` (default 10, max 50) to control page size; this tool does not filter — use the Outlook UI or specific date ranges via Graph for filtered queries. Each start/end is returned as a canonical UTC ISO-8601 instant (e.g. `2026-04-02T22:00:00.000Z`) followed by a labelled local rendering in the configured display timezone (default Australia/Melbourne; override with `OUTLOOK_DEFAULT_TIMEZONE`) — the UTC value is authoritative, so consumers never have to guess the zone.',
+      'List calendar events for the signed-in user (read-only). By default returns upcoming events (start ≥ now). Optional `startAfter`, `startBefore` and `subject` filters find past, current or specifically-named events; supplying any of them replaces the default "now" lower bound and the filters are AND-ed together. Results are oldest first, except when the search only looks backwards (`startBefore` without `startAfter`, or `subject` alone), where they are newest first. Returns an array of events with id, subject, start/end, attendees, location, organiser, and webLink. Use `count` (default 10, max 50) to control page size. Each start/end is returned as a canonical UTC ISO-8601 instant (e.g. `2026-04-02T22:00:00.000Z`) followed by a labelled local rendering in the configured display timezone (default Australia/Melbourne; override with `OUTLOOK_DEFAULT_TIMEZONE`) — the UTC value is authoritative, so consumers never have to guess the zone.',
     annotations: {
       title: 'List Calendar Events',
       readOnlyHint: true,
@@ -25,6 +25,24 @@ const calendarTools = [
         count: {
           type: 'number',
           description: 'Number of events to retrieve (default: 10, max: 50)',
+        },
+        startAfter: {
+          type: 'string',
+          format: 'date-time',
+          description:
+            'Optional ISO 8601 datetime with `Z` or a ±hh:mm offset (required). Only return events whose start is on or after this time. Replaces the default "now" lower bound when supplied. Example: "2026-01-01T00:00:00Z" or "2026-01-01T09:00:00+10:00".',
+        },
+        startBefore: {
+          type: 'string',
+          format: 'date-time',
+          description:
+            'Optional ISO 8601 datetime with `Z` or a ±hh:mm offset (required). Only return events whose start is strictly before this time. Combine with `startAfter` to bound a window; on its own, results are newest first. Example: "2026-02-01T00:00:00Z".',
+        },
+        subject: {
+          type: 'string',
+          description:
+            'Optional substring (max 255 characters) to match against the event subject, case-insensitive (Graph `contains()`). Useful for finding past or current events by name; on its own, results are newest first.',
+          maxLength: 255,
         },
       },
       additionalProperties: false,

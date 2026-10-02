@@ -36,14 +36,14 @@ Outlook Assistant connects AI assistants to your Microsoft Outlook account throu
 - 📨 **Search and read emails** — find messages by sender, subject, date, or keywords; read full threads with conversation grouping; batch flag, move, export, or categorise multiple emails at once
 - 🛡️ **Send emails with safety controls** — dry-run preview, pre-send mail tips (out-of-office, mailbox full, delivery restrictions), session rate limiting, and recipient allowlist to prevent mistakes
 - ✏️ **Draft emails for review** — create, update, and send drafts; reply and forward as drafts; preview before saving with dry-run mode
-- 📅 **Manage your calendar** — view upcoming events, schedule meetings with attendees, decline or cancel invitations
+- 📅 **Manage your calendar** — view upcoming events, look back at past ones or find them by date range and subject, schedule meetings with attendees, update, decline or cancel events
 - 📦 **Export emails** — save individual messages to Markdown, EML, JSON, or CSV; export full conversation threads to MBOX or HTML; bulk-export search results in one call
 - 🔍 **Investigate email headers** — full raw header access (DKIM, SPF, DMARC, delivery chain, X-Mailer, X-Originating-IP) for phishing investigation and compliance review
 - 🗂️ **Organise your inbox** — create nested folders (addressable by path), set up inbox rules, colour-code with categories, manage Focused Inbox — all work together for complete inbox automation
 - 🔄 **Track inbox changes** — delta sync detects new, modified, and deleted emails since your last check, with tokens for incremental polling
 - 👥 **Manage contacts** — search your contact book and organisational directory, create and update contact records
 - ⚙️ **Configure settings** — set out-of-office auto-replies, working hours, and time zone
-- 📬 **Access shared mailboxes** — read team inboxes and service accounts (Microsoft 365)
+- 📬 **Access shared mailboxes** — read and organise team inboxes and service accounts, including custom subfolders and nested folder paths; enumerate, read, and search the folder tree (best-effort — listings flag any branches skipped due to depth limits or per-folder errors), move/flag/categorise messages, and manage folders (work/school Microsoft 365 accounts; opt-in via `OUTLOOK_SHARED_MAILBOX`). Sending, drafts, replies, and forwards from a shared mailbox are not supported — those operations always act on the signed-in user's own mailbox
 - 🏢 **Find meeting rooms** — search by building, floor, capacity, AV equipment, and wheelchair accessibility (Microsoft 365)
 
 ### Why Outlook Assistant?
@@ -62,15 +62,15 @@ Outlook Assistant connects AI assistants to your Microsoft Outlook account throu
 
 | Module | Tools | What You Can Do |
 |--------|------:|-----------------|
-| **Email** | 8 | `search-emails` (list/search/delta/conversations), `read-email` (content + forensic headers), `send-email` (with dry-run + mail tips), `draft` (create/update/send/delete/reply/forward), `update-email` (read status, flags), `attachments`, `export`, `get-mail-tips` |
-| **Calendar** | 3 | `list-events`, `create-event`, `manage-event` (update/decline/cancel/delete) |
+| **Email** | 8 | `search-emails` (list/search/delta/conversations), `read-email` (content + forensic headers), `send-email` (with dry-run + mail tips), `draft` (create/update/send/delete/reply/reply-all/forward), `update-email` (read status, flags), `attachments`, `export`, `get-mail-tips` |
+| **Calendar** | 3 | `list-events` (upcoming by default; `startAfter`/`startBefore`/`subject` filters), `create-event`, `manage-event` (update/decline/cancel/delete) |
 | **Contacts** | 2 | `manage-contact` (list/search/get/create/update/delete), `search-people` |
 | **Categories** | 3 | `manage-category` (CRUD), `apply-category`, `manage-focused-inbox` |
 | **Settings** | 1 | `mailbox-settings` (get/set auto-replies/set working hours) |
 | **Folder** | 1 | `folders` (list/create/move/stats/delete) — nested folders addressable by path (`Parent/Child`) or ID |
 | **Rules** | 1 | `manage-rules` (list/create/update/reorder/delete) |
-| **Advanced** | 2 | `access-shared-mailbox`, `find-meeting-rooms` |
-| **Auth** | 1 | `auth` (status/authenticate/about) |
+| **Advanced** | 2 | `access-shared-mailbox` (messages or folder tree), `find-meeting-rooms` |
+| **Auth** | 1 | `auth` (status/authenticate/device-code-complete/about) |
 
 **22 tools total** — consolidated from 55 for optimal AI performance. See the [Tools Reference](docs/quickrefs/tools-reference.md) for complete parameter details.
 
@@ -104,7 +104,7 @@ Outlook Assistant works with both personal and work/school Microsoft accounts, b
 | Categories | Full support | Full support |
 | Mailbox settings | Full support | Full support |
 | Focused Inbox | API works (overrides stored) but mail routing not affected | Full support |
-| Shared mailboxes | Not available | Requires `Mail.Read.Shared` |
+| Shared mailboxes | Not available | Opt-in (`OUTLOOK_SHARED_MAILBOX`). Read + organise only. Read: `Mail.Read.Shared`; organise (move/categorise/flag/create folders): `Mail.ReadWrite.Shared`. No sending/drafts/replies/forwards |
 | Meeting room search | Not available | Requires `Place.Read.All` + admin consent |
 
 > **Note**: On personal accounts, Microsoft's `$search` API has limited support for free-text queries. Outlook Assistant handles this automatically with progressive search — if your query returns no results, it falls back through OData filters, boolean filters, and recent message listing to find your emails. For the most direct results on personal accounts, use the structured filter parameters (`from`, `subject`, `to`, `receivedAfter`).
@@ -141,6 +141,8 @@ Outlook Assistant is designed with safety-first principles for AI-driven email a
 > }
 > ```
 
+**Input and file hardening** — IDs containing `.` or `..` path segments are refused before any request is made, continuation links (`deltaToken`) must point at `graph.microsoft.com`, and attachment downloads and exports write sanitised filenames inside the output directory without overwriting existing files or following symlinks.
+
 **Draft protections** — The `draft` tool shares `send-email` safety controls: dry-run preview, recipient allowlist, mail-tips validation, and rate limiting. The `send` action shares the `send-email` rate limit counter, preventing circumvention via the draft-then-send pathway.
 
 **Token-optimised architecture** — Tools are consolidated using the STRAP (Single Tool, Resource, Action Pattern) approach. 22 tools instead of 55 reduces per-turn overhead by ~11,000 tokens (~64%), keeping more of the AI's context window available for your actual conversation. Fewer tools also means the AI selects the right tool more accurately — research shows tool selection degrades beyond ~40 tools.
@@ -164,7 +166,7 @@ npx @littlebearapps/outlook-assistant
 To check which version you have, or to see the available options:
 
 ```bash
-outlook-assistant --version     # prints e.g. 3.11.2
+outlook-assistant --version     # prints e.g. 3.12.0
 outlook-assistant --help        # usage, options and key environment variables
 ```
 
@@ -210,10 +212,13 @@ Add to your MCP client config:
 <summary><strong>Claude Code</strong> (CLI)</summary>
 
 ```bash
-claude mcp add outlook -- npx @littlebearapps/outlook-assistant
+claude mcp add outlook \
+  -e OUTLOOK_CLIENT_ID=your-application-client-id \
+  -e OUTLOOK_CLIENT_SECRET=your-client-secret-VALUE \
+  -- npx -y @littlebearapps/outlook-assistant
 ```
 
-Then set environment variables in your `.env` or shell.
+The MCP server reads its settings from the environment your client passes it; it doesn't load a `.env` file.
 </details>
 
 <details>
@@ -260,18 +265,18 @@ Or add manually to `.cursor/mcp.json`:
 
 ### 4. Authenticate
 
-1. Start the auth server: `outlook-assistant-auth` (or `npx @littlebearapps/outlook-assistant-auth`)
-2. In your AI assistant, use the `auth` tool with `action=authenticate` to get an OAuth URL
-3. Open the URL, sign in with your Microsoft account, and grant permissions
+1. Ask your AI assistant to connect to Outlook — it calls the `auth` tool with `action=authenticate` and returns a short code and the URL `microsoft.com/devicelogin`
+2. Open the URL on any device (a private/incognito window avoids cached sessions), enter the code, sign in and grant permissions
+3. Tell your assistant you're done — it calls `auth` with `action=device-code-complete`
 4. Tokens are saved locally and refresh automatically
 
-> **Note**: The auth server needs `OUTLOOK_CLIENT_ID` and `OUTLOOK_CLIENT_SECRET` environment variables. Your MCP client's `"env"` config only applies to the MCP server process — when running the auth server separately, ensure these are set in a `.env` file or exported in your shell.
+No auth server is needed for this default device-code flow. If you'd rather use the browser redirect flow, see [Authentication Flow](#authentication-flow) below.
 
 ## Installation
 
 ### Prerequisites
 
-- **Node.js** 18.0.0 or higher
+- **Node.js** 18.18.0 or higher (contributors: the dev tooling needs 22.22.1 or higher)
 - **npm** (included with Node.js)
 - **Azure account** for app registration ([free tier works](https://azure.microsoft.com/free/))
 
@@ -327,7 +332,8 @@ a server that would ignore it.
    - `MailboxSettings.ReadWrite` — settings, auto-replies, categories
    - `People.Read` — people search
 3. Optionally add **org-only** permissions (work/school accounts only):
-   - `Mail.Read.Shared` — shared mailbox access
+   - `Mail.Read.Shared` — shared mailbox read access (requested only when `OUTLOOK_SHARED_MAILBOX=read` or `=true`)
+   - `Mail.ReadWrite.Shared` — shared mailbox writes (move/categorise/flag/mark-read; requested only when `OUTLOOK_SHARED_MAILBOX=true`)
    - `Place.Read.All` — meeting room search (requires admin consent)
 4. Click **Add permissions**
 
@@ -342,7 +348,7 @@ a server that would ignore it.
 
 ### Environment Variables
 
-Create a `.env` file from the example:
+Set these in your MCP client's `"env"` block (see [Quick Start](#3-configure-your-mcp-client)). The MCP server doesn't load `.env` files; the browser-flow auth server (`npm run auth-server`) does, so when running from source you can also keep a `.env` for it:
 
 ```bash
 cp .env.example .env
@@ -366,6 +372,7 @@ USE_TEST_MODE=false
 | `OUTLOOK_DEFAULT_TIMEZONE` | IANA timezone applied to calendar events when callers don't pass one (e.g. `Europe/London`, `America/New_York`). | `Australia/Melbourne` |
 | `OUTLOOK_MAX_EMAILS_PER_SESSION` | Cap on `send-email` + `draft send` per MCP server lifetime. | unlimited |
 | `OUTLOOK_ALLOWED_RECIPIENTS` | Comma-separated allowlist of domains/addresses for sends, drafts, and rule forwards. | unrestricted |
+| `OUTLOOK_SHARED_MAILBOX` | Opt-in shared-mailbox support (work/school only). `read` requests `Mail.Read.Shared`; `true` (or `readwrite`/`1`) also requests `Mail.ReadWrite.Shared`. Unset leaves sign-in unchanged. After enabling, restart and run `auth action=authenticate force=true`. | unset (off) |
 | `OUTLOOK_SEARCH_SCAN_LIMIT` | How many recent messages the client-side search fallback scans. Personal accounts match `to` locally within this window, so the default caps how far back a `to` search reaches. Max 5000. | `500` |
 
 ### MCP Client Configuration
@@ -407,19 +414,27 @@ No auth server needed. Works everywhere, including remote/headless environments.
 
 ### Browser Redirect Flow (Alternative)
 
-For localhost development or if you prefer the traditional OAuth flow:
+For localhost development or if you prefer the traditional OAuth flow, start the auth server. From a source checkout:
 
 ```bash
 npm run auth-server
 ```
 
-This starts a local server on port 3333 to handle the OAuth callback.
+From a global npm install:
+
+```bash
+node "$(npm root -g)/@littlebearapps/outlook-assistant/outlook-auth-server.js"
+```
+
+This starts a local server on port 3333 to handle the OAuth callback. (The `outlook-assistant` command itself only accepts `--version` and `--help`; any other argument exits with an error.)
 
 1. In your AI assistant, use the `auth` tool with `action=authenticate, method=browser`
 2. Open the provided URL in your browser
 3. Sign in and grant permissions — tokens are saved automatically
 
-> **Note**: The auth server reads `OUTLOOK_CLIENT_ID` and `OUTLOOK_CLIENT_SECRET` from environment variables. Your MCP client's `"env"` config only applies to the MCP server process, not a separately-started auth server.
+> **Note**: The auth server reads `OUTLOOK_CLIENT_ID` and `OUTLOOK_CLIENT_SECRET` from environment variables or a `.env` file in the directory you start it from. Your MCP client's `"env"` config only applies to the MCP server process, not a separately-started auth server.
+>
+> **Shared mailboxes**: the browser flow requests the configured scopes with no fallback. If you enable `OUTLOOK_SHARED_MAILBOX`, sign in with the device-code flow.
 
 ## Directory Structure
 
@@ -429,22 +444,23 @@ outlook-assistant/
 ├── config.js                # Configuration settings
 ├── outlook-auth-server.js   # OAuth server (port 3333)
 ├── auth/                    # Authentication module (1 tool)
-├── email/                   # Email module (7 tools)
+├── email/                   # Email module (8 tools)
 │   ├── mail-tips.js         # Pre-send recipient validation
 │   ├── headers.js           # Email header retrieval
 │   ├── mime.js              # Raw MIME/EML content
 │   ├── conversations.js     # Thread listing/export
 │   ├── attachments.js       # Attachment operations
 │   └── ...
-├── calendar/                # Calendar module (3 tools)
+├── calendar/                # Calendar module (3 tools; list.js builds list-events filters)
 ├── contacts/                # Contacts module (2 tools)
 ├── categories/              # Categories module (3 tools)
 ├── settings/                # Settings module (1 tool)
-├── folder/                  # Folder module (1 tool)
+├── folder/                  # Folder module (1 tool; resolve.js resolves paths/IDs)
 ├── rules/                   # Rules module (1 tool)
 ├── advanced/                # Advanced module (2 tools)
 └── utils/
-    ├── graph-api.js         # Microsoft Graph API client (includes $batch)
+    ├── graph-api.js         # Microsoft Graph API client (includes $batch, path guards)
+    ├── mailbox.js           # me vs users/{sharedMailbox} prefix, shared-mailbox opt-in
     ├── safety.js            # Rate limiting, recipient allowlist, dry-run
     ├── odata-helpers.js     # OData query building
     ├── field-presets.js     # Token-efficient field selections
@@ -524,8 +540,9 @@ USE_TEST_MODE=true npm start
 | [Getting Started](docs/how-to/getting-started/connect-outlook-to-claude.md) | Install, configure, and authenticate — start here |
 | [Azure Setup Guide](docs/guides/azure-setup.md) | Azure account creation, app registration, permissions, and secrets |
 | [How-To Guides](docs/how-to/index.md) | 29 practical guides for email, calendar, contacts, and settings |
-| [Roadmap](ROADMAP.md) | Active milestones (v3.11.2, v3.8.x, v3.12.0+) and recent releases |
-| [Troubleshooting & FAQ](docs/how-to/getting-started/verify-your-connection.md#common-connection-problems) | Common problems, re-authentication, and frequently asked questions |
+| [Roadmap](ROADMAP.md) | Active milestones (v3.12.x, v3.8.x, v3.13.0+) and recent releases |
+| [Troubleshooting](docs/troubleshooting.md) | Known errors and fixes, including auth, search, export and shared mailboxes |
+| [FAQ](docs/faq/faq.md) | Install, accounts, permissions, tokens, updates, uninstall |
 | [Tools Reference](docs/quickrefs/tools-reference.md) | All 22 tools with parameters |
 | [AI Agent Guide](docs/how-to/ai-agents/using-outlook-assistant-in-agents.md) | Tool selection and workflow patterns for AI agents |
 
@@ -536,9 +553,10 @@ Full documentation: [docs/](docs/README.md)
 - **Personal account search**: Free-text `query` and the raw `searchExpression` (formerly `kqlQuery`) rely on Microsoft's `$search` API, which has limited support on personal Outlook.com accounts. `query` mitigates this with progressive fallback (OData filters, boolean filters, then a client-side scan). Field-scoped `$search` (e.g. `subject:"…"`) is rejected outright there; since v3.10.0 `from:`/`to:`/`subject:` expressions are translated into the closest equivalent OData filters and retried, but boolean operators, grouping, wildcards and other field prefixes are not — those still terminate with an explicit no-results rather than a silent broader search. Structured filters (`from`, `subject`, `to`, `receivedAfter`) remain the most direct route. Cross-folder search (`searchAllFolders: true`) returns a superset of inbox-only results. Note that `query` and `searchExpression` are not interchangeable there: `searchExpression` goes to `$search`, which matches the whole message including the body and ranks by relevance rather than date, while `query` falls back to a subject substring match that never reads bodies.
 - **`to` search depth on personal accounts**: the server-side recipient filter is rejected, so `to` is matched locally over the 500 most recent messages (`OUTLOOK_SEARCH_SCAN_LIMIT`, max 5000). On a large archive that excludes older mail — pair `to` with `receivedAfter`/`receivedBefore`. Since v3.11.1 the response says so whenever the scan was truncated, whether or not it matched.
 - **Focused Inbox**: Only available on work/school Microsoft 365 accounts.
-- **Shared mailboxes**: Require `Mail.Read.Shared` permission and a work/school account.
+- **Shared mailboxes**: Require a work/school account and are **opt-in**: set `OUTLOOK_SHARED_MAILBOX=read` (read) or `=true` (read and organise), restart the server, then re-authenticate with `auth action=authenticate force=true`. Until then, `sharedMailbox` calls are refused with setup guidance (`access-shared-mailbox` keeps its previous well-known-folder behaviour). `auth action=about` shows whether the shared scopes were actually granted. Support covers reading and organising only. Reading needs `Mail.Read.Shared`; organising (move/categorise/flag/mark-read/create folders via `sharedMailbox`) needs `Mail.ReadWrite.Shared` — add it in Azure and re-authenticate (until then, shared-scoped writes fail with 403; they never fall back to your own mailbox). Custom subfolders are supported — pass `folder` as a display name or nested path (e.g. `Inbox/Vendors/Acme`), a raw `folderId`, or use `listFolders: true` (or `folders action=list, sharedMailbox: …`) to discover them. **Sending, drafts, replies, and forwards from a shared mailbox are not supported** — `send-email` and `draft` (including reply/reply-all/forward) always act on the signed-in user's own mailbox, and `Mail.Send.Shared` is not requested.
 - **Meeting room search**: Requires `Place.Read.All` permission with admin consent (work/school accounts only).
-- **Export default path**: Exports save to the system temp directory by default. Use `savePath` or `outputDir` to specify a different location.
+- **Export default path**: Exports and attachment downloads save to the system temp directory by default. Use `outputDir` (or `savePath`) to choose a different location.
+- **`list-events` date filters**: `startAfter`/`startBefore` must include `Z` or a ±hh:mm offset; zone-less and date-only values are rejected rather than guessed.
 
 ## Contributing
 

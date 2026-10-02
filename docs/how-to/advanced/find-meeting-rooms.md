@@ -73,7 +73,7 @@ This is particularly useful when booking rooms for presentations (need a display
 
 ## Required Permissions
 
-This tool requires the `Place.Read.All` Microsoft Graph permission. Your Exchange administrator must also have configured room resources in your organisation's directory.
+The tool first queries `/places`, which needs the `Place.Read.All` Microsoft Graph permission (admin consent required). Outlook Assistant doesn't ask for it at sign-in, so to use `/places`, add it to your app registration in Azure Portal, have an administrator grant consent, then re-authenticate with `auth action=authenticate force=true`. Without it, the tool falls back to `me/findRooms`, which doesn't need `Place.Read.All` but is currently unreliable on Graph v1.0 (tracked in [#240](https://github.com/littlebearapps/outlook-assistant/issues/240)). Your Exchange administrator must also have configured room resources in your organisation's directory.
 
 ## Parameter Reference
 
@@ -89,8 +89,8 @@ This tool requires the `Place.Read.All` Microsoft Graph permission. Your Exchang
 
 | Problem | Cause | Fix |
 |---------|-------|-----|
-| No results returned | Missing permission or no rooms configured | Add `Places.Read.All` permission; check with Exchange admin |
-| "Forbidden" error | Permission not granted | Grant `Places.Read.All` in Azure Portal |
+| No results returned | Missing permission or no rooms configured | Add `Place.Read.All` permission; check with Exchange admin |
+| "Forbidden" error | Permission not granted | Grant `Place.Read.All` in Azure Portal |
 
 ## Tips
 

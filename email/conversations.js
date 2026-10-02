@@ -12,6 +12,8 @@ const {
 } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { getEmailFields } = require('../utils/field-presets');
+const { resolveFolderPath } = require('./folder-utils');
+const { buildMailboxPrefix } = require('../utils/mailbox');
 const {
   formatEmailContent,
   formatEmailsAsCSV,
@@ -59,6 +61,8 @@ async function handleListConversations(args) {
   const folder = args.folder || 'inbox';
   const count = Math.min(args.count || 20, 50);
   const verbosity = args.outputVerbosity || VERBOSITY.STANDARD;
+  // Optional: scope to a shared/delegated mailbox instead of the signed-in user.
+  const sharedMailbox = args.sharedMailbox || args.email || null;
 
   try {
     const accessToken = await ensureAuthenticated();
@@ -77,7 +81,13 @@ async function handleListConversations(args) {
       'bodyPreview',
     ].join(',');
 
-    const endpoint = `me/mailFolders/${folder}/messages`;
+    // resolveFolderPath handles well-known names, custom/localized names, nested
+    // paths, and raw IDs, scoped to the signed-in user or the shared mailbox.
+    const endpoint = await resolveFolderPath(
+      accessToken,
+      folder,
+      sharedMailbox
+    );
     const queryParams = {
       $select: selectFields,
       $orderby: 'receivedDateTime desc',
@@ -252,6 +262,8 @@ async function handleGetConversation(args) {
   const conversationId = args.conversationId;
   const includeHeaders = args.includeHeaders || false;
   const verbosity = args.outputVerbosity || VERBOSITY.STANDARD;
+  const sharedMailbox = args.sharedMailbox || args.email || null;
+  const prefix = buildMailboxPrefix(sharedMailbox);
 
   if (!conversationId) {
     return {
@@ -267,7 +279,7 @@ async function handleGetConversation(args) {
     const selectFields = getEmailFields(fieldPreset);
 
     // Search all folders for messages with this conversation ID
-    const endpoint = 'me/messages';
+    const endpoint = `${prefix}/messages`;
     const queryParams = {
       $select: selectFields,
       $filter: `conversationId eq '${conversationId}'`,
@@ -379,6 +391,8 @@ async function handleExportConversation(args) {
   const outputDir = args.outputDir || require('os').tmpdir();
   const _includeAttachments = args.includeAttachments !== false;
   const order = args.order || 'chronological';
+  const sharedMailbox = args.sharedMailbox || args.email || null;
+  const prefix = buildMailboxPrefix(sharedMailbox);
 
   if (!conversationId) {
     return {
@@ -403,7 +417,7 @@ async function handleExportConversation(args) {
 
     // Get all messages in conversation
     const selectFields = getEmailFields('export');
-    const endpoint = 'me/messages';
+    const endpoint = `${prefix}/messages`;
     const queryParams = {
       $select: selectFields,
       $filter: `conversationId eq '${conversationId}'`,
@@ -474,7 +488,11 @@ async function handleExportConversation(args) {
 
         for (let i = 0; i < messages.length; i++) {
           const msg = messages[i];
-          const mimeContent = await callGraphAPIRaw(accessToken, msg.id);
+          const mimeContent = await callGraphAPIRaw(
+            accessToken,
+            msg.id,
+            prefix
+          );
           const msgDate = formatDateForFilename(msg.receivedDateTime);
           const emlPath = path.join(
             emlDir,
@@ -493,7 +511,11 @@ async function handleExportConversation(args) {
         let mboxContent = '';
 
         for (const msg of messages) {
-          const mimeContent = await callGraphAPIRaw(accessToken, msg.id);
+          const mimeContent = await callGraphAPIRaw(
+            accessToken,
+            msg.id,
+            prefix
+          );
           const from = msg.from?.emailAddress?.address || 'unknown@unknown.com';
           const msgDate = new Date(msg.receivedDateTime);
           const mboxDate = msgDate.toUTCString().replace('GMT', '+0000');

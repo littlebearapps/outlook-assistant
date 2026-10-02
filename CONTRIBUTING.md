@@ -37,8 +37,9 @@ Feature requests are welcome! Use the [feature request template](https://github.
 4. **Add tests** for new functionality
 5. **Run tests**: `npm test`
 6. **Run linting**: `npm run lint`
-7. **Update documentation** if needed
-8. **Submit a pull request** using the PR template
+7. **Check formatting**: `npm run format:check` (CI runs this; `npm run format` fixes it)
+8. **Update documentation** if needed
+9. **Submit a pull request** using the PR template
 
 ## Development Setup
 
@@ -98,6 +99,8 @@ test: add tests for contacts module
 - Write tests for new functionality
 - Ensure existing tests pass: `npm test`
 - Use test mode for development: `USE_TEST_MODE=true npm start`
+- `test/auth/auth-tools.test.js` creates and deletes `~/.outlook-assistant-pending-auth.json`. If you have a real device-code sign-in in progress, run the suite with `HOME` pointed at a temporary directory (for example `HOME=$(mktemp -d) npm test`)
+- Shared-mailbox code paths are opt-in; tests that exercise them switch the setting on with `test/helpers/shared-mailbox.js`
 
 ## Questions?
 

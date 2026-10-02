@@ -164,6 +164,7 @@ On personal Outlook.com accounts, deleting a folder moves it — and everything 
 | `folder` | Folder to get stats for (alias, path, or name) | `stats` |
 | `folderId` | Folder ID (stats or delete) | `stats`, `delete` |
 | `folderName` | Folder name or path to delete (resolved to ID) | `delete` |
+| `sharedMailbox` | Act on a shared mailbox's folders instead of your own (alias `email`; opt-in, `create`/`move`/`delete` need `OUTLOOK_SHARED_MAILBOX=true`) | All |
 
 ## Tips
 
@@ -172,6 +173,7 @@ On personal Outlook.com accounts, deleting a folder moves it — and everything 
 - Use folder stats to check volume before searching a folder
 - Combine folder creation with inbox rules for automatic sorting — see [Create Inbox Rules](create-inbox-rules.md)
 - Common built-in folders: `inbox`, `sentitems`, `drafts`, `deleteditems`, `archive`, `junkemail`
+- All five actions work on a shared mailbox with `sharedMailbox` set, including nested paths and custom names — see [Access Shared Mailboxes](../advanced/access-shared-mailboxes.md)
 
 ## Related
 

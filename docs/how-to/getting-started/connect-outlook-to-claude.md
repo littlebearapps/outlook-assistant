@@ -45,8 +45,11 @@ Follow the full walkthrough in the [Azure Setup Guide](../../guides/azure-setup.
    - `People.Read` — people search
 
 **Optional** (work/school accounts only):
-   - `Mail.Read.Shared` — shared mailbox access
+   - `Mail.Read.Shared` — shared mailbox read access
+   - `Mail.ReadWrite.Shared` — shared mailbox writes (move/categorise/flag/mark-read)
    - `Place.Read.All` — meeting room search (requires admin consent)
+
+   The two `.Shared` scopes are only requested when you opt in with `OUTLOOK_SHARED_MAILBOX` — see [Access Shared Mailboxes](../advanced/access-shared-mailboxes.md).
 
 > **Common mistake**: Copy the secret **Value**, not the Secret ID. Using the wrong one causes `AADSTS7000215` errors.
 
@@ -75,7 +78,16 @@ Add to your `claude_desktop_config.json`:
 
 ### Claude Code
 
-Add to your `.mcp.json` or project settings:
+Add with the CLI:
+
+```bash
+claude mcp add outlook \
+  -e OUTLOOK_CLIENT_ID=your-client-id \
+  -e OUTLOOK_CLIENT_SECRET=your-secret-value \
+  -- npx -y @littlebearapps/outlook-assistant
+```
+
+Or add to your `.mcp.json` or project settings:
 
 ```json
 {
@@ -94,7 +106,9 @@ Add to your `.mcp.json` or project settings:
 
 ### Other MCP Clients
 
-Any MCP-compatible client can use Outlook Assistant. Set the command to `npx -y @littlebearapps/outlook-assistant` and pass the two environment variables.
+Any MCP-compatible client can use Outlook Assistant. Set the command to `npx -y @littlebearapps/outlook-assistant` and pass the two environment variables in the client's `env` settings. The MCP server doesn't read a `.env` file.
+
+Optional settings such as `OUTLOOK_AUTH_AUDIENCE`, `OUTLOOK_DEFAULT_TIMEZONE`, the send safety belts and `OUTLOOK_SHARED_MAILBOX` go in the same `env` block — see the [README's environment variables table](../../../README.md#environment-variables).
 
 ## Authenticate for the First Time
 
@@ -126,15 +140,25 @@ Your AI assistant will call the `auth` tool with `action: authenticate`. You'll 
 
 If you prefer the traditional OAuth browser redirect (e.g. for localhost development):
 
-1. Start the auth server:
+1. Start the auth server. From a source checkout:
 
 ```bash
-npx @littlebearapps/outlook-assistant auth-server
+npm run auth-server
+```
+
+From a global npm install:
+
+```bash
+node "$(npm root -g)/@littlebearapps/outlook-assistant/outlook-auth-server.js"
 ```
 
 > **Important**: The auth server needs `OUTLOOK_CLIENT_ID` and `OUTLOOK_CLIENT_SECRET` environment variables. Either:
-> - Create a `.env` file in the project root (copy from `.env.example`), or
+> - Create a `.env` file in the directory you start it from (copy from `.env.example`), or
 > - Export the variables in your shell before running the command
+>
+> The `outlook-assistant` command itself only accepts `--version` and `--help`, so `npx @littlebearapps/outlook-assistant auth-server` exits with an error.
+>
+> The browser flow requests the configured scopes with no fallback. If you've enabled `OUTLOOK_SHARED_MAILBOX`, use the device code flow instead.
 
 2. Ask your AI assistant:
 
@@ -150,7 +174,7 @@ Your AI assistant will call the `auth` tool with `action: authenticate, method: 
 
 | Process | Purpose | When to run |
 |---------|---------|-------------|
-| **MCP server** (`index.js`) | Handles all 21 Outlook tools | Always — your MCP client starts it automatically |
+| **MCP server** (`index.js`) | Handles all 22 Outlook tools | Always — your MCP client starts it automatically |
 | **Auth server** (`outlook-auth-server.js`) | Handles browser OAuth redirect flow | Only if using `method=browser` during authentication |
 
 **Key points:**
@@ -164,7 +188,7 @@ Ask your AI assistant:
 
 > "Check my Outlook connection status"
 
-The `auth` tool is called with `action: status`. You should see your email address and token expiry time.
+The `auth` tool is called with `action: status`. You should see "Authenticated and ready" with the time until the token expires. To confirm which mailbox is connected, ask for the server info (`auth` with `action: about`).
 
 ![Auth tool success message showing authenticated status](../../assets/screenshots/connect-outlook-to-claude-03.png)
 
@@ -180,7 +204,8 @@ If you see your recent emails, everything is connected.
 |---------|----------|
 | `AADSTS7000215` (invalid secret) | Use the secret **Value**, not the Secret ID |
 | `EADDRINUSE :3333` | Run `npx kill-port 3333` then restart the auth server |
-| Auth URL doesn't open | Start the auth server first with `npx @littlebearapps/outlook-assistant auth-server` |
+| Auth URL doesn't open | Browser flow only: start the auth server first (`npm run auth-server` from source). The default device code flow uses `microsoft.com/devicelogin` and needs no auth server |
+| `unrecognised argument` when starting the server | The `outlook-assistant` command only accepts `--version` and `--help`; see the browser-flow steps above for starting the auth server |
 | Permissions error after login | Check API permissions in Azure Portal and grant admin consent if required |
 | Token file not found | Tokens are stored at `~/.outlook-assistant-tokens.json` — check the file exists after auth |
 

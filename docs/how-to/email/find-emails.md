@@ -235,6 +235,7 @@ Delta sync is useful for inbox monitoring workflows, audit trails, and notificat
 | `count` | Number of results to return | `10` |
 | `searchExpression` | Raw Graph `$search` expression for advanced queries (formerly `kqlQuery`) — see the [KQL Search Reference](../advanced/kql-search-reference.md) for personal-account support | `"subject:\"quarterly report\""` |
 | `outputVerbosity` | Detail level: minimal, standard, full | `"minimal"` |
+| `sharedMailbox` | Search a shared mailbox instead of your own (alias `email`; opt-in, work/school only) | `"support@company.com"` |
 
 ## Tips
 
@@ -242,6 +243,7 @@ Delta sync is useful for inbox monitoring workflows, audit trails, and notificat
 - Use `outputVerbosity: "minimal"` when you just need subject lines and dates
 - For advanced queries, see the [KQL Search Reference](../advanced/kql-search-reference.md)
 - Combine `from` + `receivedAfter` for the most targeted searches
+- To search a shared mailbox, add `sharedMailbox` — every mode works, including `folder` paths and `searchAllFolders`. It needs the opt-in `OUTLOOK_SHARED_MAILBOX` setting; see [Access Shared Mailboxes](../advanced/access-shared-mailboxes.md)
 - **Personal accounts (Outlook.com)**: Outlook Assistant automatically tries multiple search strategies if `$search` is unavailable, but `subject`, `from`, `to`, and date range filters give the most direct results. See [Account Compatibility](../../../README.md#account-compatibility)
 
 ## Related
@@ -249,4 +251,4 @@ Delta sync is useful for inbox monitoring workflows, audit trails, and notificat
 - [Read Email Threads](read-email-threads.md) — read an email after finding it
 - [Export Emails](export-emails.md) — save search results to disk
 - [KQL Search Reference](../advanced/kql-search-reference.md) — advanced query patterns
-- [Tools Reference — search-emails](../../quickrefs/tools-reference.md#email-6-tools)
+- [Tools Reference — search-emails](../../quickrefs/tools-reference.md#email-8-tools)

@@ -103,10 +103,11 @@ Each mail server adds a `Received:` header. Read them bottom-to-top to trace the
 - Use `groupByType: true` for a structured view when doing thorough analysis
 - Compare the `From` header with the `Return-Path` — mismatches may indicate spoofing
 - For raw JSON output (for scripting), add `raw: true`
+- To inspect a message in a shared mailbox, pass the same `sharedMailbox` (alias `email`) you found it with — see [Access Shared Mailboxes](access-shared-mailboxes.md)
 
 ## Related
 
 - [Read Email Threads](../email/read-email-threads.md) — read the email body
 - [Find Emails](../email/find-emails.md) — find the suspicious email first
 - [Export Emails](../email/export-emails.md) — export with full MIME headers
-- [Tools Reference — read-email](../../quickrefs/tools-reference.md#email-6-tools)
+- [Tools Reference — read-email](../../quickrefs/tools-reference.md#email-8-tools)

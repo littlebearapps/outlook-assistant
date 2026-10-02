@@ -109,15 +109,17 @@ See [Batch Operations](../advanced/batch-operations.md) for more bulk workflows.
 | `ids` | Array of email IDs (batch) | `flag`, `unflag`, `complete` |
 | `dueDateTime` | Follow-up due date (ISO 8601) | `flag` |
 | `startDateTime` | Follow-up start date (ISO 8601) | `flag` |
+| `sharedMailbox` | Shared mailbox the messages belong to (alias `email`; needs `OUTLOOK_SHARED_MAILBOX=true`) | All actions |
 
 ## Tips
 
 - Use `search-emails` with `unreadOnly: true` to find unread emails
 - Flags sync to Outlook's task/to-do list — flagged emails appear in Microsoft To Do
 - Dates use ISO 8601 format: `2026-03-15T09:00:00Z`
+- Flagging or marking messages in a shared mailbox works the same way with `sharedMailbox` set — see [Access Shared Mailboxes](../advanced/access-shared-mailboxes.md)
 
 ## Related
 
 - [Find Emails](find-emails.md) — search for emails to flag
 - [Batch Operations](../advanced/batch-operations.md) — bulk flag operations
-- [Tools Reference — update-email](../../quickrefs/tools-reference.md#email-6-tools)
+- [Tools Reference — update-email](../../quickrefs/tools-reference.md#email-8-tools)

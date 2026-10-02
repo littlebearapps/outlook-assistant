@@ -18,6 +18,8 @@ Popular guides:
 - [Send Email Safely](how-to/email/send-email-safely.md) — Compose with dry-run preview and safety controls
 - [Set Out-of-Office](how-to/settings/set-out-of-office.md) — Automatic replies with scheduling
 - [Create Calendar Events](how-to/calendar/create-calendar-events.md) — Schedule meetings with attendees
+- [View and Search Calendar Events](how-to/calendar/view-upcoming-events.md) — Upcoming, past, or by date range and subject
+- [Access Shared Mailboxes](how-to/advanced/access-shared-mailboxes.md) — Opt-in read and organise for team inboxes
 - [KQL Search Reference](how-to/advanced/kql-search-reference.md) — Advanced search query patterns
 - [Investigate Email Headers](how-to/advanced/investigate-email-headers.md) — DKIM, SPF, and forensic analysis
 
@@ -27,6 +29,8 @@ Popular guides:
 |----------|-------------|
 | [Tools Reference](quickrefs/tools-reference.md) | All 22 tools with parameters |
 | [FAQ](faq/faq.md) | Frequently asked questions — install, accounts, permissions, tokens, updates, uninstall |
+| [Troubleshooting](troubleshooting.md) | Known errors and fixes — auth, search, export, shared mailboxes |
+| [Architecture](architecture.md) | Module layout and the v1 → v3 tool-consolidation map |
 | [Using Outlook Assistant in AI Agents](how-to/ai-agents/using-outlook-assistant-in-agents.md) | Tool selection, safety, and workflow patterns for AI agents |
 | [CLAUDE.md](../CLAUDE.md) | Quick reference for development |
 
@@ -39,6 +43,7 @@ Popular guides:
 
 ## Need Help?
 
+- [Troubleshooting](troubleshooting.md) — Known errors and their fixes
 - [Azure Troubleshooting](guides/azure-setup.md#troubleshooting) — App registration, secrets, and permission errors
 - [Connection Troubleshooting & FAQ](how-to/getting-started/verify-your-connection.md#common-connection-problems) — Auth failures, token issues, re-authentication, and FAQ
 - [Open an Issue](https://github.com/littlebearapps/outlook-assistant/issues/new/choose) — Report bugs or request features

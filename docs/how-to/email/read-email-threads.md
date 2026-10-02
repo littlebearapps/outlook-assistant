@@ -83,10 +83,11 @@ For forensic header analysis (DKIM, SPF, delivery chain), see [Investigate Email
 - Search first with `search-emails`, then read with `read-email` using the returned ID
 - Use `groupByConversation: true` to get a bird's-eye view of your inbox threads
 - Use `outputVerbosity: "minimal"` when you're scanning multiple emails and only need subject lines
+- For a message or thread from a shared mailbox, pass the same `sharedMailbox` (alias `email`) to `read-email` and `search-emails` that you found it with, or the ID won't be found — see [Access Shared Mailboxes](../advanced/access-shared-mailboxes.md)
 
 ## Related
 
 - [Find Emails](find-emails.md) — search to find the email you want to read
 - [Investigate Email Headers](../advanced/investigate-email-headers.md) — forensic header analysis
 - [Export Emails](export-emails.md) — save emails to files
-- [Tools Reference — read-email](../../quickrefs/tools-reference.md#email-6-tools)
+- [Tools Reference — read-email](../../quickrefs/tools-reference.md#email-8-tools)

@@ -185,4 +185,4 @@ Then send when ready: `draft(action: "send", id: "draft-id")`. See [Create and M
 - [Find Emails](find-emails.md) — search for emails to reply to
 - [Read Email Threads](read-email-threads.md) — read a thread before replying
 - [Batch Operations](../advanced/batch-operations.md) — bulk email operations
-- [Tools Reference — send-email](../../quickrefs/tools-reference.md#email-7-tools)
+- [Tools Reference — send-email](../../quickrefs/tools-reference.md#email-8-tools)

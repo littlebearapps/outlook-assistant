@@ -22,14 +22,9 @@ params:
   action: status
 ```
 
-A healthy response shows:
+A healthy response reads "Authenticated and ready" with roughly how many minutes the current access token has left. If the access token has expired but the refresh token is still valid, it's refreshed automatically; if that isn't possible, the tool tells you to re-authenticate.
 
-- **Authenticated**: Yes
-- **Account**: your-email@outlook.com
-- **Token expires**: date and time
-- **Scopes**: the permissions granted
-
-If the token has expired, the tool will report it and suggest re-authenticating.
+To see **which account** is connected and **which permissions** were granted, use `action: about` (below).
 
 ![Auth tool status output showing authenticated user](../../assets/screenshots/verify-your-connection-01.png)
 
@@ -72,7 +67,15 @@ params:
   action: about
 ```
 
-This returns the server version, available tools, and configuration details.
+This returns:
+
+- the server version and tool count
+- the connected **mailbox** (display name and address)
+- timezone, test mode, and the send safety belts (rate limit, recipient allowlist), with a setup hint if they're off
+- the **configured** and **granted** scopes
+- **shared-mailbox** status: whether `OUTLOOK_SHARED_MAILBOX` is on and whether each `.Shared` scope was actually granted
+
+It never shows the tokens themselves, so it's safe to paste into a bug report.
 
 ## Common Connection Problems
 
@@ -80,12 +83,13 @@ This returns the server version, available tools, and configuration details.
 |---------|-------|-----|
 | "Not authenticated" | No token file exists | Run through the [initial setup](connect-outlook-to-claude.md) |
 | "Token expired" with auto-refresh failure | Refresh token revoked or client secret changed | Re-authenticate with `force: true` |
-| Auth succeeds but API calls fail with 403 | Insufficient permissions | Add missing permissions in [Azure Portal](https://portal.azure.com), then delete `~/.outlook-assistant-tokens.json` and re-authenticate to pick up new scopes |
+| Auth succeeds but API calls fail with 403 | Insufficient permissions | Add missing permissions in [Azure Portal](https://portal.azure.com), then re-authenticate with `force: true` to pick up new scopes. `auth action=about` lists what was granted |
+| "Shared-mailbox support is turned off" | `OUTLOOK_SHARED_MAILBOX` isn't set | Set it, restart, and re-authenticate with `force: true` — see [Access Shared Mailboxes](../advanced/access-shared-mailboxes.md) (work/school accounts only) |
 | "AADSTS700082" | Refresh token expired (>90 days inactive) | Re-authenticate with `force: true` |
 | "AADSTS7000215" | Client secret is wrong (using Secret ID instead of Value) or has expired | Check [Azure Setup Guide — Client Secret](../../guides/azure-setup.md#4-create-a-client-secret) |
 | "Need admin approval" during OAuth | Organisation requires admin consent | Ask your IT admin to grant consent — see [Admin Consent](../../guides/azure-setup.md#for-workschool-accounts-admin-consent) |
 | Token file exists but auth reports failure | Corrupted token file | Delete `~/.outlook-assistant-tokens.json` and re-authenticate |
-| Auth server says "missing client ID" | Auth server does not have env vars | Create a `.env` file or export `OUTLOOK_CLIENT_ID`/`OUTLOOK_CLIENT_SECRET` in your shell — see [Connect guide](connect-outlook-to-claude.md#authenticate-for-the-first-time) |
+| Auth server says "missing client ID" | Auth server does not have env vars | Create a `.env` file in the directory you start it from, or export `OUTLOOK_CLIENT_ID`/`OUTLOOK_CLIENT_SECRET` in your shell — see [Connect guide](connect-outlook-to-claude.md#authenticate-for-the-first-time) |
 | Device code "invalid_client" | Public client flows not enabled | Enable "Allow public client flows" in Azure Portal > App registrations > Authentication > Advanced settings |
 | "No pending device code flow" | Called `device-code-complete` before `authenticate`, or server restarted (pre-v3.7.2) | Call `auth` with `action: authenticate` first. In v3.7.2+, device code state persists across server restarts. |
 | "wrongplace" page after device code sign-in | Normal — means sign-in completed but Microsoft doesn't know where to redirect | Close the browser tab. The device code flow completed successfully. Call `device-code-complete` to finish. |
@@ -97,6 +101,7 @@ This returns the server version, available tools, and configuration details.
 
 - Tokens auto-refresh in the background — you rarely need to manually re-authenticate
 - If you switch Microsoft accounts, use `force: true` to authenticate with the new account
+- After adding permissions or turning on `OUTLOOK_SHARED_MAILBOX`, re-authenticate with `force: true`: a token refresh keeps the scopes you were originally granted and never adds new ones
 - The token file at `~/.outlook-assistant-tokens.json` contains sensitive credentials — don't share or commit it
 
 ## Frequently Asked Questions
@@ -128,4 +133,4 @@ See [When Your Secret Expires](../../guides/azure-setup.md#when-your-secret-expi
 
 - [Connect Outlook to Your AI Assistant](connect-outlook-to-claude.md) — initial setup walkthrough
 - [Azure Setup Guide](../../guides/azure-setup.md) — app registration and permissions
-- [Tools Reference — auth](../../quickrefs/tools-reference.md#auth-1-tool) — full parameter reference
+- [Tools Reference — auth](../../quickrefs/tools-reference.md#authentication-1-tool) — full parameter reference

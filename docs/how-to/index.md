@@ -26,15 +26,15 @@ Practical guides for managing your Microsoft 365 email, calendar, contacts, and 
 | [Flag Emails for Follow-Up](email/flag-emails-for-follow-up.md) | Mark read/unread, set flags with due dates, bulk operations |
 | [Work with Attachments](email/work-with-attachments.md) | List, view, and download email attachments |
 | [Check Recipients Before Sending](email/check-recipients-before-sending.md) | Pre-send mail tips: out-of-office, mailbox full, delivery restrictions |
-| [Export Emails](email/export-emails.md) | Save to Markdown, EML, MBOX, JSON, or HTML |
+| [Export Emails](email/export-emails.md) | Save to Markdown, EML, MBOX, JSON, HTML, or CSV |
 
 ## Calendar
 
 | Guide | What it covers |
 |-------|---------------|
-| [View Upcoming Events](calendar/view-upcoming-events.md) | List scheduled events for planning and scheduling |
+| [View and Search Calendar Events](calendar/view-upcoming-events.md) | Upcoming events, past events by date range, and events by subject |
 | [Create Calendar Events](calendar/create-calendar-events.md) | Schedule meetings with attendees, locations, and descriptions |
-| [Manage Event Responses](calendar/manage-event-responses.md) | Decline, cancel, or delete calendar events |
+| [Manage Event Responses](calendar/manage-event-responses.md) | Update, decline, cancel, or delete calendar events |
 
 ## Organise
 
@@ -66,7 +66,7 @@ Practical guides for managing your Microsoft 365 email, calendar, contacts, and 
 |-------|---------------|
 | [KQL Search Reference](advanced/kql-search-reference.md) | Advanced raw Graph `$search` expressions via `searchExpression` |
 | [Investigate Email Headers](advanced/investigate-email-headers.md) | Phishing investigation, DKIM, SPF, DMARC authentication, delivery chain, spam scores |
-| [Access Shared Mailboxes](advanced/access-shared-mailboxes.md) | Read and organise team inboxes and service accounts (no sending) |
+| [Access Shared Mailboxes](advanced/access-shared-mailboxes.md) | Opt-in: read, search, export and organise team inboxes and service accounts, including custom folders (no sending) |
 | [Find Meeting Rooms](advanced/find-meeting-rooms.md) | Search by building, floor, or capacity |
 | [Batch Operations](advanced/batch-operations.md) | Bulk flag, move, export, and categorise |
 

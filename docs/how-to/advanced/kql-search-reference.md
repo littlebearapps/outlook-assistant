@@ -143,4 +143,4 @@ For anything in the "not translated" rows on a personal account, use the structu
 
 - [Find Emails](../email/find-emails.md) — standard search with filter parameters
 - [Find Emails — Search Across All Folders](../email/find-emails.md#search-across-all-folders)
-- [Tools Reference — search-emails](../../quickrefs/tools-reference.md#email-6-tools)
+- [Tools Reference — search-emails](../../quickrefs/tools-reference.md#email-8-tools)

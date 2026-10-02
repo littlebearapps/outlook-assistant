@@ -97,6 +97,6 @@ Delete removes the event from your calendar without notifying anyone. Use this f
 
 ## Related
 
-- [View Upcoming Events](view-upcoming-events.md) — find the event ID to act on
+- [View and Search Calendar Events](view-upcoming-events.md) — find the event ID to act on, including past events by date or subject
 - [Create Calendar Events](create-calendar-events.md) — schedule a replacement meeting
 - [Tools Reference — manage-event](../../quickrefs/tools-reference.md#calendar-3-tools)

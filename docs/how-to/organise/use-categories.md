@@ -114,6 +114,7 @@ params:
 - Categories sync across Outlook desktop, web, and mobile
 - Use `action: "add"` to preserve existing categories when adding new ones
 - Create a consistent set of categories (e.g. by project, priority, or team) for long-term organisation
+- `apply-category` also works on a shared mailbox's messages with `sharedMailbox` set (needs `OUTLOOK_SHARED_MAILBOX=true`). The categories must already exist in that mailbox's own list, because `manage-category` only manages yours — see [Access Shared Mailboxes](../advanced/access-shared-mailboxes.md)
 
 ## Related
 

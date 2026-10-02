@@ -117,6 +117,7 @@ params:
 - Use `search-emails` first to find the email IDs you want to process
 - The `export` tool's `searchQuery` option lets you skip the search step entirely
 - Combine search + batch for workflows: "Find all unread emails from Sarah and flag them for follow-up"
+- Every batch operation above also accepts `sharedMailbox` (alias `email`) to work on a shared mailbox — see [Access Shared Mailboxes](access-shared-mailboxes.md)
 
 ## Related
 

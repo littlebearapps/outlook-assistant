@@ -202,7 +202,10 @@ function hasAadstsCode(err, codes) {
     }
   }
   const haystack = `${asString(oauth.error_description)} ${asString(err.message)}`;
-  return codes.some((code) => haystack.includes(`AADSTS${code}`));
+  // Whole-code match: `AADSTS70011` must not match `AADSTS700110`.
+  return codes.some((code) =>
+    new RegExp(`AADSTS${code}(?!\\d)`).test(haystack)
+  );
 }
 
 /**
@@ -216,17 +219,16 @@ function isScopeConsentError(err) {
   if (!err) {
     return false;
   }
+  // Consent-required takes precedence: it is remediable, so it must surface
+  // rather than silently downgrade the scope set.
+  if (isConsentRequiredError(err)) {
+    return false;
+  }
   const oauth = err.oauth || {};
-
-  if (oauth.error === 'invalid_scope') {
-    return true;
-  }
-  if (hasAadstsCode(err, SCOPE_UNSUPPORTED_AADSTS_CODES)) {
-    return true;
-  }
-  // Azure named one of the `.Shared` scopes as the offending value.
-  const description = asString(oauth.error_description);
-  return config.ALL_SHARED_SCOPES.some((scope) => description.includes(scope));
+  return (
+    oauth.error === 'invalid_scope' ||
+    hasAadstsCode(err, SCOPE_UNSUPPORTED_AADSTS_CODES)
+  );
 }
 
 /**

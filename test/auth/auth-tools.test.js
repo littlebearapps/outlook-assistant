@@ -236,6 +236,11 @@ describe('device code state persistence', () => {
 describe('device code scope fallback + granted_scopes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // clearAllMocks keeps mockReturnValue implementations; reset the
+    // classifiers so one test's verdict can't leak into the next.
+    isScopeConsentError.mockReset();
+    isConsentRequiredError.mockReset();
+    initiateDeviceCodeFlow.mockReset();
     jest.spyOn(console, 'error').mockImplementation(() => {});
     try {
       fs.unlinkSync(DEVICE_CODE_STATE_PATH);
@@ -334,6 +339,27 @@ describe('device code scope fallback + granted_scopes', () => {
     } finally {
       config.SHARED_SCOPES = saved;
     }
+  });
+
+  test('a consent-required error is surfaced even if it also looks like a scope error', async () => {
+    fs.writeFileSync(
+      DEVICE_CODE_STATE_PATH,
+      JSON.stringify({
+        deviceCode: 'dc_full',
+        interval: 5,
+        expiresIn: 900,
+        expiresAt: Date.now() + 900 * 1000,
+        scopesUsed: 'full',
+      })
+    );
+    pollForToken.mockRejectedValue(new Error('AADSTS65001'));
+    isScopeConsentError.mockReturnValue(true);
+    isConsentRequiredError.mockReturnValue(true);
+
+    const result = await handleDeviceCodeComplete();
+
+    expect(initiateDeviceCodeFlow).not.toHaveBeenCalled();
+    expect(result.content[0].text).toMatch(/consent was not granted/);
   });
 
   test('with shared mailboxes off, a scope error never triggers a fallback code', async () => {

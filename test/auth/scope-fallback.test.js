@@ -65,17 +65,39 @@ describe('isScopeConsentError — fallback triggers', () => {
       ),
       true,
     ],
+
+    // --- must NOT fall back ---
     [
-      'error_description naming Mail.Read.Shared (no known AADSTS code)',
+      'free text naming Mail.Read.Shared without a scope error code',
       oauthError('Token polling failed', {
         error: 'invalid_request',
         error_description:
           "AADSTS99999: Scope 'Mail.Read.Shared' is not supported for this account.",
       }),
-      true,
+      false,
     ],
-
-    // --- must NOT fall back ---
+    [
+      'AADSTS65001 that also names a .Shared scope (consent wins)',
+      oauthError('not consented', {
+        error: 'invalid_grant',
+        error_codes: [65001],
+        error_description:
+          "AADSTS65001: The user or administrator has not consented to use the application for scope 'Mail.ReadWrite.Shared'.",
+      }),
+      false,
+    ],
+    [
+      'invalid_scope payload that is really a consent error (consent wins)',
+      oauthError('AADSTS65001: consent required', {
+        error: 'invalid_scope',
+      }),
+      false,
+    ],
+    [
+      'a longer code that merely starts with 70011 (AADSTS700110)',
+      oauthError('AADSTS700110: something else entirely'),
+      false,
+    ],
     [
       'bare invalid_grant (MFA / conditional access / revoked grant)',
       oauthError('consent required', { error: 'invalid_grant' }),

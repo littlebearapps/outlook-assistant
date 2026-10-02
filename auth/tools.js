@@ -303,6 +303,7 @@ async function initiateDeviceCode(scopes, scopesUsed, prefix) {
     if (
       config.SHARED_SCOPES.length > 0 &&
       scopesUsed === 'full' &&
+      !isConsentRequiredError(error) &&
       isScopeConsentError(error)
     ) {
       console.error(
@@ -495,10 +496,13 @@ async function handleDeviceCodeComplete() {
     // base scopes. This is the personal-account path: one extra device code.
     // Only meaningful when shared-mailbox support is on: with the flag off the
     // attempted set already IS the base set, so there is nothing to drop.
+    // Consent-required (AADSTS65001) is checked first: it is remediable and
+    // must surface below, never trigger a silent downgrade.
     if (
       config.SHARED_SCOPES.length > 0 &&
-      isScopeConsentError(error) &&
-      scopesUsed === 'full'
+      scopesUsed === 'full' &&
+      !isConsentRequiredError(error) &&
+      isScopeConsentError(error)
     ) {
       console.error(
         '[AUTH] Shared-mailbox scopes rejected; falling back to base scopes.'

@@ -70,7 +70,7 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 | `create` | Save new draft to Drafts folder | — (all optional) |
 | `update` | Edit an existing draft (refuses non-drafts) | `id` |
 | `send` | Send an existing draft (refuses non-drafts) | `id` |
-| `delete` | Move a draft to Deleted Items (refuses non-drafts) | `id` |
+| `delete` | Delete a draft to Recoverable Items, skipping Deleted Items (refuses non-drafts) | `id` |
 | `reply` | Create reply draft from message | `id` |
 | `reply-all` | Create reply-all draft from message | `id` |
 | `forward` | Create forward draft with new recipients | `id`, `to` |

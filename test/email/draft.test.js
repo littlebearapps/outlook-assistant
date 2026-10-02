@@ -229,7 +229,9 @@ describe('action=delete', () => {
     });
 
     expect(result.content[0].text).toContain('deleted');
-    expect(result.content[0].text).toContain('Deleted Items');
+    // Graph DELETE skips Deleted Items: the draft lands in Recoverable Items
+    expect(result.content[0].text).toContain('Recoverable Items');
+    expect(result.content[0].text).not.toContain('moved to Deleted Items');
     expect(callGraphAPI).toHaveBeenCalledWith(
       mockAccessToken,
       'DELETE',
@@ -380,7 +382,12 @@ describe('draft tool description', () => {
 
   it('does not claim delete is permanent', () => {
     expect(draftTool.description).not.toMatch(/permanent/i);
-    expect(draftTool.description).toContain('Deleted Items');
+    // Verified live (v3.12.1): Graph DELETE puts the draft in Recoverable
+    // Items (Deletions), not Deleted Items
+    expect(draftTool.description).toContain('Recoverable Items');
+    expect(draftTool.description).not.toMatch(
+      /moves? (a|the) draft to Deleted Items/
+    );
   });
 
   it('says update/send/delete refuse non-drafts', () => {

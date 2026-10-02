@@ -48,7 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   first and refuse anything that is not an unsent draft (nothing is changed,
   and a refusal doesn't use up a rate-limit slot); an ID that no longer exists
   reports "Draft not found". The tool description also said `delete` was
-  permanent: it moves the draft to Deleted Items.
+  permanent: the draft skips Deleted Items and goes to Recoverable Items, where
+  Outlook's "Recover deleted items" can restore it for a limited time.
 
 ### Removed
 

@@ -40,6 +40,30 @@ function mailboxFromToken(token) {
 }
 
 /**
+ * Decide whether a delta token's mailbox clearly differs from the target.
+ * Only identifiers of the same kind are compared: `me` against `me`, or an
+ * address against an address. Graph may hand back continuation links that
+ * name the mailbox by object ID (`users/<guid>`), which can't be matched to an
+ * address locally, so those are let through rather than wrongly rejected.
+ * @param {string} tokenMailbox - Mailbox segment from the token (`me` or `users/...`)
+ * @param {string} prefix - Mailbox prefix for this call (`me` or `users/...`)
+ * @returns {boolean} - True when the two identifiably name different mailboxes
+ */
+function mailboxesConflict(tokenMailbox, prefix) {
+  const token = tokenMailbox.toLowerCase();
+  const target = prefix.toLowerCase();
+  if (token === target) return false;
+  const isAddress = (p) => p.startsWith('users/') && p.includes('@');
+  if (token === 'me' || target === 'me') {
+    // `me` versus a named mailbox is a mismatch, unless the named one is an
+    // opaque object ID that could be the signed-in user.
+    const other = token === 'me' ? target : token;
+    return isAddress(other);
+  }
+  return isAddress(token) && isAddress(target);
+}
+
+/**
  * List emails delta handler - incremental sync
  * @param {object} args - Tool arguments
  * @param {string} [args.folder] - Folder to sync (default: inbox)
@@ -71,7 +95,7 @@ async function handleListEmailsDelta(args) {
       // `folder`/`sharedMailbox` args are ignored. Reject a token from a
       // different mailbox rather than silently syncing the wrong one.
       const tokenMailbox = mailboxFromToken(deltaToken);
-      if (tokenMailbox && tokenMailbox.toLowerCase() !== prefix.toLowerCase()) {
+      if (tokenMailbox && mailboxesConflict(tokenMailbox, prefix)) {
         return {
           content: [
             {

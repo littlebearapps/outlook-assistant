@@ -139,6 +139,29 @@ describe('delta initial sync — shared-mailbox routing', () => {
     expect(result._meta.mailbox).toBe('me');
   });
 
+  test('accepts a continuation link that names the mailbox by object ID', async () => {
+    // Graph can return links as users/<guid>, which can't be matched to an
+    // address locally, so they must not be rejected as a mismatch.
+    callGraphAPI.mockResolvedValue({ value: [] });
+    const deltaLink =
+      'https://graph.microsoft.com/v1.0/users/0f3c2a9e-5b1d-4c7a-9e2f-1a2b3c4d5e6f/mailFolders/inbox/messages/delta?$deltatoken=abc';
+    const result = await handleListEmailsDelta({
+      deltaToken: deltaLink,
+      sharedMailbox: MAILBOX,
+    });
+    expect(endpointOfCall()).toBe(deltaLink);
+    expect(result.content[0].text).not.toMatch(/mailbox mismatch/i);
+  });
+
+  test('accepts an object-ID continuation link when no mailbox is supplied', async () => {
+    callGraphAPI.mockResolvedValue({ value: [] });
+    const deltaLink =
+      'https://graph.microsoft.com/v1.0/users/0f3c2a9e-5b1d-4c7a-9e2f-1a2b3c4d5e6f/mailFolders/inbox/messages/delta?$deltatoken=abc';
+    const result = await handleListEmailsDelta({ deltaToken: deltaLink });
+    expect(endpointOfCall()).toBe(deltaLink);
+    expect(result.content[0].text).not.toMatch(/mailbox mismatch/i);
+  });
+
   test('surfaces the resolver error instead of querying Graph', async () => {
     resolveFolder.mockRejectedValue(new Error('Folder "Nope" not found.'));
     const result = await handleListEmailsDelta({

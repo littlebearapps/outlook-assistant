@@ -24,6 +24,21 @@ params:
 
 Update changes only the fields you pass; everything else stays as it was. Available fields: `subject`, `start`, `end`, `attendees` (full replacement list), `body`, `location`, `isOnlineMeeting`, `sensitivity`, `showAs`, `importance`, `categories`, `reminderMinutesBeforeStart`. Use `dryRun: true` to preview without applying.
 
+When you change `attendees`, everyone already on the event keeps their attendee type: an optional attendee stays optional and a booked room stays a resource. Anyone new is added as a required attendee. To set or change a type, pass an object instead of an address — an explicit type always wins:
+
+```
+tool: manage-event
+params:
+  action: "update"
+  eventId: "AAMkAGR..."
+  attendees:
+    - "alex@example.com"
+    - { email: "sarah@example.com", type: "optional" }
+    - { email: "boardroom@example.com", type: "resource" }
+```
+
+If any attendee is given without a type, the event's current attendee list is read first, so `dryRun: true` also signs in and shows the types that would be sent.
+
 Updates preserve attendee RSVP state — unlike delete-and-recreate, attendees keep their accepted/tentative status on the rescheduled event. Attendees are notified of the change.
 
 ## Decline an Event
@@ -104,7 +119,7 @@ Delete removes the event from your calendar without notifying anyone. Use this f
 - Use `list-events` first to find the event ID
 - Always include a `comment` when declining or cancelling — it's courteous and helps the organiser
 - Delete is silent — use it for personal events only
-- On `update`, the `attendees` field is a full replacement — pass everyone who should be on the event (not just the additions). Passing `attendees: []` clears the list.
+- On `update`, the `attendees` field is a full replacement — pass everyone who should be on the event (not just the additions). Passing `attendees: []` clears the list. Existing attendees keep their type (required, optional or resource) unless you pass `{email, type}` to change it.
 
 ## Related
 

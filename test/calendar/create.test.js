@@ -149,6 +149,60 @@ describe('handleCreateEvent', () => {
     expect(callGraphAPI).not.toHaveBeenCalled();
   });
 
+  test('plain string attendees are required (unchanged behaviour)', async () => {
+    ensureAuthenticated.mockResolvedValue('dummy_access_token');
+    callGraphAPI.mockResolvedValue({ id: 'test_event_id' });
+
+    await handleCreateEvent({
+      subject: 'Test Event',
+      start: '2024-03-10T10:00:00',
+      end: '2024-03-10T11:00:00',
+      attendees: ['alice@example.com'],
+    });
+
+    expect(callGraphAPI.mock.calls[0][3].attendees).toEqual([
+      { emailAddress: { address: 'alice@example.com' }, type: 'required' },
+    ]);
+  });
+
+  test('accepts typed attendee objects, including a resource (#249)', async () => {
+    ensureAuthenticated.mockResolvedValue('dummy_access_token');
+    callGraphAPI.mockResolvedValue({ id: 'test_event_id' });
+
+    await handleCreateEvent({
+      subject: 'Test Event',
+      start: '2024-03-10T10:00:00',
+      end: '2024-03-10T11:00:00',
+      attendees: [
+        'alice@example.com',
+        { email: 'opt@example.com', type: 'optional' },
+        { email: 'room@example.com', type: 'resource' },
+        { email: 'bob@example.com' },
+      ],
+    });
+
+    expect(callGraphAPI).toHaveBeenCalledTimes(1);
+    expect(callGraphAPI.mock.calls[0][3].attendees).toEqual([
+      { emailAddress: { address: 'alice@example.com' }, type: 'required' },
+      { emailAddress: { address: 'opt@example.com' }, type: 'optional' },
+      { emailAddress: { address: 'room@example.com' }, type: 'resource' },
+      { emailAddress: { address: 'bob@example.com' }, type: 'required' },
+    ]);
+  });
+
+  test('rejects an invalid attendee type before signing in (#249)', async () => {
+    const result = await handleCreateEvent({
+      subject: 'Test Event',
+      start: '2024-03-10T10:00:00',
+      end: '2024-03-10T11:00:00',
+      attendees: [{ email: 'room@example.com', type: 'room' }],
+    });
+
+    expect(result.content[0].text).toMatch(/Invalid attendee/);
+    expect(ensureAuthenticated).not.toHaveBeenCalled();
+    expect(callGraphAPI).not.toHaveBeenCalled();
+  });
+
   test('should handle Graph API call error', async () => {
     ensureAuthenticated.mockResolvedValue('dummy_access_token');
     callGraphAPI.mockRejectedValue(new Error('Graph API Error'));

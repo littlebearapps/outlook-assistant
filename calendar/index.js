@@ -7,6 +7,24 @@ const handleCreateEvent = require('./create');
 const handleCancelEvent = require('./cancel');
 const handleDeleteEvent = require('./delete');
 const handleUpdateEvent = require('./update');
+const { ATTENDEE_TYPES } = require('./attendees');
+
+// One attendee: an email string, or {email, type} (#249). schema-coerce
+// doesn't validate inside array items, so calendar/attendees.js re-checks.
+const ATTENDEE_ITEM_SCHEMA = {
+  oneOf: [
+    { type: 'string' },
+    {
+      type: 'object',
+      properties: {
+        email: { type: 'string' },
+        type: { type: 'string', enum: [...ATTENDEE_TYPES] },
+      },
+      required: ['email'],
+      additionalProperties: false,
+    },
+  ],
+};
 
 // Calendar tool definitions (consolidated: 5 → 3)
 const calendarTools = [
@@ -77,10 +95,9 @@ const calendarTools = [
         },
         attendees: {
           type: 'array',
-          items: {
-            type: 'string',
-          },
-          description: 'List of attendee email addresses',
+          items: ATTENDEE_ITEM_SCHEMA,
+          description:
+            "Attendees: email address strings (required attendees) or {email, type} objects, where type is 'required', 'optional' or 'resource' (a room or equipment)",
         },
         body: {
           type: 'string',
@@ -167,9 +184,9 @@ const calendarTools = [
         },
         attendees: {
           type: 'array',
-          items: { type: 'string' },
+          items: ATTENDEE_ITEM_SCHEMA,
           description:
-            'Full replacement attendee list — pass complete desired list, or [] to clear (action=update only)',
+            "Full replacement attendee list — pass the complete desired list, or [] to clear (action=update only). Each entry is an email address string or an {email, type} object (type 'required', 'optional' or 'resource'). A string, or an object without a type, keeps the type that address already has on the event (new addresses are required); an explicit type always wins.",
         },
         body: {
           type: 'string',

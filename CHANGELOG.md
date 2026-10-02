@@ -66,6 +66,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (boolean, default `true`): pass `false` to decline without notifying the
   organiser.
 
+- **`manage-event` update turned optional attendees and rooms into required
+  attendees** (#249). Updating `attendees` sent every address as `required`,
+  and because the list is replaced as a whole, a booked room became a required
+  human attendee. An address given as a plain string now keeps the type it
+  already has on the event (new addresses are required); the event's current
+  attendees are read first, also on `dryRun`, so the preview shows the types
+  that would be sent. Passing `[]` still clears the list without reading it.
+
+### Changed
+
+- **`create-event` and `manage-event` accept typed attendees** (#249). Each
+  `attendees` entry can be an email address or `{email, type}` with `type`
+  `required`, `optional` or `resource` (a room or equipment); an explicit type
+  always wins. Plain strings still mean required attendees on `create-event`.
+  An unknown type or field is refused before anything changes.
+
 ### Removed
 
 - Unused internal helper `callGraphAPIWithAuth` (#244).

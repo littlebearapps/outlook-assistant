@@ -11,7 +11,7 @@
  *   - subject
  *   - start          (ISO string or {dateTime, timeZone} object)
  *   - end            (same shape as start)
- *   - attendees      (full replacement list of emails)
+ *   - attendees      (full replacement list; email strings or {email, type})
  *   - body           (sent as HTML)
  *   - location       (displayName)
  *   - isOnlineMeeting
@@ -21,12 +21,16 @@
  *   - categories     (full replacement array of category names)
  *   - reminderMinutesBeforeStart
  *
- * `dryRun: true` returns a preview of the PATCH payload without calling
- * Graph — useful for confirming behaviour before mutating real data.
+ * `dryRun: true` returns a preview of the PATCH payload without changing
+ * anything — useful for confirming behaviour before mutating real data.
+ * When an attendee has no explicit type, the event's current attendees are
+ * read first (also on dryRun) so existing optional/resource attendees keep
+ * their type (#249).
  */
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { DEFAULT_TIMEZONE } = require('../config');
+const { normaliseAttendees, buildAttendees } = require('./attendees');
 
 const SENSITIVITY_VALUES = new Set([
   'normal',
@@ -82,6 +86,9 @@ async function handleUpdateEvent(args) {
   // Graph treats absent properties as "no change", so we never overwrite
   // something the user didn't intend to touch.
   const patch = {};
+  // Attendee entries without an explicit type, which need the event's
+  // current attendees to resolve (#249).
+  let untypedAttendees = null;
 
   if (subject !== undefined) patch.subject = subject;
 
@@ -102,10 +109,14 @@ async function handleUpdateEvent(args) {
   if (attendees !== undefined) {
     // Replaces the full attendee list — Graph PATCH on this property is
     // not additive. Caller must pass the desired complete list.
-    patch.attendees = (attendees || []).map((email) => ({
-      emailAddress: { address: email },
-      type: 'required',
-    }));
+    let entries;
+    try {
+      entries = normaliseAttendees(attendees || []);
+    } catch (error) {
+      return { content: [{ type: 'text', text: error.message }] };
+    }
+    patch.attendees = buildAttendees(entries);
+    if (entries.some((entry) => !entry.type)) untypedAttendees = entries;
   }
 
   if (body !== undefined) {
@@ -193,34 +204,52 @@ async function handleUpdateEvent(args) {
     };
   }
 
-  // dryRun: don't touch Graph; just show the caller what would be sent.
-  if (dryRun) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: [
-            `**Dry run** — would PATCH \`me/events/${eventId}\` with:`,
-            '',
-            '```json',
-            JSON.stringify(patch, null, 2),
-            '```',
-            '',
-            `Fields that would change: ${Object.keys(patch).join(', ')}`,
-          ].join('\n'),
-        },
-      ],
-      _meta: {
-        eventId,
-        dryRun: true,
-        patch,
-        fieldsChanged: Object.keys(patch),
-      },
-    };
-  }
-
   try {
-    const accessToken = await ensureAuthenticated();
+    let accessToken;
+
+    // Keep the type of attendees already on the event: an entry without an
+    // explicit type takes its current type, so a room or optional attendee
+    // isn't turned into a required one. Runs before the dryRun return so the
+    // preview shows the resolved types.
+    if (untypedAttendees) {
+      accessToken = await ensureAuthenticated();
+      const current = await callGraphAPI(
+        accessToken,
+        'GET',
+        `me/events/${eventId}`,
+        null,
+        { $select: 'attendees' }
+      );
+      patch.attendees = buildAttendees(untypedAttendees, current?.attendees);
+    }
+
+    // dryRun: show the caller what would be sent without changing anything.
+    if (dryRun) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: [
+              `**Dry run** — would PATCH \`me/events/${eventId}\` with:`,
+              '',
+              '```json',
+              JSON.stringify(patch, null, 2),
+              '```',
+              '',
+              `Fields that would change: ${Object.keys(patch).join(', ')}`,
+            ].join('\n'),
+          },
+        ],
+        _meta: {
+          eventId,
+          dryRun: true,
+          patch,
+          fieldsChanged: Object.keys(patch),
+        },
+      };
+    }
+
+    accessToken = accessToken || (await ensureAuthenticated());
     const endpoint = `me/events/${eventId}`;
 
     const response = await callGraphAPI(accessToken, 'PATCH', endpoint, patch);

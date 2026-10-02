@@ -101,14 +101,17 @@ describe('handleUpdateEvent', () => {
 
   test('replaces the attendee list when attendees is provided', async () => {
     ensureAuthenticated.mockResolvedValue('dummy_access_token');
-    callGraphAPI.mockResolvedValue({ id: 'evt_1' });
+    callGraphAPI
+      .mockResolvedValueOnce({ id: 'evt_1', attendees: [] })
+      .mockResolvedValueOnce({ id: 'evt_1' });
 
     await handleUpdateEvent({
       eventId: 'evt_1',
       attendees: ['alice@example.com', 'bob@example.com'],
     });
 
-    const body = patchBodyOf(callGraphAPI.mock.calls[0]);
+    expect(callGraphAPI).toHaveBeenCalledTimes(2);
+    const body = patchBodyOf(callGraphAPI.mock.calls[1]);
     expect(body.attendees).toEqual([
       { emailAddress: { address: 'alice@example.com' }, type: 'required' },
       { emailAddress: { address: 'bob@example.com' }, type: 'required' },
@@ -121,8 +124,168 @@ describe('handleUpdateEvent', () => {
 
     await handleUpdateEvent({ eventId: 'evt_1', attendees: [] });
 
+    // [] needs no current-type lookup: a single PATCH, no GET.
+    expect(callGraphAPI).toHaveBeenCalledTimes(1);
     const body = patchBodyOf(callGraphAPI.mock.calls[0]);
     expect(body.attendees).toEqual([]);
+  });
+
+  // ── Attendee types (#249) ────────────────────────────────────────────
+
+  const CURRENT_ATTENDEES = {
+    id: 'evt_1',
+    attendees: [
+      {
+        type: 'optional',
+        emailAddress: { name: 'Opt', address: 'opt@example.com' },
+        status: { response: 'none' },
+      },
+      {
+        type: 'resource',
+        emailAddress: { name: 'Room', address: 'room@example.com' },
+        status: { response: 'none' },
+      },
+    ],
+  };
+
+  test('string attendees keep the type they already have on the event', async () => {
+    ensureAuthenticated.mockResolvedValue('dummy_access_token');
+    callGraphAPI
+      .mockResolvedValueOnce(CURRENT_ATTENDEES)
+      .mockResolvedValueOnce({ id: 'evt_1' });
+
+    await handleUpdateEvent({
+      eventId: 'evt_1',
+      attendees: ['opt@example.com', 'room@example.com', 'new@example.com'],
+    });
+
+    expect(callGraphAPI).toHaveBeenCalledTimes(2);
+    const [, getMethod, getEndpoint, getBody, getQuery] =
+      callGraphAPI.mock.calls[0];
+    expect(getMethod).toBe('GET');
+    expect(getEndpoint).toBe('me/events/evt_1');
+    expect(getBody).toBeNull();
+    expect(getQuery).toEqual({ $select: 'attendees' });
+
+    const body = patchBodyOf(callGraphAPI.mock.calls[1]);
+    expect(body.attendees).toEqual([
+      { emailAddress: { address: 'opt@example.com' }, type: 'optional' },
+      { emailAddress: { address: 'room@example.com' }, type: 'resource' },
+      { emailAddress: { address: 'new@example.com' }, type: 'required' },
+    ]);
+  });
+
+  test('matches current attendees case-insensitively', async () => {
+    ensureAuthenticated.mockResolvedValue('dummy_access_token');
+    callGraphAPI
+      .mockResolvedValueOnce(CURRENT_ATTENDEES)
+      .mockResolvedValueOnce({ id: 'evt_1' });
+
+    await handleUpdateEvent({
+      eventId: 'evt_1',
+      attendees: ['OPT@Example.com', 'Room@EXAMPLE.com'],
+    });
+
+    const body = patchBodyOf(callGraphAPI.mock.calls[1]);
+    expect(body.attendees).toEqual([
+      { emailAddress: { address: 'OPT@Example.com' }, type: 'optional' },
+      { emailAddress: { address: 'Room@EXAMPLE.com' }, type: 'resource' },
+    ]);
+  });
+
+  test('fully typed attendees are sent as given without reading the event', async () => {
+    ensureAuthenticated.mockResolvedValue('dummy_access_token');
+    callGraphAPI.mockResolvedValue({ id: 'evt_1' });
+
+    await handleUpdateEvent({
+      eventId: 'evt_1',
+      attendees: [
+        { email: 'opt@example.com', type: 'required' },
+        { email: 'room@example.com', type: 'resource' },
+        { email: 'x@example.com', type: 'optional' },
+      ],
+    });
+
+    expect(callGraphAPI).toHaveBeenCalledTimes(1);
+    const body = patchBodyOf(callGraphAPI.mock.calls[0]);
+    expect(body.attendees).toEqual([
+      { emailAddress: { address: 'opt@example.com' }, type: 'required' },
+      { emailAddress: { address: 'room@example.com' }, type: 'resource' },
+      { emailAddress: { address: 'x@example.com' }, type: 'optional' },
+    ]);
+  });
+
+  test('an explicit type wins over the current type; untyped entries look it up', async () => {
+    ensureAuthenticated.mockResolvedValue('dummy_access_token');
+    callGraphAPI
+      .mockResolvedValueOnce(CURRENT_ATTENDEES)
+      .mockResolvedValueOnce({ id: 'evt_1' });
+
+    await handleUpdateEvent({
+      eventId: 'evt_1',
+      attendees: [
+        { email: 'opt@example.com', type: 'required' },
+        { email: 'room@example.com' },
+      ],
+    });
+
+    expect(callGraphAPI).toHaveBeenCalledTimes(2);
+    const body = patchBodyOf(callGraphAPI.mock.calls[1]);
+    expect(body.attendees).toEqual([
+      { emailAddress: { address: 'opt@example.com' }, type: 'required' },
+      { emailAddress: { address: 'room@example.com' }, type: 'resource' },
+    ]);
+  });
+
+  test('rejects an invalid attendee type before any Graph call', async () => {
+    const result = await handleUpdateEvent({
+      eventId: 'evt_1',
+      attendees: [{ email: 'a@example.com', type: 'chair' }],
+    });
+
+    expect(result.content[0].text).toMatch(/Invalid attendee/);
+    expect(result.content[0].text).toMatch(/chair/);
+    expect(ensureAuthenticated).not.toHaveBeenCalled();
+    expect(callGraphAPI).not.toHaveBeenCalled();
+  });
+
+  test('dryRun reads current attendees and previews the resolved types without PATCHing', async () => {
+    ensureAuthenticated.mockResolvedValue('dummy_access_token');
+    callGraphAPI.mockResolvedValueOnce(CURRENT_ATTENDEES);
+
+    const result = await handleUpdateEvent({
+      eventId: 'evt_1',
+      attendees: ['opt@example.com', 'room@example.com', 'new@example.com'],
+      dryRun: true,
+    });
+
+    expect(callGraphAPI).toHaveBeenCalledTimes(1);
+    expect(callGraphAPI.mock.calls[0][1]).toBe('GET');
+    expect(result.content[0].text).toMatch(/Dry run/);
+    expect(result.content[0].text).toMatch(/"type": "optional"/);
+    expect(result.content[0].text).toMatch(/"type": "resource"/);
+    expect(result._meta.patch.attendees).toEqual([
+      { emailAddress: { address: 'opt@example.com' }, type: 'optional' },
+      { emailAddress: { address: 'room@example.com' }, type: 'resource' },
+      { emailAddress: { address: 'new@example.com' }, type: 'required' },
+    ]);
+  });
+
+  test('a failed attendee lookup stops the update', async () => {
+    ensureAuthenticated.mockResolvedValue('dummy_access_token');
+    callGraphAPI.mockRejectedValueOnce(
+      new Error('API call failed with status 404: not found')
+    );
+
+    const result = await handleUpdateEvent({
+      eventId: 'evt_1',
+      attendees: ['a@example.com'],
+    });
+
+    expect(callGraphAPI).toHaveBeenCalledTimes(1);
+    expect(callGraphAPI.mock.calls[0][1]).toBe('GET');
+    expect(result.content[0].text).toMatch(/^Error updating event: /);
+    expect(result.content[0].text).toMatch(/status 404/);
   });
 
   test('updates body as HTML content', async () => {

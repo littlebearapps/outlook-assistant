@@ -452,7 +452,9 @@ outlook-assistant/
 │   ├── conversations.js     # Thread listing/export
 │   ├── attachments.js       # Attachment operations
 │   └── ...
-├── calendar/                # Calendar module (3 tools; list.js builds list-events filters)
+├── calendar/                # Calendar module (3 tools)
+│   ├── attendees.js         # Attendee builder (email or {email, type})
+│   └── list.js              # list-events filters
 ├── contacts/                # Contacts module (2 tools)
 ├── categories/              # Categories module (3 tools)
 ├── settings/                # Settings module (1 tool)
@@ -463,6 +465,8 @@ outlook-assistant/
     ├── graph-api.js         # Microsoft Graph API client (includes $batch, path guards)
     ├── mailbox.js           # me vs users/{sharedMailbox} prefix, shared-mailbox opt-in
     ├── safety.js            # Rate limiting, recipient allowlist, dry-run
+    ├── safe-write.js        # Exclusive, outputDir-confined file writes
+    ├── datetime.js          # ISO 8601 parsing and timezone conversion
     ├── odata-helpers.js     # OData query building
     ├── field-presets.js     # Token-efficient field selections
     ├── response-formatter.js # Verbosity levels

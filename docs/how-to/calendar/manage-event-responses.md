@@ -90,7 +90,9 @@ params:
   eventId: "AAMkAGR..."
 ```
 
-Delete removes the event from your calendar without notifying anyone. Use this for personal events or cleaning up old entries.
+Delete removes the event from your calendar. It isn't always silent: if you organised the meeting and it has attendees, Microsoft emails them a cancellation (with no message from you). To control what they receive, use `cancel` with a `comment` instead.
+
+The event goes to Recoverable Items rather than Deleted Items; Outlook's "Recover deleted items" can restore it for a limited time.
 
 ## Update vs Decline vs Cancel vs Delete
 
@@ -99,7 +101,7 @@ Delete removes the event from your calendar without notifying anyone. Use this f
 | `update` | Organiser (full edit) / Attendee (limited fields) | Yes — attendees notified of changes | Reschedule, edit, or change attendees on an existing event |
 | `decline` | Any attendee | Yes — sends decline to organiser (unless `sendResponse: false`) | You can't attend someone else's meeting |
 | `cancel` | Organiser only | Yes — notifies all attendees | You're cancelling a meeting you created |
-| `delete` | Anyone | No | Removing a personal event or cleaning up |
+| `delete` | Anyone | Only if you organised it and it has attendees — they get a cancellation with no message | Removing a personal event or cleaning up; prefer `cancel` for meetings you organised |
 
 ## Parameter Reference
 
@@ -118,7 +120,7 @@ Delete removes the event from your calendar without notifying anyone. Use this f
 
 - Use `list-events` first to find the event ID
 - Always include a `comment` when declining or cancelling — it's courteous and helps the organiser
-- Delete is silent — use it for personal events only
+- Delete isn't silent for meetings you organised with attendees — they're sent a cancellation. Use `cancel` with a `comment` when you want to say why
 - On `update`, the `attendees` field is a full replacement — pass everyone who should be on the event (not just the additions). Passing `attendees: []` clears the list. Existing attendees keep their type (required, optional or resource) unless you pass `{email, type}` to change it.
 
 ## Related

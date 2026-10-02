@@ -17,10 +17,10 @@ not worth half-doing inside a polish release.
 
 The `search-emails` and `searchExpression` descriptions were rewritten in
 v3.10.0 and revised again in v3.11.1 (the `query` versus `searchExpression`
-divergence and the `to` scan cap) — use them as the reference style. Known
-drift to fix while you're in there: `list-events` advertises attendees,
-organiser and `webLink` in its output, but returns subject, location, start/end,
-summary and ID.
+divergence and the `to` scan cap) — use them as the reference style. v3.12.1
+already fixed the known `list-events` drift (it no longer advertises attendees,
+organiser and `webLink`, which it never returned) and corrected the
+`manage-event` delete, `folders` delete and `update-email` batch wording.
 
 > Renumbered from v3.11.1 (taken by the search/export correctness release),
 > v3.11.2 (the security release) and v3.11.3 (overtaken by the v3.12.0 feature
@@ -32,21 +32,14 @@ Correctness bugs from the September 2026 Graph API audit and the v3.12.0
 release audit. They ship in patch releases as fixes accumulate, rather than one
 release per fix. The highest-impact ones come first.
 
-- **#254** delta sync with a small `maxResults` ends the initial sync early and silently drops messages
 - **#239** `list-events` misses upcoming occurrences of recurring meetings (move to `calendarView`)
-- **#244** Graph client: no 429/503 `Retry-After` handling or request timeout
-- **#246** `draft` update/delete act on non-draft messages (no `isDraft` guard)
-- **#249** `manage-event update` resets optional and room attendees to required
-- **#248** nested folder paths unresolved in delta, conversation and export modes
-- **#247** flag due/start dates given in UTC are shifted by the default timezone
-- **#242** `manage-event` sends "Declined/Cancelled via API" boilerplate to attendees
-- **#251** `search-people` doesn't escape `"` in the `$search` query
-- **#245** `update-email` and `apply-category` claim `$batch` but run sequential PATCHes
+- **#245** `update-email` and `apply-category` claim `$batch` but run sequential PATCHes (v3.12.1 corrected the `update-email` description; the code is still sequential)
 - **#240** `find-meeting-rooms` fallback calls the beta-only `findRooms` on v1.0
 - **#250** `manage-contact` folder param is unusable
 - **#243** tool descriptions contradict implemented behaviour (pairs with #93)
-- **#257** auth-tools tests touch the real pending-auth file (test-only)
-- **#258** post-3.12.0 hardening and doc checks
+- **#258** leftovers from the post-3.12.0 hardening: request `Place.Read.All`
+  for room lookup (with #240), non-ASCII shared-mailbox addresses, and redacting
+  mailbox addresses from logs
 
 ## v3.8.x — Task Integration & Auth (carry-over)
 
@@ -88,6 +81,16 @@ shipped"), so these carry forward to the next one.
 
 ## Recently shipped
 
+- **v3.12.1** (Oct 2026) — **Graph reliability and correctness fixes**. Graph
+  requests retry throttling (`429`, and `503`/`504` for non-POST) with a
+  request inactivity timeout and at most 4 requests in flight (#244); delta
+  sync pages through the whole folder instead of stopping at `maxResults`
+  (#254); `draft` update/send/delete refuse anything that isn't a draft (#246);
+  `manage-rules` resolves nested folder paths (#248); flag dates honour `Z` and
+  offsets (#247); `manage-event` keeps attendee types on update and no longer
+  sends "via API" text (#242, #249); quoted `$search` phrases are escaped
+  (#251); conversation read and export work on personal accounts; conversation
+  export no longer overwrites files (#258).
 - **v3.12.0** (Oct 2026) — **shared mailboxes and calendar search**, two
   community contributions. Opt-in shared-mailbox read and organise support
   (#228, by @DiasonD): a `sharedMailbox` parameter (alias `email`) on

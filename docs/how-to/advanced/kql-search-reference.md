@@ -135,6 +135,7 @@ For anything in the "not translated" rows on a personal account, use the structu
 ## Tips
 
 - Enclose multi-word phrases in escaped quotes: `subject:\"Project Alpha\"`
+- A `searchExpression` is sent exactly as you write it, so escape any `"` or `\` inside your own phrase with a backslash, as Graph receives it: `subject:"the \"big\" launch"`, `"C:\\Reports"` (since v3.12.1 `query`, `search-people` and `export` `searchQuery` text is escaped for you)
 - Graph `$search` matching is case-insensitive
 - Date format is `YYYY-MM-DD`
 - If a `searchExpression` returns no results, check `_meta.searchMetadata.finalStrategy` — then try the simpler `query` parameter or the structured filters, which are more forgiving

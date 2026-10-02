@@ -145,7 +145,7 @@ params:
 
 `folderName` also accepts a nested path (e.g. `Clients/Acme`); it's resolved to an ID before deletion. Protected folders (Inbox, Drafts, Sent Items, Deleted Items, Junk Email, Archive, Outbox) cannot be deleted.
 
-On personal Outlook.com accounts, deleting a folder moves it — and everything in it — to **Deleted Items**, where it stays recoverable until you empty Deleted Items. On Microsoft 365 / Exchange accounts, retention or hard-delete policies may remove it permanently instead, so check your organisation's policy before deleting.
+Deleting a folder doesn't put it in **Deleted Items**: the folder and everything in it go straight to Recoverable Items, where you can restore them for a limited time with **Recover deleted items** in Outlook. How long that window lasts depends on the account (on Microsoft 365 / Exchange, your organisation's retention policy), so check before deleting anything you might need.
 
 ## Parameter Reference
 

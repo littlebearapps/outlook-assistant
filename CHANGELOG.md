@@ -15,9 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Retry-After` or backing off with jitter (1 s doubling, capped at 30 s); a
   `Retry-After` over 60 seconds fails straight away with Graph's message. GET
   requests also retry once after a timeout or dropped connection. POST requests
-  (send, reply, move, `$batch`) are retried only on `429`, and only for waits
-  of 10 s or less (20 s in total), so mail is never sent twice and a send never
-  outlasts the MCP client's own timeout. An attempt that receives no data for
+  (send, reply, move, `$batch`) are never re-sent after a timeout or network
+  error; they are retried only on `429`, and only for waits of 10 s or less
+  each (20 s in total), to stay well inside a typical MCP client timeout. An
+  attempt that receives no data for
   `OUTLOOK_REQUEST_TIMEOUT_MS` (default 60000 ms; an inactivity timeout, not an
   overall deadline) is now abandoned instead of waiting forever, and at most 4
   requests are in flight at once, so bulk operations no longer trigger
@@ -39,9 +40,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   apostrophe broke the lookup and was misreported as "not found" too. They now
   use the same resolver as the `folders` tool: a folder ID, well-known name
   (`archive`, `sent`…), nested path, or bare name (searched through subfolders).
-  An ambiguous name lists the matching folders instead of picking one, and an
-  authentication or network failure is reported as such rather than as a
-  missing folder.
+  An ambiguous name lists the matching folders instead of picking one, a
+  not-found warning now includes the resolver's reason (such as an empty path
+  segment or Graph's 400 message), and an authentication or network failure is
+  reported as such rather than as a missing folder.
 - **`draft` update/send/delete acted on any message, not just drafts** (#246).
   Given the ID of a received or sent message, `update` edited it, `delete`
   deleted it and `send` tried to send it. These actions now look the ID up
@@ -65,7 +67,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now sent only when you give one. `decline` also accepts `sendResponse`
   (boolean, default `true`): pass `false` to decline without notifying the
   organiser.
-
 - **`manage-event` update turned optional attendees and rooms into required
   attendees** (#249). Updating `attendees` sent every address as `required`,
   and because the list is replaced as a whole, a booked room became a required
@@ -94,23 +95,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `conversationId` filter with `$orderby`, which Graph rejects on Outlook.com
   accounts (`400 InefficientFilter`), and then wrongly reported that
   conversations aren't supported on personal Microsoft accounts. The query no
-  longer sorts on the server: the thread is fetched page by page (previously
-  only the first 100 messages; now up to 1000, with a "Conversation truncated
-  at 1000 messages" note and `_meta.truncated` beyond that) and sorted by
-  received date locally, oldest first (newest first with `order: "reverse"`).
-  Any other Graph error is now shown as-is instead of that message. A `'` in
+  longer sorts on the server: the thread is fetched page by page and sorted
+  by received date locally, oldest first (newest first with
+  `order: "reverse"`). `search-emails conversationId` returns up to 100
+  messages and `export target=conversation` up to 1000 (previously only the
+  first 100); a longer thread gets a "Conversation truncated at N messages"
+  note and `_meta.truncated: true` instead of being cut short silently. Any
+  other Graph error is now shown as-is instead of that message. A `'` in
   `conversationId` is now escaped, so the ID can't widen the filter beyond the
   one thread.
 - **`list-events` documented the wrong `count` limit and missing fields**
   (#258). The description said max 50 but up to 100 events are returned; it
   also promised attendees, organiser and webLink, which the output never
   included. `count` below 1 or fractional is now clamped to a whole number of
-  at least 1 instead of reaching Graph (`0` previously became 10).
+  at least 1 instead of reaching Graph (`0` previously became 10); a missing
+  or `null` `count` means the default of 10.
 - **FAQ read-only advice was wrong** (#258). Removing write permissions from the
   Azure app registration doesn't make the server read-only: sign-in requests
   the full scope set on both auth paths and that list doesn't cap consent. The
   FAQ now points to client approval prompts, the safety controls and
   `OUTLOOK_SHARED_MAILBOX=read`.
+- **Running the test suite could cancel a real sign-in** (#257).
+  `test/auth/auth-tools.test.js` wrote and deleted the real
+  `~/.outlook-assistant-pending-auth.json`, so `npm test` during a device-code
+  sign-in removed the pending flow. The suite now points `HOME` at a temporary
+  directory, so it never touches your own files.
+- **Three tool descriptions misdescribed what happens.** `manage-event` said
+  `delete` "permanently" removes the event and the how-to called it silent:
+  the event goes to Recoverable Items, and deleting a meeting you organised
+  that has attendees emails them a cancellation (use `cancel` with a
+  `comment` to control that message). `update-email` said batch
+  flag/unflag/complete used Graph `$batch`; the messages are updated one at a
+  time. `folders` said a deleted folder goes to Deleted Items on Outlook.com;
+  it skips Deleted Items and goes to Recoverable Items, restorable for a
+  limited time with Outlook's "Recover deleted items".
 
 ### Changed
 
@@ -122,12 +140,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Export filename collisions now use `-1`, `-2`, …** (#258), matching
   attachment download, instead of `_2`, `_3`, …. The confinement error now
   reads `Refusing to write file outside outputDir` (was `… export file …`).
-
 - **`create-event` and `manage-event` accept typed attendees** (#249). Each
   `attendees` entry can be an email address or `{email, type}` with `type`
   `required`, `optional` or `resource` (a room or equipment); an explicit type
   always wins. Plain strings still mean required attendees on `create-event`.
-  An unknown type or field is refused before anything changes.
+  An unknown type or field is refused before anything changes, as a tool
+  error (`isError`).
+- **Date-only flag dates are now refused** (#247). `update-email` `flag`
+  `dueDateTime`/`startDateTime` must be a full date-time (for example
+  `2026-10-09T17:00:00`, optionally with `Z` or an offset); a date-only value
+  such as `2026-10-09`, previously accepted, is refused before anything
+  changes.
 
 ### Removed
 

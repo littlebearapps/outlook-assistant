@@ -12,8 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`list-events` filters** (#193, thanks @taranasus): `startAfter`, `startBefore`
   and `subject` find past, current or specifically-named events. With no filter
   the default is unchanged (upcoming events only). Supplying any filter replaces
-  the implicit `start ≥ now` bound; filters are AND-ed. Dates are validated as
-  ISO 8601 and normalised to UTC; `subject` is OData-escaped.
+  the implicit `start ≥ now` bound; filters are AND-ed. Dates must be ISO 8601
+  with `Z` or a ±hh:mm offset and are normalised to UTC (zone-less, date-only,
+  impossible and pre-1900 dates are rejected). `subject` is case-insensitive,
+  capped at 255 characters and OData-escaped. Backward-looking searches
+  (`startBefore` alone, or `subject` alone) return newest first. Invalid
+  arguments are reported as tool errors before any Graph call.
 
 ## [3.11.2] - 2026-09-30
 

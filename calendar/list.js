@@ -9,21 +9,67 @@ const {
   buildODataFilter,
 } = require('../utils/odata-helpers');
 
+// An ISO 8601 instant with an explicit zone: `Z` or a ±hh:mm offset. A
+// zone-less value would be read in the server's local timezone by Date.parse,
+// so results would differ between machines; date-only values are rejected for
+// the same reason.
+const ISO_INSTANT =
+  /^(\d{4})-(\d{2})-(\d{2})T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})$/;
+const MAX_SUBJECT_LENGTH = 255;
+
 /**
- * Parse an ISO 8601 datetime and return it as a UTC ISO string. Throws if invalid.
+ * Error raised for invalid list-events arguments, so the handler can report it
+ * as a tool error without touching the network.
+ */
+class ListEventsArgumentError extends Error {}
+
+/**
+ * Parse an ISO 8601 instant (with `Z` or a ±hh:mm offset) and return it as a
+ * UTC ISO string. Events are requested in UTC, so comparing against a UTC
+ * instant keeps the filter correct for offset inputs such as +10:00.
  * The schema declares `format: "date-time"` but the MCP schema-coerce layer
  * does not enforce JSON Schema `format`, so we enforce here at runtime.
  */
 function toUtcIsoDateTime(value, paramName) {
-  const parsed = Date.parse(value);
-  if (Number.isNaN(parsed)) {
-    throw new Error(
-      `Invalid ${paramName}: "${value}" is not a valid ISO 8601 datetime (e.g. "2026-01-01T00:00:00Z").`
+  const s = typeof value === 'string' ? value.trim() : '';
+  const m = ISO_INSTANT.exec(s);
+  const parsed = m ? Date.parse(s) : NaN;
+  const valid =
+    m &&
+    !Number.isNaN(parsed) &&
+    Number(m[1]) >= 1900 &&
+    // Reject dates Date.parse would roll over, e.g. 2026-02-30 -> 2 March.
+    new Date(
+      Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+    ).getUTCDate() === Number(m[3]);
+  if (!valid) {
+    throw new ListEventsArgumentError(
+      `Invalid ${paramName}: expected an ISO 8601 datetime with "Z" or a ±hh:mm offset, e.g. "2026-01-01T00:00:00Z" (got ${JSON.stringify(String(value).slice(0, 40))}).`
     );
   }
-  // Events are requested in UTC, so compare against a UTC instant; an input
-  // with an offset (e.g. +10:00) would otherwise be compared as-is.
   return new Date(parsed).toISOString();
+}
+
+/**
+ * Validate the subject filter: a non-empty-safe string of bounded length that
+ * can be URL-encoded (a lone surrogate would make encodeURIComponent throw).
+ */
+function assertValidSubject(subject) {
+  if (typeof subject !== 'string') {
+    throw new ListEventsArgumentError('Invalid subject: expected a string.');
+  }
+  if (subject.length > MAX_SUBJECT_LENGTH) {
+    throw new ListEventsArgumentError(
+      `Invalid subject: must be at most ${MAX_SUBJECT_LENGTH} characters.`
+    );
+  }
+  try {
+    encodeURIComponent(subject);
+  } catch (_e) {
+    throw new ListEventsArgumentError(
+      'Invalid subject: contains malformed Unicode.'
+    );
+  }
 }
 
 /**
@@ -34,9 +80,13 @@ function toUtcIsoDateTime(value, paramName) {
  * seeing only upcoming events. When ANY of startAfter/startBefore/subject are
  * supplied, those replace the default and are AND-ed together.
  *
- * startAfter/startBefore are validated as ISO 8601 datetimes and normalised to
- * UTC; invalid values raise before any Graph call is made. Single quotes in user-supplied strings
- * are escaped via OData rules (`'` -> `''`) to prevent filter injection.
+ * startAfter/startBefore must carry a zone and are normalised to UTC; invalid
+ * values raise before any Graph call is made. Single quotes in the subject are
+ * escaped via OData rules (`'` -> `''`) to prevent filter injection.
+ *
+ * Graph requires `$orderby` properties to lead the `$filter`, so a subject-only
+ * search gets a `start/dateTime ge '1900-…'` lead clause (which matches every
+ * event) to avoid an InefficientFilter error.
  *
  * @param {object} args - { startAfter?, startBefore?, subject? }
  * @returns {string} - The complete $filter expression
@@ -48,15 +98,23 @@ function buildListEventsFilter(args) {
   const conditions = [];
 
   if (hasAnyFilter) {
-    if (startAfter) {
-      conditions.push(
-        `start/dateTime ge '${toUtcIsoDateTime(startAfter, 'startAfter')}'`
+    const after = startAfter
+      ? toUtcIsoDateTime(startAfter, 'startAfter')
+      : null;
+    const before = startBefore
+      ? toUtcIsoDateTime(startBefore, 'startBefore')
+      : null;
+    if (after && before && after >= before) {
+      throw new ListEventsArgumentError(
+        'Invalid range: startAfter must be earlier than startBefore.'
       );
     }
-    if (startBefore) {
-      conditions.push(
-        `start/dateTime lt '${toUtcIsoDateTime(startBefore, 'startBefore')}'`
-      );
+    if (subject) assertValidSubject(subject);
+
+    if (after) conditions.push(`start/dateTime ge '${after}'`);
+    if (before) conditions.push(`start/dateTime lt '${before}'`);
+    if (!after && !before) {
+      conditions.push("start/dateTime ge '1900-01-01T00:00:00.000Z'");
     }
     if (subject) {
       conditions.push(`contains(subject, '${escapeODataString(subject)}')`);
@@ -66,6 +124,20 @@ function buildListEventsFilter(args) {
   }
 
   return buildODataFilter(conditions);
+}
+
+/**
+ * Sort order for list-events: oldest first for upcoming or bounded windows;
+ * newest first when the search only looks backwards (an upper bound only, or a
+ * subject with no dates), so `$top` returns the most recent matches rather
+ * than the oldest events in the calendar.
+ * @param {object} args - { startAfter?, startBefore?, subject? }
+ * @returns {string} - The $orderby expression
+ */
+function listEventsOrderBy(args) {
+  const { startAfter, startBefore, subject } = args;
+  const newestFirst = !startAfter && Boolean(startBefore || subject);
+  return newestFirst ? 'start/dateTime desc' : 'start/dateTime';
 }
 
 /**
@@ -154,6 +226,21 @@ function formatLocal(utcIso, tz) {
 async function handleListEvents(args) {
   const count = Math.min(args.count || 10, config.MAX_RESULT_COUNT);
 
+  // Validate arguments before authenticating, so a bad argument is reported
+  // as such (and never reaches the network).
+  let filter;
+  try {
+    filter = buildListEventsFilter(args);
+  } catch (error) {
+    if (error instanceof ListEventsArgumentError) {
+      return {
+        content: [{ type: 'text', text: error.message }],
+        isError: true,
+      };
+    }
+    throw error;
+  }
+
   try {
     // Get access token
     const accessToken = await ensureAuthenticated();
@@ -164,8 +251,8 @@ async function handleListEvents(args) {
     // Add query parameters
     const queryParams = {
       $top: count,
-      $orderby: 'start/dateTime',
-      $filter: buildListEventsFilter(args),
+      $orderby: listEventsOrderBy(args),
+      $filter: filter,
       $select: config.CALENDAR_SELECT_FIELDS,
     };
 
@@ -262,3 +349,4 @@ handleListEvents.formatLocal = formatLocal;
 
 module.exports = handleListEvents;
 module.exports.buildListEventsFilter = buildListEventsFilter;
+module.exports.listEventsOrderBy = listEventsOrderBy;

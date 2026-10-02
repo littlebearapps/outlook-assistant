@@ -26,6 +26,28 @@ summary and ID.
 > v3.11.2 (the security release) and v3.11.3 (overtaken by the v3.12.0 feature
 > release). #93 is documentation-only and was not worth blocking any of them.
 
+## Fix queue — next patch releases
+
+Correctness bugs from the September 2026 Graph API audit and the v3.12.0
+release audit. They ship in patch releases as fixes accumulate, rather than one
+release per fix. The highest-impact ones come first.
+
+- **#254** delta sync with a small `maxResults` ends the initial sync early and silently drops messages
+- **#239** `list-events` misses upcoming occurrences of recurring meetings (move to `calendarView`)
+- **#244** Graph client: no 429/503 `Retry-After` handling or request timeout
+- **#246** `draft` update/delete act on non-draft messages (no `isDraft` guard)
+- **#249** `manage-event update` resets optional and room attendees to required
+- **#248** nested folder paths unresolved in delta, conversation and export modes
+- **#247** flag due/start dates given in UTC are shifted by the default timezone
+- **#242** `manage-event` sends "Declined/Cancelled via API" boilerplate to attendees
+- **#251** `search-people` doesn't escape `"` in the `$search` query
+- **#245** `update-email` and `apply-category` claim `$batch` but run sequential PATCHes
+- **#240** `find-meeting-rooms` fallback calls the beta-only `findRooms` on v1.0
+- **#250** `manage-contact` folder param is unusable
+- **#243** tool descriptions contradict implemented behaviour (pairs with #93)
+- **#257** auth-tools tests touch the real pending-auth file (test-only)
+- **#258** post-3.12.0 hardening and doc checks
+
 ## v3.8.x — Task Integration & Auth (carry-over)
 
 v3.8.0 shipped the `manage-event update` action (#124) and two community-contributed config overrides — see "Recently shipped" below. The items in this section are the rest of the original v3.8.0 slate, carrying forward into v3.8.1 (or renumbered if scope shifts).

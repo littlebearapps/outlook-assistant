@@ -29,7 +29,7 @@ Review the FAQ at every release for accuracy and additions. The trigger checklis
 
 ## Quality bar
 
-- ≥7 question-shaped `## ` H2 headings (the hook enforces this floor; the current file has 11).
+- ≥7 question-shaped `## ` H2 headings (the hook enforces this floor; the current file has 12).
 - Each H2 phrased as a question — ends with `?` or starts with How / What / Why / When / Where / Can / Do / Does / Is / Are / Should / Will.
 - Every question has a complete answer — no `TODO`, no `[placeholder]`, no `(coming soon)`.
 - Prefer concrete, link-rich answers over hand-waving — AI citations work better with crisp facts pointing at authoritative locations (README sections, CHANGELOG, ROADMAP, troubleshooting).

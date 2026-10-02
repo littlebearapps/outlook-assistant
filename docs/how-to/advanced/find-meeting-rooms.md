@@ -73,7 +73,7 @@ This is particularly useful when booking rooms for presentations (need a display
 
 ## Required Permissions
 
-This tool requires the `Place.Read.All` Microsoft Graph permission. Your Exchange administrator must also have configured room resources in your organisation's directory.
+This tool requires the `Place.Read.All` Microsoft Graph permission, which needs admin consent. Outlook Assistant doesn't ask for it at sign-in, so add it to your app registration in Azure Portal and have an administrator grant consent, then re-authenticate with `auth action=authenticate force=true`. Your Exchange administrator must also have configured room resources in your organisation's directory.
 
 ## Parameter Reference
 
@@ -89,8 +89,8 @@ This tool requires the `Place.Read.All` Microsoft Graph permission. Your Exchang
 
 | Problem | Cause | Fix |
 |---------|-------|-----|
-| No results returned | Missing permission or no rooms configured | Add `Places.Read.All` permission; check with Exchange admin |
-| "Forbidden" error | Permission not granted | Grant `Places.Read.All` in Azure Portal |
+| No results returned | Missing permission or no rooms configured | Add `Place.Read.All` permission; check with Exchange admin |
+| "Forbidden" error | Permission not granted | Grant `Place.Read.All` in Azure Portal |
 
 ## Tips
 

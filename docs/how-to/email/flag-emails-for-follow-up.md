@@ -50,19 +50,31 @@ tool: update-email
 params:
   action: "flag"
   id: "AAMkAGR..."
-  dueDateTime: "2026-03-06T17:00:00Z"
+  dueDateTime: "2026-03-06T17:00:00"
 ```
 
-Add a start date to define a follow-up window:
+A date-time without a zone, like the one above, is read in your configured
+timezone (`OUTLOOK_DEFAULT_TIMEZONE`, default Australia/Melbourne), so this is
+5 pm Melbourne time. Add `Z` (UTC) or an offset such as `+11:00` to pin an exact
+instant instead: `"2026-03-06T06:00:00Z"` and `"2026-03-06T17:00:00+11:00"` are
+both 5 pm on 6 March in Melbourne. Date-only values (`"2026-03-06"`) and free
+text are refused before anything changes.
+
+When you give only a due date, the start defaults to 9 am on the due date in
+your configured timezone (or to the due time, if that is earlier). Add a start
+date to define your own follow-up window:
 
 ```
 tool: update-email
 params:
   action: "flag"
   id: "AAMkAGR..."
-  startDateTime: "2026-03-04T09:00:00Z"
-  dueDateTime: "2026-03-06T17:00:00Z"
+  startDateTime: "2026-03-04T09:00:00"
+  dueDateTime: "2026-03-06T17:00:00"
 ```
+
+The reply shows each date in UTC and in your configured timezone, so you can
+check the flag landed where you meant.
 
 ## Mark a Flag as Complete
 
@@ -95,7 +107,7 @@ tool: update-email
 params:
   action: "flag"
   ids: ["AAMkAGR1...", "AAMkAGR2...", "AAMkAGR3..."]
-  dueDateTime: "2026-03-15T09:00:00Z"
+  dueDateTime: "2026-03-15T09:00:00"
 ```
 
 See [Batch Operations](../advanced/batch-operations.md) for more bulk workflows.
@@ -107,15 +119,15 @@ See [Batch Operations](../advanced/batch-operations.md) for more bulk workflows.
 | `action` | `mark-read`, `mark-unread`, `flag`, `unflag`, `complete` | All |
 | `id` | Single email ID | All actions |
 | `ids` | Array of email IDs (batch) | `flag`, `unflag`, `complete` |
-| `dueDateTime` | Follow-up due date (ISO 8601) | `flag` |
-| `startDateTime` | Follow-up start date (ISO 8601) | `flag` |
+| `dueDateTime` | Follow-up due date-time (ISO 8601; `Z`/offset = exact instant, no zone = configured timezone) | `flag` |
+| `startDateTime` | Follow-up start date-time (same format; defaults to 9 am on the due date) | `flag` |
 | `sharedMailbox` | Shared mailbox the messages belong to (alias `email`; needs `OUTLOOK_SHARED_MAILBOX=true`) | All actions |
 
 ## Tips
 
 - Use `search-emails` with `unreadOnly: true` to find unread emails
 - Flags sync to Outlook's task/to-do list — flagged emails appear in Microsoft To Do
-- Dates use ISO 8601 format: `2026-03-15T09:00:00Z`
+- Dates use ISO 8601 with a time: `2026-03-15T09:00:00` (configured timezone), `2026-03-15T09:00:00Z` (UTC) or `2026-03-15T09:00:00+11:00` (offset)
 - Flagging or marking messages in a shared mailbox works the same way with `sharedMailbox` set — see [Access Shared Mailboxes](../advanced/access-shared-mailboxes.md)
 
 ## Related

@@ -50,6 +50,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reports "Draft not found". The tool description also said `delete` was
   permanent: the draft skips Deleted Items and goes to Recoverable Items, where
   Outlook's "Recover deleted items" can restore it for a limited time.
+- **`update-email` flag dates ignored `Z` and offsets** (#247). The trailing
+  `Z` was stripped and the time read in the default timezone, and offsets such
+  as `+10:00` were passed through, so `09:00Z` became 09:00 Melbourne (10 or 11
+  hours early). `dueDateTime`/`startDateTime` with `Z` or an offset are now sent
+  as that exact instant in UTC; values without a zone are still read in
+  `OUTLOOK_DEFAULT_TIMEZONE`. Date-only and unparseable values are refused
+  before anything changes. The default start (09:00 on the due date in the
+  default timezone) can no longer fall after the due time, and the reply shows
+  each date in UTC and the default timezone instead of the server's local time.
 
 ### Removed
 

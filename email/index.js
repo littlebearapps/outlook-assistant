@@ -406,7 +406,7 @@ const emailTools = [
   {
     name: 'update-email',
     description:
-      'Update message state without modifying content (idempotent — safe to retry). action=`mark-read`/`mark-unread` toggles the `isRead` flag on a single message by `id`. action=`flag` sets a follow-up flag with optional `dueDateTime`/`startDateTime` (ISO 8601). action=`unflag` clears the flag. action=`complete` marks the flag as done. Flag/unflag/complete accept either `id` (single) or `ids` (batch array) — batch operations use Graph `$batch` for efficiency. Pass `sharedMailbox` (or alias `email`) to update messages in a shared/delegated mailbox instead of the signed-in account (requires Mail.ReadWrite.Shared + delegate access). Returns status confirmation per message.',
+      'Update message state without modifying content (idempotent — safe to retry). action=`mark-read`/`mark-unread` toggles the `isRead` flag on a single message by `id`. action=`flag` sets a follow-up flag with optional `dueDateTime`/`startDateTime` (ISO 8601 with a time: a value with `Z` or a ±hh:mm offset is kept as that exact instant; a value without one is read in the configured default timezone (OUTLOOK_DEFAULT_TIMEZONE); date-only or unparseable values are refused before any change). With only `dueDateTime`, the start defaults to 09:00 on the due date in the default timezone, or to the due time if that is earlier. action=`unflag` clears the flag. action=`complete` marks the flag as done. Flag/unflag/complete accept either `id` (single) or `ids` (batch array) — batch operations use Graph `$batch` for efficiency. Pass `sharedMailbox` (or alias `email`) to update messages in a shared/delegated mailbox instead of the signed-in account (requires Mail.ReadWrite.Shared + delegate access). Returns status confirmation per message.',
     annotations: {
       title: 'Update Email',
       readOnlyHint: false,
@@ -436,11 +436,13 @@ const emailTools = [
         // Flag params
         dueDateTime: {
           type: 'string',
-          description: 'Due date/time for follow-up, ISO 8601 (action=flag)',
+          description:
+            'Due date/time for follow-up (action=flag). ISO 8601 with a time: "2026-03-01T09:00:00Z" or "2026-03-01T09:00:00+10:00" is that exact instant; "2026-03-01T09:00:00" (no zone) is read in the default timezone (OUTLOOK_DEFAULT_TIMEZONE).',
         },
         startDateTime: {
           type: 'string',
-          description: 'Start date/time for follow-up, ISO 8601 (action=flag)',
+          description:
+            'Start date/time for follow-up (action=flag), same format as dueDateTime. Defaults to 09:00 on the due date in the default timezone (capped at the due time) when only dueDateTime is given.',
         },
         sharedMailbox: {
           type: 'string',

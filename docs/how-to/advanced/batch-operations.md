@@ -19,8 +19,12 @@ tool: update-email
 params:
   action: "flag"
   ids: ["AAMkAGR1...", "AAMkAGR2...", "AAMkAGR3..."]
-  dueDateTime: "2026-03-15T09:00:00Z"
+  dueDateTime: "2026-03-15T09:00:00"
 ```
+
+A due date-time without a zone is read in your configured timezone
+(`OUTLOOK_DEFAULT_TIMEZONE`); add `Z` or an offset such as `+11:00` to pin an
+exact instant. See [Flag Emails for Follow-Up](../email/flag-emails-for-follow-up.md#set-a-due-date).
 
 Batch unflag:
 

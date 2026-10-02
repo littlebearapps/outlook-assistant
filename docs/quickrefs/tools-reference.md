@@ -22,7 +22,7 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 | `send-email` | Send email with safety controls | **destructive** | `to`, `subject`, `body`, `dryRun`, `checkRecipients`, `cc`, `bcc`, `importance` |
 | `draft` | Create, update, send, delete, reply, forward drafts | **destructive** | `action` (required), `id`, `to`, `subject`, `body`, `comment`, `dryRun`, `checkRecipients` |
 | `get-mail-tips` | Pre-send recipient validation | read-only | `recipients`, `tipTypes` |
-| `update-email` | Mark read/unread, flag/unflag/complete | idempotent | `action` (required), `id`, `ids`, `dueDateTime`, `sharedMailbox` (alias `email`) |
+| `update-email` | Mark read/unread, flag/unflag/complete | idempotent | `action` (required), `id`, `ids`, `dueDateTime`, `startDateTime`, `sharedMailbox` (alias `email`) |
 | `attachments` | List, view, or download attachments | moderate write | `action` (`list`/`view`/`download`), `messageId`, `attachmentId`, `outputDir` (download; default system tmpdir), `sharedMailbox` (alias `email`) |
 | `export` | Export emails to various formats | moderate write | `target` (`message`/`messages`/`conversation`/`mime`), `id`, `emailIds`, `searchQuery`/`query`, `conversationId`, `format`, `outputDir` (or `savePath` for a single message), `sharedMailbox` (alias `email`) |
 
@@ -62,6 +62,8 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 | `flag` | Flag for follow-up | `id` or `ids` (batch), `dueDateTime`, `startDateTime` |
 | `unflag` | Clear flag | `id` or `ids` (batch) |
 | `complete` | Mark flag as complete | `id` or `ids` (batch) |
+
+Flag dates: a `dueDateTime`/`startDateTime` with `Z` or a ±hh:mm offset is kept as that exact instant (sent to Graph in UTC); one without a zone is read in the configured timezone (`OUTLOOK_DEFAULT_TIMEZONE`, default Australia/Melbourne). Date-only or unparseable values are refused before any change. With only `dueDateTime`, the start defaults to 09:00 on the due date in the configured timezone, or the due time if earlier. The reply shows each date in UTC and in the configured timezone.
 
 ### draft actions
 
@@ -248,8 +250,9 @@ list-events(subject: "standup", count: 5)
 // Set out-of-office
 mailbox-settings(action: "set-auto-replies", enabled: true, internalReplyMessage: "I'm away...")
 
-// Flag email for follow-up
+// Flag email for follow-up (Z/offset = exact instant; no zone = configured timezone)
 update-email(action: "flag", id: "...", dueDateTime: "2026-03-01T09:00:00Z")
+update-email(action: "flag", id: "...", dueDateTime: "2026-03-01T17:00:00")
 
 // Access shared mailbox (needs OUTLOOK_SHARED_MAILBOX for listFolders / custom names)
 access-shared-mailbox(sharedMailbox: "team@company.com", folder: "inbox")

@@ -47,6 +47,7 @@ utils/
   ├── mailbox.js          # `me` vs `users/{mailbox}` prefix; shared-mailbox opt-in and address validation
   ├── schema-coerce.js    # MCP-boundary param coercion and validation
   ├── odata-helpers.js    # OData filter building and escaping
+  ├── datetime.js         # ISO 8601 parsing, Graph dateTimeTimeZone envelopes, IANA-zone conversion (no server-local time)
   ├── safety.js           # Rate limiting, recipient allowlist, dry-run preview
   ├── field-presets.js    # Field selections for token efficiency
   ├── response-formatter.js # Verbosity levels (minimal/standard/full)

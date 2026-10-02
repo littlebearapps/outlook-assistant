@@ -10,6 +10,7 @@ const _config = require('../config'); // Reserved for future use
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { buildMailboxPrefix } = require('../utils/mailbox');
+const { writeClaimedFile } = require('../utils/safe-write');
 
 const MAX_FILENAME_LENGTH = 200;
 
@@ -36,38 +37,6 @@ function safeAttachmentFilename(name) {
 
   const ext = path.extname(base).slice(0, 20);
   return base.slice(0, MAX_FILENAME_LENGTH - ext.length) + ext;
-}
-
-/**
- * Write a buffer into outputDir without ever overwriting an existing entry
- * or following a symlink: `wx` fails on any existing path (including a
- * dangling symlink), so collisions get a numbered suffix instead.
- * @param {string} outputDir - Target directory
- * @param {string} filename - Safe basename from safeAttachmentFilename
- * @param {Buffer} buffer - File contents
- * @returns {string} - Absolute path actually written
- */
-function writeUniqueFile(outputDir, filename, buffer) {
-  const root = path.resolve(outputDir);
-  const ext = path.extname(filename);
-  const stem = filename.slice(0, filename.length - ext.length);
-
-  for (let i = 0; i < 1000; i++) {
-    const candidate = path.join(
-      root,
-      i === 0 ? filename : `${stem}-${i}${ext}`
-    );
-    if (path.dirname(candidate) !== root) {
-      throw new Error('Refusing to write attachment outside outputDir');
-    }
-    try {
-      fs.writeFileSync(candidate, buffer, { flag: 'wx' });
-      return candidate;
-    } catch (error) {
-      if (error.code !== 'EEXIST') throw error;
-    }
-  }
-  throw new Error(`Too many files named ${filename} in ${root}`);
 }
 
 /**
@@ -248,9 +217,13 @@ async function handleDownloadAttachment(args) {
 
       // Decode base64 and save to file
       const buffer = Buffer.from(contentBytes, 'base64');
-      const outputPath = writeUniqueFile(
+      const safeName = safeAttachmentFilename(filename);
+      const ext = path.extname(safeName);
+      const outputPath = writeClaimedFile(
         outputDir,
-        safeAttachmentFilename(filename),
+        safeName.slice(0, safeName.length - ext.length),
+        ext.slice(1),
+        null,
         buffer
       );
 
@@ -445,5 +418,4 @@ module.exports = {
   // Shared with email/export.js so exported attachments get the same
   // GHSA-755c-c45g-69rv filename hardening.
   safeAttachmentFilename,
-  writeUniqueFile,
 };

@@ -80,6 +80,21 @@ describe('CLI flags', () => {
       expect(stdout).toContain('--help');
     });
 
+    it('lists the optional environment variables (#258)', async () => {
+      const { stdout } = await runCli(['--help']);
+      for (const name of [
+        'OUTLOOK_SHARED_MAILBOX',
+        'OUTLOOK_SEARCH_SCAN_LIMIT',
+        'OUTLOOK_DEFAULT_TIMEZONE',
+        'OUTLOOK_IMMUTABLE_IDS',
+        'OUTLOOK_MAX_<TOOL>_PER_SESSION',
+        'OUTLOOK_MAX_SEND_EMAIL_PER_SESSION',
+        'OUTLOOK_REQUEST_TIMEOUT_MS',
+      ]) {
+        expect(stdout).toContain(name);
+      }
+    });
+
     it('does not start the MCP server', async () => {
       const { stderr } = await runCli(['--help']);
       expect(stderr).not.toMatch(/STARTING/i);

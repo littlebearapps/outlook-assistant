@@ -81,8 +81,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   quotes and backslashes inside these phrases are now backslash-escaped, as
   Graph requires. A `searchExpression` you write yourself is still sent exactly
   as given, so escape any quotes inside your own phrases.
+- **Conversation export could overwrite files and follow symlinks** (#258).
+  `export target=conversation` wrote with a plain overwrite, so a second export
+  of a thread replaced the first, and a planted symlink at the target name was
+  followed out of `outputDir`. It now writes exclusively like message export
+  and attachment download (one shared implementation): an existing file or
+  symlink is never touched and the new file gets a `-1`, `-2`, … suffix. `eml`
+  exports go into a new directory the export creates (`…_conversation-1/` on a
+  second run), never an existing or symlinked one.
+- **`list-events` documented the wrong `count` limit and missing fields**
+  (#258). The description said max 50 but up to 100 events are returned; it
+  also promised attendees, organiser and webLink, which the output never
+  included. `count` below 1 or fractional is now clamped to a whole number of
+  at least 1 instead of reaching Graph (`0` previously became 10).
+- **FAQ read-only advice was wrong** (#258). Removing write permissions from the
+  Azure app registration doesn't make the server read-only: sign-in requests
+  the full scope set on both auth paths and that list doesn't cap consent. The
+  FAQ now points to client approval prompts, the safety controls and
+  `OUTLOOK_SHARED_MAILBOX=read`.
 
 ### Changed
+
+- **`--help` lists the optional environment variables** (#258):
+  `OUTLOOK_SHARED_MAILBOX`, `OUTLOOK_SEARCH_SCAN_LIMIT`,
+  `OUTLOOK_DEFAULT_TIMEZONE`, `OUTLOOK_IMMUTABLE_IDS`,
+  `OUTLOOK_REQUEST_TIMEOUT_MS` and the per-tool `OUTLOOK_MAX_<TOOL>_PER_SESSION`
+  caps (e.g. `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION`).
+- **Export filename collisions now use `-1`, `-2`, …** (#258), matching
+  attachment download, instead of `_2`, `_3`, …. The confinement error now
+  reads `Refusing to write file outside outputDir` (was `… export file …`).
 
 - **`create-event` and `manage-event` accept typed attendees** (#249). Each
   `attendees` entry can be an email address or `{email, type}` with `type`
@@ -97,6 +124,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (#248), superseded by the shared folder resolver.
 - Unused `calendar/accept.js` handler (#242); `manage-event` has no `accept`
   action.
+- Internal write helpers `writeUniqueFile` (`email/attachments.js`) and the
+  private copies in `email/export.js` (#258), replaced by `utils/safe-write.js`.
 
 ## [3.12.0] - 2026-10-02
 

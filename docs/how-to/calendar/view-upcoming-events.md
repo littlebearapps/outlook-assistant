@@ -91,7 +91,7 @@ Each event shows:
 
 | Parameter | What it does | Default |
 |-----------|-------------|---------|
-| `count` | Number of events to return (max 50) | 10 |
+| `count` | Number of events to return (max 100) | 10 |
 | `startAfter` | Only events starting at or after this time (ISO 8601 with `Z` or ±hh:mm) | now, when no filter is given |
 | `startBefore` | Only events starting before this time (ISO 8601 with `Z` or ±hh:mm) | — |
 | `subject` | Case-insensitive text the subject must contain (max 255 characters) | — |

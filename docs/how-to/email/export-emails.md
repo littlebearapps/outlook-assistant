@@ -61,6 +61,8 @@ params:
   order: "chronological"
 ```
 
+Conversation files are named `<date>_<subject>_conversation.<ext>`; `eml` writes one file per message into a new `<date>_<subject>_conversation/` directory. Exporting the same thread again never overwrites the earlier export or follows a symlink: since v3.12.1 the new copy gets a `-1` (then `-2`, ...) suffix.
+
 ## Batch Export Multiple Emails
 
 Export a list of specific emails:
@@ -179,8 +181,9 @@ reported `Failed 0`.
 Two guarantees now hold:
 
 - **Nothing is overwritten.** If a name is already taken, on disk or by another
-  message in the same batch, the exporter appends `_2`, `_3`, ... rather than
-  clobbering. A note in the output tells you when that happened.
+  message in the same batch, the exporter appends `-1`, `-2`, ... rather than
+  clobbering (before v3.12.1 batch export used `_2`, `_3`, ...). A note in the
+  output tells you when that happened.
 - **Every requested ID is accounted for.** `_meta.manifest` maps each requested
   message ID to the path actually written, so you can reconcile without listing
   the directory:

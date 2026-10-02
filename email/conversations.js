@@ -14,6 +14,7 @@ const { ensureAuthenticated } = require('../auth');
 const { getEmailFields } = require('../utils/field-presets');
 const { resolveFolderPath } = require('./folder-utils');
 const { buildMailboxPrefix } = require('../utils/mailbox');
+const { writeClaimedFile, makeClaimedDir } = require('../utils/safe-write');
 const {
   formatEmailContent,
   formatEmailsAsCSV,
@@ -475,16 +476,19 @@ async function handleExportConversation(args) {
     const date = formatDateForFilename(messages[0].receivedDateTime);
     const filenameBase = `${date}_${subject}_conversation`;
 
+    // Every file is written exclusively (never overwrites, never follows a
+    // symlink); a name already taken gets a -1, -2, … suffix.
+    const writeExport = (dir, base, extension, content) =>
+      writeClaimedFile(dir, base, extension, null, content, 'utf8');
+
     const exportedFiles = [];
     const exportStats = { messages: messages.length, attachments: 0, bytes: 0 };
 
     switch (format) {
       case 'eml': {
-        // Export each message as individual .eml file
-        const emlDir = path.join(resolvedDir, filenameBase);
-        if (!fs.existsSync(emlDir)) {
-          fs.mkdirSync(emlDir, { recursive: true });
-        }
+        // Export each message as individual .eml file, into a directory this
+        // export creates (never an existing one, which could be a symlink).
+        const emlDir = makeClaimedDir(resolvedDir, filenameBase);
 
         for (let i = 0; i < messages.length; i++) {
           const msg = messages[i];
@@ -494,11 +498,12 @@ async function handleExportConversation(args) {
             prefix
           );
           const msgDate = formatDateForFilename(msg.receivedDateTime);
-          const emlPath = path.join(
+          const emlPath = writeExport(
             emlDir,
-            `${i + 1}_${msgDate}_${sanitizeForFilename(msg.from?.emailAddress?.name || 'unknown', 20)}.eml`
+            `${i + 1}_${msgDate}_${sanitizeForFilename(msg.from?.emailAddress?.name || 'unknown', 20)}`,
+            'eml',
+            mimeContent
           );
-          fs.writeFileSync(emlPath, mimeContent, 'utf8');
           exportStats.bytes += Buffer.byteLength(mimeContent, 'utf8');
           exportedFiles.push(emlPath);
         }
@@ -507,7 +512,6 @@ async function handleExportConversation(args) {
 
       case 'mbox': {
         // Export all messages to single MBOX file
-        const mboxPath = path.join(resolvedDir, `${filenameBase}.mbox`);
         let mboxContent = '';
 
         for (const msg of messages) {
@@ -526,7 +530,12 @@ async function handleExportConversation(args) {
           mboxContent += '\n\n';
         }
 
-        fs.writeFileSync(mboxPath, mboxContent, 'utf8');
+        const mboxPath = writeExport(
+          resolvedDir,
+          filenameBase,
+          'mbox',
+          mboxContent
+        );
         exportStats.bytes = Buffer.byteLength(mboxContent, 'utf8');
         exportedFiles.push(mboxPath);
         break;
@@ -534,7 +543,6 @@ async function handleExportConversation(args) {
 
       case 'markdown': {
         // Export as threaded Markdown document
-        const mdPath = path.join(resolvedDir, `${filenameBase}.md`);
         const mdContent = [];
 
         mdContent.push(
@@ -581,7 +589,7 @@ async function handleExportConversation(args) {
         }
 
         const content = mdContent.join('\n');
-        fs.writeFileSync(mdPath, content, 'utf8');
+        const mdPath = writeExport(resolvedDir, filenameBase, 'md', content);
         exportStats.bytes = Buffer.byteLength(content, 'utf8');
         exportedFiles.push(mdPath);
         break;
@@ -589,7 +597,6 @@ async function handleExportConversation(args) {
 
       case 'json': {
         // Export as JSON
-        const jsonPath = path.join(resolvedDir, `${filenameBase}.json`);
         const jsonContent = JSON.stringify(
           {
             conversationId,
@@ -602,7 +609,12 @@ async function handleExportConversation(args) {
           2
         );
 
-        fs.writeFileSync(jsonPath, jsonContent, 'utf8');
+        const jsonPath = writeExport(
+          resolvedDir,
+          filenameBase,
+          'json',
+          jsonContent
+        );
         exportStats.bytes = Buffer.byteLength(jsonContent, 'utf8');
         exportedFiles.push(jsonPath);
         break;
@@ -610,7 +622,6 @@ async function handleExportConversation(args) {
 
       case 'html': {
         // Export as HTML document
-        const htmlPath = path.join(resolvedDir, `${filenameBase}.html`);
         const htmlContent = [];
 
         htmlContent.push('<!DOCTYPE html>');
@@ -667,7 +678,12 @@ async function handleExportConversation(args) {
 
         htmlContent.push('</body></html>');
         const content = htmlContent.join('\n');
-        fs.writeFileSync(htmlPath, content, 'utf8');
+        const htmlPath = writeExport(
+          resolvedDir,
+          filenameBase,
+          'html',
+          content
+        );
         exportStats.bytes = Buffer.byteLength(content, 'utf8');
         exportedFiles.push(htmlPath);
         break;
@@ -675,9 +691,13 @@ async function handleExportConversation(args) {
 
       case 'csv': {
         // Export as CSV
-        const csvPath = path.join(resolvedDir, `${filenameBase}.csv`);
         const csvContent = formatEmailsAsCSV(messages);
-        fs.writeFileSync(csvPath, csvContent, 'utf8');
+        const csvPath = writeExport(
+          resolvedDir,
+          filenameBase,
+          'csv',
+          csvContent
+        );
         exportStats.bytes = Buffer.byteLength(csvContent, 'utf8');
         exportedFiles.push(csvPath);
         break;

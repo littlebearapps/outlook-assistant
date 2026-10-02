@@ -209,7 +209,13 @@ function formatLocal(utcIso, tz) {
  * @returns {object} - MCP response
  */
 async function handleListEvents(args) {
-  const count = Math.min(args.count || 10, config.MAX_RESULT_COUNT);
+  // Whole number in 1..MAX_RESULT_COUNT: Graph rejects $top below 1 or
+  // fractional, and the schema promises the cap.
+  const requested = args.count === undefined ? 10 : Math.floor(args.count);
+  const count = Math.min(
+    Math.max(Number.isFinite(requested) ? requested : 10, 1),
+    config.MAX_RESULT_COUNT
+  );
 
   // Validate arguments before authenticating, so a bad argument is reported
   // as such (and never reaches the network).

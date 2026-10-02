@@ -20,6 +20,7 @@ const { resolveFolderPath } = require('./folder-utils');
 const { buildMailboxPrefix } = require('../utils/mailbox');
 const { quoteSearchPhrase } = require('../utils/odata-helpers');
 const { safeAttachmentFilename } = require('./attachments');
+const { writeClaimedFile } = require('../utils/safe-write');
 
 // Export format constants
 const EXPORT_FORMATS = {
@@ -337,7 +338,7 @@ async function handleBatchExportEmails(args) {
         outputDir,
         `batch_export_${timestamp}`,
         'csv',
-        new Set(),
+        null,
         csvContent,
         'utf8'
       );
@@ -695,7 +696,7 @@ async function saveAttachments(
           outputDir,
           `${messageTag(emailId)}_${base}`,
           extension,
-          claimedPaths || new Set(),
+          claimedPaths,
           buffer
         );
         saved.push({
@@ -727,82 +728,6 @@ function filenameTimestamp(isoDateTime) {
   const parsed = new Date(isoDateTime);
   if (Number.isNaN(parsed.getTime())) return 'undated';
   return parsed.toISOString().slice(0, 19).replace(/[:.]/g, '-');
-}
-
-/**
- * Claim a not-yet-used path in `outputDir`, appending `_2`, `_3`, ... until the
- * name is free both on disk and among the paths already claimed in this batch.
- *
- * Silent overwrite is the dangerous part of the collision defect: the exporter
- * reported `Successful N / Failed 0` while messages vanished. Never overwrite —
- * disambiguate instead, and let the caller reconcile via the manifest.
- *
- * The claim is synchronous, so it is atomic with respect to the event loop and
- * safe under the batch exporter's 4-way concurrency even though the write
- * itself happens after an await.
- *
- * @param {string} outputDir - Target directory
- * @param {string} base - Filename without extension
- * @param {string} extension - Extension without a leading dot
- * @param {Set<string>} claimed - Paths already claimed by this batch
- * @returns {string} - An unused absolute path, now claimed
- */
-function claimUniquePath(outputDir, base, extension, claimed) {
-  const root = path.resolve(outputDir);
-  const ext = extension ? `.${extension}` : '';
-  let candidate = path.join(root, `${base}${ext}`);
-  let suffix = 1;
-  while (claimed.has(candidate) || pathEntryExists(candidate)) {
-    suffix += 1;
-    candidate = path.join(root, `${base}_${suffix}${ext}`);
-  }
-  // Names are built from sanitised parts, but confine defensively anyway.
-  if (path.dirname(candidate) !== root) {
-    throw new Error('Refusing to write export file outside outputDir');
-  }
-  claimed.add(candidate);
-  return candidate;
-}
-
-/**
- * Like fs.existsSync, but a dangling symlink counts as existing (existsSync
- * follows the link and reports false).
- * @param {string} candidate
- * @returns {boolean}
- */
-function pathEntryExists(candidate) {
-  try {
-    fs.lstatSync(candidate);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Claim a unique name in `outputDir` and write `data` to it exclusively. The
- * `wx` flag fails on any existing entry — including a dangling symlink planted
- * after the claim — so an export never overwrites a file or follows a link;
- * on EEXIST the next suffix is claimed instead.
- * @param {string} outputDir - Target directory
- * @param {string} base - Filename without extension (already sanitised)
- * @param {string} extension - Extension without a leading dot ('' for none)
- * @param {Set<string>} claimed - Paths already claimed by this export
- * @param {string|Buffer} data - File contents
- * @param {string} [encoding] - Encoding for string data
- * @returns {string} - Absolute path actually written
- */
-function writeClaimedFile(outputDir, base, extension, claimed, data, encoding) {
-  for (let attempt = 0; attempt < 1000; attempt++) {
-    const candidate = claimUniquePath(outputDir, base, extension, claimed);
-    try {
-      fs.writeFileSync(candidate, data, { encoding, flag: 'wx' });
-      return candidate;
-    } catch (error) {
-      if (error.code !== 'EEXIST') throw error;
-    }
-  }
-  throw new Error(`Too many files named ${base} in ${outputDir}`);
 }
 
 /**

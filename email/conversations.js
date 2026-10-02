@@ -252,6 +252,70 @@ async function handleListConversations(args) {
 }
 
 /**
+ * Fetch every message in a conversation, oldest first (or newest first).
+ *
+ * Graph rejects `$filter=conversationId eq '…'` combined with `$orderby` on
+ * personal Microsoft accounts (400 InefficientFilter), so the query carries no
+ * `$orderby`: every page is fetched and the messages are sorted here.
+ * @param {string} accessToken - Access token
+ * @param {string} prefix - Mailbox prefix (`me` or `users/{mailbox}`)
+ * @param {string} conversationId - Conversation ID
+ * @param {string} selectFields - `$select` fields
+ * @param {boolean} [newestFirst=false] - Sort newest first instead
+ * @returns {Promise<Array<object>>} - Sorted messages
+ */
+async function fetchConversationMessages(
+  accessToken,
+  prefix,
+  conversationId,
+  selectFields,
+  newestFirst = false
+) {
+  const messages = [];
+  let url = `${prefix}/messages`;
+  let queryParams = {
+    $select: selectFields,
+    $filter: `conversationId eq '${conversationId}'`,
+    $top: 100,
+  };
+
+  while (url) {
+    const response = await callGraphAPI(
+      accessToken,
+      'GET',
+      url,
+      null,
+      queryParams
+    );
+    messages.push(...(response.value || []));
+    url = response['@odata.nextLink'];
+    queryParams = {}; // the nextLink already carries every parameter
+  }
+
+  return sortByReceivedDate(messages, newestFirst);
+}
+
+/**
+ * Sort messages by receivedDateTime (stable; messages without a valid date
+ * go last in either direction).
+ * @param {Array<object>} messages - Messages to sort
+ * @param {boolean} newestFirst - Sort newest first instead of oldest first
+ * @returns {Array<object>} - New sorted array
+ */
+function sortByReceivedDate(messages, newestFirst) {
+  const time = (msg) => {
+    const t = Date.parse(msg.receivedDateTime);
+    return Number.isNaN(t) ? null : t;
+  };
+  return [...messages].sort((a, b) => {
+    const ta = time(a);
+    const tb = time(b);
+    if (ta === null || tb === null) return (ta === null) - (tb === null);
+    return newestFirst ? tb - ta : ta - tb;
+  });
+}
+
+/**
  * Get conversation handler - retrieves all messages in a thread
  * @param {object} args - Tool arguments
  * @param {string} args.conversationId - Conversation ID (required)
@@ -280,41 +344,12 @@ async function handleGetConversation(args) {
     const selectFields = getEmailFields(fieldPreset);
 
     // Search all folders for messages with this conversation ID
-    const endpoint = `${prefix}/messages`;
-    const queryParams = {
-      $select: selectFields,
-      $filter: `conversationId eq '${conversationId}'`,
-      $orderby: 'receivedDateTime asc',
-      $top: 100,
-    };
-
-    let response;
-    try {
-      response = await callGraphAPI(
-        accessToken,
-        'GET',
-        endpoint,
-        null,
-        queryParams
-      );
-    } catch (apiError) {
-      if (
-        apiError.message.includes('ErrorInvalidUrlQueryFilter') ||
-        apiError.message.includes('InefficientFilter') ||
-        apiError.message.includes('filter')
-      ) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Conversation retrieval by conversationId is not supported on personal Microsoft accounts. Use read-email with individual message IDs instead.`,
-            },
-          ],
-        };
-      }
-      throw apiError;
-    }
-    const messages = response.value || [];
+    const messages = await fetchConversationMessages(
+      accessToken,
+      prefix,
+      conversationId,
+      selectFields
+    );
 
     if (messages.length === 0) {
       return {
@@ -417,42 +452,13 @@ async function handleExportConversation(args) {
     const accessToken = await ensureAuthenticated();
 
     // Get all messages in conversation
-    const selectFields = getEmailFields('export');
-    const endpoint = `${prefix}/messages`;
-    const queryParams = {
-      $select: selectFields,
-      $filter: `conversationId eq '${conversationId}'`,
-      $orderby: `receivedDateTime ${order === 'reverse' ? 'desc' : 'asc'}`,
-      $top: 100,
-    };
-
-    let response;
-    try {
-      response = await callGraphAPI(
-        accessToken,
-        'GET',
-        endpoint,
-        null,
-        queryParams
-      );
-    } catch (apiError) {
-      if (
-        apiError.message.includes('ErrorInvalidUrlQueryFilter') ||
-        apiError.message.includes('InefficientFilter') ||
-        apiError.message.includes('filter')
-      ) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Conversation export is not supported on personal Microsoft accounts. Use export with target=message and individual message IDs instead.`,
-            },
-          ],
-        };
-      }
-      throw apiError;
-    }
-    const messages = response.value || [];
+    const messages = await fetchConversationMessages(
+      accessToken,
+      prefix,
+      conversationId,
+      getEmailFields('export'),
+      order === 'reverse'
+    );
 
     if (messages.length === 0) {
       return {

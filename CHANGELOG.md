@@ -89,6 +89,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   symlink is never touched and the new file gets a `-1`, `-2`, … suffix. `eml`
   exports go into a new directory the export creates (`…_conversation-1/` on a
   second run), never an existing or symlinked one.
+- **Conversation read and export failed on personal accounts.**
+  `search-emails conversationId` and `export target=conversation` combined the
+  `conversationId` filter with `$orderby`, which Graph rejects on Outlook.com
+  accounts (`400 InefficientFilter`), and then wrongly reported that
+  conversations aren't supported on personal Microsoft accounts. The query no
+  longer sorts on the server: every page of the thread is fetched (previously
+  only the first 100 messages) and sorted by received date locally, oldest
+  first (newest first with `order: "reverse"`). Any other Graph error is now
+  shown as-is instead of that message.
 - **`list-events` documented the wrong `count` limit and missing fields**
   (#258). The description said max 50 but up to 100 events are returned; it
   also promised attendees, organiser and webLink, which the output never

@@ -125,6 +125,32 @@ describe('mailbox', () => {
     });
   });
 
+  describe('printable-ASCII only (F11)', () => {
+    test.each([
+      ['NUL byte', 'a@b.com\u0000'],
+      ['zero-width space', 'a@b.com\u200b'],
+      ['full-width slash and dots', 'a@b.com\uff0f..\uff0fgroups'],
+      ['full-width dots as local part', '\uff0e\uff0e@b.com'],
+      ['backslash', 'a\\..\\@b.com'],
+      ['CRLF', 'a@b.com\r\nX-Injected: 1'],
+      ['non-ASCII letters', 'ü@bücher.de'],
+      ['hash', 'a#b@c.com'],
+      ['empty domain label', 'a@b..com'],
+      ['trailing dot', 'a@b.com.'],
+      ['no TLD', 'a@localhost'],
+    ])('rejects %s', (_label, value) => {
+      expect(() => validateMailboxPrefix(value)).toThrow(/Invalid mailbox/);
+    });
+
+    test.each([
+      "o'brien@contoso.com",
+      'team+archive@contoso.com',
+      'a_b-c.d@sub.contoso.co.uk',
+    ])('accepts %s', (value) => {
+      expect(validateMailboxPrefix(value)).toBe(`users/${value}`);
+    });
+  });
+
   describe('opt-in gate (OUTLOOK_SHARED_MAILBOX)', () => {
     let saved;
     beforeEach(() => {

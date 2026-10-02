@@ -379,6 +379,22 @@ describe('handleAccessSharedMailbox — OUTLOOK_SHARED_MAILBOX off (pre-opt-in b
   });
 });
 
+describe('handleAccessSharedMailbox — mailbox validation (F12)', () => {
+  it('rejects "me" and points to search-emails', async () => {
+    const result = await handleAccessSharedMailbox({ sharedMailbox: 'me' });
+    expect(callGraphAPI).not.toHaveBeenCalled();
+    expect(result.content[0].text).toMatch(/search-emails/);
+  });
+
+  it('rejects a malformed address before any Graph call', async () => {
+    const result = await handleAccessSharedMailbox({
+      sharedMailbox: 'a@b.com/../../groups',
+    });
+    expect(callGraphAPI).not.toHaveBeenCalled();
+    expect(result.content[0].text).toMatch(/Invalid mailbox/);
+  });
+});
+
 describe('handleSetMessageFlag', () => {
   it('should flag a single message', async () => {
     callGraphAPI.mockResolvedValue({});

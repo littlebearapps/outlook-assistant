@@ -8,12 +8,15 @@
  * each call site re-deciding the shape.
  */
 
-// Pragmatic SMTP address / UPN shape — deliberately not RFC 5322. The point is
-// to keep caller input inside a single Graph path segment: something@something
-// .something with no whitespace and none of `/ ? # %` (path, query, fragment
-// and percent-escape delimiters). The tool schemas advertise an email address
-// only, so bare user GUIDs are not accepted.
-const MAILBOX_PATTERN = /^[^\s/?#%@]+@[^\s/?#%@]+\.[^\s/?#%@]+$/;
+// Pragmatic SMTP address / UPN shape — deliberately not full RFC 5322. The
+// point is to keep caller input inside a single Graph path segment, so only
+// printable ASCII is accepted: RFC 5322 `atext` in the local part minus `#`
+// (a URL fragment delimiter), and dot-separated letters/digits/hyphens in the
+// domain. No whitespace, control characters, `/ ? # % \`, or non-ASCII
+// look-alikes (full-width `／`, zero-width spaces). The tool schemas advertise
+// an email address only, so bare user GUIDs are not accepted.
+const MAILBOX_PATTERN =
+  /^[A-Za-z0-9.!$&'*+=^_`{|}~-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/;
 
 const config = require('../config');
 

@@ -82,6 +82,27 @@ async function handleAccessSharedMailbox(args) {
     };
   }
 
+  // Validate up front, through the same helper every other tool uses. The
+  // ungated variant keeps this tool's pre-opt-in behaviour when
+  // OUTLOOK_SHARED_MAILBOX is off; with it on, buildMailboxPrefix and
+  // validateMailboxPrefix agree.
+  let mailboxPrefix;
+  try {
+    mailboxPrefix = validateMailboxPrefix(sharedMailbox);
+  } catch (error) {
+    return { content: [{ type: 'text', text: error.message }] };
+  }
+  if (mailboxPrefix === 'me') {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: 'access-shared-mailbox reads another mailbox — pass its email address. To read your own mailbox, use `search-emails`.',
+        },
+      ],
+    };
+  }
+
   // listFolders mode: enumerate the shared mailbox's folder tree so callers
   // can discover custom subfolder names/IDs to read from.
   const sharedEnabled = config.SHARED_MAILBOX_MODE !== 'off';
@@ -140,7 +161,7 @@ async function handleAccessSharedMailbox(args) {
     }
 
     // Build endpoint for shared mailbox
-    const endpoint = `${validateMailboxPrefix(sharedMailbox)}/mailFolders/${resolvedFolder}/messages`;
+    const endpoint = `${mailboxPrefix}/mailFolders/${resolvedFolder}/messages`;
     const fieldSet = verbosity === 'full' ? 'read' : 'list';
     const queryParams = {
       $top: pageSize.toString(),

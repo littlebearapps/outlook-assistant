@@ -228,6 +228,30 @@ describe('resolveRefreshScopes — refresh uses granted, not configured, scopes'
     expect(resolveRefreshScopes(null, FULL)).toEqual(FULL);
   });
 
+  it('always includes offline_access (Microsoft omits it from the granted scope string)', () => {
+    // Shape of a real device-code token response `scope` for this app.
+    const tokens = {
+      scope:
+        'Calendars.Read Calendars.ReadWrite Contacts.Read Contacts.ReadWrite MailboxSettings.ReadWrite Mail.Read Mail.ReadWrite Mail.Send People.Read User.Read',
+    };
+    const result = resolveRefreshScopes(tokens, FULL);
+    expect(result).toContain('offline_access');
+    expect(result.filter((s) => s === 'offline_access')).toHaveLength(1);
+    expect(result).not.toContain('Mail.Read.Shared');
+  });
+
+  it('adds offline_access to granted_scopes that lack it, without duplicating', () => {
+    expect(
+      resolveRefreshScopes({ granted_scopes: ['User.Read'] }, FULL)
+    ).toEqual(['User.Read', 'offline_access']);
+    expect(
+      resolveRefreshScopes(
+        { granted_scopes: ['offline_access', 'User.Read'] },
+        FULL
+      )
+    ).toEqual(['offline_access', 'User.Read']);
+  });
+
   it('ignores an empty granted_scopes array and falls through to scope string', () => {
     const tokens = { granted_scopes: [], scope: 'offline_access Mail.Read' };
     expect(resolveRefreshScopes(tokens, FULL)).toEqual([

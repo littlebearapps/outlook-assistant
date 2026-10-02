@@ -11,20 +11,28 @@ const { describeAuthError } = require('./auth-errors');
  * refresh and gets logged out ~1h later). Falls back to the parsed `scope`
  * string, then to the configured scopes for back-compat with token files
  * written before granted_scopes existed.
+ *
+ * `offline_access` is always included. Microsoft's token responses list only
+ * the scopes the access token is valid for — `offline_access` is not among
+ * them — and the token endpoint issues a new refresh_token only when
+ * `offline_access` is requested. Refreshing with the bare granted list would
+ * stop refresh-token rotation and eventually log the user out.
  * @param {object|null} tokens - Stored token object
  * @param {string[]} configScopes - Configured scope set (back-compat fallback)
  * @returns {string[]} - Scopes to send in the refresh request
  */
 function resolveRefreshScopes(tokens, configScopes) {
+  let scopes = configScopes;
   if (tokens) {
     if (Array.isArray(tokens.granted_scopes) && tokens.granted_scopes.length) {
-      return tokens.granted_scopes;
-    }
-    if (typeof tokens.scope === 'string' && tokens.scope.trim()) {
-      return tokens.scope.split(' ').filter(Boolean);
+      scopes = tokens.granted_scopes;
+    } else if (typeof tokens.scope === 'string' && tokens.scope.trim()) {
+      scopes = tokens.scope.split(' ').filter(Boolean);
     }
   }
-  return configScopes;
+  return scopes.includes('offline_access')
+    ? scopes
+    : [...scopes, 'offline_access'];
 }
 
 class TokenStorage {

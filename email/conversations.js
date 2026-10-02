@@ -15,6 +15,7 @@ const { getEmailFields } = require('../utils/field-presets');
 const { resolveFolderPath } = require('./folder-utils');
 const { buildMailboxPrefix } = require('../utils/mailbox');
 const { writeClaimedFile, makeClaimedDir } = require('../utils/safe-write');
+const { escapeODataString } = require('../utils/odata-helpers');
 const {
   formatEmailContent,
   formatEmailsAsCSV,
@@ -251,18 +252,24 @@ async function handleListConversations(args) {
   }
 }
 
+// Upper bound on the messages one conversation read/export will load.
+const MAX_CONVERSATION_MESSAGES = 1000;
+
 /**
- * Fetch every message in a conversation, oldest first (or newest first).
+ * Fetch the messages in a conversation, oldest first (or newest first).
  *
  * Graph rejects `$filter=conversationId eq '…'` combined with `$orderby` on
  * personal Microsoft accounts (400 InefficientFilter), so the query carries no
- * `$orderby`: every page is fetched and the messages are sorted here.
+ * `$orderby`: the pages are fetched and the messages are sorted here. Paging
+ * stops at MAX_CONVERSATION_MESSAGES or if Graph repeats a nextLink; either
+ * way the result is marked truncated. (Not callGraphAPIPaginated: it can't
+ * report truncation or catch a repeated nextLink.)
  * @param {string} accessToken - Access token
  * @param {string} prefix - Mailbox prefix (`me` or `users/{mailbox}`)
  * @param {string} conversationId - Conversation ID
  * @param {string} selectFields - `$select` fields
  * @param {boolean} [newestFirst=false] - Sort newest first instead
- * @returns {Promise<Array<object>>} - Sorted messages
+ * @returns {Promise<{messages: Array<object>, truncated: boolean}>}
  */
 async function fetchConversationMessages(
   accessToken,
@@ -271,11 +278,13 @@ async function fetchConversationMessages(
   selectFields,
   newestFirst = false
 ) {
-  const messages = [];
+  let messages = [];
+  let truncated = false;
+  const seenLinks = new Set();
   let url = `${prefix}/messages`;
   let queryParams = {
     $select: selectFields,
-    $filter: `conversationId eq '${conversationId}'`,
+    $filter: `conversationId eq '${escapeODataString(String(conversationId))}'`,
     $top: 100,
   };
 
@@ -288,11 +297,34 @@ async function fetchConversationMessages(
       queryParams
     );
     messages.push(...(response.value || []));
-    url = response['@odata.nextLink'];
+    const nextLink = response['@odata.nextLink'];
+    if (messages.length > MAX_CONVERSATION_MESSAGES) {
+      messages = messages.slice(0, MAX_CONVERSATION_MESSAGES);
+      truncated = true;
+      break;
+    }
+    if (
+      nextLink &&
+      (messages.length >= MAX_CONVERSATION_MESSAGES || seenLinks.has(nextLink))
+    ) {
+      truncated = true;
+      break;
+    }
+    if (nextLink) seenLinks.add(nextLink);
+    url = nextLink;
     queryParams = {}; // the nextLink already carries every parameter
   }
 
-  return sortByReceivedDate(messages, newestFirst);
+  return { messages: sortByReceivedDate(messages, newestFirst), truncated };
+}
+
+/**
+ * Note added to output when a conversation hit a fetch limit.
+ * @param {number} count - Messages loaded
+ * @returns {string}
+ */
+function truncationNote(count) {
+  return `**Note**: Conversation truncated at ${count} messages.`;
 }
 
 /**
@@ -344,7 +376,7 @@ async function handleGetConversation(args) {
     const selectFields = getEmailFields(fieldPreset);
 
     // Search all folders for messages with this conversation ID
-    const messages = await fetchConversationMessages(
+    const { messages, truncated } = await fetchConversationMessages(
       accessToken,
       prefix,
       conversationId,
@@ -368,6 +400,7 @@ async function handleGetConversation(args) {
     output.push(`**Subject**: ${messages[0].subject || '(no subject)'}`);
     output.push(`**Messages**: ${messages.length}`);
     output.push(`**Conversation ID**: \`${conversationId}\`\n`);
+    if (truncated) output.push(`${truncationNote(messages.length)}\n`);
     output.push('---\n');
 
     messages.forEach((msg, index) => {
@@ -387,6 +420,7 @@ async function handleGetConversation(args) {
         conversationId,
         messageCount: messages.length,
         subject: messages[0]?.subject,
+        truncated,
       },
     };
   } catch (error) {
@@ -452,7 +486,7 @@ async function handleExportConversation(args) {
     const accessToken = await ensureAuthenticated();
 
     // Get all messages in conversation
-    const messages = await fetchConversationMessages(
+    const { messages, truncated } = await fetchConversationMessages(
       accessToken,
       prefix,
       conversationId,
@@ -725,6 +759,7 @@ async function handleExportConversation(args) {
     output.push(`**Subject**: ${messages[0].subject || '(no subject)'}`);
     output.push(`**Format**: ${format.toUpperCase()}`);
     output.push(`**Messages**: ${exportStats.messages}`);
+    if (truncated) output.push(truncationNote(exportStats.messages));
     output.push(`**Total Size**: ${sizeFormatted}`);
     output.push(`**Output Directory**: ${resolvedDir}\n`);
     output.push('## Exported Files\n');
@@ -743,6 +778,7 @@ async function handleExportConversation(args) {
         messageCount: exportStats.messages,
         bytes: exportStats.bytes,
         files: exportedFiles,
+        truncated,
       },
     };
   } catch (error) {

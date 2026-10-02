@@ -94,10 +94,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `conversationId` filter with `$orderby`, which Graph rejects on Outlook.com
   accounts (`400 InefficientFilter`), and then wrongly reported that
   conversations aren't supported on personal Microsoft accounts. The query no
-  longer sorts on the server: every page of the thread is fetched (previously
-  only the first 100 messages) and sorted by received date locally, oldest
-  first (newest first with `order: "reverse"`). Any other Graph error is now
-  shown as-is instead of that message.
+  longer sorts on the server: the thread is fetched page by page (previously
+  only the first 100 messages; now up to 1000, with a "Conversation truncated
+  at 1000 messages" note and `_meta.truncated` beyond that) and sorted by
+  received date locally, oldest first (newest first with `order: "reverse"`).
+  Any other Graph error is now shown as-is instead of that message. A `'` in
+  `conversationId` is now escaped, so the ID can't widen the filter beyond the
+  one thread.
 - **`list-events` documented the wrong `count` limit and missing fields**
   (#258). The description said max 50 but up to 100 events are returned; it
   also promised attendees, organiser and webLink, which the output never

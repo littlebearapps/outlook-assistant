@@ -155,6 +155,113 @@ describe('pagination', () => {
   });
 });
 
+describe('conversationId escaping', () => {
+  test('a single quote in the ID is doubled inside the $filter literal', async () => {
+    await handleGetConversation({ conversationId: "ab'cd" });
+
+    expect(callGraphAPI.mock.calls[0][4].$filter).toBe(
+      "conversationId eq 'ab''cd'"
+    );
+  });
+
+  test.each([
+    ['get-conversation', () => handleGetConversation],
+    ['conversation export', () => handleExportConversation],
+  ])('%s keeps an injection payload inside the literal', async (_n, get) => {
+    const payload = "x' or conversationId ne 'x";
+    await get()({ conversationId: payload, format: 'json', outputDir });
+
+    const filter = callGraphAPI.mock.calls[0][4].$filter;
+    expect(filter).toBe("conversationId eq 'x'' or conversationId ne ''x'");
+    // Strip the escaped quotes: exactly one literal remains, wrapping it all.
+    expect(filter.replace(/''/g, '')).toMatch(/^conversationId eq '[^']*'$/);
+  });
+});
+
+describe('fetch limits', () => {
+  const page = (start, n) =>
+    Array.from({ length: n }, (_, i) =>
+      msg(
+        `m${start + i}`,
+        new Date(Date.UTC(2026, 0, 1) + (start + i) * 60000).toISOString()
+      )
+    );
+
+  test('stops at 1000 messages and says the conversation was truncated', async () => {
+    let calls = 0;
+    callGraphAPI.mockImplementation(() => {
+      const start = calls * 100;
+      calls += 1;
+      return {
+        value: page(start, 100),
+        '@odata.nextLink': `https://graph.microsoft.com/v1.0/me/messages?$skip=${start + 100}`,
+      };
+    });
+
+    const result = await handleGetConversation({ conversationId: 'c1' });
+
+    expect(callGraphAPI).toHaveBeenCalledTimes(10);
+    expect(result._meta.messageCount).toBe(1000);
+    expect(result._meta.truncated).toBe(true);
+    expect(result.content[0].text).toContain(
+      'Conversation truncated at 1000 messages'
+    );
+  });
+
+  test('export reports truncation in its text and _meta', async () => {
+    let calls = 0;
+    callGraphAPI.mockImplementation(() => {
+      const start = calls * 100;
+      calls += 1;
+      return {
+        value: page(start, 100),
+        '@odata.nextLink': `https://graph.microsoft.com/v1.0/me/messages?$skip=${start + 100}`,
+      };
+    });
+
+    const result = await handleExportConversation({
+      conversationId: 'c1',
+      format: 'json',
+      outputDir,
+    });
+
+    expect(callGraphAPI).toHaveBeenCalledTimes(10);
+    expect(result._meta.messageCount).toBe(1000);
+    expect(result._meta.truncated).toBe(true);
+    expect(result.content[0].text).toContain(
+      'Conversation truncated at 1000 messages'
+    );
+    const json = JSON.parse(fs.readFileSync(result._meta.files[0], 'utf8'));
+    expect(json.messages).toHaveLength(1000);
+    expect(json.messages[0].id).toBe('m0');
+  });
+
+  test('stops when Graph repeats a nextLink', async () => {
+    const LOOP = 'https://graph.microsoft.com/v1.0/me/messages?$skip=2';
+    let calls = 0;
+    callGraphAPI.mockImplementation(() => {
+      const start = calls * 2;
+      calls += 1;
+      return { value: page(start, 2), '@odata.nextLink': LOOP };
+    });
+
+    const result = await handleGetConversation({ conversationId: 'c1' });
+
+    expect(callGraphAPI).toHaveBeenCalledTimes(2);
+    expect(result._meta.messageCount).toBe(4);
+    expect(result._meta.truncated).toBe(true);
+    expect(result.content[0].text).toContain(
+      'Conversation truncated at 4 messages'
+    );
+  });
+
+  test('a complete conversation is not marked truncated', async () => {
+    const result = await handleGetConversation({ conversationId: 'c1' });
+    expect(result._meta.truncated).toBe(false);
+    expect(result.content[0].text).not.toContain('truncated');
+  });
+});
+
 describe('Graph errors', () => {
   const inefficient = new Error(
     'API call failed with status 400: {"error":{"code":"InefficientFilter","message":"The restriction or sort order is too complex for this operation."}}'

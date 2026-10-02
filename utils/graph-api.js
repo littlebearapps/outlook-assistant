@@ -220,6 +220,11 @@ const MAX_RETRIES = 3;
 const BACKOFF_BASE_MS = 1000;
 const BACKOFF_CAP_MS = 30000;
 const MAX_RETRY_AFTER_SECONDS = 60;
+// POST (sendMail, /send, …) must finish well inside an MCP client's ~60 s
+// request timeout: if the client gives up while we sleep and the send later
+// succeeds, the model may send again. So a POST only waits out a short 429.
+const POST_MAX_RETRY_DELAY_MS = 10000;
+const POST_MAX_TOTAL_SLEEP_MS = 20000;
 
 /**
  * Can this response be retried for this method? POST (sendMail, /send,
@@ -257,7 +262,9 @@ function sleep(ms) {
  * Send a request through the concurrency gate, retrying throttled and
  * transient failures: 429 (all methods) and 503/504 (GET/PUT/DELETE/PATCH)
  * up to MAX_RETRIES times, honouring Retry-After; GET also retries once on
- * ETIMEDOUT/ECONNRESET. The slot is released before any backoff sleep.
+ * ETIMEDOUT/ECONNRESET. A POST waits out a 429 only if that delay is
+ * ≤ 10 s and its total sleep stays ≤ 20 s. The slot is released before any
+ * backoff sleep.
  * @param {object} request - See sendOnce (timeoutMs defaults to config)
  * @returns {Promise<{status: number, headers: object, text: string}>} The
  *   final response (2xx, or the last non-retried error status)
@@ -267,6 +274,7 @@ async function requestWithRetry(request) {
   const method = String(request.method).toUpperCase();
   const timeoutMs = request.timeoutMs || config.REQUEST_TIMEOUT_MS;
   let networkRetryUsed = false;
+  let totalSleepMs = 0;
 
   for (let retry = 0; ; retry++) {
     await acquireSlot();
@@ -299,12 +307,20 @@ async function requestWithRetry(request) {
         return response; // fail fast rather than block for minutes
       }
       delayMs = retryAfter !== null ? retryAfter * 1000 : backoffDelayMs(retry);
+      if (
+        method === 'POST' &&
+        (delayMs > POST_MAX_RETRY_DELAY_MS ||
+          totalSleepMs + delayMs > POST_MAX_TOTAL_SLEEP_MS)
+      ) {
+        return response; // surface the 429 rather than outlast the client
+      }
     }
 
     console.error(
       `[GRAPH-API] ${method} ${networkError ? networkError.code : response.status}; ` +
         `retry ${retry + 1}/${MAX_RETRIES} in ${delayMs} ms`
     );
+    totalSleepMs += delayMs;
     await sleep(delayMs);
   }
 }
@@ -598,7 +614,6 @@ async function callGraphAPIRaw(accessToken, emailId, mailboxPrefix = 'me') {
 
 module.exports = {
   assertSafeResourcePath,
-  buildGraphUrl,
   callGraphAPI,
   callGraphAPIPaginated,
   callGraphAPIBatch,

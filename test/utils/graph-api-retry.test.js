@@ -348,6 +348,110 @@ describe('callGraphAPI POST is retried only on 429', () => {
     );
     expect(bodies).toEqual(['{"message":{"a":1}}', '{"message":{"a":1}}']);
   });
+
+  it('still retries POST on 429 with a short Retry-After (2 s)', async () => {
+    script(
+      { status: 429, headers: { 'retry-after': '2' }, body: THROTTLED },
+      { status: 202 }
+    );
+    const state = track(
+      callGraphAPI('token', 'POST', 'me/sendMail', { message: {} })
+    );
+    await jest.advanceTimersByTimeAsync(1999);
+    expect(https.request).toHaveBeenCalledTimes(1);
+    await jest.advanceTimersByTimeAsync(1);
+    expect(https.request).toHaveBeenCalledTimes(2);
+    expect(state.value).toEqual({});
+  });
+
+  it('does not retry POST on 429 when Retry-After exceeds 10 s', async () => {
+    script(
+      { status: 429, headers: { 'retry-after': '15' }, body: THROTTLED },
+      { status: 202 }
+    );
+    await expect(
+      callGraphAPI('token', 'POST', 'me/sendMail', { message: {} })
+    ).rejects.toThrow(/^API call failed with status 429: .*Slow down/);
+    expect(https.request).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops retrying POST once cumulative sleep would exceed 20 s', async () => {
+    // Retry-After 8 s: sleeps of 8 s and 16 s total fit the 20 s budget; a
+    // third (24 s total) does not, so the third 429 is returned as an error.
+    script(
+      { status: 429, headers: { 'retry-after': '8' }, body: THROTTLED },
+      { status: 429, headers: { 'retry-after': '8' }, body: THROTTLED },
+      { status: 429, headers: { 'retry-after': '8' }, body: THROTTLED },
+      { status: 202 }
+    );
+    const state = track(
+      callGraphAPI('token', 'POST', 'me/sendMail', { message: {} })
+    );
+    await jest.advanceTimersByTimeAsync(60000);
+    expect(https.request).toHaveBeenCalledTimes(3);
+    expect(state.error.message).toMatch(/^API call failed with status 429: /);
+  });
+
+  it('applies no POST budget to other methods (PATCH keeps retrying)', async () => {
+    script(
+      { status: 429, headers: { 'retry-after': '15' }, body: THROTTLED },
+      { status: 200, body: { ok: true } }
+    );
+    const state = track(
+      callGraphAPI('token', 'PATCH', 'me/messages/abc', { isRead: true })
+    );
+    await jest.advanceTimersByTimeAsync(15000);
+    expect(https.request).toHaveBeenCalledTimes(2);
+    expect(state.value).toEqual({ ok: true });
+  });
+});
+
+describe('writes are not retried after network failures', () => {
+  it.each(['PUT', 'PATCH', 'DELETE'])(
+    '%s is not retried after a timeout',
+    async (method) => {
+      config.REQUEST_TIMEOUT_MS = 5000;
+      script({ stall: true }, { status: 200, body: {} });
+      const state = track(
+        callGraphAPI('token', method, 'me/messages/abc', { isRead: true })
+      );
+      await jest.advanceTimersByTimeAsync(5000);
+      await jest.advanceTimersByTimeAsync(60000);
+      expect(https.request).toHaveBeenCalledTimes(1);
+      expect(state.error.code).toBe('ETIMEDOUT');
+    }
+  );
+
+  it.each(['PUT', 'PATCH', 'DELETE'])(
+    '%s is not retried after ECONNRESET',
+    async (method) => {
+      script({ errorCode: 'ECONNRESET' }, { status: 200, body: {} });
+      await expect(
+        callGraphAPI('token', method, 'me/messages/abc', { isRead: true })
+      ).rejects.toThrow(/Network error during API call: socket ECONNRESET/);
+      expect(https.request).toHaveBeenCalledTimes(1);
+    }
+  );
+});
+
+describe('Retry-After parsing', () => {
+  it('falls back to backoff for a non-numeric (HTTP-date) Retry-After', async () => {
+    jest.spyOn(Math, 'random').mockReturnValue(0.5);
+    script(
+      {
+        status: 429,
+        headers: { 'retry-after': 'Wed, 21 Oct 2026 07:28:00 GMT' },
+        body: THROTTLED,
+      },
+      { status: 200, body: { ok: 3 } }
+    );
+    const state = track(callGraphAPI('token', 'GET', 'me/messages'));
+    await jest.advanceTimersByTimeAsync(499);
+    expect(https.request).toHaveBeenCalledTimes(1);
+    await jest.advanceTimersByTimeAsync(1);
+    expect(https.request).toHaveBeenCalledTimes(2);
+    expect(state.value).toEqual({ ok: 3 });
+  });
 });
 
 describe('callGraphAPI timeout', () => {
@@ -424,6 +528,41 @@ describe('concurrency gate', () => {
     expect(https.request).toHaveBeenCalledTimes(10);
     expect(maxInFlight).toBe(4);
     expect(states.every((s) => s.settled && !s.error)).toBe(true);
+  });
+
+  it('releases slots after a timed-out and a failed request', async () => {
+    config.REQUEST_TIMEOUT_MS = 5000;
+    script(
+      { stall: true },
+      { errorCode: 'ECONNRESET' },
+      ...Array.from({ length: 4 }, () => ({
+        status: 200,
+        body: {},
+        delayMs: 100,
+      }))
+    );
+    const timedOut = track(
+      callGraphAPI('token', 'PATCH', 'me/messages/a', { isRead: true })
+    );
+    const reset = track(
+      callGraphAPI('token', 'PATCH', 'me/messages/b', { isRead: true })
+    );
+    await jest.advanceTimersByTimeAsync(5000);
+    expect(timedOut.error.code).toBe('ETIMEDOUT');
+    expect(reset.error.message).toMatch(/ECONNRESET/);
+    expect(inFlight).toBe(0);
+
+    https.request.mockClear();
+    maxInFlight = 0;
+    const next = Array.from({ length: 4 }, () =>
+      track(callGraphAPI('token', 'GET', 'me/mailFolders/inbox'))
+    );
+    await jest.advanceTimersByTimeAsync(0);
+    // All four start at once: no slot was leaked by the failed requests.
+    expect(https.request).toHaveBeenCalledTimes(4);
+    expect(maxInFlight).toBe(4);
+    await jest.advanceTimersByTimeAsync(100);
+    expect(next.every((s) => s.settled && !s.error)).toBe(true);
   });
 
   it('releases the slot while sleeping before a retry', async () => {

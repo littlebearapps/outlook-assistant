@@ -126,8 +126,8 @@ const BASE_SCOPES = [
 const DEFAULT_REQUEST_TIMEOUT_MS = 60000;
 
 /**
- * Parse OUTLOOK_REQUEST_TIMEOUT_MS: per-attempt Graph request timeout in
- * milliseconds. Unset or invalid → 60000 (invalid values warn).
+ * Parse OUTLOOK_REQUEST_TIMEOUT_MS: per-attempt Graph inactivity timeout
+ * (ms with no data received). Unset or invalid → 60000 (invalid values warn).
  * @param {string|undefined} raw
  * @returns {number}
  */
@@ -219,8 +219,9 @@ module.exports = {
   // Immutable IDs (opt-in: IDs persist through folder moves)
   USE_IMMUTABLE_IDS: process.env.OUTLOOK_IMMUTABLE_IDS === 'true',
 
-  // Per-attempt Graph request timeout (ms). Throttled/transient responses are
-  // retried by utils/graph-api.js; each attempt gets this long.
+  // Per-attempt Graph inactivity timeout: an attempt that receives no data
+  // for this many ms is abandoned (not an overall deadline). Throttled and
+  // transient responses are retried by utils/graph-api.js.
   REQUEST_TIMEOUT_MS: parseRequestTimeoutMs(
     process.env.OUTLOOK_REQUEST_TIMEOUT_MS
   ),

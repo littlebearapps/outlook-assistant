@@ -85,6 +85,27 @@ describe('device-code', () => {
       ).rejects.toThrow('The client ID is not valid');
     });
 
+    it('attaches the OAuth payload so a scope rejection can be classified', async () => {
+      mockHttpsResponse(400, {
+        error: 'invalid_scope',
+        error_codes: [70011],
+        error_description:
+          'AADSTS70011: The provided value for scope is not valid.',
+      });
+
+      const error = await initiateDeviceCodeFlow('client', [
+        'Mail.Read.Shared',
+      ]).catch((e) => e);
+
+      expect(error.oauth).toEqual(
+        expect.objectContaining({
+          error: 'invalid_scope',
+          error_codes: [70011],
+        })
+      );
+      expect(isScopeConsentError(error)).toBe(true);
+    });
+
     it('defaults interval to 5 when not provided', async () => {
       mockHttpsResponse(200, {
         user_code: 'XXXX-YYYY',

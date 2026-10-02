@@ -298,6 +298,22 @@ async function initiateDeviceCode(scopes, scopesUsed, prefix) {
   try {
     response = await initiateDeviceCodeFlow(clientId, scopes);
   } catch (error) {
+    // The `.Shared` scopes can also be rejected when the code is requested
+    // (before sign-in). Same single fallback as at completion.
+    if (
+      config.SHARED_SCOPES.length > 0 &&
+      scopesUsed === 'full' &&
+      isScopeConsentError(error)
+    ) {
+      console.error(
+        '[AUTH] Shared-mailbox scopes rejected at device-code request; retrying with base scopes.'
+      );
+      return initiateDeviceCode(
+        config.AUTH_CONFIG.fallbackScopes,
+        'base',
+        "Your account doesn't support shared-mailbox access; signing in with the standard scopes instead."
+      );
+    }
     return buildDeviceCodeErrorResponse(error);
   }
 

@@ -290,6 +290,52 @@ describe('device code scope fallback + granted_scopes', () => {
     ]);
   });
 
+  test('falls back once when the device-code REQUEST rejects the .Shared scopes', async () => {
+    const scopeErr = new Error('AADSTS70011: invalid scope');
+    scopeErr.oauth = { error: 'invalid_scope' };
+    initiateDeviceCodeFlow
+      .mockRejectedValueOnce(scopeErr)
+      .mockResolvedValueOnce({
+        userCode: 'BASECODE',
+        verificationUri: 'https://microsoft.com/devicelogin',
+        deviceCode: 'dc_base',
+        expiresIn: 900,
+        interval: 5,
+      });
+    isScopeConsentError.mockReturnValue(true);
+
+    const result = await handleDeviceCodeAuth();
+
+    expect(initiateDeviceCodeFlow).toHaveBeenCalledTimes(2);
+    expect(initiateDeviceCodeFlow.mock.calls[1][1]).toEqual([
+      'offline_access',
+      'User.Read',
+      'Mail.Read',
+    ]);
+    expect(result.content[0].text).toContain('BASECODE');
+    const persisted = JSON.parse(
+      fs.readFileSync(DEVICE_CODE_STATE_PATH, 'utf8')
+    );
+    expect(persisted.scopesUsed).toBe('base');
+  });
+
+  test('with shared mailboxes off, a rejected device-code request is reported, not retried', async () => {
+    const config = require('../../config');
+    const saved = config.SHARED_SCOPES;
+    config.SHARED_SCOPES = [];
+    try {
+      initiateDeviceCodeFlow.mockRejectedValue(new Error('AADSTS70011'));
+      isScopeConsentError.mockReturnValue(true);
+
+      const result = await handleDeviceCodeAuth();
+
+      expect(initiateDeviceCodeFlow).toHaveBeenCalledTimes(1);
+      expect(result.isError).toBe(true);
+    } finally {
+      config.SHARED_SCOPES = saved;
+    }
+  });
+
   test('with shared mailboxes off, a scope error never triggers a fallback code', async () => {
     const config = require('../../config');
     const saved = config.SHARED_SCOPES;

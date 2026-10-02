@@ -73,10 +73,19 @@ async function initiateDeviceCodeFlow(clientId, scopes) {
   const { statusCode, body } = await postRequest(endpoint, postData);
 
   if (statusCode < 200 || statusCode >= 300) {
-    throw new Error(
+    const error = new Error(
       body.error_description ||
         `Device code request failed with status ${statusCode}`
     );
+    // Same classification payload as pollForToken, so a scope rejection at
+    // initiation can be recognised by isScopeConsentError.
+    error.oauth = {
+      error: body.error,
+      error_codes: body.error_codes,
+      suberror: body.suberror,
+      error_description: body.error_description,
+    };
+    throw error;
   }
 
   return {

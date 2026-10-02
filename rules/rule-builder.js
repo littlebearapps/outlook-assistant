@@ -134,8 +134,13 @@ async function resolveRuleFolder(accessToken, folder, label) {
       message.startsWith('Invalid folder path') ||
       /status (400|404):/.test(message)
     ) {
+      // The resolver's reason follows (an empty path segment, Graph's 400 text);
+      // its own not-found message already carries the action=list guidance.
+      const hint = message.includes('action=list')
+        ? ''
+        : ' Use `folders` action=list to see folders (with IDs and full paths), or pass a path like "Parent/Child" or a folderId.';
       return {
-        warning: `${label} "${folder}" not found. Use \`folders\` action=list to see folders (with IDs and full paths), or pass a path like "Parent/Child" or a folderId.`,
+        warning: `${label} "${folder}" not found. ${message}${hint}`,
       };
     }
     throw error;

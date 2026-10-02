@@ -152,6 +152,37 @@ describe('batch export — filename collisions', () => {
     expect(fs.readdirSync(outputDir)).toHaveLength(2);
   });
 
+  test('should name a colliding message file with a -1 suffix (v3.12.1)', async () => {
+    const twins = [
+      {
+        id: 'AAMkAGI2TWIN1',
+        subject: 'Duplicate',
+        receivedDateTime: '2023-06-15T01:26:00Z',
+      },
+      {
+        id: 'AAMkAGI2TWIN2',
+        subject: 'Duplicate',
+        receivedDateTime: '2023-06-15T01:26:00Z',
+      },
+    ];
+    mockMessages(twins);
+
+    const result = await handleBatchExportEmails({
+      target: 'messages',
+      emailIds: twins.map((m) => m.id),
+      format: 'json',
+      outputDir,
+    });
+
+    expect(fs.readdirSync(outputDir).sort()).toEqual([
+      '2023-06-15T01-26-00_Duplicate-1.json',
+      '2023-06-15T01-26-00_Duplicate.json',
+    ]);
+    // Never the pre-v3.12.1 `_2` style.
+    const names = result._meta.manifest.map((e) => path.basename(e.filePath));
+    expect(names.some((n) => /_2\.json$/.test(n))).toBe(false);
+  });
+
   test('should not overwrite a file already present in the output directory', async () => {
     const [first] = THREAD;
     // Pre-seed every name the exporter could plausibly choose for `first`.

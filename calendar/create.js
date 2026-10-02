@@ -31,7 +31,10 @@ async function handleCreateEvent(args) {
     try {
       graphAttendees = buildAttendees(attendees);
     } catch (error) {
-      return { content: [{ type: 'text', text: error.message }] };
+      return {
+        content: [{ type: 'text', text: error.message }],
+        isError: true,
+      };
     }
   }
 

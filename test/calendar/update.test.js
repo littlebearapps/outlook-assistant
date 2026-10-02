@@ -245,6 +245,7 @@ describe('handleUpdateEvent', () => {
 
     expect(result.content[0].text).toMatch(/Invalid attendee/);
     expect(result.content[0].text).toMatch(/chair/);
+    expect(result.isError).toBe(true);
     expect(ensureAuthenticated).not.toHaveBeenCalled();
     expect(callGraphAPI).not.toHaveBeenCalled();
   });

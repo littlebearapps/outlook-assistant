@@ -211,7 +211,7 @@ function formatLocal(utcIso, tz) {
 async function handleListEvents(args) {
   // Whole number in 1..MAX_RESULT_COUNT: Graph rejects $top below 1 or
   // fractional, and the schema promises the cap.
-  const requested = args.count === undefined ? 10 : Math.floor(args.count);
+  const requested = args.count == null ? 10 : Math.floor(args.count);
   const count = Math.min(
     Math.max(Number.isFinite(requested) ? requested : 10, 1),
     config.MAX_RESULT_COUNT

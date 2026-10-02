@@ -325,6 +325,7 @@ describe('handleListEvents — count (#258)', () => {
     [0, 1],
     [-5, 1],
     [2.7, 2],
+    [null, 10],
   ])('count %p sends $top %p', async (count, expected) => {
     await handleListEvents(count === undefined ? {} : { count });
 

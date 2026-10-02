@@ -41,7 +41,7 @@ function normaliseAttendeeInput(entry, index) {
   if (unknown) {
     throw invalid(
       index,
-      `Unknown attendee field '${unknown}'. Use {email, type}.`
+      `unknown attendee field '${unknown}'. Use {email, type}.`
     );
   }
   if (typeof entry.email !== 'string' || !entry.email.trim()) {

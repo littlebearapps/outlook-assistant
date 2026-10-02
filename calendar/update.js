@@ -113,7 +113,10 @@ async function handleUpdateEvent(args) {
     try {
       entries = normaliseAttendees(attendees || []);
     } catch (error) {
-      return { content: [{ type: 'text', text: error.message }] };
+      return {
+        content: [{ type: 'text', text: error.message }],
+        isError: true,
+      };
     }
     patch.attendees = buildAttendees(entries);
     if (entries.some((entry) => !entry.type)) untypedAttendees = entries;

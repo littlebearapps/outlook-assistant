@@ -41,7 +41,7 @@ describe('normaliseAttendeeInput', () => {
     [{ email: 'a@example.com', type: 'Optional' }, /type 'Optional'/],
     [{ type: 'optional' }, /email/],
     [{ email: '   ' }, /email/],
-    [{ email: 'a@example.com', name: 'A' }, /Unknown attendee field 'name'/],
+    [{ email: 'a@example.com', name: 'A' }, /: unknown attendee field 'name'/],
     ['', /email/],
     [42, /email address or an \{email, type\} object/],
     [['a@example.com'], /email address or an \{email, type\} object/],
@@ -205,7 +205,8 @@ describe('attendee schemas and MCP-boundary coercion', () => {
     // schema-coerce does not validate inside array items, so the handler must.
     const result = await manageEvent.handler(coerced.args);
 
-    expect(result.content[0].text).toMatch(/Unknown attendee field 'kind'/);
+    expect(result.content[0].text).toMatch(/unknown attendee field 'kind'/);
+    expect(result.isError).toBe(true);
     expect(callGraphAPI).not.toHaveBeenCalled();
   });
 });

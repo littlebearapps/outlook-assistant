@@ -235,7 +235,7 @@ describe('handleDeleteEvent', () => {
 describe('manage-event decline/cancel request bodies (#242)', () => {
   const manageEvent = calendarTools.find((t) => t.name === 'manage-event');
 
-  async function callManageEvent(rawArgs) {
+  function callManageEvent(rawArgs) {
     const coerced = coerceArgsAgainstSchema(rawArgs, manageEvent.inputSchema);
     expect(coerced.error).toBeUndefined();
     return manageEvent.handler(coerced.args);

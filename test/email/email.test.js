@@ -591,6 +591,9 @@ describe('handleListEmailsDelta', () => {
       expect(result._meta.tokenType).toBe('continuation');
       expect(result._meta.hasMoreChanges).toBe(true);
       expect(result._meta.deltaToken).toBe(nextLink);
+      expect(result.content[0].text).toContain(
+        'pass the same `maxResults` on every page'
+      );
     });
   });
 });

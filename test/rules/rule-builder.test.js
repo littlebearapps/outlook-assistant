@@ -326,6 +326,57 @@ describe('buildActions', () => {
     ]);
   });
 
+  it('should report an invalid folder path as not found, with the reason', async () => {
+    resolveFolder.mockRejectedValue(
+      new Error('Invalid folder path "Triage//Delete": empty path segment.')
+    );
+
+    const { actions, warnings } = await buildActions(
+      { moveToFolder: 'Triage//Delete' },
+      mockToken
+    );
+
+    expect(actions.moveToFolder).toBeUndefined();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('Target folder "Triage//Delete" not found');
+    expect(warnings[0]).toContain('empty path segment');
+    expect(warnings[0]).toContain('`folders` action=list');
+  });
+
+  it("should report a Graph 400 as not found, with Graph's message", async () => {
+    resolveFolder.mockRejectedValue(
+      new Error(
+        'API call failed with status 400: {"error":{"code":"ErrorInvalidIdMalformed"}}'
+      )
+    );
+
+    const { actions, warnings } = await buildActions(
+      { copyToFolder: FOLDER_ID },
+      mockToken
+    );
+
+    expect(actions.copyToFolder).toBeUndefined();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(`Copy-to folder "${FOLDER_ID}" not found`);
+    expect(warnings[0]).toContain('ErrorInvalidIdMalformed');
+  });
+
+  it("should keep the resolver's not-found guidance without repeating it", async () => {
+    resolveFolder.mockRejectedValue(
+      new Error(
+        'Folder "Nope" not found. Use `folders` action=list to see folders (with IDs and full paths), pass a folder path like "Parent/Child", or a folderId.'
+      )
+    );
+
+    const { warnings } = await buildActions(
+      { moveToFolder: 'Nope' },
+      mockToken
+    );
+
+    expect(warnings[0]).toContain('Target folder "Nope" not found');
+    expect(warnings[0].match(/action=list/g)).toHaveLength(1);
+  });
+
   it('should warn with the candidates when the folder name is ambiguous', async () => {
     resolveFolder.mockRejectedValue(
       new Error(

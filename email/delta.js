@@ -257,7 +257,7 @@ async function handleListEmailsDelta(args) {
       // Pagination info
       if (hasMoreChanges) {
         resultText += `\n### More Pages Available\n`;
-        resultText += `This page returned a continuation token. Call \`search-emails deltaMode=true deltaToken=<token>\` again to fetch the next page. The real delta token only emits once paging completes.\n`;
+        resultText += `This page returned a continuation token. Call \`search-emails deltaMode=true deltaToken=<token>\` again to fetch the next page, and pass the same \`maxResults\` on every page to keep the page size. The real delta token only emits once paging completes.\n`;
       }
 
       // Token (delta or continuation)

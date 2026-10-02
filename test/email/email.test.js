@@ -511,6 +511,88 @@ describe('handleListEmailsDelta', () => {
     const result = await handleListEmailsDelta({});
     expect(result.content[0].text).toBe('Delta sync failed: Server error');
   });
+
+  // #254: `$top` on messages/delta caps the whole sync, not the page; the
+  // page size goes in the Prefer header on every request instead.
+  describe('page size (#254)', () => {
+    const TOKEN =
+      'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$deltatoken=abc';
+
+    // The initial sync resolves the folder first, so pick out the delta call.
+    const deltaCall = () =>
+      callGraphAPI.mock.calls.find(
+        ([, , path]) => path.endsWith('/messages/delta') || path === TOKEN
+      );
+
+    beforeEach(() => {
+      callGraphAPI.mockResolvedValue({
+        id: 'inbox-id',
+        value: [],
+        '@odata.deltaLink': TOKEN,
+      });
+    });
+
+    it('sends the page size as Prefer, never $top, on the initial sync', async () => {
+      await handleListEmailsDelta({ deltaMode: true, maxResults: 5 });
+
+      const call = deltaCall();
+      expect(call[4].$top).toBeUndefined();
+      expect(call[4].$select).toBeDefined();
+      expect(call[5]).toEqual({ Prefer: 'odata.maxpagesize=5' });
+    });
+
+    it('sends Prefer with no query params when following a token', async () => {
+      await handleListEmailsDelta({ deltaToken: TOKEN, maxResults: 5 });
+
+      const call = deltaCall();
+      expect(call[4]).toEqual({});
+      expect(call[5]).toEqual({ Prefer: 'odata.maxpagesize=5' });
+    });
+
+    it('defaults the page size to 100 when following a token', async () => {
+      await handleListEmailsDelta({ deltaToken: TOKEN });
+
+      expect(deltaCall()[5]).toEqual({ Prefer: 'odata.maxpagesize=100' });
+    });
+
+    it.each([
+      [undefined, 100],
+      ['abc', 100],
+      [NaN, 100],
+      [0, 1],
+      [-3, 1],
+      [1, 1],
+      [7.9, 7],
+      [200, 200],
+      [201, 200],
+      [5000, 200],
+    ])('clamps maxResults %p to a page size of %p', async (input, expected) => {
+      await handleListEmailsDelta({ deltaMode: true, maxResults: input });
+
+      expect(deltaCall()[5]).toEqual({
+        Prefer: `odata.maxpagesize=${expected}`,
+      });
+    });
+
+    it('labels a nextLink page as a continuation with more changes', async () => {
+      const nextLink =
+        'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$skiptoken=xyz';
+      callGraphAPI.mockResolvedValue({
+        id: 'inbox-id',
+        value: [{ id: 'msg-1', subject: 'One' }],
+        '@odata.nextLink': nextLink,
+      });
+
+      const result = await handleListEmailsDelta({
+        deltaMode: true,
+        maxResults: 1,
+      });
+
+      expect(result._meta.tokenType).toBe('continuation');
+      expect(result._meta.hasMoreChanges).toBe(true);
+      expect(result._meta.deltaToken).toBe(nextLink);
+    });
+  });
 });
 
 // ──────────────────────────────────────────────────

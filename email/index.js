@@ -48,7 +48,7 @@ const emailTools = [
         deltaMode: {
           type: 'boolean',
           description:
-            'Enable delta sync mode. Returns only changes since last sync. Use deltaToken for subsequent calls. Honors `sharedMailbox`/`email` (and custom `folder` paths) to sync within a shared/delegated mailbox.',
+            'Enable delta sync mode. Returns only changes since last sync. Use deltaToken for subsequent calls; an initial sync larger than `maxResults` arrives over several pages, each returning a continuation token to pass back until a delta token is returned. Honors `sharedMailbox`/`email` (and custom `folder` paths) to sync within a shared/delegated mailbox.',
         },
         internetMessageId: {
           type: 'string',
@@ -147,7 +147,7 @@ const emailTools = [
         maxResults: {
           type: 'number',
           description:
-            'Max results per page for delta sync (default: 100, max: 200)',
+            'Delta sync page size (deltaMode only): 1-200, default 100, sent to Graph as the `Prefer: odata.maxpagesize` header. It sizes each page, not the whole sync: while a page returns a continuation token, keep calling with that token until a delta token is returned, and pass the same `maxResults` on every page (an omitted value means 100).',
         },
         // Conversation params
         includeHeaders: {

@@ -25,6 +25,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`$filter` was stripped from the caller's query parameters** after the first
   request (#244), so a caller reusing the object (such as the multi-step search
   fallbacks) silently lost its filter. The query object is no longer modified.
+- **Delta sync `maxResults` capped the whole sync instead of sizing a page**
+  (#254). It was sent as `$top`, which on `messages/delta` ends the sync after
+  that many messages (`maxResults: 5` returned 5 of 38 messages plus a final
+  delta token, so the rest were never synced). The page size is now sent as
+  `Prefer: odata.maxpagesize` on the initial request and on every continuation
+  request, so a large folder pages through completely. `maxResults` is clamped
+  to a whole number from 1 to 200 (default 100); previously `0` became 100 and
+  negative or fractional values reached Graph.
 
 ### Removed
 

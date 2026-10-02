@@ -27,10 +27,20 @@ params:
 ```
 
 The response includes:
-- Current inbox emails (up to the configured count)
+- Current inbox emails, one page at a time (`maxResults` per page: 1–200, default 100)
 - A `deltaToken` string to use on subsequent calls
 
-Save this token — you'll need it for all future incremental checks.
+If the folder holds more messages than one page, the response returns a **continuation token** instead (`_meta.tokenType: "continuation"`, `hasMoreChanges: true`). Pass it back as `deltaToken`, with the same `maxResults`, and keep paging until a page returns a **delta token** (`_meta.tokenType: "delta"`). Only that final delta token is worth saving.
+
+```
+tool: search-emails
+params:
+  deltaMode: true
+  deltaToken: "continuation-token-from-previous-page"
+  maxResults: 50
+```
+
+Save the delta token — you'll need it for all future incremental checks.
 
 ## Incremental Sync
 
@@ -96,7 +106,7 @@ Detect emails from specific senders or matching patterns:
 - Store tokens persistently between agent sessions — they remain valid for extended periods.
 - Use `outputVerbosity: "minimal"` for efficient polling when you only need to detect changes, not read full content.
 - Combine with `read-email` to get full content of specific changed messages after detecting them.
-- Use `count` to control how many results are returned per sync call.
+- Use `maxResults` (1–200, default 100) to set the page size. It is sent to Graph as the `Prefer: odata.maxpagesize` header and sizes each page, never the whole sync — pass the same value on every page (an omitted value means 100).
 
 ## Related
 

@@ -48,10 +48,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `BASE_SCOPES + SHARED_SCOPES` and, when an account can't consent to `.Shared`,
   automatically retries with `AUTH_CONFIG.fallbackScopes` (base only).
   Work/school accounts consent on the first try; personal accounts incur one
-  extra device code (or browser redirect). No `OUTLOOK_AUTH_AUDIENCE` change or
-  manual scope editing required. Rejection is classified by `isScopeConsentError`
-  (`auth/device-code.js`); the browser flow mirrors the fallback via a one-shot
-  `/auth?fallback=1` redirect (`auth/oauth-server.js`).
+  extra device code. Rejection is classified by `isScopeConsentError`
+  (`auth/device-code.js`). The fallback is device-code only: the browser flow
+  (`npm run auth-server`) requests the configured scopes with no fallback, so
+  personal-account users who sign in that way shouldn't enable shared-mailbox
+  scopes.
 - **Refresh uses granted scopes** — `token-storage.js` persists `granted_scopes`
   and refreshes with them (not the full configured set), so a base-only fallback
   session isn't logged out ~1h later by re-requesting `.Shared`.

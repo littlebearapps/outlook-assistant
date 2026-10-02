@@ -297,18 +297,14 @@ class TokenStorage {
     return this._refreshPromise.then((tokens) => tokens.access_token);
   }
 
-  async exchangeCodeForTokens(authCode, scopes = null) {
+  async exchangeCodeForTokens(authCode) {
     if (!this.config.clientId || !this.config.clientSecret) {
       throw new Error(
         'Client ID or Client Secret is not configured. Cannot exchange code for tokens.'
       );
     }
     console.log('Exchanging authorization code for tokens...');
-    // The redemption request must use the same scope set the authorization
-    // code was issued for — a fallback (base-only) code redeemed with the
-    // full configured set would re-request the rejected `.Shared` scopes.
-    const requestedScopes =
-      Array.isArray(scopes) && scopes.length ? scopes : this.config.scopes;
+    const requestedScopes = this.config.scopes;
     const postData = querystring.stringify({
       client_id: this.config.clientId,
       client_secret: this.config.clientSecret,
@@ -345,8 +341,7 @@ class TokenStorage {
                   scope: responseBody.scope,
                   // Persist granted scopes so refresh re-requests exactly what
                   // was granted (mirrors the device-code path). If the token
-                  // response omits `scope`, fall back to what we requested so
-                  // a fallback session never refreshes with `.Shared` again.
+                  // response omits `scope`, fall back to what we requested.
                   granted_scopes:
                     typeof responseBody.scope === 'string' &&
                     responseBody.scope.trim()

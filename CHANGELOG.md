@@ -42,6 +42,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   An ambiguous name lists the matching folders instead of picking one, and an
   authentication or network failure is reported as such rather than as a
   missing folder.
+- **`draft` update/send/delete acted on any message, not just drafts** (#246).
+  Given the ID of a received or sent message, `update` edited it, `delete`
+  deleted it and `send` tried to send it. These actions now look the ID up
+  first and refuse anything that is not an unsent draft (nothing is changed,
+  and a refusal doesn't use up a rate-limit slot); an ID that no longer exists
+  reports "Draft not found". The tool description also said `delete` was
+  permanent: it moves the draft to Deleted Items.
 
 ### Removed
 

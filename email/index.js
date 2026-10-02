@@ -327,7 +327,7 @@ const emailTools = [
   {
     name: 'draft',
     description:
-      'Full draft lifecycle for review-before-send workflows (destructive: covers `send` and `delete`). action=`create` saves a new draft in the Drafts folder and returns its id (use `dryRun: true` to preview without saving; `checkRecipients: true` runs mail-tips first). action=`update` patches an existing draft by `id` (only fields passed are changed). action=`send` dispatches an existing draft — shares the rate limit with `send-email`. action=`delete` removes a draft permanently. action=`reply`/`reply-all` creates a reply draft from a message `id` (use `comment` to prepend text — mutually exclusive with `body`). action=`forward` creates a forward draft (requires `id` and `to`). Recipient allowlist applies to create/update/forward. Returns the draft object on create/update/reply/forward; status confirmation on send/delete.',
+      'Full draft lifecycle for review-before-send workflows (destructive: covers `send` and `delete`). action=`create` saves a new draft in the Drafts folder and returns its id (use `dryRun: true` to preview without saving; `checkRecipients: true` runs mail-tips first). action=`update` patches an existing draft by `id` (only fields passed are changed). action=`send` dispatches an existing draft — shares the rate limit with `send-email`. action=`delete` moves a draft to Deleted Items. update/send/delete refuse any `id` that is not an unsent draft (received or sent messages are never changed). action=`reply`/`reply-all` creates a reply draft from a message `id` (use `comment` to prepend text — mutually exclusive with `body`). action=`forward` creates a forward draft (requires `id` and `to`). Recipient allowlist applies to create/update/forward. Returns the draft object on create/update/reply/forward; status confirmation on send/delete.',
     annotations: {
       title: 'Draft Operations',
       readOnlyHint: false,
@@ -354,7 +354,7 @@ const emailTools = [
         id: {
           type: 'string',
           description:
-            'Draft or message ID. Required for update/send/delete/reply/reply-all/forward.',
+            'Draft or message ID. Required for update/send/delete/reply/reply-all/forward. update/send/delete need a draft ID; reply/reply-all/forward take any message ID.',
         },
         to: {
           type: 'string',

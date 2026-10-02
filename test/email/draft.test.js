@@ -156,10 +156,12 @@ describe('action=create', () => {
 // ──────────────────────────────────────────────────
 describe('action=update', () => {
   it('should update a draft', async () => {
-    callGraphAPI.mockResolvedValue({
-      ...mockDraftResponse,
-      subject: 'Updated Subject',
-    });
+    callGraphAPI
+      .mockResolvedValueOnce({ id: 'draft-123', isDraft: true })
+      .mockResolvedValueOnce({
+        ...mockDraftResponse,
+        subject: 'Updated Subject',
+      });
 
     const result = await handleDraft({
       action: 'update',
@@ -188,7 +190,9 @@ describe('action=update', () => {
 // ──────────────────────────────────────────────────
 describe('action=send', () => {
   it('should send a draft', async () => {
-    callGraphAPI.mockResolvedValue(undefined); // 202 no body
+    callGraphAPI
+      .mockResolvedValueOnce({ id: 'draft-123', isDraft: true })
+      .mockResolvedValueOnce(undefined); // 202 no body
 
     const result = await handleDraft({
       action: 'send',
@@ -215,7 +219,9 @@ describe('action=send', () => {
 // ──────────────────────────────────────────────────
 describe('action=delete', () => {
   it('should delete a draft', async () => {
-    callGraphAPI.mockResolvedValue(undefined); // 204 no body
+    callGraphAPI
+      .mockResolvedValueOnce({ id: 'draft-123', isDraft: true })
+      .mockResolvedValueOnce(undefined); // 204 no body
 
     const result = await handleDraft({
       action: 'delete',
@@ -223,6 +229,7 @@ describe('action=delete', () => {
     });
 
     expect(result.content[0].text).toContain('deleted');
+    expect(result.content[0].text).toContain('Deleted Items');
     expect(callGraphAPI).toHaveBeenCalledWith(
       mockAccessToken,
       'DELETE',
@@ -233,6 +240,151 @@ describe('action=delete', () => {
   it('should require id for delete', async () => {
     const result = await handleDraft({ action: 'delete' });
     expect(result.content[0].text).toContain('Draft ID (id) is required');
+  });
+});
+
+// ──────────────────────────────────────────────────
+// update/send/delete refuse ids that are not drafts (#246)
+// ──────────────────────────────────────────────────
+describe('draft guard: update/send/delete only act on drafts', () => {
+  const receivedMessage = {
+    id: 'msg-received',
+    isDraft: false,
+    subject: 'Weekly newsletter',
+  };
+
+  const mutations = [
+    {
+      action: 'update',
+      args: { subject: 'Weekly newsletter' },
+      method: 'PATCH',
+      path: 'me/messages/msg-received',
+    },
+    {
+      action: 'send',
+      args: {},
+      method: 'POST',
+      path: 'me/messages/msg-received/send',
+    },
+    {
+      action: 'delete',
+      args: {},
+      method: 'DELETE',
+      path: 'me/messages/msg-received',
+    },
+  ];
+
+  it.each(mutations)(
+    'action=$action refuses a non-draft with one GET and no mutation',
+    async ({ action, args }) => {
+      callGraphAPI.mockResolvedValueOnce(receivedMessage);
+
+      const result = await handleDraft({ action, id: 'msg-received', ...args });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('is not a draft');
+      expect(result.content[0].text).toContain('Weekly newsletter');
+      expect(callGraphAPI).toHaveBeenCalledTimes(1);
+      expect(callGraphAPI).toHaveBeenCalledWith(
+        mockAccessToken,
+        'GET',
+        'me/messages/msg-received',
+        null,
+        { $select: 'id,isDraft,subject' }
+      );
+    }
+  );
+
+  it.each(mutations)(
+    'action=$action on a draft checks first, then mutates as call #2',
+    async ({ action, args, method, path }) => {
+      callGraphAPI
+        .mockResolvedValueOnce({ ...receivedMessage, isDraft: true })
+        .mockResolvedValueOnce(mockDraftResponse);
+
+      const result = await handleDraft({ action, id: 'msg-received', ...args });
+
+      expect(result.isError).toBeUndefined();
+      expect(callGraphAPI).toHaveBeenCalledTimes(2);
+      expect(callGraphAPI.mock.calls[0][1]).toBe('GET');
+      expect(callGraphAPI.mock.calls[1][1]).toBe(method);
+      expect(callGraphAPI.mock.calls[1][2]).toBe(path);
+    }
+  );
+
+  it.each(mutations)(
+    'action=$action reports "Draft not found" on a 404',
+    async ({ action, args }) => {
+      callGraphAPI.mockRejectedValueOnce(
+        new Error(
+          'API call failed with status 404: {"error":{"code":"ErrorItemNotFound","message":"The specified object was not found in the store."}}'
+        )
+      );
+
+      const result = await handleDraft({ action, id: 'gone-id', ...args });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Draft not found');
+      expect(result.content[0].text).toContain('gone-id');
+      expect(callGraphAPI).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it('passes other lookup errors through unchanged', async () => {
+    callGraphAPI.mockRejectedValueOnce(
+      new Error('API call failed with status 500: boom')
+    );
+
+    const result = await handleDraft({ action: 'delete', id: 'draft-123' });
+
+    expect(result.content[0].text).toContain(
+      'Error deleting draft: API call failed with status 500: boom'
+    );
+    expect(callGraphAPI).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['update', 'OUTLOOK_MAX_DRAFT_PER_SESSION', { subject: 'S' }],
+    ['send', 'OUTLOOK_MAX_SEND_EMAIL_PER_SESSION', {}],
+  ])(
+    'a refused action=%s does not consume a rate-limit slot',
+    async (action, envKey, args) => {
+      process.env[envKey] = '1';
+      try {
+        // Refused: not a draft — must not count against the limit
+        callGraphAPI.mockResolvedValueOnce(receivedMessage);
+        const refused = await handleDraft({
+          action,
+          id: 'msg-received',
+          ...args,
+        });
+        expect(refused.content[0].text).toContain('is not a draft');
+
+        // The single allowed slot is still available for a real draft
+        callGraphAPI
+          .mockResolvedValueOnce({ id: 'draft-123', isDraft: true })
+          .mockResolvedValueOnce(mockDraftResponse);
+        const allowed = await handleDraft({ action, id: 'draft-123', ...args });
+        expect(allowed.content[0].text).not.toContain('Rate limit reached');
+        expect(callGraphAPI).toHaveBeenCalledTimes(3);
+      } finally {
+        delete process.env[envKey];
+      }
+    }
+  );
+});
+
+describe('draft tool description', () => {
+  const { emailTools } = require('../../email');
+  const draftTool = emailTools.find((t) => t.name === 'draft');
+
+  it('does not claim delete is permanent', () => {
+    expect(draftTool.description).not.toMatch(/permanent/i);
+    expect(draftTool.description).toContain('Deleted Items');
+  });
+
+  it('says update/send/delete refuse non-drafts', () => {
+    expect(draftTool.description).toMatch(/refuse/i);
   });
 });
 

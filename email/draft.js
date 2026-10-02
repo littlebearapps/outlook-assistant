@@ -95,6 +95,51 @@ function formatDraftResponse(draft, actionLabel) {
 }
 
 /**
+ * Raised when update/send/delete is pointed at something that is not an
+ * unsent draft. Carries the user-facing message; handleError turns it into
+ * a tool error without the generic "Error ..." prefix.
+ */
+class DraftGuardError extends Error {}
+
+/**
+ * Refuse to mutate anything that is not an unsent draft. Graph's PATCH,
+ * DELETE and /send accept any message id, so without this check a received
+ * or sent message could be edited, deleted or re-sent (#246).
+ * @param {string} accessToken - Graph access token
+ * @param {string} id - Message id the caller passed as the draft id
+ * @param {string} action - The draft action being guarded (for the message)
+ * @throws {DraftGuardError} If the id is not a draft or does not exist
+ */
+async function assertIsDraft(accessToken, id, action) {
+  let message;
+  try {
+    message = await callGraphAPI(
+      accessToken,
+      'GET',
+      `me/messages/${id}`,
+      null,
+      {
+        $select: 'id,isDraft,subject',
+      }
+    );
+  } catch (error) {
+    if (/status 404\b|ErrorItemNotFound/.test(error.message)) {
+      throw new DraftGuardError(
+        `Draft not found: \`${id}\`. It may already have been sent or deleted, or the ID is wrong.`
+      );
+    }
+    throw error;
+  }
+
+  if (message?.isDraft !== true) {
+    const subject = message?.subject ? ` ("${message.subject}")` : '';
+    throw new DraftGuardError(
+      `Message \`${id}\`${subject} is not a draft, so draft action=${action} refused it and nothing was changed. update/send/delete only act on unsent drafts.`
+    );
+  }
+}
+
+/**
  * Draft handler — routes to action-specific logic
  * @param {object} args - Tool arguments
  * @returns {object} - MCP response
@@ -242,12 +287,14 @@ async function handleUpdateDraft(args) {
     if (allowlistError) return allowlistError;
   }
 
-  // Rate limit check
-  const rateLimitError = checkRateLimit('draft');
-  if (rateLimitError) return rateLimitError;
-
   try {
     const accessToken = await ensureAuthenticated();
+    // Refusals must not consume a rate-limit slot, so check before counting
+    await assertIsDraft(accessToken, id, 'update');
+
+    const rateLimitError = checkRateLimit('draft');
+    if (rateLimitError) return rateLimitError;
+
     const draft = await callGraphAPI(
       accessToken,
       'PATCH',
@@ -272,12 +319,14 @@ async function handleSendDraft(args) {
     };
   }
 
-  // Rate limit via send-email counter (shares limit with direct sends)
-  const rateLimitError = checkRateLimit('send-email');
-  if (rateLimitError) return rateLimitError;
-
   try {
     const accessToken = await ensureAuthenticated();
+    await assertIsDraft(accessToken, id, 'send');
+
+    // Rate limit via send-email counter (shares limit with direct sends)
+    const rateLimitError = checkRateLimit('send-email');
+    if (rateLimitError) return rateLimitError;
+
     await callGraphAPI(accessToken, 'POST', `me/messages/${id}/send`);
     return {
       content: [
@@ -308,12 +357,13 @@ async function handleDeleteDraft(args) {
 
   try {
     const accessToken = await ensureAuthenticated();
+    await assertIsDraft(accessToken, id, 'delete');
     await callGraphAPI(accessToken, 'DELETE', `me/messages/${id}`);
     return {
       content: [
         {
           type: 'text',
-          text: `Draft \`${id}\` deleted.`,
+          text: `Draft \`${id}\` deleted (moved to Deleted Items).`,
         },
       ],
     };
@@ -458,6 +508,13 @@ async function handleForwardDraft(args) {
  * Standard error handler
  */
 function handleError(actionLabel, error) {
+  if (error instanceof DraftGuardError) {
+    return {
+      content: [{ type: 'text', text: error.message }],
+      isError: true,
+    };
+  }
+
   if (error.message === 'Authentication required') {
     return {
       content: [

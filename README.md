@@ -143,7 +143,7 @@ Outlook Assistant is designed with safety-first principles for AI-driven email a
 
 **Input and file hardening** — IDs containing `.` or `..` path segments are refused before any request is made, continuation links (`deltaToken`) must point at `graph.microsoft.com`, and attachment downloads and exports write sanitised filenames inside the output directory without overwriting existing files or following symlinks.
 
-**Draft protections** — The `draft` tool shares `send-email` safety controls: dry-run preview, recipient allowlist, mail-tips validation, and rate limiting. The `send` action shares the `send-email` rate limit counter, preventing circumvention via the draft-then-send pathway.
+**Draft protections** — The `draft` tool shares `send-email` safety controls: dry-run preview, recipient allowlist, mail-tips validation, and rate limiting. The `send` action shares the `send-email` rate limit counter, preventing circumvention via the draft-then-send pathway. `update`, `send` and `delete` refuse any ID that is not an unsent draft, so a received or sent message is never edited, deleted or re-sent.
 
 **Token-optimised architecture** — Tools are consolidated using the STRAP (Single Tool, Resource, Action Pattern) approach. 22 tools instead of 55 reduces per-turn overhead by ~11,000 tokens (~64%), keeping more of the AI's context window available for your actual conversation. Fewer tools also means the AI selects the right tool more accurately — research shows tool selection degrades beyond ~40 tools.
 

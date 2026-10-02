@@ -57,6 +57,8 @@ params:
 
 You can update any combination of subject, body, recipients (to/cc/bcc), and importance. Only the fields you include are changed.
 
+The `id` must be an unsent draft. If it points at a received or sent message, the update is refused and nothing is changed; an ID that no longer exists returns "Draft not found".
+
 ## Send a Draft
 
 > "That draft looks good — send it"
@@ -82,6 +84,8 @@ params:
   action: "delete"
   id: "draft-id"
 ```
+
+The draft moves to **Deleted Items**, where you can still recover it until Deleted Items is emptied. Like `update` and `send`, `delete` refuses any `id` that is not an unsent draft, so it can't remove a received or sent message.
 
 ## Reply as Draft
 
@@ -151,6 +155,7 @@ The `draft` tool inherits the same safety controls as `send-email`:
 | Recipient allowlist | `create`, `update`, `forward` | `OUTLOOK_ALLOWED_RECIPIENTS` env |
 | Rate limiting | `create`, `update` | `OUTLOOK_MAX_DRAFT_PER_SESSION` env |
 | Send rate limiting | `send` | `OUTLOOK_MAX_EMAILS_PER_SESSION` env (shared with `send-email`) |
+| Drafts-only guard | `update`, `send`, `delete` | Always on (non-drafts are refused) |
 
 ## Tips
 

@@ -68,14 +68,14 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 | Action | Description | Required Params |
 |--------|-------------|-----------------|
 | `create` | Save new draft to Drafts folder | — (all optional) |
-| `update` | Edit existing draft | `id` |
-| `send` | Send an existing draft | `id` |
-| `delete` | Remove a draft | `id` |
+| `update` | Edit an existing draft (refuses non-drafts) | `id` |
+| `send` | Send an existing draft (refuses non-drafts) | `id` |
+| `delete` | Move a draft to Deleted Items (refuses non-drafts) | `id` |
 | `reply` | Create reply draft from message | `id` |
 | `reply-all` | Create reply-all draft from message | `id` |
 | `forward` | Create forward draft with new recipients | `id`, `to` |
 
-> **Draft safety**: `dryRun: true` previews without saving (create only). `checkRecipients: true` validates recipients via mail-tips before saving. The `send` action shares rate limits with `send-email`. Recipient allowlist applies to create, update, and forward. `comment` and `body` are mutually exclusive on reply/forward.
+> **Draft safety**: `dryRun: true` previews without saving (create only). `checkRecipients: true` validates recipients via mail-tips before saving. The `send` action shares rate limits with `send-email`. Recipient allowlist applies to create, update, and forward. `update`, `send` and `delete` check the `id` first and refuse anything that is not an unsent draft, so a received or sent message is never edited, deleted or re-sent. `comment` and `body` are mutually exclusive on reply/forward.
 
 ### Export formats
 
@@ -194,6 +194,7 @@ Check recipients before sending — detects out-of-office, mailbox full, deliver
 | Session rate limit (create/update) | `OUTLOOK_MAX_DRAFT_PER_SESSION` env | Unlimited (0) |
 | Session rate limit (send) | `OUTLOOK_MAX_EMAILS_PER_SESSION` env (shared with `send-email`) | Unlimited (0) |
 | Recipient allowlist | `OUTLOOK_ALLOWED_RECIPIENTS` env | Allow all |
+| Drafts-only guard (update/send/delete) | Always on | Non-drafts refused |
 
 ## Common Patterns
 

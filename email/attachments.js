@@ -442,4 +442,8 @@ module.exports = {
   handleListAttachments,
   handleDownloadAttachment,
   handleGetAttachmentContent,
+  // Shared with email/export.js so exported attachments get the same
+  // GHSA-755c-c45g-69rv filename hardening.
+  safeAttachmentFilename,
+  writeUniqueFile,
 };

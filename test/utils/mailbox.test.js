@@ -1,0 +1,191 @@
+const {
+  buildMailboxPrefix,
+  validateMailboxPrefix,
+} = require('../../utils/mailbox');
+const config = require('../../config');
+const { enableSharedMailbox } = require('../helpers/shared-mailbox');
+
+enableSharedMailbox();
+
+describe('mailbox', () => {
+  describe('buildMailboxPrefix', () => {
+    describe('absent mailbox falls back to the signed-in user', () => {
+      test('returns "me" for null and undefined', () => {
+        expect(buildMailboxPrefix(null)).toBe('me');
+        expect(buildMailboxPrefix(undefined)).toBe('me');
+        expect(buildMailboxPrefix()).toBe('me');
+      });
+
+      test('returns "me" for empty and whitespace-only strings', () => {
+        expect(buildMailboxPrefix('')).toBe('me');
+        expect(buildMailboxPrefix('   ')).toBe('me');
+        expect(buildMailboxPrefix('\t\n')).toBe('me');
+      });
+
+      test('returns "me" when the caller passes "me" explicitly', () => {
+        expect(buildMailboxPrefix('me')).toBe('me');
+        expect(buildMailboxPrefix('  me  ')).toBe('me');
+      });
+    });
+
+    describe('valid addresses', () => {
+      test('builds users/{address} for a normal address', () => {
+        expect(buildMailboxPrefix('shared@company.com')).toBe(
+          'users/shared@company.com'
+        );
+      });
+
+      test('accepts subdomains and multi-label domains', () => {
+        expect(buildMailboxPrefix('team@mail.corp.example.co.uk')).toBe(
+          'users/team@mail.corp.example.co.uk'
+        );
+      });
+
+      test('accepts dots, dashes and underscores in the local part', () => {
+        expect(buildMailboxPrefix('first.last_x-y@company.com')).toBe(
+          'users/first.last_x-y@company.com'
+        );
+      });
+
+      test('trims leading/trailing whitespace', () => {
+        expect(buildMailboxPrefix('  shared@company.com  ')).toBe(
+          'users/shared@company.com'
+        );
+        expect(buildMailboxPrefix('\tshared@company.com\n')).toBe(
+          'users/shared@company.com'
+        );
+      });
+    });
+
+    describe('path-segment shape', () => {
+      test('returns the address raw — encoding happens once, in the Graph client', () => {
+        // Pre-encoding here would double-encode (`+` → `%2B` → `%252B`) once
+        // callGraphAPI encodes each path segment.
+        expect(buildMailboxPrefix('sales+alerts@company.com')).toBe(
+          'users/sales+alerts@company.com'
+        );
+        expect(buildMailboxPrefix('a@b.com')).not.toContain('%');
+      });
+
+      test('output is always a two-segment users/ prefix', () => {
+        const prefix = buildMailboxPrefix('sales+alerts@company.com');
+        expect(prefix.startsWith('users/')).toBe(true);
+        // Nothing after `users/` may introduce another path segment.
+        expect(prefix.slice('users/'.length)).not.toContain('/');
+      });
+    });
+
+    describe('rejects values that could escape the path segment', () => {
+      test.each([
+        ['forward slash', 'a@b.com/messages'],
+        ['leading slash', '/etc/passwd'],
+        ['query character', 'a@b.com?$select=id'],
+        ['fragment character', 'a@b.com#frag'],
+        ['percent escape', 'a%2Fb@company.com'],
+        ['internal space', 'shared mailbox@company.com'],
+        ['space before domain', 'a@ b.com'],
+      ])('rejects %s', (_label, value) => {
+        expect(() => buildMailboxPrefix(value)).toThrow(/Invalid mailbox/);
+      });
+
+      test('rejects a pre-built users/ prefix (passthrough removed)', () => {
+        expect(() => buildMailboxPrefix('users/shared@company.com')).toThrow(
+          /Invalid mailbox/
+        );
+        expect(() => buildMailboxPrefix('users/foo')).toThrow(
+          /Invalid mailbox/
+        );
+      });
+
+      test('rejects non-address junk', () => {
+        expect(() => buildMailboxPrefix('notanemail')).toThrow(
+          /Invalid mailbox/
+        );
+        expect(() => buildMailboxPrefix('missing-domain@')).toThrow(
+          /Invalid mailbox/
+        );
+        expect(() => buildMailboxPrefix('@missing-local.com')).toThrow(
+          /Invalid mailbox/
+        );
+        expect(() => buildMailboxPrefix('no@dot')).toThrow(/Invalid mailbox/);
+        expect(() => buildMailboxPrefix('two@at@signs.com')).toThrow(
+          /Invalid mailbox/
+        );
+      });
+
+      test('rejects a bare user GUID (schemas advertise addresses only)', () => {
+        expect(() =>
+          buildMailboxPrefix('48d31887-5fad-4d73-a9f5-3c356e68a038')
+        ).toThrow(/Invalid mailbox/);
+      });
+
+      test('error message names the offending value', () => {
+        expect(() => buildMailboxPrefix('users/foo')).toThrow(/users\/foo/);
+      });
+    });
+  });
+
+  describe('printable-ASCII only (F11)', () => {
+    test.each([
+      ['NUL byte', 'a@b.com\u0000'],
+      ['zero-width space', 'a@b.com\u200b'],
+      ['full-width slash and dots', 'a@b.com\uff0f..\uff0fgroups'],
+      ['full-width dots as local part', '\uff0e\uff0e@b.com'],
+      ['backslash', 'a\\..\\@b.com'],
+      ['CRLF', 'a@b.com\r\nX-Injected: 1'],
+      ['non-ASCII letters', 'ü@bücher.de'],
+      ['hash', 'a#b@c.com'],
+      ['empty domain label', 'a@b..com'],
+      ['trailing dot', 'a@b.com.'],
+      ['no TLD', 'a@localhost'],
+    ])('rejects %s', (_label, value) => {
+      expect(() => validateMailboxPrefix(value)).toThrow(/Invalid mailbox/);
+    });
+
+    test.each([
+      "o'brien@contoso.com",
+      'team+archive@contoso.com',
+      'a_b-c.d@sub.contoso.co.uk',
+    ])('accepts %s', (value) => {
+      expect(validateMailboxPrefix(value)).toBe(`users/${value}`);
+    });
+  });
+
+  describe('opt-in gate (OUTLOOK_SHARED_MAILBOX)', () => {
+    let saved;
+    beforeEach(() => {
+      saved = config.SHARED_MAILBOX_MODE;
+      config.SHARED_MAILBOX_MODE = 'off';
+    });
+    afterEach(() => {
+      config.SHARED_MAILBOX_MODE = saved;
+    });
+
+    test('a shared mailbox is refused with setup guidance when support is off', () => {
+      expect(() => buildMailboxPrefix('team@contoso.com')).toThrow(
+        /OUTLOOK_SHARED_MAILBOX=read.*force=true/s
+      );
+    });
+
+    test('the signed-in mailbox is unaffected when support is off', () => {
+      expect(buildMailboxPrefix(null)).toBe('me');
+      expect(buildMailboxPrefix('me')).toBe('me');
+    });
+
+    test('validateMailboxPrefix validates without the gate', () => {
+      expect(validateMailboxPrefix('team@contoso.com')).toBe(
+        'users/team@contoso.com'
+      );
+      expect(() => validateMailboxPrefix('a@b.c/../x')).toThrow(
+        /Invalid mailbox/
+      );
+    });
+
+    test('read mode enables the prefix', () => {
+      config.SHARED_MAILBOX_MODE = 'read';
+      expect(buildMailboxPrefix('team@contoso.com')).toBe(
+        'users/team@contoso.com'
+      );
+    });
+  });
+});

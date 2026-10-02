@@ -4,6 +4,7 @@
 const _config = require('../config'); // Reserved for future use
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
+const { buildMailboxPrefix } = require('../utils/mailbox');
 
 /**
  * Mark email as read handler
@@ -13,6 +14,7 @@ const { ensureAuthenticated } = require('../auth');
 async function handleMarkAsRead(args) {
   const emailId = args.id;
   const isRead = args.isRead !== undefined ? args.isRead : true; // Default to true
+  const prefix = buildMailboxPrefix(args.sharedMailbox || args.email || null);
 
   if (!emailId) {
     return {
@@ -30,7 +32,7 @@ async function handleMarkAsRead(args) {
     const accessToken = await ensureAuthenticated();
 
     // Make API call to update email read status
-    const endpoint = `me/messages/${emailId}`;
+    const endpoint = `${prefix}/messages/${emailId}`;
     const updateData = {
       isRead: isRead,
     };

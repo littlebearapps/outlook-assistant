@@ -53,6 +53,7 @@ Larger surface-area additions and platform hardening. None of these shipped in
 v3.10.0 (search correctness) or v3.11.0 (fixes & polish), so they carry forward
 to the next feature slot.
 
+- **Shared/delegated mailbox completeness** — `sharedMailbox` (alias `email`) scoping across folder enumeration/resolution, reads, writes, and exports, plus automatic `.Shared` scope fallback for personal accounts. Fixes `404 ErrorInvalidMailboxItemId` when opening or writing shared-mailbox items by ID.
 - **#147** Publisher-verified shared multi-tenant app (one-click setup for read-only scopes)
 - **#133** MCP OAuth 2.1 / PKCE auth flow
 - **#132** Copilot Meeting Insights (AI meeting notes and action items)

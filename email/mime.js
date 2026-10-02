@@ -6,6 +6,7 @@
  */
 const { callGraphAPIRaw } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
+const { buildMailboxPrefix } = require('../utils/mailbox');
 
 /**
  * Parse MIME headers from raw content
@@ -93,6 +94,8 @@ async function handleGetMimeContent(args) {
   const headersOnly = args.headersOnly || false;
   const returnBase64 = args.base64 || false;
   const maxSize = args.maxSize !== undefined ? args.maxSize : 1024 * 1024; // 1MB default
+  // Mailbox-scoped IDs: route to /users/{mailbox} for a shared/delegated mailbox.
+  const prefix = buildMailboxPrefix(args.sharedMailbox || args.email || null);
 
   if (!emailId) {
     return {
@@ -111,7 +114,7 @@ async function handleGetMimeContent(args) {
 
     try {
       // Fetch raw MIME content
-      const mimeContent = await callGraphAPIRaw(accessToken, emailId);
+      const mimeContent = await callGraphAPIRaw(accessToken, emailId, prefix);
 
       if (!mimeContent) {
         return {

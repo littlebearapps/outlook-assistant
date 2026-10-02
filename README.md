@@ -43,7 +43,7 @@ Outlook Assistant connects AI assistants to your Microsoft Outlook account throu
 - 🔄 **Track inbox changes** — delta sync detects new, modified, and deleted emails since your last check, with tokens for incremental polling
 - 👥 **Manage contacts** — search your contact book and organisational directory, create and update contact records
 - ⚙️ **Configure settings** — set out-of-office auto-replies, working hours, and time zone
-- 📬 **Access shared mailboxes** — read team inboxes and service accounts (Microsoft 365)
+- 📬 **Access shared mailboxes** — read and organise team inboxes and service accounts, including custom subfolders and nested folder paths; enumerate, read, and search the folder tree (best-effort — listings flag any branches skipped due to depth limits or per-folder errors), move/flag/categorise messages, and manage folders (Microsoft 365; opt-in via `OUTLOOK_SHARED_MAILBOX`). Sending, drafts, replies, and forwards from a shared mailbox are not supported — those operations always act on the signed-in user's own mailbox
 - 🏢 **Find meeting rooms** — search by building, floor, capacity, AV equipment, and wheelchair accessibility (Microsoft 365)
 
 ### Why Outlook Assistant?
@@ -104,7 +104,7 @@ Outlook Assistant works with both personal and work/school Microsoft accounts, b
 | Categories | Full support | Full support |
 | Mailbox settings | Full support | Full support |
 | Focused Inbox | API works (overrides stored) but mail routing not affected | Full support |
-| Shared mailboxes | Not available | Requires `Mail.Read.Shared` |
+| Shared mailboxes | Not available | Opt-in (`OUTLOOK_SHARED_MAILBOX`). Read + organise only. Read: `Mail.Read.Shared`; organise (move/categorize/flag/create folders): `Mail.ReadWrite.Shared`. No sending/drafts/replies/forwards |
 | Meeting room search | Not available | Requires `Place.Read.All` + admin consent |
 
 > **Note**: On personal accounts, Microsoft's `$search` API has limited support for free-text queries. Outlook Assistant handles this automatically with progressive search — if your query returns no results, it falls back through OData filters, boolean filters, and recent message listing to find your emails. For the most direct results on personal accounts, use the structured filter parameters (`from`, `subject`, `to`, `receivedAfter`).
@@ -327,7 +327,8 @@ a server that would ignore it.
    - `MailboxSettings.ReadWrite` — settings, auto-replies, categories
    - `People.Read` — people search
 3. Optionally add **org-only** permissions (work/school accounts only):
-   - `Mail.Read.Shared` — shared mailbox access
+   - `Mail.Read.Shared` — shared mailbox read access (requested only when `OUTLOOK_SHARED_MAILBOX=read` or `=true`)
+   - `Mail.ReadWrite.Shared` — shared mailbox writes (move/categorize/flag/mark-read; requested only when `OUTLOOK_SHARED_MAILBOX=true`)
    - `Place.Read.All` — meeting room search (requires admin consent)
 4. Click **Add permissions**
 
@@ -366,6 +367,7 @@ USE_TEST_MODE=false
 | `OUTLOOK_DEFAULT_TIMEZONE` | IANA timezone applied to calendar events when callers don't pass one (e.g. `Europe/London`, `America/New_York`). | `Australia/Melbourne` |
 | `OUTLOOK_MAX_EMAILS_PER_SESSION` | Cap on `send-email` + `draft send` per MCP server lifetime. | unlimited |
 | `OUTLOOK_ALLOWED_RECIPIENTS` | Comma-separated allowlist of domains/addresses for sends, drafts, and rule forwards. | unrestricted |
+| `OUTLOOK_SHARED_MAILBOX` | Opt-in shared-mailbox support (work/school only). `read` requests `Mail.Read.Shared`; `true` (or `readwrite`/`1`) also requests `Mail.ReadWrite.Shared`. Unset leaves sign-in unchanged. After enabling, restart and run `auth action=authenticate force=true`. | unset (off) |
 | `OUTLOOK_SEARCH_SCAN_LIMIT` | How many recent messages the client-side search fallback scans. Personal accounts match `to` locally within this window, so the default caps how far back a `to` search reaches. Max 5000. | `500` |
 
 ### MCP Client Configuration
@@ -536,7 +538,7 @@ Full documentation: [docs/](docs/README.md)
 - **Personal account search**: Free-text `query` and the raw `searchExpression` (formerly `kqlQuery`) rely on Microsoft's `$search` API, which has limited support on personal Outlook.com accounts. `query` mitigates this with progressive fallback (OData filters, boolean filters, then a client-side scan). Field-scoped `$search` (e.g. `subject:"…"`) is rejected outright there; since v3.10.0 `from:`/`to:`/`subject:` expressions are translated into the closest equivalent OData filters and retried, but boolean operators, grouping, wildcards and other field prefixes are not — those still terminate with an explicit no-results rather than a silent broader search. Structured filters (`from`, `subject`, `to`, `receivedAfter`) remain the most direct route. Cross-folder search (`searchAllFolders: true`) returns a superset of inbox-only results. Note that `query` and `searchExpression` are not interchangeable there: `searchExpression` goes to `$search`, which matches the whole message including the body and ranks by relevance rather than date, while `query` falls back to a subject substring match that never reads bodies.
 - **`to` search depth on personal accounts**: the server-side recipient filter is rejected, so `to` is matched locally over the 500 most recent messages (`OUTLOOK_SEARCH_SCAN_LIMIT`, max 5000). On a large archive that excludes older mail — pair `to` with `receivedAfter`/`receivedBefore`. Since v3.11.1 the response says so whenever the scan was truncated, whether or not it matched.
 - **Focused Inbox**: Only available on work/school Microsoft 365 accounts.
-- **Shared mailboxes**: Require `Mail.Read.Shared` permission and a work/school account.
+- **Shared mailboxes**: Require a work/school account and are **opt-in**: set `OUTLOOK_SHARED_MAILBOX=read` (read) or `=true` (read and organise), restart the server, then re-authenticate with `auth action=authenticate force=true`. Until then, `sharedMailbox` calls are refused with setup guidance (`access-shared-mailbox` keeps its previous well-known-folder behaviour). `auth action=about` shows whether the shared scopes were actually granted. Support covers reading and organising only. Reading needs `Mail.Read.Shared`; organising (move/categorize/flag/mark-read/create folders via `sharedMailbox`) needs `Mail.ReadWrite.Shared` — add it in Azure and re-authenticate (until then, shared-scoped writes fail with 403; they never fall back to your own mailbox). Custom subfolders are supported — pass `folder` as a display name or nested path (e.g. `Inbox/Vendors/Acme`), a raw `folderId`, or use `listFolders: true` (or `folders action=list, sharedMailbox: …`) to discover them. **Sending, drafts, replies, and forwards from a shared mailbox are not supported** — `send-email` and `draft` (including reply/reply-all/forward) always act on the signed-in user's own mailbox, and `Mail.Send.Shared` is not requested.
 - **Meeting room search**: Requires `Place.Read.All` permission with admin consent (work/school accounts only).
 - **Export default path**: Exports save to the system temp directory by default. Use `savePath` or `outputDir` to specify a different location.
 

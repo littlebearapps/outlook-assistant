@@ -34,7 +34,12 @@ Full walkthrough: [`docs/how-to/getting-started/connect-outlook-to-claude.md`](d
 - Enable "Allow public client flows" in Authentication > Advanced settings
 - Use a **private/incognito browser** for `microsoft.com/devicelogin` (avoids cached session interference)
 
-**Token refresh**: Tokens auto-refresh when expired (via `token-storage.js`). Re-authentication only needed when the refresh token expires (~90 days).
+**Browser flow (alternative, for localhost only):**
+Start the auth server with `npm run auth-server` — needs `OUTLOOK_CLIENT_ID`/`OUTLOOK_CLIENT_SECRET` as env vars. The MCP server itself reads credentials from `.mcp.json` inline `kc_get` calls. Full walkthrough: [`docs/how-to/getting-started/connect-outlook-to-claude.md`](docs/how-to/getting-started/connect-outlook-to-claude.md).
+
+**Token refresh**: Tokens auto-refresh when expired (via `token-storage.js`). Re-authentication only needed when the refresh token expires (~90 days). Refresh re-requests only the **granted** scopes (persisted as `granted_scopes`, falling back to the stored `scope`) plus `offline_access`, not the full configured set.
+
+**Shared-mailbox scopes are opt-in**: `OUTLOOK_SHARED_MAILBOX` (`read` → `Mail.Read.Shared`; `true`/`readwrite`/`1` → both `.Shared` scopes; unset → sign-in requests `BASE_SCOPES` only, unchanged). Parsed in `config.js` (`SHARED_MAILBOX_MODE`, `SHARED_SCOPES`); `utils/mailbox.js` `buildMailboxPrefix` refuses non-`me` mailboxes while it's off. With it on, `handleDeviceCodeComplete` (`auth/tools.js`) falls back once to `AUTH_CONFIG.fallbackScopes` when `isScopeConsentError` (`auth/device-code.js`) matches; AADSTS65001 surfaces remediation instead. The browser auth server (`outlook-auth-server.js`) has no fallback. `auth action=about` reports configured vs granted scopes.
 
 ## Architecture
 
@@ -80,6 +85,7 @@ OUTLOOK_IMMUTABLE_IDS=true                 # Optional: IDs persist through folde
 OUTLOOK_AUTH_METHOD=device-code            # Optional: default auth method (device-code|browser)
 OUTLOOK_AUTH_AUDIENCE=common               # Optional: common|consumers|organizations|<tenant-guid> (v3.8.0; fixes AADSTS9002331 for personal-only Azure apps)
 OUTLOOK_DEFAULT_TIMEZONE=Australia/Melbourne  # Optional: overrides hardcoded default (v3.8.0)
+OUTLOOK_SHARED_MAILBOX=read                # Optional, opt-in: read|true (work/school only; re-auth with force=true after enabling)
 ```
 
 > The server reads `OUTLOOK_CLIENT_ID`/`OUTLOOK_CLIENT_SECRET` from `config.js`.

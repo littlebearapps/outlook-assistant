@@ -4,6 +4,7 @@
  * Export emails to disk in MIME, Markdown, or JSON format.
  * Supports single and batch export with attachment handling.
  */
+const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -15,6 +16,9 @@ const {
   VERBOSITY,
 } = require('../utils/response-formatter');
 const { getEmailFields } = require('../utils/field-presets');
+const { resolveFolderPath } = require('./folder-utils');
+const { buildMailboxPrefix } = require('../utils/mailbox');
+const { safeAttachmentFilename } = require('./attachments');
 
 // Export format constants
 const EXPORT_FORMATS = {
@@ -42,6 +46,9 @@ async function handleExportEmail(args) {
   // hardcoded os.tmpdir(), inconsistent with target=messages.
   const savePath = args.outputDir || args.savePath;
   const includeAttachments = args.includeAttachments !== false;
+  // Message IDs are mailbox-scoped: route to /users/{mailbox} for a shared/
+  // delegated mailbox, else /me.
+  const prefix = buildMailboxPrefix(args.sharedMailbox || args.email || null);
 
   if (!emailId) {
     return {
@@ -62,7 +69,7 @@ async function handleExportEmail(args) {
     const email = await callGraphAPI(
       accessToken,
       'GET',
-      `me/messages/${emailId}`,
+      `${prefix}/messages/${emailId}`,
       null,
       { $select: selectFields }
     );
@@ -89,22 +96,15 @@ async function handleExportEmail(args) {
     // Paths claimed while writing this message (main file + attachments).
     const claimedPaths = new Set();
 
-    // Determine final save path
-    let finalPath;
-    if (
+    // Determine the save location. An explicit file path is the caller's to
+    // control — honour it exactly, including overwriting, since that is what
+    // an explicit path means. A directory (or the default temp dir) means we
+    // choose the name, so the write is exclusive (`wx`): it never clobbers an
+    // existing file and never follows a planted symlink.
+    const explicitFile =
       savePath &&
-      !(fs.existsSync(savePath) && fs.statSync(savePath).isDirectory())
-    ) {
-      // An explicit file path is the caller's to control — honour it exactly,
-      // including overwriting, since that is what an explicit path means.
-      finalPath = savePath;
-    } else {
-      // A directory (or the default temp dir) means we choose the name, so
-      // never clobber a file that is already there.
-      const dir = savePath || os.tmpdir();
-      fs.mkdirSync(dir, { recursive: true });
-      finalPath = claimUniquePath(dir, defaultBase, extension, claimedPaths);
-    }
+      !(fs.existsSync(savePath) && fs.statSync(savePath).isDirectory());
+    const targetDir = explicitFile ? null : savePath || os.tmpdir();
 
     // Export based on format
     let content;
@@ -112,7 +112,7 @@ async function handleExportEmail(args) {
 
     if (format === EXPORT_FORMATS.MIME || format === EXPORT_FORMATS.EML) {
       // MIME export - raw RFC822 format
-      content = await callGraphAPIRaw(accessToken, emailId);
+      content = await callGraphAPIRaw(accessToken, emailId, prefix);
     } else if (format === EXPORT_FORMATS.MARKDOWN) {
       // Markdown export using existing formatter
       content = formatEmailContent(email, VERBOSITY.FULL, {
@@ -147,11 +147,24 @@ async function handleExportEmail(args) {
       };
     }
 
-    // Auto-create the parent directory so callers don't have to pre-mkdir.
-    fs.mkdirSync(path.dirname(finalPath), { recursive: true });
-
-    // Save main file
-    fs.writeFileSync(finalPath, content, 'utf8');
+    // Save main file. Auto-create the directory so callers don't have to
+    // pre-mkdir.
+    let finalPath;
+    if (explicitFile) {
+      finalPath = savePath;
+      fs.mkdirSync(path.dirname(finalPath), { recursive: true });
+      fs.writeFileSync(finalPath, content, 'utf8');
+    } else {
+      fs.mkdirSync(targetDir, { recursive: true });
+      finalPath = writeClaimedFile(
+        targetDir,
+        defaultBase,
+        extension,
+        claimedPaths,
+        content,
+        'utf8'
+      );
+    }
 
     // Handle attachments
     if (includeAttachments && email.hasAttachments) {
@@ -159,6 +172,7 @@ async function handleExportEmail(args) {
         accessToken,
         emailId,
         path.dirname(finalPath),
+        prefix,
         claimedPaths
       );
     }
@@ -241,6 +255,10 @@ async function handleBatchExportEmails(args) {
   const format = (args.format || EXPORT_FORMATS.MARKDOWN).toLowerCase();
   const outputDir = args.outputDir;
   const includeAttachments = args.includeAttachments === true; // Default false for batch
+  // Scope the whole batch (search + per-message fetch + attachments) to a
+  // shared/delegated mailbox when supplied.
+  const mailbox = args.sharedMailbox || args.email || null;
+  const prefix = buildMailboxPrefix(mailbox);
 
   if (!outputDir) {
     return {
@@ -266,7 +284,8 @@ async function handleBatchExportEmails(args) {
     if (Object.keys(searchQuery).length > 0 && emailIds.length === 0) {
       const searchResults = await searchEmailsForExport(
         accessToken,
-        searchQuery
+        searchQuery,
+        mailbox
       );
       idsToExport = searchResults.map((e) => e.id);
     }
@@ -300,7 +319,7 @@ async function handleBatchExportEmails(args) {
           const email = await callGraphAPI(
             accessToken,
             'GET',
-            `me/messages/${emailId}`,
+            `${prefix}/messages/${emailId}`,
             null,
             { $select: selectFields }
           );
@@ -312,8 +331,15 @@ async function handleBatchExportEmails(args) {
 
       const csvContent = formatEmailsAsCSV(emails);
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const csvPath = path.join(outputDir, `batch_export_${timestamp}.csv`);
-      fs.writeFileSync(csvPath, csvContent, 'utf8');
+      fs.mkdirSync(outputDir, { recursive: true });
+      const csvPath = writeClaimedFile(
+        outputDir,
+        `batch_export_${timestamp}`,
+        'csv',
+        new Set(),
+        csvContent,
+        'utf8'
+      );
       const totalBytes = Buffer.byteLength(csvContent, 'utf8');
 
       let resultText = `## Batch Export Complete\n\n`;
@@ -356,7 +382,8 @@ async function handleBatchExportEmails(args) {
       format,
       outputDir,
       includeAttachments,
-      4 // Max concurrent
+      4, // Max concurrent
+      prefix
     );
 
     // Build response
@@ -446,8 +473,11 @@ async function handleBatchExportEmails(args) {
 
 /**
  * Search emails for batch export
+ * @param {string} accessToken
+ * @param {object} query
+ * @param {string|null} [mailbox] - Shared mailbox email, or null for the signed-in user
  */
-async function searchEmailsForExport(accessToken, query) {
+async function searchEmailsForExport(accessToken, query, mailbox = null) {
   const folder = query.folder || 'inbox';
   const maxResults = Math.min(query.maxResults || 25, 100);
 
@@ -487,10 +517,13 @@ async function searchEmailsForExport(accessToken, query) {
     delete params.$orderby; // Can't combine $search with $orderby
   }
 
+  // resolveFolderPath handles well-known names, custom/localized names, nested
+  // paths, and raw IDs, scoped to the signed-in user or the shared mailbox.
+  const endpoint = await resolveFolderPath(accessToken, folder, mailbox);
   const response = await callGraphAPI(
     accessToken,
     'GET',
-    `me/mailFolders/${folder}/messages`,
+    endpoint,
     null,
     params
   );
@@ -507,7 +540,8 @@ async function exportWithConcurrency(
   format,
   outputDir,
   includeAttachments,
-  maxConcurrent
+  maxConcurrent,
+  prefix = 'me'
 ) {
   const results = [];
   const inProgress = new Set();
@@ -525,6 +559,7 @@ async function exportWithConcurrency(
         format,
         outputDir,
         includeAttachments,
+        prefix,
         claimedPaths
       ).then((result) => {
         inProgress.delete(promise);
@@ -553,6 +588,7 @@ async function exportSingleForBatch(
   format,
   outputDir,
   includeAttachments,
+  prefix = 'me',
   claimedPaths
 ) {
   try {
@@ -560,7 +596,7 @@ async function exportSingleForBatch(
     const email = await callGraphAPI(
       accessToken,
       'GET',
-      `me/messages/${emailId}`,
+      `${prefix}/messages/${emailId}`,
       null,
       { $select: selectFields }
     );
@@ -568,16 +604,10 @@ async function exportSingleForBatch(
     const timestamp = filenameTimestamp(email.receivedDateTime);
     const safeSubject = sanitizeFilename(email.subject || 'no-subject');
     const extension = getExtension(format);
-    const filePath = claimUniquePath(
-      outputDir,
-      `${timestamp}_${safeSubject}`,
-      extension,
-      claimedPaths
-    );
 
     let content;
     if (format === EXPORT_FORMATS.MIME || format === EXPORT_FORMATS.EML) {
-      content = await callGraphAPIRaw(accessToken, emailId);
+      content = await callGraphAPIRaw(accessToken, emailId, prefix);
     } else if (format === EXPORT_FORMATS.MARKDOWN) {
       content = formatEmailContent(email, VERBOSITY.FULL, {
         includeHeaders: true,
@@ -586,7 +616,14 @@ async function exportSingleForBatch(
       content = JSON.stringify(email, null, 2);
     }
 
-    fs.writeFileSync(filePath, content, 'utf8');
+    const filePath = writeClaimedFile(
+      outputDir,
+      `${timestamp}_${safeSubject}`,
+      extension,
+      claimedPaths,
+      content,
+      'utf8'
+    );
 
     // Handle attachments if requested
     let attachmentCount = 0;
@@ -595,6 +632,7 @@ async function exportSingleForBatch(
         accessToken,
         emailId,
         outputDir,
+        prefix,
         claimedPaths
       );
       attachmentCount = saved.length;
@@ -618,15 +656,25 @@ async function exportSingleForBatch(
 
 /**
  * Save email attachments to directory
+ * @param {string} accessToken
+ * @param {string} emailId
+ * @param {string} outputDir
+ * @param {string} [prefix] - Mailbox resource prefix (`me` or `users/{email}`)
  */
-async function saveAttachments(accessToken, emailId, outputDir, claimedPaths) {
+async function saveAttachments(
+  accessToken,
+  emailId,
+  outputDir,
+  prefix = 'me',
+  claimedPaths
+) {
   const saved = [];
 
   try {
     const response = await callGraphAPI(
       accessToken,
       'GET',
-      `me/messages/${emailId}/attachments`,
+      `${prefix}/messages/${emailId}/attachments`,
       null,
       { $select: 'id,name,contentBytes,size,contentType' }
     );
@@ -635,20 +683,20 @@ async function saveAttachments(accessToken, emailId, outputDir, claimedPaths) {
 
     for (const att of response.value) {
       if (att.contentBytes) {
-        const safeFilename = sanitizeFilename(att.name || 'attachment');
-        // `emailId.substring(0, 8)` was not a disambiguator: Graph message ids
-        // within one mailbox share a long common prefix, so every message's
-        // `invoice.pdf` resolved to the same path and all but the last were
-        // overwritten. Claim a unique path instead.
+        // The attachment name is sender-controlled (GHSA-755c-c45g-69rv):
+        // reduce it to a safe basename. The per-message tag is derived from a
+        // hash of the id, never the raw caller-supplied id, so it can't carry
+        // path characters; uniqueness comes from the exclusive write.
+        const safeFilename = safeAttachmentFilename(att.name);
         const { base, extension } = splitExtension(safeFilename);
-        const filePath = claimUniquePath(
-          outputDir,
-          `${emailId.substring(0, 8)}_${base}`,
-          extension,
-          claimedPaths || new Set()
-        );
         const buffer = Buffer.from(att.contentBytes, 'base64');
-        fs.writeFileSync(filePath, buffer);
+        const filePath = writeClaimedFile(
+          outputDir,
+          `${messageTag(emailId)}_${base}`,
+          extension,
+          claimedPaths || new Set(),
+          buffer
+        );
         saved.push({
           filename: safeFilename,
           path: filePath,
@@ -699,14 +747,76 @@ function filenameTimestamp(isoDateTime) {
  * @returns {string} - An unused absolute path, now claimed
  */
 function claimUniquePath(outputDir, base, extension, claimed) {
-  let candidate = path.join(outputDir, `${base}.${extension}`);
+  const root = path.resolve(outputDir);
+  const ext = extension ? `.${extension}` : '';
+  let candidate = path.join(root, `${base}${ext}`);
   let suffix = 1;
-  while (claimed.has(candidate) || fs.existsSync(candidate)) {
+  while (claimed.has(candidate) || pathEntryExists(candidate)) {
     suffix += 1;
-    candidate = path.join(outputDir, `${base}_${suffix}.${extension}`);
+    candidate = path.join(root, `${base}_${suffix}${ext}`);
+  }
+  // Names are built from sanitised parts, but confine defensively anyway.
+  if (path.dirname(candidate) !== root) {
+    throw new Error('Refusing to write export file outside outputDir');
   }
   claimed.add(candidate);
   return candidate;
+}
+
+/**
+ * Like fs.existsSync, but a dangling symlink counts as existing (existsSync
+ * follows the link and reports false).
+ * @param {string} candidate
+ * @returns {boolean}
+ */
+function pathEntryExists(candidate) {
+  try {
+    fs.lstatSync(candidate);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Claim a unique name in `outputDir` and write `data` to it exclusively. The
+ * `wx` flag fails on any existing entry — including a dangling symlink planted
+ * after the claim — so an export never overwrites a file or follows a link;
+ * on EEXIST the next suffix is claimed instead.
+ * @param {string} outputDir - Target directory
+ * @param {string} base - Filename without extension (already sanitised)
+ * @param {string} extension - Extension without a leading dot ('' for none)
+ * @param {Set<string>} claimed - Paths already claimed by this export
+ * @param {string|Buffer} data - File contents
+ * @param {string} [encoding] - Encoding for string data
+ * @returns {string} - Absolute path actually written
+ */
+function writeClaimedFile(outputDir, base, extension, claimed, data, encoding) {
+  for (let attempt = 0; attempt < 1000; attempt++) {
+    const candidate = claimUniquePath(outputDir, base, extension, claimed);
+    try {
+      fs.writeFileSync(candidate, data, { encoding, flag: 'wx' });
+      return candidate;
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+    }
+  }
+  throw new Error(`Too many files named ${base} in ${outputDir}`);
+}
+
+/**
+ * Short, filesystem-safe tag for a message id. Graph ids in one mailbox share
+ * a long common prefix and are caller-supplied, so neither a raw prefix nor
+ * the id itself is usable in a filename.
+ * @param {string} emailId
+ * @returns {string} - 8 hex characters
+ */
+function messageTag(emailId) {
+  return crypto
+    .createHash('sha256')
+    .update(String(emailId))
+    .digest('hex')
+    .slice(0, 8);
 }
 
 /**

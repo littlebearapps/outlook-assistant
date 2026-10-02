@@ -38,6 +38,55 @@ function assertGraphUrl(url) {
 }
 
 /**
+ * Fully percent-decode a value (bounded), so `%2e`, `%252e` etc. are seen as
+ * the characters they eventually stand for. Malformed escapes stop decoding.
+ * @param {string} value
+ * @returns {string}
+ */
+function decodeFully(value) {
+  let current = value;
+  for (let i = 0; i < 5; i++) {
+    let next;
+    try {
+      next = decodeURIComponent(current);
+    } catch {
+      return current;
+    }
+    if (next === current) return current;
+    current = next;
+  }
+  return current;
+}
+
+/**
+ * Is this path segment a dot segment (`.` or `..`) in any encoding?
+ * @param {string} segment
+ * @returns {boolean}
+ */
+function isDotSegment(segment) {
+  const decoded = decodeFully(String(segment)).trim();
+  return decoded === '.' || decoded === '..';
+}
+
+/**
+ * Reject relative Graph resource paths containing dot segments. Caller-supplied
+ * IDs (message, folder, attachment, delta tokens) are interpolated into these
+ * paths, and URL normalisation would otherwise let `..` walk the request to a
+ * different Graph resource (another mailbox, another API version) than the
+ * tool intended. Legitimate Graph IDs never contain a bare `.`/`..` segment.
+ * @param {string} resourcePath - Relative path (query string, if any, ignored)
+ * @throws {Error} If any segment is `.` or `..` (literal or percent-encoded)
+ */
+function assertSafeResourcePath(resourcePath) {
+  const pathOnly = String(resourcePath).split('?')[0];
+  if (pathOnly.split('/').some(isDotSegment)) {
+    throw new Error(
+      'Invalid resource path: IDs must not contain "." or ".." path segments'
+    );
+  }
+}
+
+/**
  * Makes a request to the Microsoft Graph API
  * In test mode (USE_TEST_MODE=true), routes to mock data instead of the real API.
  * @param {string} accessToken - The access token for authentication
@@ -71,7 +120,10 @@ async function callGraphAPI(
       assertGraphUrl(path);
       finalUrl = path;
     } else {
-      // Build URL from path and queryParams
+      // Build URL from path and queryParams. Refuse dot segments before
+      // encoding: encodeURIComponent leaves `..` intact, and the URL parser
+      // would then resolve it to a different resource.
+      assertSafeResourcePath(path);
       // Encode path segments properly
       const encodedPath = path
         .split('/')
@@ -292,6 +344,12 @@ async function callGraphAPIBatch(accessToken, requests) {
     }));
   }
 
+  // Batch sub-request URLs are resolved by Graph itself — apply the same
+  // dot-segment guard as single requests.
+  for (const req of requests) {
+    assertSafeResourcePath(req.url);
+  }
+
   const batchPayload = {
     requests: requests.map((req) => ({
       id: req.id,
@@ -319,11 +377,12 @@ async function callGraphAPIBatch(accessToken, requests) {
  * In test mode (USE_TEST_MODE=true), returns mock MIME content instead of calling the real API.
  * @param {string} accessToken - The access token for authentication
  * @param {string} emailId - The email ID to export
+ * @param {string} [mailboxPrefix] - Resource prefix (`me` or `users/{email}`) for shared mailboxes. Defaults to `me`.
  * @returns {Promise<string>} - Raw MIME content as string
  * @throws {Error} 'UNAUTHORIZED' if the server returns HTTP 401 (token expired or invalid)
  * @throws {Error} If the HTTP status is outside 2xx or a network error occurs
  */
-async function callGraphAPIRaw(accessToken, emailId) {
+async function callGraphAPIRaw(accessToken, emailId, mailboxPrefix = 'me') {
   // Test mode: return mock MIME content
   if (config.USE_TEST_MODE && accessToken.startsWith('test_access_token_')) {
     return mockData.getMockMimeContent
@@ -331,8 +390,21 @@ async function callGraphAPIRaw(accessToken, emailId) {
       : `MIME-Version: 1.0\nContent-Type: text/plain\n\nTest email content for ${emailId}`;
   }
 
+  // `emailId` is encoded as a single segment, but a bare `.`/`..` id would
+  // still be resolved as a dot segment — refuse it (and any in the prefix).
+  assertSafeResourcePath(`${mailboxPrefix}/messages`);
+  if (isDotSegment(emailId)) {
+    throw new Error(
+      'Invalid resource path: IDs must not contain "." or ".." path segments'
+    );
+  }
+
   return new Promise((resolve, reject) => {
-    const path = `me/messages/${encodeURIComponent(emailId)}/$value`;
+    const encodedPrefix = mailboxPrefix
+      .split('/')
+      .map((segment) => encodeURIComponent(segment))
+      .join('/');
+    const path = `${encodedPrefix}/messages/${encodeURIComponent(emailId)}/$value`;
     const finalUrl = `${config.GRAPH_API_ENDPOINT}${path}`;
 
     const options = {
@@ -434,6 +506,7 @@ async function callGraphAPIWithAuth(
 }
 
 module.exports = {
+  assertSafeResourcePath,
   callGraphAPI,
   callGraphAPIPaginated,
   callGraphAPIBatch,

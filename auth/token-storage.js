@@ -5,6 +5,36 @@ const https = require('https');
 const querystring = require('querystring');
 const { describeAuthError } = require('./auth-errors');
 
+/**
+ * Decide which scopes a refresh request should use. Prefer the scopes that were
+ * actually GRANTED (so a base-only fallback never re-requests `.Shared` on
+ * refresh and gets logged out ~1h later). Falls back to the parsed `scope`
+ * string, then to the configured scopes for back-compat with token files
+ * written before granted_scopes existed.
+ *
+ * `offline_access` is always included. Microsoft's token responses list only
+ * the scopes the access token is valid for — `offline_access` is not among
+ * them — and the token endpoint issues a new refresh_token only when
+ * `offline_access` is requested. Refreshing with the bare granted list would
+ * stop refresh-token rotation and eventually log the user out.
+ * @param {object|null} tokens - Stored token object
+ * @param {string[]} configScopes - Configured scope set (back-compat fallback)
+ * @returns {string[]} - Scopes to send in the refresh request
+ */
+function resolveRefreshScopes(tokens, configScopes) {
+  let scopes = configScopes;
+  if (tokens) {
+    if (Array.isArray(tokens.granted_scopes) && tokens.granted_scopes.length) {
+      scopes = tokens.granted_scopes;
+    } else if (typeof tokens.scope === 'string' && tokens.scope.trim()) {
+      scopes = tokens.scope.split(' ').filter(Boolean);
+    }
+  }
+  return scopes.includes('offline_access')
+    ? scopes
+    : [...scopes, 'offline_access'];
+}
+
 class TokenStorage {
   constructor(config) {
     this.config = {
@@ -179,7 +209,9 @@ class TokenStorage {
       client_id: this.config.clientId,
       grant_type: 'refresh_token',
       refresh_token: this.tokens.refresh_token,
-      scope: this.config.scopes.join(' '),
+      // Use the GRANTED scopes, not the full configured set. After a base-only
+      // fallback, re-requesting `.Shared` here would fail and log the user out.
+      scope: resolveRefreshScopes(this.tokens, this.config.scopes).join(' '),
     };
     if (!isDeviceCode) {
       refreshParams.client_secret = this.config.clientSecret;
@@ -272,13 +304,14 @@ class TokenStorage {
       );
     }
     console.log('Exchanging authorization code for tokens...');
+    const requestedScopes = this.config.scopes;
     const postData = querystring.stringify({
       client_id: this.config.clientId,
       client_secret: this.config.clientSecret,
       grant_type: 'authorization_code',
       code: authCode,
       redirect_uri: this.config.redirectUri,
-      scope: this.config.scopes.join(' '),
+      scope: requestedScopes.join(' '),
     });
 
     const requestOptions = {
@@ -306,6 +339,14 @@ class TokenStorage {
                   expires_in: responseBody.expires_in,
                   expires_at: Date.now() + responseBody.expires_in * 1000,
                   scope: responseBody.scope,
+                  // Persist granted scopes so refresh re-requests exactly what
+                  // was granted (mirrors the device-code path). If the token
+                  // response omits `scope`, fall back to what we requested.
+                  granted_scopes:
+                    typeof responseBody.scope === 'string' &&
+                    responseBody.scope.trim()
+                      ? responseBody.scope.split(' ').filter(Boolean)
+                      : requestedScopes,
                   token_type: responseBody.token_type,
                 };
                 try {
@@ -379,4 +420,5 @@ class TokenStorage {
 }
 
 module.exports = TokenStorage;
+module.exports.resolveRefreshScopes = resolveRefreshScopes;
 // Adding a newline at the end of the file as requested by Gemini Code Assist

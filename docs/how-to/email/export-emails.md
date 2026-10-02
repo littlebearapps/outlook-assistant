@@ -61,7 +61,7 @@ params:
   order: "chronological"
 ```
 
-Conversation files are named `<date>_<subject>_conversation.<ext>`; `eml` writes one file per message into a new `<date>_<subject>_conversation/` directory. Exporting the same thread again never overwrites the earlier export or follows a symlink: since v3.12.1 the new copy gets a `-1` (then `-2`, ...) suffix.
+A conversation export includes up to 1000 messages (beyond that the result says the conversation was truncated). Conversation files are named `<date>_<subject>_conversation.<ext>`; `eml` writes one file per message into a new `<date>_<subject>_conversation/` directory. Exporting the same thread again never overwrites the earlier export or follows a symlink: since v3.12.1 the new copy gets a `-1` (then `-2`, ...) suffix.
 
 ## Batch Export Multiple Emails
 

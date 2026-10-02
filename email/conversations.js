@@ -252,8 +252,10 @@ async function handleListConversations(args) {
   }
 }
 
-// Upper bound on the messages one conversation read/export will load.
-const MAX_CONVERSATION_MESSAGES = 1000;
+// Upper bounds on the messages one conversation read/export will load. The
+// inline read returns every message in the tool result, so it stops sooner.
+const GET_CONVERSATION_MESSAGE_LIMIT = 100;
+const EXPORT_CONVERSATION_MESSAGE_LIMIT = 1000;
 
 /**
  * Fetch the messages in a conversation, oldest first (or newest first).
@@ -261,14 +263,16 @@ const MAX_CONVERSATION_MESSAGES = 1000;
  * Graph rejects `$filter=conversationId eq '…'` combined with `$orderby` on
  * personal Microsoft accounts (400 InefficientFilter), so the query carries no
  * `$orderby`: the pages are fetched and the messages are sorted here. Paging
- * stops at MAX_CONVERSATION_MESSAGES or if Graph repeats a nextLink; either
+ * stops at the caller's `limit` or if Graph repeats a nextLink; either
  * way the result is marked truncated. (Not callGraphAPIPaginated: it can't
  * report truncation or catch a repeated nextLink.)
  * @param {string} accessToken - Access token
  * @param {string} prefix - Mailbox prefix (`me` or `users/{mailbox}`)
  * @param {string} conversationId - Conversation ID
  * @param {string} selectFields - `$select` fields
- * @param {boolean} [newestFirst=false] - Sort newest first instead
+ * @param {object} options
+ * @param {number} options.limit - Most messages to load
+ * @param {boolean} [options.newestFirst=false] - Sort newest first instead
  * @returns {Promise<{messages: Array<object>, truncated: boolean}>}
  */
 async function fetchConversationMessages(
@@ -276,7 +280,7 @@ async function fetchConversationMessages(
   prefix,
   conversationId,
   selectFields,
-  newestFirst = false
+  { limit, newestFirst = false }
 ) {
   let messages = [];
   let truncated = false;
@@ -285,7 +289,7 @@ async function fetchConversationMessages(
   let queryParams = {
     $select: selectFields,
     $filter: `conversationId eq '${escapeODataString(String(conversationId))}'`,
-    $top: 100,
+    $top: Math.min(100, limit),
   };
 
   while (url) {
@@ -298,15 +302,12 @@ async function fetchConversationMessages(
     );
     messages.push(...(response.value || []));
     const nextLink = response['@odata.nextLink'];
-    if (messages.length > MAX_CONVERSATION_MESSAGES) {
-      messages = messages.slice(0, MAX_CONVERSATION_MESSAGES);
+    if (messages.length > limit) {
+      messages = messages.slice(0, limit);
       truncated = true;
       break;
     }
-    if (
-      nextLink &&
-      (messages.length >= MAX_CONVERSATION_MESSAGES || seenLinks.has(nextLink))
-    ) {
+    if (nextLink && (messages.length >= limit || seenLinks.has(nextLink))) {
       truncated = true;
       break;
     }
@@ -380,7 +381,8 @@ async function handleGetConversation(args) {
       accessToken,
       prefix,
       conversationId,
-      selectFields
+      selectFields,
+      { limit: GET_CONVERSATION_MESSAGE_LIMIT }
     );
 
     if (messages.length === 0) {
@@ -491,7 +493,10 @@ async function handleExportConversation(args) {
       prefix,
       conversationId,
       getEmailFields('export'),
-      order === 'reverse'
+      {
+        limit: EXPORT_CONVERSATION_MESSAGE_LIMIT,
+        newestFirst: order === 'reverse',
+      }
     );
 
     if (messages.length === 0) {

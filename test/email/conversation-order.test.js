@@ -187,7 +187,7 @@ describe('fetch limits', () => {
       )
     );
 
-  test('stops at 1000 messages and says the conversation was truncated', async () => {
+  test('get-conversation stops at 100 messages and says it was truncated', async () => {
     let calls = 0;
     callGraphAPI.mockImplementation(() => {
       const start = calls * 100;
@@ -200,12 +200,30 @@ describe('fetch limits', () => {
 
     const result = await handleGetConversation({ conversationId: 'c1' });
 
-    expect(callGraphAPI).toHaveBeenCalledTimes(10);
-    expect(result._meta.messageCount).toBe(1000);
+    expect(callGraphAPI).toHaveBeenCalledTimes(1);
+    expect(result._meta.messageCount).toBe(100);
     expect(result._meta.truncated).toBe(true);
     expect(result.content[0].text).toContain(
-      'Conversation truncated at 1000 messages'
+      'Conversation truncated at 100 messages'
     );
+  });
+
+  test('get-conversation trims an oversized page to 100 messages', async () => {
+    callGraphAPI.mockResolvedValue({ value: page(0, 150) });
+
+    const result = await handleGetConversation({ conversationId: 'c1' });
+
+    expect(result._meta.messageCount).toBe(100);
+    expect(result._meta.truncated).toBe(true);
+  });
+
+  test('get-conversation with exactly 100 messages and no nextLink is complete', async () => {
+    callGraphAPI.mockResolvedValue({ value: page(0, 100) });
+
+    const result = await handleGetConversation({ conversationId: 'c1' });
+
+    expect(result._meta.messageCount).toBe(100);
+    expect(result._meta.truncated).toBe(false);
   });
 
   test('export reports truncation in its text and _meta', async () => {

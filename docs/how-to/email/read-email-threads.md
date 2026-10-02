@@ -63,7 +63,7 @@ params:
   conversationId: "AAQkAGR..."
 ```
 
-Messages are returned in chronological order so you can follow the discussion.
+Messages are returned in chronological order (oldest first) so you can follow the discussion. Up to 100 messages are returned; a longer thread ends with a "Conversation truncated at 100 messages" note, so export it with `export target: "conversation"` (up to 1000 messages) to get the rest.
 
 ## Include Headers with Email Content
 

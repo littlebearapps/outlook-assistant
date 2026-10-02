@@ -10,17 +10,20 @@ const {
 } = require('../utils/odata-helpers');
 
 /**
- * Validate that a value parses as an ISO 8601 datetime. Throws otherwise.
+ * Parse an ISO 8601 datetime and return it as a UTC ISO string. Throws if invalid.
  * The schema declares `format: "date-time"` but the MCP schema-coerce layer
  * does not enforce JSON Schema `format`, so we enforce here at runtime.
  */
-function assertIsoDateTime(value, paramName) {
+function toUtcIsoDateTime(value, paramName) {
   const parsed = Date.parse(value);
   if (Number.isNaN(parsed)) {
     throw new Error(
       `Invalid ${paramName}: "${value}" is not a valid ISO 8601 datetime (e.g. "2026-01-01T00:00:00Z").`
     );
   }
+  // Events are requested in UTC, so compare against a UTC instant; an input
+  // with an offset (e.g. +10:00) would otherwise be compared as-is.
+  return new Date(parsed).toISOString();
 }
 
 /**
@@ -31,8 +34,8 @@ function assertIsoDateTime(value, paramName) {
  * seeing only upcoming events. When ANY of startAfter/startBefore/subject are
  * supplied, those replace the default and are AND-ed together.
  *
- * startAfter/startBefore are validated as ISO 8601 datetimes; invalid values
- * raise before any Graph call is made. Single quotes in user-supplied strings
+ * startAfter/startBefore are validated as ISO 8601 datetimes and normalised to
+ * UTC; invalid values raise before any Graph call is made. Single quotes in user-supplied strings
  * are escaped via OData rules (`'` -> `''`) to prevent filter injection.
  *
  * @param {object} args - { startAfter?, startBefore?, subject? }
@@ -46,12 +49,14 @@ function buildListEventsFilter(args) {
 
   if (hasAnyFilter) {
     if (startAfter) {
-      assertIsoDateTime(startAfter, 'startAfter');
-      conditions.push(`start/dateTime ge '${escapeODataString(startAfter)}'`);
+      conditions.push(
+        `start/dateTime ge '${toUtcIsoDateTime(startAfter, 'startAfter')}'`
+      );
     }
     if (startBefore) {
-      assertIsoDateTime(startBefore, 'startBefore');
-      conditions.push(`start/dateTime lt '${escapeODataString(startBefore)}'`);
+      conditions.push(
+        `start/dateTime lt '${toUtcIsoDateTime(startBefore, 'startBefore')}'`
+      );
     }
     if (subject) {
       conditions.push(`contains(subject, '${escapeODataString(subject)}')`);

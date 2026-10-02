@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`list-events` filters** (#193, thanks @taranasus): `startAfter`, `startBefore`
+  and `subject` find past, current or specifically-named events. With no filter
+  the default is unchanged (upcoming events only). Supplying any filter replaces
+  the implicit `start ≥ now` bound; filters are AND-ed. Dates are validated as
+  ISO 8601 and normalised to UTC; `subject` is OData-escaped.
+
 ## [3.11.2] - 2026-09-30
 
 Security release. Upgrading is recommended for everyone on 3.11.1 or earlier.

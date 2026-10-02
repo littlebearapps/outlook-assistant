@@ -54,7 +54,7 @@ describe('handleListEvents — filter parameters', () => {
     await handleListEvents({ startAfter: '2026-01-01T00:00:00Z' });
 
     expect(filterOf(callGraphAPI.mock.calls[0])).toBe(
-      "start/dateTime ge '2026-01-01T00:00:00Z'"
+      "start/dateTime ge '2026-01-01T00:00:00.000Z'"
     );
   });
 
@@ -62,7 +62,20 @@ describe('handleListEvents — filter parameters', () => {
     await handleListEvents({ startBefore: '2026-02-01T00:00:00Z' });
 
     expect(filterOf(callGraphAPI.mock.calls[0])).toBe(
-      "start/dateTime lt '2026-02-01T00:00:00Z'"
+      "start/dateTime lt '2026-02-01T00:00:00.000Z'"
+    );
+  });
+
+  test('offset datetimes are normalised to UTC before filtering', async () => {
+    // Events are requested in UTC, so a +10:00 input must become the same
+    // instant in UTC rather than being compared as a local wall-clock time.
+    await handleListEvents({
+      startAfter: '2026-04-03T09:00:00+10:00',
+      startBefore: '2026-04-04T00:00:00+10:00',
+    });
+
+    expect(filterOf(callGraphAPI.mock.calls[0])).toBe(
+      "start/dateTime ge '2026-04-02T23:00:00.000Z' and start/dateTime lt '2026-04-03T14:00:00.000Z'"
     );
   });
 
@@ -83,8 +96,8 @@ describe('handleListEvents — filter parameters', () => {
 
     expect(filterOf(callGraphAPI.mock.calls[0])).toBe(
       [
-        "start/dateTime ge '2026-01-01T00:00:00Z'",
-        "start/dateTime lt '2026-02-01T00:00:00Z'",
+        "start/dateTime ge '2026-01-01T00:00:00.000Z'",
+        "start/dateTime lt '2026-02-01T00:00:00.000Z'",
         "contains(subject, 'Miele')",
       ].join(' and ')
     );

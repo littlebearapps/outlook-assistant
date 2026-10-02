@@ -128,7 +128,7 @@ npm run format:check        # Prettier (CI runs this)
 USE_TEST_MODE=true npm start # Mock data mode
 ```
 
-Mock data defined in `utils/mock-data.js`. `test/auth/auth-tools.test.js` writes and deletes `~/.outlook-assistant-pending-auth.json`, so run Jest with `HOME` pointed at a temp dir if you have a real pending flow. Shared-mailbox suites switch the opt-in on via `test/helpers/shared-mailbox.js`.
+Mock data defined in `utils/mock-data.js`. Shared-mailbox suites switch the opt-in on via `test/helpers/shared-mailbox.js`.
 
 ## Graph API Notes
 

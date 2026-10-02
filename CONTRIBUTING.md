@@ -99,7 +99,6 @@ test: add tests for contacts module
 - Write tests for new functionality
 - Ensure existing tests pass: `npm test`
 - Use test mode for development: `USE_TEST_MODE=true npm start`
-- `test/auth/auth-tools.test.js` creates and deletes `~/.outlook-assistant-pending-auth.json`. If you have a real device-code sign-in in progress, run the suite with `HOME` pointed at a temporary directory (for example `HOME=$(mktemp -d) npm test`)
 - Shared-mailbox code paths are opt-in; tests that exercise them switch the setting on with `test/helpers/shared-mailbox.js`
 
 ## Questions?

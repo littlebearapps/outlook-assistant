@@ -1,5 +1,22 @@
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
+
+// auth/tools.js builds its pending-auth path from HOME at load time, so point
+// HOME at a throwaway dir before it is required — this suite writes and deletes
+// that file and must never touch a real pending sign-in (#257).
+const ORIGINAL_HOME = process.env.HOME;
+const TEST_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'oa-auth-tools-'));
+process.env.HOME = TEST_HOME;
+
+afterAll(() => {
+  if (ORIGINAL_HOME === undefined) {
+    delete process.env.HOME;
+  } else {
+    process.env.HOME = ORIGINAL_HOME;
+  }
+  fs.rmSync(TEST_HOME, { recursive: true, force: true });
+});
 
 // Mock dependencies before requiring the module under test
 jest.mock('../../auth/device-code');
@@ -7,7 +24,7 @@ jest.mock('../../auth/token-manager');
 jest.mock('../../auth/token-storage');
 
 const DEVICE_CODE_STATE_PATH = path.join(
-  process.env.HOME || process.env.USERPROFILE,
+  TEST_HOME,
   '.outlook-assistant-pending-auth.json'
 );
 
@@ -125,6 +142,33 @@ describe('device code state persistence', () => {
 
     // State file should be cleaned up
     expect(fs.existsSync(DEVICE_CODE_STATE_PATH)).toBe(false);
+  });
+
+  test('keeps pending-auth state inside an isolated temp HOME (#257)', async () => {
+    // The state file must live in this suite's own temp HOME, never the real one
+    const stateHome = path.dirname(DEVICE_CODE_STATE_PATH);
+    expect(stateHome.startsWith(os.tmpdir())).toBe(true);
+    expect(path.basename(stateHome)).toMatch(/^oa-auth-tools-/);
+
+    initiateDeviceCodeFlow.mockResolvedValue({
+      userCode: 'ISOLATED',
+      verificationUri: 'https://microsoft.com/devicelogin',
+      deviceCode: 'device_code_isolated',
+      expiresIn: 900,
+      interval: 5,
+    });
+    await handleDeviceCodeAuth();
+    expect(
+      JSON.parse(fs.readFileSync(DEVICE_CODE_STATE_PATH, 'utf8')).deviceCode
+    ).toBe('device_code_isolated');
+
+    // Consume the in-memory state so it doesn't leak to subsequent tests
+    pollForToken.mockRejectedValue(new Error('test cleanup'));
+    TokenStorage.mockImplementation(() => ({
+      tokens: null,
+      _saveTokensToFile: jest.fn(),
+    }));
+    await handleDeviceCodeComplete();
   });
 
   test('handleDeviceCodeAuth persists state to disk', async () => {

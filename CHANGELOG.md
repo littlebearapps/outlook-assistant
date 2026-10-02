@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Graph requests now survive throttling and can no longer hang** (#244).
+  Every Graph call (including MIME export) retries `429` responses and, for
+  GET/PUT/PATCH/DELETE, `503`/`504` — up to 3 retries, honouring
+  `Retry-After` or backing off with jitter (1 s doubling, capped at 30 s); a
+  `Retry-After` over 60 seconds fails straight away with Graph's message. GET
+  requests also retry once after a timeout or dropped connection. POST requests
+  (send, reply, move, `$batch`) are retried only on `429`, so mail is never
+  sent twice. Each attempt now times out after `OUTLOOK_REQUEST_TIMEOUT_MS`
+  (default 60000 ms) instead of waiting forever, and at most 4 requests are in
+  flight at once, so bulk operations no longer trigger throttling themselves.
+- **`$filter` was stripped from the caller's query parameters** after the first
+  request (#244), so a caller reusing the object (such as the multi-step search
+  fallbacks) silently lost its filter. The query object is no longer modified.
+
+### Removed
+
+- Unused internal helper `callGraphAPIWithAuth` (#244).
+
 ## [3.12.0] - 2026-10-02
 
 Two community contributions: opt-in shared-mailbox read and organise support

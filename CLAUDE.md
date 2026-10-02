@@ -68,7 +68,7 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 | `auth/device-code.js` | Device code flow for headless/remote authentication |
 | `auth/auth-errors.js` | AADSTS error → remediation hint table (shared by token-storage and the device-code path) |
 | `auth/tools.js` | Auth tool handlers; persists device code state to `~/.outlook-assistant-pending-auth.json`; `about` diagnostics (granted scopes, shared-mailbox status) |
-| `utils/graph-api.js` | All Graph API calls go through here (includes $batch); dot-segment and Graph-host guards |
+| `utils/graph-api.js` | All Graph API calls go through here (includes $batch); dot-segment and Graph-host guards; retries 429 (any method) and 503/504 (not POST) honouring `Retry-After`, per-attempt timeout, max 4 requests in flight |
 | `utils/mailbox.js` | `buildMailboxPrefix` → `me` or `users/{mailbox}`; validates addresses and enforces the `OUTLOOK_SHARED_MAILBOX` opt-in |
 | `folder/resolve.js` | Path-aware folder resolver (ID, well-known alias, `Parent/Child` path, bare name), mailbox-aware |
 | `calendar/list.js` | `list-events` filter/order building (`startAfter`/`startBefore`/`subject`) |
@@ -91,6 +91,7 @@ OUTLOOK_AUTH_AUDIENCE=common               # Optional: common|consumers|organiza
 OUTLOOK_DEFAULT_TIMEZONE=Australia/Melbourne  # Optional: overrides hardcoded default (v3.8.0)
 OUTLOOK_SHARED_MAILBOX=read                # Optional, opt-in: read|true (work/school only; re-auth with force=true after enabling)
 OUTLOOK_SEARCH_SCAN_LIMIT=500              # Optional: client-side search fallback window (max 5000)
+OUTLOOK_REQUEST_TIMEOUT_MS=60000           # Optional: per-attempt Graph request timeout (ms)
 ```
 
 > The server reads `OUTLOOK_CLIENT_ID`/`OUTLOOK_CLIENT_SECRET` from `config.js`.

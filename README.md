@@ -374,6 +374,7 @@ USE_TEST_MODE=false
 | `OUTLOOK_ALLOWED_RECIPIENTS` | Comma-separated allowlist of domains/addresses for sends, drafts, and rule forwards. | unrestricted |
 | `OUTLOOK_SHARED_MAILBOX` | Opt-in shared-mailbox support (work/school only). `read` requests `Mail.Read.Shared`; `true` (or `readwrite`/`1`) also requests `Mail.ReadWrite.Shared`. Unset leaves sign-in unchanged. After enabling, restart and run `auth action=authenticate force=true`. | unset (off) |
 | `OUTLOOK_SEARCH_SCAN_LIMIT` | How many recent messages the client-side search fallback scans. Personal accounts match `to` locally within this window, so the default caps how far back a `to` search reaches. Max 5000. | `500` |
+| `OUTLOOK_REQUEST_TIMEOUT_MS` | How long each Graph request attempt may take, in milliseconds, before it's abandoned with a timeout error. Throttled (`429`) and busy (`503`/`504`) responses are retried automatically, honouring `Retry-After`. | `60000` |
 
 ### MCP Client Configuration
 

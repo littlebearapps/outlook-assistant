@@ -43,7 +43,7 @@ settings/             # 1 tool: mailbox-settings (action: get|set-auto-replies|s
 advanced/             # 2 tools: access-shared-mailbox (messages, listFolders, folderId), find-meeting-rooms
 
 utils/
-  ├── graph-api.js        # Graph API client with OData encoding, $batch, immutable IDs, dot-segment and Graph-host guards
+  ├── graph-api.js        # Graph API client with OData encoding, $batch, immutable IDs, dot-segment and Graph-host guards, throttling retries, timeout, concurrency gate
   ├── mailbox.js          # `me` vs `users/{mailbox}` prefix; shared-mailbox opt-in and address validation
   ├── schema-coerce.js    # MCP-boundary param coercion and validation
   ├── odata-helpers.js    # OData filter building and escaping

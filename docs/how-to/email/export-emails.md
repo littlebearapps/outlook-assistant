@@ -120,7 +120,7 @@ This returns the raw RFC 822 content rather than writing a file. Add `headersOnl
 
 ## Export from a Shared Mailbox
 
-Every target accepts `sharedMailbox` (alias `email`). Pass it whenever the IDs, conversation or search come from a shared mailbox, otherwise the export looks in your own mailbox and fails with `404 ErrorInvalidMailboxItemId`:
+Every target accepts `sharedMailbox` (alias `email`). Pass it whenever the IDs, conversation or search come from a shared mailbox. Without it, ID- and conversation-based exports look in your own mailbox and fail with `404 ErrorInvalidMailboxItemId`, while search-based exports search your own mailbox instead, so they return nothing or matches from the wrong mailbox:
 
 ```
 tool: export

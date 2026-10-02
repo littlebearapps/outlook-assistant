@@ -217,7 +217,7 @@ function isScopeConsentError(err) {
   }
   // Azure named one of the `.Shared` scopes as the offending value.
   const description = asString(oauth.error_description);
-  return config.SHARED_SCOPES.some((scope) => description.includes(scope));
+  return config.ALL_SHARED_SCOPES.some((scope) => description.includes(scope));
 }
 
 /**

@@ -279,9 +279,8 @@ describe('OAuth Server Routes', () => {
       expect(config.clientId).toBe('');
       expect(config.clientSecret).toBe('');
       expect(config.redirectUri).toBe('http://localhost:3333/auth/callback');
-      // Defaults to base + shared scopes now (OUTLOOK_SCOPES override still wins).
-      expect(config.scopes).toContain('Mail.Read.Shared');
-      expect(config.scopes).toContain('Mail.ReadWrite.Shared');
+      // Shared-mailbox scopes are opt-in; off by default.
+      expect(config.scopes).not.toContain('Mail.Read.Shared');
       expect(config.scopes).toContain('offline_access');
       // fallbackScopes is base-only (no .Shared).
       expect(config.fallbackScopes).not.toContain('Mail.Read.Shared');

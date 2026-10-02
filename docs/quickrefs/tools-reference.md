@@ -26,6 +26,8 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 | `attachments` | List, view, or download attachments | moderate write | `action` (`list`/`view`/`download`), `messageId`, `attachmentId`, `sharedMailbox` (alias `email`) |
 | `export` | Export emails to various formats | moderate write | `target` (`message`/`messages`/`conversation`/`mime`), `id`, `format`, `outputDir`, `sharedMailbox` (alias `email`) |
 
+> **`sharedMailbox` is opt-in (work/school only).** Set `OUTLOOK_SHARED_MAILBOX=read` (read: `Mail.Read.Shared`) or `=true` (read and organise: adds `Mail.ReadWrite.Shared`), restart, then run `auth action=authenticate force=true`. While it's unset, `sharedMailbox` calls are refused with these steps, and `access-shared-mailbox` reads only well-known folder names or folder IDs, as before (`listFolders` and custom/nested names need the setting).
+>
 > **`sharedMailbox` is read/organise only.** `send-email` and `draft` (create/update/send/delete, reply, reply-all, forward) deliberately take no `sharedMailbox` parameter — they always act on the signed-in user's own mailbox, and `Mail.Send.Shared` is not requested.
 
 ### search-emails modes
@@ -237,7 +239,7 @@ mailbox-settings(action: "set-auto-replies", enabled: true, internalReplyMessage
 // Flag email for follow-up
 update-email(action: "flag", id: "...", dueDateTime: "2026-03-01T09:00:00Z")
 
-// Access shared mailbox
+// Access shared mailbox (needs OUTLOOK_SHARED_MAILBOX for listFolders / custom names)
 access-shared-mailbox(sharedMailbox: "team@company.com", folder: "inbox")
 
 // Discover a shared mailbox's custom subfolders (names, paths, IDs)

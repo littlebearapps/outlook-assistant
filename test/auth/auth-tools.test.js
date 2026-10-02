@@ -29,6 +29,10 @@ jest.mock('../../config', () => ({
     authServerUrl: 'http://localhost:3333',
     defaultAuthMethod: 'device-code',
   },
+  // Shared-mailbox support enabled for these tests (the fallback paths only
+  // apply when OUTLOOK_SHARED_MAILBOX opts in).
+  SHARED_SCOPES: ['Mail.Read.Shared', 'Mail.ReadWrite.Shared'],
+  SHARED_MAILBOX_MODE: 'readwrite',
   USE_TEST_MODE: false,
   SERVER_VERSION: '3.9.0',
   DEFAULT_TIMEZONE: 'Australia/Melbourne',
@@ -286,6 +290,35 @@ describe('device code scope fallback + granted_scopes', () => {
     ]);
   });
 
+  test('with shared mailboxes off, a scope error never triggers a fallback code', async () => {
+    const config = require('../../config');
+    const saved = config.SHARED_SCOPES;
+    config.SHARED_SCOPES = [];
+    try {
+      fs.writeFileSync(
+        DEVICE_CODE_STATE_PATH,
+        JSON.stringify({
+          deviceCode: 'dc_full',
+          interval: 5,
+          expiresIn: 900,
+          expiresAt: Date.now() + 900 * 1000,
+          scopesUsed: 'full',
+        })
+      );
+      pollForToken.mockRejectedValue(new Error('AADSTS70011: invalid scope'));
+      isScopeConsentError.mockReturnValue(true);
+      isConsentRequiredError.mockReturnValue(true);
+
+      const result = await handleDeviceCodeComplete();
+
+      expect(initiateDeviceCodeFlow).not.toHaveBeenCalled();
+      expect(result.content[0].text).toMatch(/Authentication failed/);
+      expect(result.content[0].text).not.toMatch(/shared-mailbox scopes/);
+    } finally {
+      config.SHARED_SCOPES = saved;
+    }
+  });
+
   test('falls back to base scopes when full-scope flow hits scope-consent error', async () => {
     const state = {
       deviceCode: 'dc_full',
@@ -527,6 +560,68 @@ describe('handleAbout — F-1/F-2/F-48', () => {
     const result = await handleAbout();
 
     expect(result.content[0].text).not.toMatch(/Safety Belts Not Configured/);
+  });
+
+  describe('shared-mailbox status and granted scopes', () => {
+    const auth = require('../../auth');
+    const config = require('../../config');
+    let savedMode;
+    let savedScopes;
+
+    beforeEach(() => {
+      savedMode = config.SHARED_MAILBOX_MODE;
+      savedScopes = config.SHARED_SCOPES;
+      callGraphAPI.mockResolvedValue({ userPrincipalName: 'u@example.com' });
+    });
+
+    afterEach(() => {
+      config.SHARED_MAILBOX_MODE = savedMode;
+      config.SHARED_SCOPES = savedScopes;
+      delete auth.tokenStorage;
+    });
+
+    test('reports which configured .Shared scopes were actually granted', async () => {
+      auth.tokenStorage = {
+        getTokens: jest.fn().mockResolvedValue({
+          access_token: 'never-shown',
+          refresh_token: 'never-shown-either',
+          scope:
+            'https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/Mail.Read.Shared User.Read',
+        }),
+      };
+
+      const text = (await handleAbout()).content[0].text;
+
+      expect(text).toMatch(
+        /Shared mailboxes \| Enabled \(readwrite\): Mail\.Read\.Shared granted, Mail\.ReadWrite\.Shared not granted/
+      );
+      expect(text).toMatch(/force=true/);
+      expect(text).toMatch(
+        /\*\*Granted scopes\*\*: Mail\.Read, Mail\.Read\.Shared, User\.Read/
+      );
+      expect(text).not.toContain('never-shown');
+    });
+
+    test('says shared mailboxes are disabled when the flag is off', async () => {
+      config.SHARED_MAILBOX_MODE = 'off';
+      config.SHARED_SCOPES = [];
+      auth.tokenStorage = {
+        getTokens: jest.fn().mockResolvedValue({ scope: 'User.Read' }),
+      };
+
+      const text = (await handleAbout()).content[0].text;
+
+      expect(text).toMatch(/Shared mailboxes \| Disabled/);
+      expect(text).toMatch(/OUTLOOK_SHARED_MAILBOX=read/);
+    });
+
+    test('reports not signed in when no token is stored', async () => {
+      auth.tokenStorage = { getTokens: jest.fn().mockResolvedValue(null) };
+
+      const text = (await handleAbout()).content[0].text;
+
+      expect(text).toMatch(/\*\*Granted scopes\*\*: not signed in/);
+    });
   });
 
   test('degrades gracefully when not authenticated', async () => {

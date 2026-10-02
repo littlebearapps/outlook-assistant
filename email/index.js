@@ -89,7 +89,7 @@ const emailTools = [
         sharedMailbox: {
           type: 'string',
           description:
-            'Email address of a shared/delegated mailbox to search instead of the signed-in account. Combine with `folder` (incl. custom subfolders/paths) or `searchAllFolders`.',
+            'Email address of a shared/delegated mailbox to search instead of the signed-in account. Combine with `folder` (incl. custom subfolders/paths) or `searchAllFolders`. Work/school only; needs the server opt-in setting OUTLOOK_SHARED_MAILBOX (otherwise the call is refused with setup guidance).',
         },
         email: {
           type: 'string',
@@ -217,7 +217,7 @@ const emailTools = [
         sharedMailbox: {
           type: 'string',
           description:
-            'Email address of the shared/delegated mailbox the id belongs to. Required when the id was obtained from a shared mailbox — message IDs are mailbox-scoped and reading without it returns 404 ErrorInvalidMailboxItemId. Requires delegate access + Mail.Read.Shared.',
+            'Email address of the shared/delegated mailbox the id belongs to. Required when the id was obtained from a shared mailbox — message IDs are mailbox-scoped and reading without it returns 404 ErrorInvalidMailboxItemId. Requires delegate access + Mail.Read.Shared. Work/school only; needs the server opt-in setting OUTLOOK_SHARED_MAILBOX (otherwise the call is refused with setup guidance).',
         },
         email: {
           type: 'string',
@@ -445,7 +445,7 @@ const emailTools = [
         sharedMailbox: {
           type: 'string',
           description:
-            'Email address of a shared/delegated mailbox whose message(s) to update instead of the signed-in account. Requires delegate access + Mail.ReadWrite.Shared.',
+            'Email address of a shared/delegated mailbox whose message(s) to update instead of the signed-in account. Requires delegate access + Mail.ReadWrite.Shared. Work/school only; needs the server opt-in setting OUTLOOK_SHARED_MAILBOX (otherwise the call is refused with setup guidance).',
         },
         email: {
           type: 'string',
@@ -531,7 +531,7 @@ const emailTools = [
         sharedMailbox: {
           type: 'string',
           description:
-            'Email address of the shared/delegated mailbox the messageId belongs to. Required when the message came from a shared mailbox. Requires delegate access + Mail.Read.Shared.',
+            'Email address of the shared/delegated mailbox the messageId belongs to. Required when the message came from a shared mailbox. Requires delegate access + Mail.Read.Shared. Work/school only; needs the server opt-in setting OUTLOOK_SHARED_MAILBOX (otherwise the call is refused with setup guidance).',
         },
         email: {
           type: 'string',
@@ -655,7 +655,7 @@ const emailTools = [
         sharedMailbox: {
           type: 'string',
           description:
-            'Email address of a shared/delegated mailbox to export from instead of the signed-in account. Applies to all targets (message/messages/conversation/mime) — pass it whenever the id(s)/conversationId/searchQuery belong to a shared mailbox. Requires delegate access + Mail.Read.Shared.',
+            'Email address of a shared/delegated mailbox to export from instead of the signed-in account. Applies to all targets (message/messages/conversation/mime) — pass it whenever the id(s)/conversationId/searchQuery belong to a shared mailbox. Requires delegate access + Mail.Read.Shared. Work/school only; needs the server opt-in setting OUTLOOK_SHARED_MAILBOX (otherwise the call is refused with setup guidance).',
         },
         email: {
           type: 'string',

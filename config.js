@@ -64,20 +64,47 @@ if (
   );
 }
 
-// Shared/delegated mailbox access (work/school accounts only). Required to
-// read and organise a shared mailbox via /users/{email}/...; without these
-// every organise operation (move/category/flag/mark-read) falls back to `me`
-// and fails with ErrorInvalidMailboxItemId. Sending/drafts from a shared
-// mailbox are out of scope (Mail.Send.Shared deliberately not requested).
-// The auth flow ATTEMPTS the full set (BASE_SCOPES + SHARED_SCOPES) and falls
-// back to BASE_SCOPES only on errors proving the account can't use `.Shared`
-// scopes (invalid_scope, AADSTS650053/70011, or an error naming a `.Shared`
-// scope — see auth/device-code.js isScopeConsentError); consent-required
-// errors (AADSTS65001) surface remediation instead of downgrading.
-const SHARED_SCOPES = [
-  'Mail.Read.Shared', // access-shared-mailbox (read)
-  'Mail.ReadWrite.Shared', // shared-mailbox writes (move/category/flag/mark-read)
-];
+// Shared/delegated mailbox access is OPT-IN (work/school accounts only).
+// With OUTLOOK_SHARED_MAILBOX unset, sign-in requests exactly BASE_SCOPES —
+// nobody's consent prompt or token changes unless they enable it:
+//   OUTLOOK_SHARED_MAILBOX=read                 → Mail.Read.Shared
+//   OUTLOOK_SHARED_MAILBOX=true|readwrite|1     → Mail.Read.Shared + Mail.ReadWrite.Shared
+// Sending/drafts from a shared mailbox are out of scope (Mail.Send.Shared is
+// never requested). When enabled, the device-code flow falls back to
+// BASE_SCOPES only on errors proving the account can't use `.Shared` scopes
+// (see auth/device-code.js isScopeConsentError); consent-required errors
+// (AADSTS65001) surface remediation instead of downgrading.
+const ALL_SHARED_SCOPES = ['Mail.Read.Shared', 'Mail.ReadWrite.Shared'];
+
+/**
+ * Parse OUTLOOK_SHARED_MAILBOX into a mode.
+ * @param {string|undefined} raw
+ * @returns {'off'|'read'|'readwrite'}
+ */
+function parseSharedMailboxMode(raw) {
+  const value = String(raw || '')
+    .trim()
+    .toLowerCase();
+  if (value === 'read') return 'read';
+  if (['true', 'readwrite', '1'].includes(value)) return 'readwrite';
+  if (value && !['false', '0', 'off', 'no'].includes(value)) {
+    console.warn(
+      `[outlook-assistant] OUTLOOK_SHARED_MAILBOX="${raw}" is not a recognised value. ` +
+        'Expected read, true/readwrite/1, or unset. Shared-mailbox support stays off.'
+    );
+  }
+  return 'off';
+}
+
+const SHARED_MAILBOX_MODE = parseSharedMailboxMode(
+  process.env.OUTLOOK_SHARED_MAILBOX
+);
+const SHARED_SCOPES_BY_MODE = {
+  off: [],
+  read: ['Mail.Read.Shared'],
+  readwrite: [...ALL_SHARED_SCOPES],
+};
+const SHARED_SCOPES = SHARED_SCOPES_BY_MODE[SHARED_MAILBOX_MODE];
 
 // Base scopes consentable by ANY account type (personal + work/school).
 const BASE_SCOPES = [
@@ -106,15 +133,21 @@ module.exports = {
 
   // OAuth scope sets (exported so tests + the fallback logic can reference them)
   BASE_SCOPES,
+  // `.Shared` scopes requested at sign-in for the configured mode ([] = off)
   SHARED_SCOPES,
+  ALL_SHARED_SCOPES,
+  // 'off' | 'read' | 'readwrite' — from OUTLOOK_SHARED_MAILBOX (opt-in)
+  SHARED_MAILBOX_MODE,
+  parseSharedMailboxMode,
 
   // Authentication configuration
   AUTH_CONFIG: {
     clientId: process.env.OUTLOOK_CLIENT_ID || '',
     clientSecret: process.env.OUTLOOK_CLIENT_SECRET || '',
     redirectUri: 'http://localhost:3333/auth/callback',
-    // Preferred/attempt set: base + shared. Auth falls back to fallbackScopes
-    // (base only) when the account rejects the `.Shared` scopes.
+    // Base scopes, plus the `.Shared` scopes only when OUTLOOK_SHARED_MAILBOX
+    // opts in. With the flag on, device-code auth falls back to
+    // fallbackScopes (base only) when the account rejects `.Shared`.
     scopes: [...BASE_SCOPES, ...SHARED_SCOPES],
     fallbackScopes: BASE_SCOPES,
     tokenStorePath: path.join(homeDir, '.outlook-assistant-tokens.json'),

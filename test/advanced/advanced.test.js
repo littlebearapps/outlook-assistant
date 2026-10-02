@@ -9,6 +9,10 @@ const { ensureAuthenticated } = require('../../auth');
 
 jest.mock('../../utils/graph-api');
 jest.mock('../../auth');
+
+const { enableSharedMailbox } = require('../helpers/shared-mailbox');
+
+enableSharedMailbox();
 jest.mock('../../utils/field-presets', () => {
   const actual = jest.requireActual('../../utils/field-presets');
   return {
@@ -310,6 +314,68 @@ describe('handleAccessSharedMailbox', () => {
     expect(result.content[0].text).toBe(
       'Error accessing shared mailbox: Server error'
     );
+  });
+});
+
+describe('handleAccessSharedMailbox — OUTLOOK_SHARED_MAILBOX off (pre-opt-in behaviour)', () => {
+  const config = require('../../config');
+  let saved;
+  beforeEach(() => {
+    saved = config.SHARED_MAILBOX_MODE;
+    config.SHARED_MAILBOX_MODE = 'off';
+  });
+  afterEach(() => {
+    config.SHARED_MAILBOX_MODE = saved;
+  });
+
+  it('reads the folder as given, with a single Graph call (no resolution)', async () => {
+    callGraphAPI.mockResolvedValue({ value: [] });
+    await handleAccessSharedMailbox({
+      sharedMailbox: 'shared@company.com',
+      folder: 'sentitems',
+    });
+    expect(callGraphAPI).toHaveBeenCalledTimes(1);
+    expect(callGraphAPI.mock.calls[0][2]).toBe(
+      'users/shared@company.com/mailFolders/sentitems/messages'
+    );
+  });
+
+  it('defaults to inbox and accepts the email alias', async () => {
+    callGraphAPI.mockResolvedValue({ value: [] });
+    await handleAccessSharedMailbox({ email: 'shared@company.com' });
+    expect(callGraphAPI.mock.calls[0][2]).toBe(
+      'users/shared@company.com/mailFolders/inbox/messages'
+    );
+  });
+
+  it('points at the opt-in flag when access is denied', async () => {
+    callGraphAPI.mockRejectedValue(
+      new Error('API call failed with status 403: Access is denied')
+    );
+    const result = await handleAccessSharedMailbox({
+      sharedMailbox: 'shared@company.com',
+    });
+    expect(result.content[0].text).toContain('Access denied');
+    expect(result.content[0].text).toContain('OUTLOOK_SHARED_MAILBOX=read');
+  });
+
+  it('listFolders explains how to enable shared-mailbox support', async () => {
+    const result = await handleAccessSharedMailbox({
+      sharedMailbox: 'shared@company.com',
+      listFolders: true,
+    });
+    expect(callGraphAPI).not.toHaveBeenCalled();
+    expect(result.content[0].text).toMatch(/OUTLOOK_SHARED_MAILBOX/);
+  });
+
+  it('flag/update on a shared mailbox is refused with the same guidance', async () => {
+    await expect(
+      handleSetMessageFlag({
+        messageId: 'm1',
+        sharedMailbox: 'shared@company.com',
+      })
+    ).rejects.toThrow(/OUTLOOK_SHARED_MAILBOX/);
+    expect(callGraphAPI).not.toHaveBeenCalled();
   });
 });
 

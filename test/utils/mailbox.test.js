@@ -1,4 +1,11 @@
-const { buildMailboxPrefix } = require('../../utils/mailbox');
+const {
+  buildMailboxPrefix,
+  validateMailboxPrefix,
+} = require('../../utils/mailbox');
+const config = require('../../config');
+const { enableSharedMailbox } = require('../helpers/shared-mailbox');
+
+enableSharedMailbox();
 
 describe('mailbox', () => {
   describe('buildMailboxPrefix', () => {
@@ -115,6 +122,44 @@ describe('mailbox', () => {
       test('error message names the offending value', () => {
         expect(() => buildMailboxPrefix('users/foo')).toThrow(/users\/foo/);
       });
+    });
+  });
+
+  describe('opt-in gate (OUTLOOK_SHARED_MAILBOX)', () => {
+    let saved;
+    beforeEach(() => {
+      saved = config.SHARED_MAILBOX_MODE;
+      config.SHARED_MAILBOX_MODE = 'off';
+    });
+    afterEach(() => {
+      config.SHARED_MAILBOX_MODE = saved;
+    });
+
+    test('a shared mailbox is refused with setup guidance when support is off', () => {
+      expect(() => buildMailboxPrefix('team@contoso.com')).toThrow(
+        /OUTLOOK_SHARED_MAILBOX=read.*force=true/s
+      );
+    });
+
+    test('the signed-in mailbox is unaffected when support is off', () => {
+      expect(buildMailboxPrefix(null)).toBe('me');
+      expect(buildMailboxPrefix('me')).toBe('me');
+    });
+
+    test('validateMailboxPrefix validates without the gate', () => {
+      expect(validateMailboxPrefix('team@contoso.com')).toBe(
+        'users/team@contoso.com'
+      );
+      expect(() => validateMailboxPrefix('a@b.c/../x')).toThrow(
+        /Invalid mailbox/
+      );
+    });
+
+    test('read mode enables the prefix', () => {
+      config.SHARED_MAILBOX_MODE = 'read';
+      expect(buildMailboxPrefix('team@contoso.com')).toBe(
+        'users/team@contoso.com'
+      );
     });
   });
 });

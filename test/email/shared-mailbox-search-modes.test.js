@@ -23,6 +23,10 @@ jest.mock('../../utils/graph-api');
 jest.mock('../../auth');
 jest.mock('../../folder/resolve');
 
+const { enableSharedMailbox } = require('../helpers/shared-mailbox');
+
+enableSharedMailbox();
+
 const TOKEN = 'test_token';
 const MAILBOX = 'office@werdropo.com';
 const RESOLVED_REF = 'AAMkResolvedFolderRef=';

@@ -26,6 +26,49 @@ function setToolCount(count) {
 }
 
 /**
+ * Scopes recorded as granted in a stored token object. Prefers the
+ * `granted_scopes` array; falls back to the token response's `scope` string
+ * (token files written before granted_scopes existed). Full-URI forms such as
+ * `https://graph.microsoft.com/Mail.Read` are reduced to the bare scope name.
+ * @param {object|null} tokens
+ * @returns {string[]|null} - null when no token is stored
+ */
+function grantedScopesOf(tokens) {
+  if (!tokens) return null;
+  let raw = [];
+  if (Array.isArray(tokens.granted_scopes) && tokens.granted_scopes.length) {
+    raw = tokens.granted_scopes;
+  } else if (typeof tokens.scope === 'string') {
+    raw = tokens.scope.split(' ');
+  }
+  return raw.map((scope) => String(scope).split('/').pop()).filter(Boolean);
+}
+
+/**
+ * Human-readable shared-mailbox status for `auth about`.
+ * @param {string[]|null} granted - Granted scopes, or null when signed out
+ * @returns {string}
+ */
+function describeSharedMailboxStatus(granted) {
+  if (config.SHARED_MAILBOX_MODE === 'off' || !config.SHARED_SCOPES.length) {
+    return 'Disabled (opt-in, work/school only: set `OUTLOOK_SHARED_MAILBOX=read` or `=true`, restart, then `auth action=authenticate force=true`)';
+  }
+  const lowerGranted = (granted || []).map((s) => s.toLowerCase());
+  const parts = config.SHARED_SCOPES.map(
+    (scope) =>
+      `${scope} ${lowerGranted.includes(scope.toLowerCase()) ? 'granted' : 'not granted'}`
+  );
+  let status = `Enabled (${config.SHARED_MAILBOX_MODE}): ${parts.join(', ')}`;
+  if (!granted) {
+    status += ' (not signed in)';
+  } else if (parts.some((p) => p.endsWith('not granted'))) {
+    status +=
+      ' (re-authenticate with `auth action=authenticate force=true`; personal accounts cannot be granted these)';
+  }
+  return status;
+}
+
+/**
  * About tool handler
  * @returns {object} - MCP response
  */
@@ -48,6 +91,17 @@ async function handleAbout() {
   // GET /me round-trip when a valid token is available; degrades
   // gracefully when not authenticated.
   let identity = 'Not authenticated (run `auth action=authenticate`)';
+  // Granted scopes come from the stored token file (scope names only — the
+  // tokens themselves are never surfaced).
+  let granted = null;
+  try {
+    const { tokenStorage } = require('./index');
+    if (tokenStorage && typeof tokenStorage.getTokens === 'function') {
+      granted = grantedScopesOf(await tokenStorage.getTokens());
+    }
+  } catch (_e) {
+    // Leave granted as unknown
+  }
   try {
     const { ensureAuthenticated } = require('./index');
     const { callGraphAPI } = require('../utils/graph-api');
@@ -75,8 +129,10 @@ async function handleAbout() {
     `| Rate Limit | ${rateLimit} |`,
     `| Recipient Allowlist | ${allowlist} |`,
     `| Scopes | ${scopes.length} configured |`,
+    `| Shared mailboxes | ${describeSharedMailboxStatus(granted)} |`,
     ``,
-    `**Scopes**: ${scopes.join(', ')}`,
+    `**Configured scopes**: ${scopes.join(', ')}`,
+    `**Granted scopes**: ${granted ? granted.filter((s) => s !== 'offline_access').join(', ') || 'none recorded' : 'not signed in'}`,
   ];
 
   // F-1 / F-48: warn when no safety belts are wired up. AI-assisted
@@ -214,8 +270,9 @@ async function handleDeviceCodeAuth() {
   }
 
   console.error('[AUTH] Starting device code flow...');
-  // Attempt the full scope set (base + shared) first. If the account can't
-  // consent to `.Shared`, handleDeviceCodeComplete re-issues with base scopes.
+  // Attempt the configured scope set (base, plus `.Shared` when
+  // OUTLOOK_SHARED_MAILBOX opts in). If the account can't consent to
+  // `.Shared`, handleDeviceCodeComplete re-issues with base scopes.
   return initiateDeviceCode(config.AUTH_CONFIG.scopes, 'full');
 }
 
@@ -420,7 +477,13 @@ async function handleDeviceCodeComplete() {
   } catch (error) {
     // Scope-consent rejection while attempting the FULL set → re-issue with
     // base scopes. This is the personal-account path: one extra device code.
-    if (isScopeConsentError(error) && scopesUsed === 'full') {
+    // Only meaningful when shared-mailbox support is on: with the flag off the
+    // attempted set already IS the base set, so there is nothing to drop.
+    if (
+      config.SHARED_SCOPES.length > 0 &&
+      isScopeConsentError(error) &&
+      scopesUsed === 'full'
+    ) {
       console.error(
         '[AUTH] Shared-mailbox scopes rejected; falling back to base scopes.'
       );
@@ -459,7 +522,9 @@ async function handleDeviceCodeComplete() {
     // Consent required (AADSTS65001) — remediable, so surface it instead of
     // silently downgrading to base scopes (which would strip shared-mailbox
     // access for every future refresh).
-    if (isConsentRequiredError(error)) {
+    // Only when the shared scopes were requested — otherwise the generic
+    // path below (with its AADSTS hint table) is unchanged.
+    if (config.SHARED_SCOPES.length > 0 && isConsentRequiredError(error)) {
       return {
         content: [
           {
@@ -467,7 +532,8 @@ async function handleDeviceCodeComplete() {
             text: [
               'Authentication failed: consent was not granted (AADSTS65001).',
               '',
-              'An administrator may need to grant consent for the shared-mailbox scopes (Mail.Read.Shared, Mail.ReadWrite.Shared), or re-run `auth action=authenticate` and approve every requested permission.',
+              `An administrator may need to grant consent for the shared-mailbox scopes (${config.SHARED_SCOPES.join(', ')}), or re-run \`auth action=authenticate\` and approve every requested permission.`,
+              'If your organisation will not consent to them, unset OUTLOOK_SHARED_MAILBOX and restart the server to sign in with the standard scopes.',
               'No scopes were changed — your configured capability is unchanged.',
             ].join('\n'),
           },

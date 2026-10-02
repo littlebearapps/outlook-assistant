@@ -15,6 +15,10 @@ const { ensureAuthenticated } = require('../../auth');
 jest.mock('../../utils/graph-api');
 jest.mock('../../auth');
 
+const { enableSharedMailbox } = require('../helpers/shared-mailbox');
+
+enableSharedMailbox();
+
 const TOKEN = 'test_token';
 const MAILBOX = 'shared@company.com';
 

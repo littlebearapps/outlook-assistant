@@ -15,13 +15,24 @@
 // only, so bare user GUIDs are not accepted.
 const MAILBOX_PATTERN = /^[^\s/?#%@]+@[^\s/?#%@]+\.[^\s/?#%@]+$/;
 
+const config = require('../config');
+
+const SHARED_MAILBOX_DISABLED_MESSAGE =
+  'Shared-mailbox support is turned off. It is opt-in and work/school only: ' +
+  'set OUTLOOK_SHARED_MAILBOX=read (read) or OUTLOOK_SHARED_MAILBOX=true ' +
+  '(read and organise) in the MCP server environment, restart the server, then ' +
+  're-authenticate with `auth action=authenticate force=true` so the token ' +
+  'carries the shared-mailbox scopes.';
+
 /**
- * Build the Graph resource prefix for a mailbox.
+ * Validate a mailbox and build its Graph resource prefix, WITHOUT checking
+ * whether shared-mailbox support is enabled. Only for paths that worked
+ * before the opt-in flag existed (access-shared-mailbox's direct read).
  * @param {string|null} [mailbox] - Shared mailbox email address, or null/empty for the signed-in user
  * @returns {string} - `me` or `users/{mailbox}`
  * @throws {Error} If `mailbox` is non-empty but not a plausible email address
  */
-function buildMailboxPrefix(mailbox) {
+function validateMailboxPrefix(mailbox) {
   const trimmed = typeof mailbox === 'string' ? mailbox.trim() : mailbox;
   if (!trimmed) {
     return 'me';
@@ -41,4 +52,23 @@ function buildMailboxPrefix(mailbox) {
   return `users/${trimmed}`;
 }
 
-module.exports = { buildMailboxPrefix };
+/**
+ * Build the Graph resource prefix for a mailbox. A non-`me` mailbox requires
+ * shared-mailbox support to be enabled (OUTLOOK_SHARED_MAILBOX).
+ * @param {string|null} [mailbox] - Shared mailbox email address, or null/empty for the signed-in user
+ * @returns {string} - `me` or `users/{mailbox}`
+ * @throws {Error} If `mailbox` is invalid, or shared-mailbox support is off
+ */
+function buildMailboxPrefix(mailbox) {
+  const prefix = validateMailboxPrefix(mailbox);
+  if (prefix !== 'me' && config.SHARED_MAILBOX_MODE === 'off') {
+    throw new Error(SHARED_MAILBOX_DISABLED_MESSAGE);
+  }
+  return prefix;
+}
+
+module.exports = {
+  buildMailboxPrefix,
+  validateMailboxPrefix,
+  SHARED_MAILBOX_DISABLED_MESSAGE,
+};

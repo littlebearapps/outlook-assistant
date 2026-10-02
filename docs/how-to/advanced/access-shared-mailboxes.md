@@ -10,6 +10,23 @@ Read and organise shared mailboxes like team inboxes, support queues, or service
 
 > **Scope:** shared-mailbox support covers reading and organising (search, read, export, attachments, flags/categories, moves, delta, conversations, folder management). **Sending, drafts, replies, and forwards from a shared mailbox are not supported** — `send-email` and `draft` always act on the signed-in user's own mailbox.
 
+## Turn On Shared-Mailbox Support
+
+Shared-mailbox support is **opt-in** and works with **work/school (Microsoft 365) accounts only**. Without it, sign-in requests the standard scopes and nothing changes for you.
+
+1. Add the setting to the MCP server's environment (for example the `env` block of your `.mcp.json`):
+   - `OUTLOOK_SHARED_MAILBOX=read` — read, search, and export shared mailboxes (`Mail.Read.Shared`)
+   - `OUTLOOK_SHARED_MAILBOX=true` — also organise them: move, flag, categorise, mark read, and manage folders (adds `Mail.ReadWrite.Shared`)
+2. Restart the server.
+3. Re-authenticate so your token carries the new scopes: `auth action=authenticate force=true`. Existing tokens never gain them on their own.
+4. Check `auth action=about` — the **Shared mailboxes** row shows whether each shared scope was actually granted.
+
+Use the device-code flow (the default) to sign in. The browser flow (`npm run auth-server`) requests the configured scopes and has no fallback if your account or tenant rejects them. Personal Outlook.com accounts can't be granted these scopes, so leave the setting unset there.
+
+If your organisation blocks user consent, an administrator has to grant consent for the shared scopes. If they won't, unset `OUTLOOK_SHARED_MAILBOX` and you'll sign in with the standard scopes again.
+
+While the setting is off, `access-shared-mailbox` behaves as it always has (a well-known folder name or folder ID, using whatever access your existing token has). Every other tool's `sharedMailbox` parameter is refused with these setup steps.
+
 ## Read from a Shared Mailbox
 
 > "Check the support inbox for new emails"
@@ -50,7 +67,7 @@ Your Azure app registration needs the `Mail.Read.Shared` permission to **read** 
 1. Go to [Azure Portal → App registrations](https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade) → your Outlook Assistant app
 2. Under **API permissions**, add the Microsoft Graph delegated permissions: `Mail.Read.Shared` (read) and `Mail.ReadWrite.Shared` (write)
 3. Grant admin consent if required by your organisation
-4. **Re-authenticate** (`auth` tool, `action=authenticate`) so the refreshed token carries the new scopes — existing tokens won't have them
+4. Set `OUTLOOK_SHARED_MAILBOX` (see [Turn On Shared-Mailbox Support](#turn-on-shared-mailbox-support)) and **re-authenticate** (`auth action=authenticate force=true`) so the token carries the new scopes — existing tokens won't have them
 
 Your Microsoft account must also have been granted access (Full Access / delegate) to the shared mailbox by your Exchange administrator.
 

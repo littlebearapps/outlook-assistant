@@ -16,6 +16,10 @@ jest.mock('../../utils/graph-api');
 jest.mock('../../auth');
 jest.mock('../../email/folder-utils');
 
+const { enableSharedMailbox } = require('../helpers/shared-mailbox');
+
+enableSharedMailbox();
+
 const mockAccessToken = 'test_token';
 const INBOX_ENDPOINT = 'me/mailFolders/inbox/messages';
 

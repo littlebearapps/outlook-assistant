@@ -40,7 +40,7 @@ const folderTools = [
         sharedMailbox: {
           type: 'string',
           description:
-            'Email address of a shared/delegated mailbox to target instead of the signed-in account (all actions). Requires delegate access + Mail.Read.Shared (list/stats) or Mail.ReadWrite.Shared (create/move/delete).',
+            'Email address of a shared/delegated mailbox to target instead of the signed-in account (all actions). Requires delegate access + Mail.Read.Shared (list/stats) or Mail.ReadWrite.Shared (create/move/delete). Work/school only; needs the server opt-in setting OUTLOOK_SHARED_MAILBOX (otherwise the call is refused with setup guidance).',
         },
         email: {
           type: 'string',

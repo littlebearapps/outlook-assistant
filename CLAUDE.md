@@ -37,9 +37,9 @@ Full walkthrough: [`docs/how-to/getting-started/connect-outlook-to-claude.md`](d
 **Browser flow (alternative, for localhost only):**
 Start the auth server with `npm run auth-server` — needs `OUTLOOK_CLIENT_ID`/`OUTLOOK_CLIENT_SECRET` as env vars. The MCP server itself reads credentials from `.mcp.json` inline `kc_get` calls. Full walkthrough: [`docs/how-to/getting-started/connect-outlook-to-claude.md`](docs/how-to/getting-started/connect-outlook-to-claude.md).
 
-**Token refresh**: Tokens auto-refresh when expired (via `token-storage.js`). Re-authentication only needed when the refresh token expires (~90 days). Refresh re-requests only the **granted** scopes (persisted as `granted_scopes`), not the full configured set.
+**Token refresh**: Tokens auto-refresh when expired (via `token-storage.js`). Re-authentication only needed when the refresh token expires (~90 days). Refresh re-requests only the **granted** scopes (persisted as `granted_scopes`, falling back to the stored `scope`) plus `offline_access`, not the full configured set.
 
-**Scope fallback**: Auth attempts the full scope set (`BASE_SCOPES` + `SHARED_SCOPES`, defined in `config.js`). Personal Microsoft accounts can't consent to the `.Shared` scopes, so `handleDeviceCodeComplete` (`auth/tools.js`) detects the rejection via `isScopeConsentError` (`auth/device-code.js`) and automatically re-issues a device code with `AUTH_CONFIG.fallbackScopes` (base only) — one extra code for personal accounts; work/school accounts consent on the first try (unless the tenant requires admin consent, AADSTS65001, which is surfaced with remediation instead of downgrading scopes). The `auth/oauth-server.js` Express module mirrors the fallback via a one-shot `/auth?fallback=1` redirect, but the standalone `npm run auth-server` (`outlook-auth-server.js`) does **not** auto-retry — personal accounts should use device-code auth. No `OUTLOOK_AUTH_AUDIENCE` change needed.
+**Shared-mailbox scopes are opt-in**: `OUTLOOK_SHARED_MAILBOX` (`read` → `Mail.Read.Shared`; `true`/`readwrite`/`1` → both `.Shared` scopes; unset → sign-in requests `BASE_SCOPES` only, unchanged). Parsed in `config.js` (`SHARED_MAILBOX_MODE`, `SHARED_SCOPES`); `utils/mailbox.js` `buildMailboxPrefix` refuses non-`me` mailboxes while it's off. With it on, `handleDeviceCodeComplete` (`auth/tools.js`) falls back once to `AUTH_CONFIG.fallbackScopes` when `isScopeConsentError` (`auth/device-code.js`) matches; AADSTS65001 surfaces remediation instead. The browser auth server (`outlook-auth-server.js`) has no fallback. `auth action=about` reports configured vs granted scopes.
 
 ## Architecture
 
@@ -85,6 +85,7 @@ OUTLOOK_IMMUTABLE_IDS=true                 # Optional: IDs persist through folde
 OUTLOOK_AUTH_METHOD=device-code            # Optional: default auth method (device-code|browser)
 OUTLOOK_AUTH_AUDIENCE=common               # Optional: common|consumers|organizations|<tenant-guid> (v3.8.0; fixes AADSTS9002331 for personal-only Azure apps)
 OUTLOOK_DEFAULT_TIMEZONE=Australia/Melbourne  # Optional: overrides hardcoded default (v3.8.0)
+OUTLOOK_SHARED_MAILBOX=read                # Optional, opt-in: read|true (work/school only; re-auth with force=true after enabling)
 ```
 
 > The server reads `OUTLOOK_CLIENT_ID`/`OUTLOOK_CLIENT_SECRET` from `config.js`.

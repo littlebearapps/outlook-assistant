@@ -29,6 +29,10 @@ const { ensureAuthenticated } = require('../../auth');
 jest.mock('../../utils/graph-api');
 jest.mock('../../auth');
 
+const { enableSharedMailbox } = require('../helpers/shared-mailbox');
+
+enableSharedMailbox();
+
 const TOKEN = 'test_token';
 const MAILBOX = 'office@werdropo.com';
 const ID = 'AAMkADItem-Id-From-Shared-Mailbox=';

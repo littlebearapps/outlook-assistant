@@ -939,7 +939,7 @@ const categoriesTools = [
         sharedMailbox: {
           type: 'string',
           description:
-            'Email address of a shared/delegated mailbox whose messages to categorise instead of the signed-in account. Requires delegate access + Mail.ReadWrite.Shared.',
+            'Email address of a shared/delegated mailbox whose messages to categorise instead of the signed-in account. Requires delegate access + Mail.ReadWrite.Shared. Work/school only; needs the server opt-in setting OUTLOOK_SHARED_MAILBOX (otherwise the call is refused with setup guidance).',
         },
         email: {
           type: 'string',

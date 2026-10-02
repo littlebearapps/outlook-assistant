@@ -13,6 +13,7 @@ jest.mock('../../config', () => ({
     tokenEndpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
   },
   SHARED_SCOPES: ['Mail.Read.Shared', 'Mail.ReadWrite.Shared'],
+  ALL_SHARED_SCOPES: ['Mail.Read.Shared', 'Mail.ReadWrite.Shared'],
 }));
 
 /**

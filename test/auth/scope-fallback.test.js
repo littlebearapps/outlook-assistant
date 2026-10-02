@@ -181,20 +181,74 @@ describe('config scope exports', () => {
     expect(config.BASE_SCOPES).toContain('offline_access');
   });
 
-  it('SHARED_SCOPES contains exactly the two .Shared scopes', () => {
-    expect(config.SHARED_SCOPES).toEqual([
+  it('ALL_SHARED_SCOPES contains exactly the two .Shared scopes', () => {
+    expect(config.ALL_SHARED_SCOPES).toEqual([
       'Mail.Read.Shared',
       'Mail.ReadWrite.Shared',
     ]);
   });
 
-  it('AUTH_CONFIG.scopes is base + shared (includes both .Shared)', () => {
-    expect(config.AUTH_CONFIG.scopes).toContain('Mail.Read.Shared');
-    expect(config.AUTH_CONFIG.scopes).toContain('Mail.ReadWrite.Shared');
-    expect(config.AUTH_CONFIG.scopes).toEqual([
-      ...config.BASE_SCOPES,
-      ...config.SHARED_SCOPES,
-    ]);
+  it('shared mailboxes are off by default: sign-in requests BASE_SCOPES only', () => {
+    // The test environment does not set OUTLOOK_SHARED_MAILBOX.
+    expect(config.SHARED_MAILBOX_MODE).toBe('off');
+    expect(config.SHARED_SCOPES).toEqual([]);
+    expect(config.AUTH_CONFIG.scopes).toEqual(config.BASE_SCOPES);
+    expect(config.AUTH_CONFIG.scopes).not.toContain('Mail.Read.Shared');
+  });
+
+  describe('OUTLOOK_SHARED_MAILBOX opt-in', () => {
+    const original = process.env.OUTLOOK_SHARED_MAILBOX;
+    afterEach(() => {
+      if (original === undefined) delete process.env.OUTLOOK_SHARED_MAILBOX;
+      else process.env.OUTLOOK_SHARED_MAILBOX = original;
+    });
+
+    function loadConfigWith(value) {
+      process.env.OUTLOOK_SHARED_MAILBOX = value;
+      let loaded;
+      jest.isolateModules(() => {
+        loaded = require('../../config');
+      });
+      return loaded;
+    }
+
+    it('read → Mail.Read.Shared only', () => {
+      const c = loadConfigWith('read');
+      expect(c.SHARED_MAILBOX_MODE).toBe('read');
+      expect(c.AUTH_CONFIG.scopes).toEqual([
+        ...c.BASE_SCOPES,
+        'Mail.Read.Shared',
+      ]);
+    });
+
+    it.each(['true', 'readwrite', '1', ' TRUE '])(
+      '%s → both .Shared scopes',
+      (value) => {
+        const c = loadConfigWith(value);
+        expect(c.SHARED_MAILBOX_MODE).toBe('readwrite');
+        expect(c.AUTH_CONFIG.scopes).toEqual([
+          ...c.BASE_SCOPES,
+          'Mail.Read.Shared',
+          'Mail.ReadWrite.Shared',
+        ]);
+      }
+    );
+
+    it.each(['', 'false', '0', 'off'])('%p → off', (value) => {
+      const c = loadConfigWith(value);
+      expect(c.SHARED_MAILBOX_MODE).toBe('off');
+      expect(c.AUTH_CONFIG.scopes).toEqual(c.BASE_SCOPES);
+    });
+
+    it('an unrecognised value stays off and warns', () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const c = loadConfigWith('yes-please');
+      expect(c.SHARED_MAILBOX_MODE).toBe('off');
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('OUTLOOK_SHARED_MAILBOX')
+      );
+      warn.mockRestore();
+    });
   });
 
   it('AUTH_CONFIG.fallbackScopes matches BASE_SCOPES content', () => {

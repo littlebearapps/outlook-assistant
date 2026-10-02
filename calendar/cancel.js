@@ -30,10 +30,11 @@ async function handleCancelEvent(args) {
     // Build API endpoint
     const endpoint = `me/events/${eventId}/cancel`;
 
-    // Request body
-    const body = {
-      comment: comment || 'Cancelled via API',
-    };
+    // Only send a comment the caller gave; no placeholder text.
+    const body = {};
+    if (typeof comment === 'string' && comment.trim() !== '') {
+      body.comment = comment;
+    }
 
     // Make API call
     await callGraphAPI(accessToken, 'POST', endpoint, body);

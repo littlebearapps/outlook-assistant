@@ -59,12 +59,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   before anything changes. The default start (09:00 on the due date in the
   default timezone) can no longer fall after the due time, and the reply shows
   each date in UTC and the default timezone instead of the server's local time.
+- **`manage-event` decline and cancel sent "via API" text on your behalf**
+  (#242). Without a `comment`, a decline told the organiser "Declined via API"
+  and a cancellation told every attendee "Cancelled via API". The comment is
+  now sent only when you give one. `decline` also accepts `sendResponse`
+  (boolean, default `true`): pass `false` to decline without notifying the
+  organiser.
 
 ### Removed
 
 - Unused internal helper `callGraphAPIWithAuth` (#244).
 - Internal top-level-only folder helpers `getFolderIdByName` and `getAllFolders`
   (#248), superseded by the shared folder resolver.
+- Unused `calendar/accept.js` handler (#242); `manage-event` has no `accept`
+  action.
 
 ## [3.12.0] - 2026-10-02
 

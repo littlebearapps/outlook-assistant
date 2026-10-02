@@ -95,7 +95,7 @@ const calendarTools = [
   {
     name: 'manage-event',
     description:
-      "Manage an existing calendar event (destructive: covers update/decline/cancel/delete — use dryRun where supported to preview). action=`update` edits fields in place via PATCH (subject, start, end, attendees, body, location, isOnlineMeeting, sensitivity, showAs, importance, categories, reminderMinutesBeforeStart) — only fields you pass are changed; pass `dryRun: true` to preview the PATCH payload. action=`decline` declines an invitation (optional `comment`). action=`cancel` cancels an event you organised and notifies attendees. action=`delete` permanently removes the event. Returns the updated event on update; status confirmation otherwise. Note: there is no `accept` action — accept invitations in the Outlook UI (Graph's accept verb is unreliable across personal/M365).",
+      "Manage an existing calendar event (destructive: covers update/decline/cancel/delete — use dryRun where supported to preview). action=`update` edits fields in place via PATCH (subject, start, end, attendees, body, location, isOnlineMeeting, sensitivity, showAs, importance, categories, reminderMinutesBeforeStart) — only fields you pass are changed; pass `dryRun: true` to preview the PATCH payload. action=`decline` declines an invitation (optional `comment`; `sendResponse: false` declines without notifying the organiser). action=`cancel` cancels an event you organised and notifies attendees. action=`delete` permanently removes the event. Returns the updated event on update; status confirmation otherwise. Note: there is no `accept` action — accept invitations in the Outlook UI (Graph's accept verb is unreliable across personal/M365).",
     annotations: {
       title: 'Manage Calendar Event',
       readOnlyHint: false,
@@ -121,7 +121,13 @@ const calendarTools = [
         },
         comment: {
           type: 'string',
-          description: 'Optional comment for declining or cancelling the event',
+          description:
+            'Message sent with a decline or cancel (optional; omitted if not given)',
+        },
+        sendResponse: {
+          type: 'boolean',
+          description:
+            'Send the decline to the organiser (action=decline only; default true). Pass false to decline without notifying the organiser.',
         },
         subject: {
           type: 'string',

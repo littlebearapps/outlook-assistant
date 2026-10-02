@@ -10,7 +10,7 @@ const { ensureAuthenticated } = require('../auth');
  * @returns {object} - MCP response
  */
 async function handleDeclineEvent(args) {
-  const { eventId, comment } = args;
+  const { eventId, comment, sendResponse } = args;
 
   if (!eventId) {
     return {
@@ -30,10 +30,15 @@ async function handleDeclineEvent(args) {
     // Build API endpoint
     const endpoint = `me/events/${eventId}/decline`;
 
-    // Request body
-    const body = {
-      comment: comment || 'Declined via API',
-    };
+    // Only send what the caller gave: no placeholder comment, and Graph's
+    // own default (notify the organiser) unless sendResponse is set.
+    const body = {};
+    if (typeof comment === 'string' && comment.trim() !== '') {
+      body.comment = comment;
+    }
+    if (typeof sendResponse === 'boolean') {
+      body.sendResponse = sendResponse;
+    }
 
     // Make API call
     await callGraphAPI(accessToken, 'POST', endpoint, body);

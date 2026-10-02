@@ -448,4 +448,33 @@ describe('handleSearchPeople', () => {
       'Error searching people: People search failed'
     );
   });
+
+  describe('$search phrase escaping (#251)', () => {
+    it('backslash-escapes double quotes in the query', async () => {
+      callGraphAPI.mockResolvedValue({ value: [] });
+
+      await handleSearchPeople({ query: 'Sam "the man" Lee' });
+
+      const [, , , , params] = callGraphAPI.mock.calls[0];
+      expect(params.$search).toBe('"Sam \\"the man\\" Lee"');
+    });
+
+    it('doubles a backslash in the query', async () => {
+      callGraphAPI.mockResolvedValue({ value: [] });
+
+      await handleSearchPeople({ query: 'a\\b' });
+
+      const [, , , , params] = callGraphAPI.mock.calls[0];
+      expect(params.$search).toBe('"a\\\\b"');
+    });
+
+    it('quotes a plain query unchanged', async () => {
+      callGraphAPI.mockResolvedValue({ value: [] });
+
+      await handleSearchPeople({ query: 'jane' });
+
+      const [, , , , params] = callGraphAPI.mock.calls[0];
+      expect(params.$search).toBe('"jane"');
+    });
+  });
 });

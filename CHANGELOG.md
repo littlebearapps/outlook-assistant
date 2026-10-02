@@ -73,6 +73,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   already has on the event (new addresses are required); the event's current
   attendees are read first, also on `dryRun`, so the preview shows the types
   that would be sent. Passing `[]` still clears the list without reading it.
+- **Search text containing `"` or `\` broke the request** (#251). `search-people`
+  queries, `search-emails` `query` text, a bare single-token `searchExpression`
+  and `export` `searchQuery` values are wrapped in a quoted Graph `$search`
+  phrase, and an unescaped `"` ended the phrase early, so a name such as
+  `Sam "the man" Lee` could fail with a 400 or match the wrong text. Double
+  quotes and backslashes inside these phrases are now backslash-escaped, as
+  Graph requires. A `searchExpression` you write yourself is still sent exactly
+  as given, so escape any quotes inside your own phrases.
 
 ### Changed
 

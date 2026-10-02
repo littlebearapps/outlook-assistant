@@ -8,6 +8,7 @@ const {
   callGraphAPIPaginated: _callGraphAPIPaginated,
 } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
+const { quoteSearchPhrase } = require('../utils/odata-helpers');
 
 /**
  * Contact field presets for different use cases
@@ -597,7 +598,7 @@ async function handleSearchPeople(args) {
 
     const endpoint = 'me/people';
     const queryParams = {
-      $search: `"${query}"`,
+      $search: quoteSearchPhrase(query),
       $top: count,
       $select:
         'id,displayName,scoredEmailAddresses,phones,companyName,jobTitle,department,userPrincipalName,personType',

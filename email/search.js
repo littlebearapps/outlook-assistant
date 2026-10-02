@@ -14,7 +14,11 @@ const {
   DEFAULT_LIMITS,
 } = require('../utils/response-formatter');
 const { getEmailFields } = require('../utils/field-presets');
-const { escapeODataString } = require('../utils/odata-helpers');
+const {
+  escapeODataString,
+  escapeSearchPhrase,
+  quoteSearchPhrase,
+} = require('../utils/odata-helpers');
 
 // Upper bound on how many recent messages the client-side fallback scans
 // before giving up. Deliberately DECOUPLED from the requested result count so
@@ -328,12 +332,13 @@ async function progressiveSearch(
       trimmedKql.includes(':') || /\s/.test(trimmedKql);
     // Already-quoted phrases and KQL-looking expressions (field syntax
     // or multi-word) are passed through as-is; only bare single tokens
-    // are wrapped so Graph treats them as phrase searches.
+    // are wrapped so Graph treats them as phrase searches. The wrapped
+    // token's own `"` and `\` are escaped so they cannot end the phrase. (#251)
     let kqlForSearch;
     if (alreadyQuoted || looksLikeExpression) {
       kqlForSearch = trimmedKql;
     } else {
-      kqlForSearch = `"${trimmedKql}"`;
+      kqlForSearch = `"${escapeSearchPhrase(trimmedKql)}"`;
     }
 
     // Graph rejects field-scoped expressions outright on personal accounts
@@ -1212,7 +1217,7 @@ function buildSearchParams(searchTerms, filterTerms, count, selectFields) {
 
   // Handle search terms - use $search only for free-text query
   if (searchTerms.query) {
-    params.$search = `"${searchTerms.query}"`;
+    params.$search = quoteSearchPhrase(searchTerms.query);
   }
 
   // Build filter conditions array - use $filter for structured fields (more reliable)

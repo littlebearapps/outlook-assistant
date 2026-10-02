@@ -511,6 +511,64 @@ describe('handleSearchEmails — kqlQuery silent-drop prevention (#169)', () => 
 });
 
 // ──────────────────────────────────────────────────
+// $search phrase escaping (#251)
+//
+// Inside a quoted $search phrase Graph needs `"` and `\` backslash-escaped;
+// unescaped, the phrase ends early and Graph answers 400.
+// ──────────────────────────────────────────────────
+describe('handleSearchEmails — $search phrase escaping (#251)', () => {
+  test('escapes double quotes in a free-text query phrase', async () => {
+    callGraphAPIPaginated.mockResolvedValue({ value: [] });
+
+    await handleSearchEmails({ query: 'say "hello"' });
+
+    const searches = callGraphAPIPaginated.mock.calls
+      .map(([, , , p]) => p.$search)
+      .filter(Boolean);
+    expect(searches.length).toBeGreaterThan(0);
+    searches.forEach((s) => expect(s).toBe('"say \\"hello\\""'));
+  });
+
+  test('doubles a backslash in a free-text query phrase', async () => {
+    callGraphAPIPaginated.mockResolvedValue({ value: [] });
+
+    await handleSearchEmails({ query: 'a\\b' });
+
+    const [, , , params] = callGraphAPIPaginated.mock.calls[0];
+    expect(params.$search).toBe('"a\\\\b"');
+  });
+
+  test('leaves a plain free-text query phrase unchanged', async () => {
+    callGraphAPIPaginated.mockResolvedValue({ value: [] });
+
+    await handleSearchEmails({ query: 'Bunnings' });
+
+    const [, , , params] = callGraphAPIPaginated.mock.calls[0];
+    expect(params.$search).toBe('"Bunnings"');
+  });
+
+  test('escapes the contents of an auto-quoted bare token', async () => {
+    callGraphAPIPaginated.mockResolvedValue({ value: [] });
+
+    await handleSearchEmails({ searchExpression: 'O"Brien\\x' });
+
+    const [, , , params] = callGraphAPIPaginated.mock.calls[0];
+    expect(params.$search).toBe('"O\\"Brien\\\\x"');
+  });
+
+  test('passes a caller-written expression with quotes through untouched', async () => {
+    callGraphAPIPaginated.mockResolvedValue({ value: [] });
+
+    await handleSearchEmails({
+      searchExpression: 'subject:"a \\"b\\"" OR c\\d',
+    });
+
+    const [, , , params] = callGraphAPIPaginated.mock.calls[0];
+    expect(params.$search).toBe('subject:"a \\"b\\"" OR c\\d');
+  });
+});
+
+// ──────────────────────────────────────────────────
 // handleSearchEmails — shared mailbox scoping
 // ──────────────────────────────────────────────────
 describe('handleSearchEmails — shared mailbox', () => {

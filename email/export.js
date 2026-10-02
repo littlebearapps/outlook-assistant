@@ -18,6 +18,7 @@ const {
 const { getEmailFields } = require('../utils/field-presets');
 const { resolveFolderPath } = require('./folder-utils');
 const { buildMailboxPrefix } = require('../utils/mailbox');
+const { quoteSearchPhrase } = require('../utils/odata-helpers');
 const { safeAttachmentFilename } = require('./attachments');
 
 // Export format constants
@@ -513,7 +514,7 @@ async function searchEmailsForExport(accessToken, query, mailbox = null) {
     searchParts.push(`subject:${query.subject}`);
   }
   if (searchParts.length > 0) {
-    params.$search = `"${searchParts.join(' ')}"`;
+    params.$search = quoteSearchPhrase(searchParts.join(' '));
     delete params.$orderby; // Can't combine $search with $orderby
   }
 

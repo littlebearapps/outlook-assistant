@@ -283,6 +283,20 @@ async function resolvePath(accessToken, segments, mailbox) {
 }
 
 /**
+ * Does a `folder` value look like a raw Graph folder ID rather than a display
+ * name or path? Graph IDs are long base64url-style tokens (`AAMkAG…`,
+ * `AQMkAD…`) with no spaces or `/`; display names that long without a space
+ * are vanishingly rare. Used where `folder` historically accepted raw IDs.
+ * @param {string} value
+ * @returns {boolean}
+ */
+function looksLikeFolderId(value) {
+  return (
+    typeof value === 'string' && /^[A-Za-z0-9_+=-]{60,}$/.test(value.trim())
+  );
+}
+
+/**
  * Resolve a folder from a name/path and/or explicit ID.
  * @param {string} accessToken
  * @param {{name?: string, id?: string, mailbox?: string|null}} spec
@@ -333,6 +347,7 @@ async function resolveFolder(accessToken, spec = {}) {
 
 module.exports = {
   WELL_KNOWN,
+  looksLikeFolderId,
   resolveFolder,
   listChildFolders,
   buildTree,

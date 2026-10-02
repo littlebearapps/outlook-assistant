@@ -9,7 +9,7 @@ const { ensureAuthenticated } = require('../auth');
 const { formatEmailList, VERBOSITY } = require('../utils/response-formatter');
 const { getEmailFields } = require('../utils/field-presets');
 const { buildMailboxPrefix } = require('../utils/mailbox');
-const { resolveFolder } = require('../folder/resolve');
+const { resolveFolder, looksLikeFolderId } = require('../folder/resolve');
 
 /**
  * Extract the mailbox segment (`me` or `users/{address}`) from a delta/
@@ -90,10 +90,14 @@ async function handleListEmailsDelta(args) {
       // custom subfolders work for shared mailboxes too.
       // Resolution failures (not-found / ambiguous) carry their own actionable
       // message; let them propagate to the handler's catch like any other error.
-      const resolved = await resolveFolder(accessToken, {
-        name: folder,
-        mailbox: sharedMailbox,
-      });
+      // A raw folder ID (accepted here before name resolution existed) is
+      // treated as an ID, not searched for as a display name.
+      const resolved = await resolveFolder(
+        accessToken,
+        looksLikeFolderId(folder)
+          ? { id: folder, mailbox: sharedMailbox }
+          : { name: folder, mailbox: sharedMailbox }
+      );
       endpoint = `${prefix}/mailFolders/${resolved.id}/messages/delta`;
       queryParams = {
         $select: getEmailFields('delta'),

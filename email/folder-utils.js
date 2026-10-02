@@ -2,7 +2,7 @@
  * Email folder utilities
  */
 const { callGraphAPI } = require('../utils/graph-api');
-const { resolveFolder } = require('../folder/resolve');
+const { resolveFolder, looksLikeFolderId } = require('../folder/resolve');
 const { buildMailboxPrefix } = require('../utils/mailbox');
 
 /**
@@ -77,6 +77,12 @@ async function resolveFolderPath(accessToken, folderName, mailbox = null) {
   if (WELL_KNOWN_FOLDERS[lowerFolderName]) {
     console.error(`Using well-known folder path for "${folderName}"`);
     return scope(WELL_KNOWN_FOLDERS[lowerFolderName], prefix);
+  }
+
+  // A raw folder ID is used as-is, as conversations/export did before name
+  // resolution was added (resolving it as a display name would fail).
+  if (looksLikeFolderId(folderName)) {
+    return `${prefix}/mailFolders/${folderName.trim()}/messages`;
   }
 
   try {

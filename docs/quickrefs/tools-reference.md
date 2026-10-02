@@ -23,10 +23,12 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 | `draft` | Create, update, send, delete, reply, forward drafts | **destructive** | `action` (required), `id`, `to`, `subject`, `body`, `comment`, `dryRun`, `checkRecipients` |
 | `get-mail-tips` | Pre-send recipient validation | read-only | `recipients`, `tipTypes` |
 | `update-email` | Mark read/unread, flag/unflag/complete | idempotent | `action` (required), `id`, `ids`, `dueDateTime`, `sharedMailbox` (alias `email`) |
-| `attachments` | List, view, or download attachments | moderate write | `action` (`list`/`view`/`download`), `messageId`, `attachmentId`, `sharedMailbox` (alias `email`) |
-| `export` | Export emails to various formats | moderate write | `target` (`message`/`messages`/`conversation`/`mime`), `id`, `format`, `outputDir`, `sharedMailbox` (alias `email`) |
+| `attachments` | List, view, or download attachments | moderate write | `action` (`list`/`view`/`download`), `messageId`, `attachmentId`, `outputDir` (download; default system tmpdir), `sharedMailbox` (alias `email`) |
+| `export` | Export emails to various formats | moderate write | `target` (`message`/`messages`/`conversation`/`mime`), `id`, `emailIds`, `searchQuery`/`query`, `conversationId`, `format`, `outputDir` (or `savePath` for a single message), `sharedMailbox` (alias `email`) |
 
 > **`sharedMailbox` is opt-in (work/school only).** Set `OUTLOOK_SHARED_MAILBOX=read` (read: `Mail.Read.Shared`) or `=true` (read and organise: adds `Mail.ReadWrite.Shared`), restart, then run `auth action=authenticate force=true`. While it's unset, `sharedMailbox` calls are refused with these steps, and `access-shared-mailbox` reads only well-known folder names or folder IDs, as before (`listFolders` and custom/nested names need the setting).
+>
+> **Downloads and exports stay in the output directory.** Server-chosen filenames are sanitised, written with exclusive create (an existing file or symlink is never overwritten or followed; a clash gets a numbered suffix) and confined to `outputDir`. IDs containing `.` or `..` path segments are refused before any Graph request.
 >
 > **`sharedMailbox` is read/organise only.** `send-email` and `draft` (create/update/send/delete, reply, reply-all, forward) deliberately take no `sharedMailbox` parameter — they always act on the signed-in user's own mailbox, and `Mail.Send.Shared` is not requested.
 
@@ -92,7 +94,7 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
-| `list-events` | List events: upcoming by default, or past/current/by name with filters (times as canonical UTC ISO-8601 + labelled local) | read-only | `count`, `startAfter`/`startBefore` (ISO 8601 with `Z` or ±hh:mm, normalised to UTC), `subject` (case-insensitive contains, ≤ 255 chars). Supplying any filter replaces the default `start ≥ now` bound; backward-looking searches return newest first |
+| `list-events` | List events: upcoming by default, or past/current/by name with filters (times as canonical UTC ISO-8601 + labelled local) | read-only | `count` (default 10, max 50), `startAfter`/`startBefore` (ISO 8601 with `Z` or ±hh:mm, normalised to UTC), `subject` (case-insensitive contains, ≤ 255 chars). Supplying any filter replaces the default `start ≥ now` bound and filters are AND-ed; backward-looking searches (`startBefore` alone, or `subject` alone) return newest first. Invalid values return a tool error before any Graph call |
 | `create-event` | Create new event | moderate write | `subject`, `start`, `end`, `attendees`, `body`. Times use configured timezone (default: Australia/Melbourne; override with `OUTLOOK_DEFAULT_TIMEZONE` env var) — omit `Z` suffix for local time |
 | `manage-event` | Update, decline, cancel, or delete | **destructive** | `action` (`update`/`decline`/`cancel`/`delete`), `eventId` (or alias `id`), `comment` (decline/cancel), `subject`/`start`/`end`/`attendees`/`body`/`location`/`isOnlineMeeting`/`sensitivity`/`showAs`/`importance`/`categories`/`reminderMinutesBeforeStart` (update only — only the fields you pass are changed), `dryRun` (preview the PATCH without applying it) |
 
@@ -112,7 +114,7 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
-| `manage-contact` | Full CRUD: `list` (default), `search`, `get`, `create`, `update`, `delete` | moderate write | `action`, `query`, `id`, `displayName`, `email`, `count` |
+| `manage-contact` | Full CRUD: `list` (default), `search`, `get`, `create`, `update`, `delete` | **destructive** | `action`, `query`, `id`, `displayName`, `email`, `count` |
 | `search-people` | Relevance-based search (People API) | read-only | `query`, `count` |
 
 ## Categories (3 tools)
@@ -137,19 +139,19 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
-| `access-shared-mailbox` | Read shared mailbox (incl. custom subfolders) or enumerate its folder tree — no send/draft/reply/forward | read-only | `sharedMailbox` (or alias `email`), `folder` (name/path), `folderId`, `listFolders`, `count` |
-| `find-meeting-rooms` | Search meeting rooms | read-only | `query`, `building`, `capacity` |
+| `access-shared-mailbox` | Read shared mailbox (incl. custom subfolders) or enumerate its folder tree — no send/draft/reply/forward | read-only | `sharedMailbox` (or alias `email`), `folder` (name/path), `folderId`, `listFolders`, `count` (default 25, max 50), `outputVerbosity` |
+| `find-meeting-rooms` | Search meeting rooms | read-only | `query`, `building`, `floor`, `capacity` |
 
 ## Safety Annotations
 
 | Category | Tools | Client Behaviour |
 |----------|-------|------------------|
 | **Read-only** (7) | `search-emails`, `read-email`, `list-events`, `search-people`, `access-shared-mailbox`, `find-meeting-rooms`, `get-mail-tips` | Auto-approved by MCP clients that support annotations |
-| **Destructive** (5) | `send-email`, `draft`, `manage-event`, `folders`, `manage-rules` | Client prompts for confirmation |
+| **Destructive** (6) | `send-email`, `draft`, `manage-event`, `manage-contact`, `folders`, `manage-rules` | Client prompts for confirmation |
 | **Idempotent** (2) | `update-email`, `mailbox-settings` | Safe to retry |
-| **Moderate write** (8) | All others | Normal approval flow |
+| **Moderate write** (7) | `attachments`, `export`, `create-event`, `manage-category`, `apply-category`, `manage-focused-inbox`, `auth` | Normal approval flow |
 
-> **`openWorldHint: true`** is set on tools whose output can carry content authored by external/untrusted parties — `search-emails`, `read-email`, `search-people`, `access-shared-mailbox`, `attachments`, `export`, `send-email`, `draft` — signalling MCP clients to apply appropriate caution (e.g. prompt-injection defences).
+> **`openWorldHint: true`** is set on tools that return content authored by external/untrusted parties (`search-emails`, `read-email`, `search-people`, `access-shared-mailbox`, `attachments`, `export`) or send to them (`send-email`, `draft`), signalling MCP clients to apply appropriate caution (e.g. prompt-injection defences).
 
 ## send-email Safety Controls
 
@@ -232,6 +234,15 @@ read-email(id: "...", headersMode: true, importantOnly: true)
 
 // Export conversation to markdown
 export(target: "conversation", conversationId: "...", format: "markdown", outputDir: "/tmp")
+
+// Upcoming events (default)
+list-events(count: 10)
+
+// Past events in a window (oldest first)
+list-events(startAfter: "2026-01-01T00:00:00Z", startBefore: "2026-02-01T00:00:00Z")
+
+// Most recent events with "standup" in the subject (newest first)
+list-events(subject: "standup", count: 5)
 
 // Set out-of-office
 mailbox-settings(action: "set-auto-replies", enabled: true, internalReplyMessage: "I'm away...")

@@ -38,11 +38,22 @@ Common issues and their fixes. For getting-started guidance, see [`docs/how-to/g
 | `export target=messages` writes fewer files than the IDs you passed | Fixed in v3.11.1 — per-message filenames were `<date>_<subject>`, so every message in a same-day reply chain overwrote the previous one while the summary still reported `Failed 0`. Filenames now carry the message time, collisions get a `_2`/`_3` suffix instead of clobbering, and `_meta.manifest` maps each requested ID to the path actually written so you can reconcile. Attachment names had the same defect (`emailId.substring(0, 8)` is a shared prefix across a mailbox, not a disambiguator). (extends #82, which covered only the aggregated CSV) |
 | `searchExpression` returns irrelevant top hits where `query` finds the right message | Working as designed, now documented. They are different requests, not the same one ranked differently: an untranslated `searchExpression` goes to Graph `$search`, which matches the whole message including the body and ranks by relevance with no date sort — so a term buried in a body can outrank the obvious subject-line match. `query` on a personal account is a subject substring match, which is why it looks more accurate for subject terms and misses body text entirely. Pick `query` for subject terms, `searchExpression` to reach bodies. |
 | A `to` search misses mail you know exists further back | The server-side recipient filter is rejected on personal Outlook.com, so `to` is matched locally over the 500 most recent messages. On a large archive that silently excludes anything older. Since v3.11.1 the response says so whenever the scan was truncated (previously only on empty results). Narrow with `receivedAfter`/`receivedBefore`, or raise `OUTLOOK_SEARCH_SCAN_LIMIT` (max 5000). |
+| `list-events` only shows upcoming events | That's the default. Pass `startAfter`, `startBefore` and/or `subject` (v3.12.0+) to look back or search by name — supplying any of them replaces the implicit "from now" bound. `startBefore` alone, or `subject` alone, returns the most recent matches first. |
+| `list-events` returns `Invalid startAfter` / `Invalid startBefore` | Dates must be ISO 8601 with `Z` or a ±hh:mm offset, e.g. `2026-01-01T00:00:00Z` or `2026-01-01T09:00:00+10:00`. Zone-less (`2026-01-01T09:00:00`), date-only (`2026-01-01`), impossible (`2026-02-30…`) and pre-1900 dates are rejected rather than guessed, and `startAfter` must be earlier than `startBefore`. Nothing is sent to Graph when an argument is invalid. |
+| `Invalid resource path: IDs must not contain "." or ".." path segments` | Since v3.12.0 a message, folder or attachment ID containing a `.` or `..` path segment (including percent-encoded forms) is refused before any request is made, so it can't be resolved against a different Graph resource. Real Graph IDs never contain these segments — copy the ID again from `search-emails` or `folders action=list`. |
+| `Refusing to call non-Graph URL` | A `deltaToken` or continuation link pointed somewhere other than `https://graph.microsoft.com` (v3.11.2+). Pass the token exactly as a previous `search-emails deltaMode=true` call returned it, or start a fresh delta sync. |
+| `Refusing to write export file outside outputDir` | `export` keeps every file it names inside `outputDir` (v3.12.0+). You shouldn't see this in normal use; if you do, report it with the export arguments you used. |
+| `OUTLOOK_SHARED_MAILBOX` is set but `auth action=about` shows the `.Shared` scopes as not granted | A token refresh never adds scopes: since v3.12.0 it requests only the scopes granted at sign-in plus `offline_access` (#241), so an existing token keeps its old scope set. Restart the server and run `auth action=authenticate force=true` once. If they're still not granted, the account is personal (it can't hold them) or the device-code flow fell back to the standard scopes — see the rows above. |
 | `kqlQuery` shown as deprecated | `kqlQuery` was renamed to `searchExpression` in v3.9.0 (it was always a Microsoft Graph `$search` expression, never full KQL). The `kqlQuery` alias still works for back-compat — prefer `searchExpression`. |
-| Shared-mailbox **read** works but **move/categorize/flag/create-folder** fails with `404 ErrorInvalidMailboxItemId`, "folder not found", or the change lands in your own mailbox | The write tool must target the shared mailbox, and the token must carry `Mail.ReadWrite.Shared`. (1) Pass `sharedMailbox` (alias `email`) on the write tool — `folders action=move`, `folders action=create`, `apply-category`, `update-email`. (2) Add the delegated `Mail.ReadWrite.Shared` permission to your Azure app and grant consent. (3) **Re-authenticate** so the refreshed token includes the new scope. Omitting `sharedMailbox` targets your own mailbox, where the shared message ID doesn't exist (the 404); a missing scope makes the shared-scoped request fail with 403 — it never falls back to your own mailbox. |
+| Shared-mailbox **read** works but **move/categorise/flag/create-folder** fails with `404 ErrorInvalidMailboxItemId`, "folder not found", or the change lands in your own mailbox | The write tool must target the shared mailbox, and the token must carry `Mail.ReadWrite.Shared`. (1) Pass `sharedMailbox` (alias `email`) on the write tool — `folders action=move`, `folders action=create`, `apply-category`, `update-email`. (2) Set `OUTLOOK_SHARED_MAILBOX=true` (`read` requests only `Mail.Read.Shared`), add the delegated `Mail.ReadWrite.Shared` permission to your Azure app and grant consent. (3) Restart and **re-authenticate** with `auth action=authenticate force=true` so the token includes the new scope. Omitting `sharedMailbox` targets your own mailbox, where the shared message ID doesn't exist (the 404); a missing scope makes the shared-scoped request fail with 403 — it never falls back to your own mailbox. |
+| `Invalid mailbox "…" — expected a shared mailbox email address` | `sharedMailbox` (or `email`) must be a plain email address such as `team@contoso.com`. Since v3.12.0 only printable ASCII is accepted, so look-alike characters (full-width `／`, zero-width spaces), `#`, `%`, `/` and spaces are refused. User GUIDs aren't accepted either. |
 | Mail sent/replied/forwarded "from" a shared mailbox arrives from your own address | Working as designed — shared-mailbox support covers reading and organising only. `send-email` and `draft` (create/update/send/delete, reply, reply-all, forward) always act on the signed-in user's mailbox and accept no `sharedMailbox` parameter; `Mail.Send.Shared` is not requested. Use the Outlook UI for send-as / send-on-behalf. |
 
 ## Checking Authentication State
+
+The simplest check is from your AI assistant: `auth action=status` reports whether the token is valid and when it expires, and `auth action=about` shows the connected mailbox, the configured and granted scopes, shared-mailbox status and the safety-belt settings, without ever printing a token.
+
+From a shell:
 
 ```bash
 # Token state (redacted)
@@ -54,7 +65,7 @@ ls -la ~/.outlook-assistant-pending-auth.json 2>/dev/null || echo "No pending fl
 
 ## Forcing a Fresh Auth
 
-If tokens are corrupted or stuck:
+Usually `auth action=authenticate force=true` is enough, followed by `auth action=device-code-complete`. If tokens are corrupted or stuck:
 
 ```bash
 rm ~/.outlook-assistant-tokens.json ~/.outlook-assistant-pending-auth.json
@@ -66,6 +77,6 @@ rm ~/.outlook-assistant-tokens.json ~/.outlook-assistant-pending-auth.json
 Report issues at <https://github.com/littlebearapps/outlook-assistant/issues> with:
 
 - Error message (full text)
-- Contents of the token file (redact `access_token` and `refresh_token`)
+- The output of `auth action=about` (version, configured and granted scopes; it never includes tokens). Don't paste the token file.
 - Auth method: device code or browser
 - Account type: personal (Microsoft/Outlook.com) or work/school

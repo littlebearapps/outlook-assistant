@@ -27,6 +27,8 @@ function mockHttpsResponse(statusCode, body) {
   };
   const mockReq = {
     on: jest.fn(),
+    setTimeout: jest.fn(),
+    destroy: jest.fn(),
     write: jest.fn(),
     end: jest.fn(),
   };
@@ -90,6 +92,28 @@ describe('device-code', () => {
 
       const result = await initiateDeviceCodeFlow('test-client', ['Mail.Read']);
       expect(result.interval).toBe(5);
+    });
+
+    // #191 — a hung request (e.g. blocked outbound egress in a sandboxed
+    // connector) must fail fast with a clear timeout error rather than hang.
+    it('rejects with a timeout message when the request times out', async () => {
+      const mockReq = {
+        on: jest.fn(),
+        setTimeout: jest.fn((_ms, cb) => cb()), // fire the timeout immediately
+        write: jest.fn(),
+        end: jest.fn(),
+      };
+      // destroy(err) re-emits via the registered 'error' handler (Node behaviour)
+      mockReq.destroy = jest.fn((err) => {
+        const errCall = mockReq.on.mock.calls.find((c) => c[0] === 'error');
+        if (errCall) errCall[1](err);
+      });
+      // Never invoke the response callback — simulates no response / hang
+      https.request.mockImplementationOnce(() => mockReq);
+
+      await expect(
+        initiateDeviceCodeFlow('test-client', ['Mail.Read'])
+      ).rejects.toThrow(/timed out/i);
     });
   });
 

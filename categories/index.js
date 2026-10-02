@@ -867,7 +867,8 @@ const categoriesTools = [
         },
         categoryId: {
           type: 'string',
-          description: 'DEPRECATED: alias for `id`. Will be removed in v3.8.0.',
+          description:
+            'DEPRECATED: alias for `id`. Will be removed in a future release.',
         },
       },
       additionalProperties: false,

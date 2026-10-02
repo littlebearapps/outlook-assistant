@@ -6,6 +6,7 @@
  */
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
+const { resolveFolder } = require('./resolve');
 const config = require('../config');
 
 const { VERBOSITY, DEFAULT_LIMITS } = config;
@@ -17,24 +18,25 @@ const { VERBOSITY, DEFAULT_LIMITS } = config;
  */
 async function handleGetFolderStats(args) {
   const folderName = args.folder || 'inbox';
+  const folderIdArg = args.folderId || '';
   const verbosity = args.outputVerbosity || VERBOSITY.STANDARD;
 
   try {
     const accessToken = await ensureAuthenticated();
 
-    // Resolve folder name to ID
-    const folderId = await resolveFolderName(accessToken, folderName);
-
-    if (!folderId) {
+    // Resolve folder (name/path/alias/ID → concrete folder). (#216)
+    let resolved;
+    try {
+      resolved = await resolveFolder(accessToken, {
+        name: folderName,
+        id: folderIdArg,
+      });
+    } catch (resolveError) {
       return {
-        content: [
-          {
-            type: 'text',
-            text: `Folder "${folderName}" not found.`,
-          },
-        ],
+        content: [{ type: 'text', text: resolveError.message }],
       };
     }
+    const folderId = resolved.id;
 
     // Get folder details with full stats
     const folder = await callGraphAPI(
@@ -88,71 +90,6 @@ async function handleGetFolderStats(args) {
       ],
     };
   }
-}
-
-/**
- * Resolve folder name to ID
- * @param {string} accessToken - Access token
- * @param {string} folderName - Folder name or well-known name
- * @returns {Promise<string|null>} - Folder ID or null
- */
-async function resolveFolderName(accessToken, folderName) {
-  const wellKnownFolders = {
-    inbox: 'inbox',
-    sent: 'sentitems',
-    sentitems: 'sentitems',
-    'sent items': 'sentitems',
-    drafts: 'drafts',
-    deleted: 'deleteditems',
-    deleteditems: 'deleteditems',
-    'deleted items': 'deleteditems',
-    junk: 'junkemail',
-    junkemail: 'junkemail',
-    'junk email': 'junkemail',
-    spam: 'junkemail',
-    archive: 'archive',
-    outbox: 'outbox',
-  };
-
-  const normalised = folderName.toLowerCase().trim();
-
-  // Check if it's a well-known folder
-  if (wellKnownFolders[normalised]) {
-    try {
-      const response = await callGraphAPI(
-        accessToken,
-        'GET',
-        `me/mailFolders/${wellKnownFolders[normalised]}`,
-        null,
-        { $select: 'id' }
-      );
-      return response.id;
-    } catch (_error) {
-      // Fall through to search
-    }
-  }
-
-  // Search for folder by name
-  try {
-    const response = await callGraphAPI(
-      accessToken,
-      'GET',
-      'me/mailFolders',
-      null,
-      {
-        $filter: `displayName eq '${folderName}'`,
-        $select: 'id',
-      }
-    );
-
-    if (response.value && response.value.length > 0) {
-      return response.value[0].id;
-    }
-  } catch (error) {
-    console.error(`Error searching for folder: ${error.message}`);
-  }
-
-  return null;
 }
 
 /**

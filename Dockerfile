@@ -1,7 +1,7 @@
 FROM node:22-alpine
 
 LABEL org.opencontainers.image.title="Outlook Assistant"
-LABEL org.opencontainers.image.description="MCP server for Microsoft Outlook — 21 tools for email, calendar, contacts, and settings via Graph API"
+LABEL org.opencontainers.image.description="MCP server for Microsoft Outlook — 22 tools for email, calendar, contacts, and settings via Graph API"
 LABEL org.opencontainers.image.source="https://github.com/littlebearapps/outlook-assistant"
 LABEL org.opencontainers.image.licenses="MIT"
 

@@ -5,7 +5,7 @@ tags:
 
 # Tools Reference - Outlook Assistant
 
-Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP safety annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`).
+Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP safety annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`).
 
 ## Authentication (1 tool)
 
@@ -17,7 +17,7 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
-| `search-emails` | Search, list, delta sync, conversations | read-only | `query`, `from`, `to`, `folder`, `deltaMode`, `conversationId`, `groupByConversation`, `internetMessageId` |
+| `search-emails` | Search, list, delta sync, conversations | read-only | `query`, `from`, `to`, `folder` (name or nested path), `searchAllFolders`, `searchExpression`, `deltaMode`, `conversationId`, `groupByConversation`, `internetMessageId` |
 | `read-email` | Read content or forensic headers | read-only | `id`, `headersMode`, `groupByType`, `importantOnly` |
 | `send-email` | Send email with safety controls | **destructive** | `to`, `subject`, `body`, `dryRun`, `checkRecipients`, `cc`, `bcc`, `importance` |
 | `draft` | Create, update, send, delete, reply, forward drafts | **destructive** | `action` (required), `id`, `to`, `subject`, `body`, `comment`, `dryRun`, `checkRecipients` |
@@ -31,13 +31,19 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 | Mode | Trigger | Description |
 |------|---------|-------------|
 | List | No query params | Lists recent emails (like old `list-emails`) |
-| Search | `query`, `from`, `to`, etc. | Full search with filters and KQL |
+| Search | `query`, `from`, `to`, etc. | Full search with OData filters; `searchExpression` for a raw Graph `$search` expression; `searchAllFolders: true` for cross-folder |
 | Delta | `deltaMode: true` | Incremental sync, returns `deltaToken` |
 | Conversation list | `groupByConversation: true` | Groups by thread |
 | Conversation get | `conversationId` | All messages in a thread |
 | Message-ID lookup | `internetMessageId` | Find by RFC Message-ID header |
 
-> **Personal accounts**: The `query` and `kqlQuery` parameters use Microsoft's `$search` API which has limited support on personal Outlook.com accounts. Outlook Assistant handles this automatically with progressive search fallback — if `$search` returns no results, it tries OData filters, boolean filters, and recent message listing. For the most direct results on personal accounts, use structured filters (`from`, `subject`, `to`, `receivedAfter`, `hasAttachments`, `unreadOnly`).
+> **Personal accounts**: The `query` and raw `searchExpression` (formerly `kqlQuery`, kept as a deprecated alias) parameters use Microsoft's `$search` API, which has limited support on personal Outlook.com accounts. Unscoped expressions work; field-scoped ones (e.g. `from:someone@example.com`, `subject:"…"`) return nothing from `$search` there, so since v3.10.0 they are translated into the closest equivalent OData filters and retried, reported as strategy `raw-kql-translated` (#217) — note a `subject:` term becomes a substring match, so the translation is close rather than identical. Expressions that cannot be translated exactly — free text, `AND`/`OR`, unknown prefixes — still terminate rather than silently falling back to an unfiltered search. `query` handles the same limitation with progressive fallback (OData filters, boolean filters, recent listing). Structured filters (`from`, `subject`, `to`, `receivedAfter`, `hasAttachments`, `unreadOnly`) remain the most direct route. Cross-folder search (`searchAllFolders: true`) returns a superset of inbox-only results.
+
+> **`query` vs `searchExpression`**: these issue structurally different Graph requests, so they surface different messages. An untranslated `searchExpression` is answered by `$search` over the entire message — body included — ranked by relevance with no date ordering, so a term buried in a body can outrank an obvious subject-line match. On personal accounts `query` falls back to a subject substring match (every word must appear in the subject), which is precise but never reads bodies. Use `query` for a term you expect in a subject, `searchExpression` when you need body content.
+
+> **`to` scan cap**: personal Outlook.com rejects the server-side recipient filter, so `to` falls back to a local match over the 500 most recent messages (`OUTLOOK_SEARCH_SCAN_LIMIT`, max 5000). On a large archive that excludes older mail; pair `to` with `receivedAfter`/`receivedBefore` to reach it. The response discloses a truncated scan whether or not it matched.
+
+> **Search metadata**: every `search-emails` response carries `_meta.searchMetadata`. `finalStrategy` names the rung that answered (`combined-search`, `single-term-*`, `client-side-*`, `boolean-filters-only`, `raw-kql-translated`, `recent-emails`); `filterApplied` says whether every supplied filter was honoured; `droppedFilters` lists any that were not — it should always be empty, and a non-empty value means the result set is broader than the query (#229). `candidatesScanned` (with `scanLimit` and `truncated`) discloses how many messages a client-side fallback examined, so a bounded scan never reads as a whole-mailbox answer; `kqlTranslatedTo` records the rewrite when a field-scoped `searchExpression` was translated. An empty search additionally reports in its guidance text how many messages any local narrowing pass looked at.
 
 > **Delta sync** is designed for inbox monitoring workflows. The first call returns current emails and a `deltaToken`; subsequent calls with that token return only new, modified, and deleted messages. See [Monitor Inbox with Delta Sync](../how-to/ai-agents/monitor-inbox-with-delta-sync.md).
 
@@ -82,7 +88,7 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
-| `list-events` | List upcoming events | read-only | `count` |
+| `list-events` | List upcoming events (times as canonical UTC ISO-8601 + labelled local) | read-only | `count` |
 | `create-event` | Create new event | moderate write | `subject`, `start`, `end`, `attendees`, `body`. Times use configured timezone (default: Australia/Melbourne; override with `OUTLOOK_DEFAULT_TIMEZONE` env var) — omit `Z` suffix for local time |
 | `manage-event` | Update, decline, cancel, or delete | **destructive** | `action` (`update`/`decline`/`cancel`/`delete`), `eventId` (or alias `id`), `comment` (decline/cancel), `subject`/`start`/`end`/`attendees`/`body`/`location`/`isOnlineMeeting`/`sensitivity`/`showAs`/`importance`/`categories`/`reminderMinutesBeforeStart` (update only — only the fields you pass are changed), `dryRun` (preview the PATCH without applying it) |
 
@@ -90,7 +96,7 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 
 | Tool | Actions | Safety | Key Parameters |
 |------|---------|--------|----------------|
-| `folders` | `list` (default), `create`, `move`, `stats`, `delete` | **destructive** | `name`, `emailIds`, `targetFolder`, `folder`, `folderId`, `folderName`, `outputVerbosity` |
+| `folders` | `list` (default), `create`, `move`, `stats`, `delete` | **destructive** | `name`, `parentFolder`/`parentFolderId` (create), `emailIds`, `targetFolder`/`targetFolderId` (move), `folder`/`folderId` (stats), `folderName`/`folderId` (delete), `outputVerbosity`. Folders addressable by nested path (`Parent/Child`) or ID; `list` shows full paths + IDs |
 
 ## Rules (1 tool)
 
@@ -138,6 +144,8 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 | **Destructive** (5) | `send-email`, `draft`, `manage-event`, `folders`, `manage-rules` | Client prompts for confirmation |
 | **Idempotent** (2) | `update-email`, `mailbox-settings` | Safe to retry |
 | **Moderate write** (8) | All others | Normal approval flow |
+
+> **`openWorldHint: true`** is set on tools whose output can carry content authored by external/untrusted parties — `search-emails`, `read-email`, `search-people`, `access-shared-mailbox`, `attachments`, `export`, `send-email`, `draft` — signalling MCP clients to apply appropriate caution (e.g. prompt-injection defences).
 
 ## send-email Safety Controls
 

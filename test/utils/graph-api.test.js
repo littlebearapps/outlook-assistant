@@ -132,17 +132,14 @@ describe('callGraphAPI', () => {
       );
     });
 
-    it('should use full URL directly when path starts with http://', async () => {
+    it('should refuse a full URL that is not the Graph host over https (GHSA-mqfm)', async () => {
       const httpLink = 'http://localhost/test';
       mockHttpsRequest(200, {});
 
-      await callGraphAPI('token', 'GET', httpLink);
-
-      expect(https.request).toHaveBeenCalledWith(
-        httpLink,
-        expect.any(Object),
-        expect.any(Function)
+      await expect(callGraphAPI('token', 'GET', httpLink)).rejects.toThrow(
+        /Refusing to call non-Graph URL/
       );
+      expect(https.request).not.toHaveBeenCalled();
     });
   });
 
@@ -711,7 +708,9 @@ describe('callGraphAPI - immutable IDs', () => {
     expect(options.headers.Prefer).toBe('IdType="ImmutableId"');
   });
 
-  it('should allow extraHeaders to override Prefer', async () => {
+  it('should combine a caller Prefer with the immutable-IDs Prefer (not clobber)', async () => {
+    // Prefer is multi-valued in HTTP; a caller Prefer (e.g. outlook.timezone)
+    // must not silently drop the global immutable-IDs Prefer. (#118)
     config.USE_IMMUTABLE_IDS = true;
     mockHttpsRequest(200, {});
 
@@ -727,7 +726,28 @@ describe('callGraphAPI - immutable IDs', () => {
     );
 
     const options = https.request.mock.calls[0][1];
-    expect(options.headers.Prefer).toBe('outlook.body-content-type="text"');
+    expect(options.headers.Prefer).toBe(
+      'IdType="ImmutableId", outlook.body-content-type="text"'
+    );
+  });
+
+  it('should use the caller Prefer alone when immutable IDs are off', async () => {
+    config.USE_IMMUTABLE_IDS = false;
+    mockHttpsRequest(200, {});
+
+    await callGraphAPI(
+      'token',
+      'GET',
+      'me/events',
+      null,
+      {},
+      {
+        Prefer: 'outlook.timezone="UTC"',
+      }
+    );
+
+    const options = https.request.mock.calls[0][1];
+    expect(options.headers.Prefer).toBe('outlook.timezone="UTC"');
   });
 
   it('should merge extraHeaders with default headers', async () => {

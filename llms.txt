@@ -22,13 +22,13 @@ Built by [Little Bear Apps](https://littlebearapps.com).
 
 ## Key Differentiators
 
-- **Progressive search**: Automatically falls back through 4 search strategies when Microsoft's `$search` API is unavailable (personal accounts) — most Graph API wrappers fail silently. Explicit "no results" messaging instead of unfiltered fallback.
+- **Progressive search**: Automatically falls back through 4 search strategies when Microsoft's `$search` API is unavailable (personal accounts) — most Graph API wrappers fail silently. Explicit "no results" messaging instead of unfiltered fallback, and `_meta.searchMetadata` reports which strategy answered plus any filter that could not be honoured (`droppedFilters`), so a partially-applied search can never pass as a complete one. Field-scoped `$search` expressions (`from:`/`to:`/`subject:`), which personal accounts reject outright, are translated to equivalent OData filters and retried. Cross-folder search (`searchAllFolders`) reliably returns a superset of inbox results.
 - **Remote-friendly auth**: Device code flow (default) — no auth server, no port forwarding, no SSH tunnels. State persists across MCP server restarts. Works from Untether, mosh, SSH, and headless environments.
 - **Email forensics**: Built-in header analysis for DKIM, SPF, DMARC authentication, delivery chains, and spam scores — useful for phishing investigation and compliance
 - **Delta sync**: Incremental inbox monitoring — returns only new, modified, and deleted emails since last check, with tokens for continuous polling
 - **Batch operations**: Flag, move, export, or categorise multiple emails in a single tool call; search-driven export for batch archiving without collecting IDs
 - **Pre-send intelligence**: Check recipients for out-of-office, mailbox full, delivery restrictions, and moderation before sending — no other Outlook MCP server offers this
-- **Compound automation**: Rules + categories + folders + Focused Inbox for complete inbox management in one conversation
+- **Compound automation**: Rules + categories + nested folders (addressable by path or ID) + Focused Inbox for complete inbox management in one conversation
 
 ## Safety & Token Efficiency
 
@@ -63,7 +63,7 @@ Requires an Azure app registration with Microsoft Graph delegated permissions. S
 - **Email (8 tools)**: `search-emails`, `read-email`, `send-email`, `draft`, `update-email`, `attachments`, `export`, `get-mail-tips`
 - **Calendar (3 tools)**: `list-events`, `create-event`, `manage-event`
 - **Contacts (2 tools)**: `manage-contact`, `search-people`
-- **Folders (1 tool)**: `folders` — list, create, move, stats
+- **Folders (1 tool)**: `folders` — list, create, move, stats, delete; folders addressable by nested path (`Parent/Child`) or ID
 - **Rules (1 tool)**: `manage-rules` — list, create, update, reorder, delete
 - **Categories (3 tools)**: `manage-category`, `apply-category`, `manage-focused-inbox`
 - **Settings (1 tool)**: `mailbox-settings` — get, set auto-replies, set working hours
@@ -79,6 +79,6 @@ Requires an Azure app registration with Microsoft Graph delegated permissions. S
 - [FAQ](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/faq/faq.md): Frequently asked questions — install, accounts, permissions, tokens, send safety, updates, uninstall (also at <https://littlebearapps.com/help/outlook-assistant/faq/>)
 - [CLAUDE.md](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CLAUDE.md): Quick reference for development
 - [CONTRIBUTING](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CONTRIBUTING.md): Contribution guidelines
-- [CHANGELOG](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CHANGELOG.md): Version history (current: v3.8.0 — `manage-event` gains an `update` action covering 12 fields with `dryRun` (#173, closes #124); new `OUTLOOK_AUTH_AUDIENCE` env var fixes AADSTS9002331 for personal-only Azure apps (#174); new `OUTLOOK_DEFAULT_TIMEZONE` env var overrides the hardcoded Australia/Melbourne default (#175))
-- [ROADMAP](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/ROADMAP.md): Active milestones (v3.8.x polish, v3.9.0 new Graph APIs)
+- [CHANGELOG](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CHANGELOG.md): Version history (current: v3.11.2 — security release: attachment downloads confined to `outputDir` (GHSA-755c-c45g-69rv) and the access token only ever sent to Microsoft Graph (GHSA-mqfm-wfjq-jxq2), HTML-to-text entity double-decoding fixed, `npm audit` at 0. Preceded by v3.11.1 — search and export correctness: a search term combined with a date or boolean filter was silently overwritten, so the request carried only the date window and the whole window came back reported as a filtered result; batch export named files `<date>_<subject>`, so a same-day reply chain overwrote itself on disk while the summary reported `Failed 0` — filenames now carry the time, collisions get a numeric suffix instead of clobbering, and a manifest maps each requested ID to the file actually written; a truncated local scan is now disclosed when it matched, not only when it returned nothing; `query` versus `searchExpression` and the 500-message `to` scan cap documented. Preceded by v3.11.0 — fixes & polish: `--version`/`--help` CLI flags (#68), `AADSTS7000215` explaining the Secret ID vs Secret Value mistake via one shared AADSTS hint table (#69), token-refresh round trip covered end to end (#72), and all 17 development-dependency advisories cleared; and v3.10.0 — search correctness: field-scoped `searchExpression` translated to OData filters and retried on personal accounts (#217), two-filter searches no longer returning the single-filter superset (#229), `from`/`to` filter values OData-escaped (#230), no-results guidance derived from what was actually attempted (#231))
+- [ROADMAP](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/ROADMAP.md): Active milestones (v3.11.2 tool description audit, v3.8.x carry-over, v3.12.0+ new Graph APIs)
 - [SECURITY](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/SECURITY.md): Security policy, token handling, and MCP safety controls

@@ -3,6 +3,7 @@ const fsSync = require('fs');
 const path = require('path');
 const https = require('https');
 const querystring = require('querystring');
+const { describeAuthError } = require('./auth-errors');
 
 class TokenStorage {
   constructor(config) {
@@ -131,16 +132,22 @@ class TokenStorage {
           return await this.refreshAccessToken();
         } catch (refreshError) {
           console.error('Failed to refresh access token:', refreshError);
-          this.tokens = null; // Invalidate tokens on refresh failure
-          await this._saveTokensToFile(); // Persist invalidation
+          // Drop the in-memory tokens so callers re-authenticate. The save
+          // below is intentionally a no-op — `_saveTokensToFile` returns early
+          // when `tokens` is null — which is the behaviour we want: a transient
+          // network failure must not erase a still-valid refresh token from
+          // disk. The next process start reloads it and retries. (#72)
+          this.tokens = null;
+          await this._saveTokensToFile();
           return null;
         }
       } else {
         console.warn(
           'No refresh token available. Cannot refresh access token.'
         );
-        this.tokens = null; // Invalidate tokens as they are expired and cannot be refreshed
-        await this._saveTokensToFile(); // Persist invalidation
+        // Same as above: clears memory, leaves the file alone. (#72)
+        this.tokens = null;
+        await this._saveTokensToFile();
         return null;
       }
     }
@@ -226,8 +233,10 @@ class TokenStorage {
                 console.error('Error refreshing token:', responseBody);
                 reject(
                   new Error(
-                    responseBody.error_description ||
-                      `Token refresh failed with status ${res.statusCode}`
+                    describeAuthError(
+                      responseBody.error_description ||
+                        `Token refresh failed with status ${res.statusCode}`
+                    )
                   )
                 );
               }
@@ -320,8 +329,10 @@ class TokenStorage {
                 );
                 reject(
                   new Error(
-                    responseBody.error_description ||
-                      `Token exchange failed with status ${res.statusCode}`
+                    describeAuthError(
+                      responseBody.error_description ||
+                        `Token exchange failed with status ${res.statusCode}`
+                    )
                   )
                 );
               }

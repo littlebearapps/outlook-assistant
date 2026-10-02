@@ -150,7 +150,8 @@ See [Investigate Email Headers](../advanced/investigate-email-headers.md) for he
 - Prefer `draft` over `send-email` in automated contexts — drafts can be reviewed in Outlook before sending
 - Use `dryRun: true` on `send-email` or `draft` in automated contexts for human review
 - Prefer `search-people` over `manage-contact` search — it searches more broadly
-- Use `kqlQuery` for complex boolean searches, standard params for simple filters
+- Use `searchExpression` (formerly `kqlQuery`) for complex boolean searches on work/school accounts, standard params for simple filters — on personal accounts only `from:`/`to:`/`subject:` expressions are translated and retried, so structured filters are the reliable route
+- After any search, check `_meta.searchMetadata`: `finalStrategy` names the rung that answered, and `droppedFilters` lists any filter that could not be honoured. Treat a non-empty `droppedFilters` as "these results are broader than I asked for" and narrow again rather than acting on them
 - Batch operations (`ids`, `messageIds`, `emailIds`) reduce API calls
 
 ## Related

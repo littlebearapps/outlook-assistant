@@ -78,26 +78,32 @@ async function handleExportEmail(args) {
       };
     }
 
-    // Generate filename based on email metadata
-    const timestamp = new Date(email.receivedDateTime)
-      .toISOString()
-      .slice(0, 10);
+    // Generate filename based on email metadata. The time matters: a
+    // date-only name collides across any same-day reply chain, and the old
+    // behaviour was to overwrite silently.
+    const timestamp = filenameTimestamp(email.receivedDateTime);
     const safeSubject = sanitizeFilename(email.subject || 'no-subject');
     const extension = getExtension(format);
-    const defaultFilename = `${timestamp}_${safeSubject}.${extension}`;
+    const defaultBase = `${timestamp}_${safeSubject}`;
+
+    // Paths claimed while writing this message (main file + attachments).
+    const claimedPaths = new Set();
 
     // Determine final save path
     let finalPath;
-    if (savePath) {
-      // If savePath is a directory, append filename
-      if (fs.existsSync(savePath) && fs.statSync(savePath).isDirectory()) {
-        finalPath = path.join(savePath, defaultFilename);
-      } else {
-        finalPath = savePath;
-      }
+    if (
+      savePath &&
+      !(fs.existsSync(savePath) && fs.statSync(savePath).isDirectory())
+    ) {
+      // An explicit file path is the caller's to control — honour it exactly,
+      // including overwriting, since that is what an explicit path means.
+      finalPath = savePath;
     } else {
-      // Default to OS temp directory to avoid polluting the working directory
-      finalPath = path.join(os.tmpdir(), defaultFilename);
+      // A directory (or the default temp dir) means we choose the name, so
+      // never clobber a file that is already there.
+      const dir = savePath || os.tmpdir();
+      fs.mkdirSync(dir, { recursive: true });
+      finalPath = claimUniquePath(dir, defaultBase, extension, claimedPaths);
     }
 
     // Export based on format
@@ -152,7 +158,8 @@ async function handleExportEmail(args) {
       attachmentsSaved = await saveAttachments(
         accessToken,
         emailId,
-        path.dirname(finalPath)
+        path.dirname(finalPath),
+        claimedPaths
       );
     }
 
@@ -372,6 +379,21 @@ async function handleBatchExportEmails(args) {
     );
     resultText += `| Total Size | ${(totalBytes / 1024).toFixed(1)} KB |\n`;
 
+    // Requested id -> written path, so a caller can reconcile without
+    // listing the directory. A batch that silently lost messages to
+    // filename collisions still reported "Successful N / Failed 0", and the
+    // loss was only ever caught by counting distinct Message-IDs by hand.
+    const manifest = successful.map((r) => ({
+      emailId: r.emailId,
+      filePath: r.filePath,
+    }));
+    const disambiguated = manifest.filter((entry) =>
+      /_\d+\.[^.]+$/.test(entry.filePath)
+    );
+    if (disambiguated.length > 0) {
+      resultText += `\n> ${disambiguated.length} file name(s) were disambiguated with a numeric suffix — messages sharing a timestamp and subject, or names already present in the output directory. Nothing was overwritten.\n`;
+    }
+
     if (failed.length > 0) {
       resultText += `\n### Failed Exports\n\n`;
       for (const f of failed.slice(0, 10)) {
@@ -396,6 +418,7 @@ async function handleBatchExportEmails(args) {
         successful: successful.length,
         failed: failed.length,
         totalBytes: totalBytes,
+        manifest,
       },
     };
   } catch (error) {
@@ -488,6 +511,8 @@ async function exportWithConcurrency(
 ) {
   const results = [];
   const inProgress = new Set();
+  // Shared across the batch so concurrent exports cannot claim the same path.
+  const claimedPaths = new Set();
   let index = 0;
 
   while (index < emailIds.length || inProgress.size > 0) {
@@ -499,7 +524,8 @@ async function exportWithConcurrency(
         emailId,
         format,
         outputDir,
-        includeAttachments
+        includeAttachments,
+        claimedPaths
       ).then((result) => {
         inProgress.delete(promise);
         results.push(result);
@@ -526,7 +552,8 @@ async function exportSingleForBatch(
   emailId,
   format,
   outputDir,
-  includeAttachments
+  includeAttachments,
+  claimedPaths
 ) {
   try {
     const selectFields = getEmailFields('export');
@@ -538,13 +565,15 @@ async function exportSingleForBatch(
       { $select: selectFields }
     );
 
-    const timestamp = new Date(email.receivedDateTime)
-      .toISOString()
-      .slice(0, 10);
+    const timestamp = filenameTimestamp(email.receivedDateTime);
     const safeSubject = sanitizeFilename(email.subject || 'no-subject');
     const extension = getExtension(format);
-    const filename = `${timestamp}_${safeSubject}.${extension}`;
-    const filePath = path.join(outputDir, filename);
+    const filePath = claimUniquePath(
+      outputDir,
+      `${timestamp}_${safeSubject}`,
+      extension,
+      claimedPaths
+    );
 
     let content;
     if (format === EXPORT_FORMATS.MIME || format === EXPORT_FORMATS.EML) {
@@ -562,7 +591,12 @@ async function exportSingleForBatch(
     // Handle attachments if requested
     let attachmentCount = 0;
     if (includeAttachments && email.hasAttachments) {
-      const saved = await saveAttachments(accessToken, emailId, outputDir);
+      const saved = await saveAttachments(
+        accessToken,
+        emailId,
+        outputDir,
+        claimedPaths
+      );
       attachmentCount = saved.length;
     }
 
@@ -585,7 +619,7 @@ async function exportSingleForBatch(
 /**
  * Save email attachments to directory
  */
-async function saveAttachments(accessToken, emailId, outputDir) {
+async function saveAttachments(accessToken, emailId, outputDir, claimedPaths) {
   const saved = [];
 
   try {
@@ -602,9 +636,16 @@ async function saveAttachments(accessToken, emailId, outputDir) {
     for (const att of response.value) {
       if (att.contentBytes) {
         const safeFilename = sanitizeFilename(att.name || 'attachment');
-        const filePath = path.join(
+        // `emailId.substring(0, 8)` was not a disambiguator: Graph message ids
+        // within one mailbox share a long common prefix, so every message's
+        // `invoice.pdf` resolved to the same path and all but the last were
+        // overwritten. Claim a unique path instead.
+        const { base, extension } = splitExtension(safeFilename);
+        const filePath = claimUniquePath(
           outputDir,
-          `${emailId.substring(0, 8)}_${safeFilename}`
+          `${emailId.substring(0, 8)}_${base}`,
+          extension,
+          claimedPaths || new Set()
         );
         const buffer = Buffer.from(att.contentBytes, 'base64');
         fs.writeFileSync(filePath, buffer);
@@ -620,6 +661,63 @@ async function saveAttachments(accessToken, emailId, outputDir) {
   }
 
   return saved;
+}
+
+/**
+ * Format a message timestamp for use in a filename.
+ *
+ * Date-only was the collision: a same-day reply chain is extremely common, and
+ * every message in it normalises to the same `<date>_<subject>` name. Keeping
+ * the time disambiguates the realistic case. Mirrors the sanitisation #82
+ * applied to the aggregated CSV name.
+ *
+ * @param {string} isoDateTime - Message receivedDateTime
+ * @returns {string} - e.g. `2023-06-15T01-26-00`
+ */
+function filenameTimestamp(isoDateTime) {
+  const parsed = new Date(isoDateTime);
+  if (Number.isNaN(parsed.getTime())) return 'undated';
+  return parsed.toISOString().slice(0, 19).replace(/[:.]/g, '-');
+}
+
+/**
+ * Claim a not-yet-used path in `outputDir`, appending `_2`, `_3`, ... until the
+ * name is free both on disk and among the paths already claimed in this batch.
+ *
+ * Silent overwrite is the dangerous part of the collision defect: the exporter
+ * reported `Successful N / Failed 0` while messages vanished. Never overwrite —
+ * disambiguate instead, and let the caller reconcile via the manifest.
+ *
+ * The claim is synchronous, so it is atomic with respect to the event loop and
+ * safe under the batch exporter's 4-way concurrency even though the write
+ * itself happens after an await.
+ *
+ * @param {string} outputDir - Target directory
+ * @param {string} base - Filename without extension
+ * @param {string} extension - Extension without a leading dot
+ * @param {Set<string>} claimed - Paths already claimed by this batch
+ * @returns {string} - An unused absolute path, now claimed
+ */
+function claimUniquePath(outputDir, base, extension, claimed) {
+  let candidate = path.join(outputDir, `${base}.${extension}`);
+  let suffix = 1;
+  while (claimed.has(candidate) || fs.existsSync(candidate)) {
+    suffix += 1;
+    candidate = path.join(outputDir, `${base}_${suffix}.${extension}`);
+  }
+  claimed.add(candidate);
+  return candidate;
+}
+
+/**
+ * Split a filename into base and extension for collision-safe claiming.
+ * @param {string} name - Sanitised filename, possibly with an extension
+ * @returns {{base: string, extension: string}}
+ */
+function splitExtension(name) {
+  const dot = name.lastIndexOf('.');
+  if (dot <= 0) return { base: name, extension: '' };
+  return { base: name.slice(0, dot), extension: name.slice(dot + 1) };
 }
 
 /**

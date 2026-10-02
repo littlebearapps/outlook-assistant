@@ -38,7 +38,8 @@ const templates = {
       <body style="font-family: Arial, sans-serif; text-align: center; margin-top: 50px;">
         <h1 style="color: #e74c3c;">❌ Token Exchange Failed</h1>
         <p>Failed to exchange authorization code for access token.</p>
-        <p><strong>Error:</strong> ${escapeHtml(error instanceof Error ? error.message : String(error))}</p>
+        <p><strong>Error:</strong></p>
+        <pre style="white-space: pre-wrap; text-align: left; display: inline-block; max-width: 40em; font-family: inherit;">${escapeHtml(error instanceof Error ? error.message : String(error))}</pre>
         <p>You can close this window and try again.</p>
       </body>
     </html>`,
@@ -227,7 +228,7 @@ function setupOAuthRoutes(
 module.exports = {
   setupOAuthRoutes,
   createAuthConfig,
-  // Exporting templates for potential direct use or testing, though not typical
-  // templates
+  // Exported so the rendered error pages can be asserted on directly (#69).
+  templates,
 };
 // Adding a newline at the end of the file as requested by Gemini Code Assist

@@ -1,6 +1,6 @@
 # CLAUDE.md - Outlook Assistant
 
-MCP server for Microsoft Outlook via Graph API (v3.8.0). 22 tools across 9 modules.
+MCP server for Microsoft Outlook via Graph API (v3.11.2). 22 tools across 9 modules.
 
 ## Commands
 
@@ -12,23 +12,27 @@ npm test                 # Run Jest tests
 npm run test-mode        # Start with mock data (USE_TEST_MODE=true)
 npm run inspect          # MCP Inspector for interactive testing
 npx kill-port 3333       # Kill auth server if port blocked
+node index.js --version  # Print version and exit (also -v); --help for usage
 ```
 
 ### Authentication
 
-**Device code flow (default, recommended for remote/headless):**
-1. Call `auth` tool with `action=authenticate` (uses device-code by default)
-2. Visit the URL shown, enter the code
-3. Call `auth` tool with `action=device-code-complete` to finish
-4. No auth server, SSH tunnel, or port forwarding needed
+**Device code flow (default — recommended for remote/headless; no auth server, SSH tunnel, or port forwarding needed):**
+1. Call `auth` tool with `action=authenticate` → returns a code + URL (device-code by default)
+2. Visit the URL on any device, enter the code, and sign in
+3. Call `auth` tool with `action=device-code-complete` → tokens saved
+
+**Browser redirect flow (alternative, localhost only):**
+1. Start the auth server: `npm run auth-server` (needs `OUTLOOK_CLIENT_ID`/`OUTLOOK_CLIENT_SECRET` env vars)
+2. Call `auth` tool with `action=authenticate, method=browser` → returns a URL
+3. Open the URL → Microsoft login → grant permissions → tokens saved automatically
+
+Full walkthrough: [`docs/how-to/getting-started/connect-outlook-to-claude.md`](docs/how-to/getting-started/connect-outlook-to-claude.md). The MCP server reads its own credentials from `.mcp.json` inline `kc_get` calls.
 
 **Azure prerequisites**:
 - Add platform: Authentication > Add a platform > Mobile and desktop applications > check `nativeclient` URI
 - Enable "Allow public client flows" in Authentication > Advanced settings
 - Use a **private/incognito browser** for `microsoft.com/devicelogin` (avoids cached session interference)
-
-**Browser flow (alternative, for localhost only):**
-Start the auth server with `npm run auth-server` — needs `OUTLOOK_CLIENT_ID`/`OUTLOOK_CLIENT_SECRET` as env vars. The MCP server itself reads credentials from `.mcp.json` inline `kc_get` calls. Full walkthrough: [`docs/how-to/getting-started/connect-outlook-to-claude.md`](docs/how-to/getting-started/connect-outlook-to-claude.md).
 
 **Token refresh**: Tokens auto-refresh when expired (via `token-storage.js`). Re-authentication only needed when the refresh token expires (~90 days).
 
@@ -38,23 +42,25 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 
 ## Safety Controls
 
-- **MCP annotations** on all 22 tools (`readOnlyHint`, `destructiveHint`, `idempotentHint`)
+- **MCP annotations** on all 22 tools (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`). `openWorldHint: true` on tools that surface external-sender content (`search-emails`, `read-email`, `search-people`, `access-shared-mailbox`, `attachments`, `export`) (#92)
 - **get-mail-tips**: pre-send recipient validation (out-of-office, mailbox full, delivery restrictions)
 - **send-email**: `dryRun` param, `checkRecipients` param (mail tips), session rate limiting (`OUTLOOK_MAX_EMAILS_PER_SESSION`), recipient allowlist (`OUTLOOK_ALLOWED_RECIPIENTS`)
 - **draft**: `dryRun` on create, `checkRecipients` (mail tips), recipient allowlist, rate limiting. Send action shares limit with `send-email`.
 - **manage-rules**: `dryRun` on create/update, rate limiting (`OUTLOOK_MAX_MANAGE_RULES_PER_SESSION`), recipient allowlist on forwardTo/redirectTo, no `permanentDelete` (too dangerous for AI). Supports 12 conditions, 9 actions, and exceptions.
 - **manage-event**: marked `destructiveHint: true` (covers `decline`/`cancel`/`delete`; `update` action added v3.8.0 is non-destructive in isolation but inherits the tool-level annotation — use `dryRun: true` to preview update payloads). `accept` is deliberately omitted — Microsoft Graph doesn't expose an `accept` verb in a way that works across personal/M365 reliably; use the Outlook UI to accept invitations.
-- 7 read-only tools auto-approved by Claude Code; 2 destructive tools prompt for confirmation
+- 7 read-only tools auto-approved by Claude Code; 6 destructive tools (`manage-event`, `manage-contact`, `send-email`, `draft`, `folders`, `manage-rules`) prompt for confirmation
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `index.js` | MCP protocol handler, combines all tools, runs schema coercion before each handler |
+| `index.js` | Entry point: combines all tools into `TOOLS`, creates the MCP server, wires `request-handler.js`, connects the stdio transport |
+| `request-handler.js` | MCP request dispatcher (extracted from `index.js` for testability): routes `initialize`/`tools/list`/`tools/call`, runs schema coercion, and returns tool errors as visible `isError` content (never empty output) |
 | `config.js` | API endpoint, auth settings, defaults |
 | `utils/schema-coerce.js` | MCP-boundary param coercion + validation (string→array/boolean/number, `additionalProperties: false`, required, enums) |
 | `auth/token-storage.js` | Token storage with auto-refresh at `~/.outlook-assistant-tokens.json` (includes `auth_method` field) |
 | `auth/device-code.js` | Device code flow for headless/remote authentication |
+| `auth/auth-errors.js` | AADSTS error → remediation hint table (shared by token-storage and the device-code path) |
 | `auth/tools.js` | Auth tool handlers; persists device code state to `~/.outlook-assistant-pending-auth.json` |
 | `utils/graph-api.js` | All Graph API calls go through here (includes $batch) |
 | `email/mail-tips.js` | Pre-send recipient validation |
@@ -87,21 +93,6 @@ OUTLOOK_DEFAULT_TIMEZONE=Australia/Melbourne  # Optional: overrides hardcoded de
 - Timezone: `Australia/Melbourne`
 - Page size: 25
 - Max results: 100
-
-## Authentication Flow
-
-**Device code (default — no auth server needed):**
-1. Call `auth` tool with `action=authenticate` → get code + URL
-2. Visit URL on any device, enter the code, sign in
-3. Call `auth` tool with `action=device-code-complete` → tokens saved
-
-**Browser redirect (alternative):**
-1. Start auth server: `npm run auth-server`
-2. Call `auth` tool with `action=authenticate, method=browser` → get URL
-3. Open URL in browser → Microsoft login
-4. Grant permissions → tokens saved automatically
-
-**Token refresh**: Tokens auto-refresh transparently via `token-storage.js`. Re-auth only needed when refresh token expires (~90 days).
 
 ## Adding New Tools
 
@@ -159,15 +150,9 @@ Use `Edit` (not `Write`) to revise individual Q&A pairs — the `Write` guard is
 ## See Also
 
 - [`README.md`](README.md) - Full documentation, Azure setup, tool reference
-- [`ROADMAP.md`](ROADMAP.md) - Active milestones (v3.7.5, v3.8.0, v3.9.0) and recent releases
+- [`ROADMAP.md`](ROADMAP.md) - Active milestones (v3.11.2, v3.8.x, v3.12.0+) and recent releases
 - [`docs/architecture.md`](docs/architecture.md) - Module layout, file tree, tool-consolidation map, history
 - [`docs/troubleshooting.md`](docs/troubleshooting.md) - Common issues and fixes
 - [`docs/quickrefs/tools-reference.md`](docs/quickrefs/tools-reference.md) - Tools quick reference
 - [`docs/faq/faq.md`](docs/faq/faq.md) - User-facing FAQ (feeds the help-centre `FAQPage` schema; see protection note above)
-- [`docs/research/publisher-verification.md`](docs/research/publisher-verification.md) - Shared multi-tenant publisher-verified app strategy (GH #147); rollout status in [`publisher-verification-tasks.md`](docs/research/publisher-verification-tasks.md)
 - `.env.example` - Environment template
-
-# currentDate
-Today's date is 2026-02-27.
-
-      IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.

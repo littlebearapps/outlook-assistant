@@ -2,6 +2,7 @@
  * Authentication-related tools for the Outlook Assistant server
  */
 const config = require('../config');
+const { getAuthErrorHints } = require('./auth-errors');
 const fs = require('fs');
 const path = require('path');
 const tokenManager = require('./token-manager');
@@ -208,10 +209,22 @@ async function handleDeviceCodeAuth() {
   }
 
   console.error('[AUTH] Starting device code flow...');
-  const response = await initiateDeviceCodeFlow(
-    clientId,
-    config.AUTH_CONFIG.scopes
-  );
+
+  // #213 — initiation can throw (blocked network egress in a sandboxed
+  // connector, AADSTS9002331 audience mismatch, invalid_client, non-JSON
+  // proxy page). Without this guard the exception propagates to the
+  // top-level dispatcher, which returns a content-less error and the client
+  // renders EMPTY OUTPUT. Mirror the try/catch that step 2
+  // (handleDeviceCodeComplete) already has, and surface actionable hints.
+  let response;
+  try {
+    response = await initiateDeviceCodeFlow(
+      clientId,
+      config.AUTH_CONFIG.scopes
+    );
+  } catch (error) {
+    return buildDeviceCodeErrorResponse(error);
+  }
 
   // Store in memory and persist to disk
   pendingDeviceCode = {
@@ -239,6 +252,47 @@ async function handleDeviceCodeAuth() {
         ].join('\n'),
       },
     ],
+  };
+}
+
+/**
+ * Build a visible, actionable MCP error result for a failed device-code
+ * initiation. Adds remediation hints for the common remote-connector
+ * failure modes. (#213)
+ * @param {Error} error
+ * @returns {object} - MCP response ({ content, isError: true })
+ */
+function buildDeviceCodeErrorResponse(error) {
+  const msg = (error && error.message) || String(error);
+  const code = error && error.code;
+  // Shared AADSTS hint table (#69) so this path and the token-endpoint paths in
+  // token-storage.js cannot drift apart.
+  const hints = getAuthErrorHints(msg);
+
+  if (
+    code === 'ENOTFOUND' ||
+    code === 'ETIMEDOUT' ||
+    code === 'ECONNREFUSED' ||
+    code === 'ECONNRESET' ||
+    /timed out|ENOTFOUND|ETIMEDOUT|ECONNREFUSED|ECONNRESET|network|Failed to parse response/i.test(
+      msg
+    )
+  ) {
+    hints.push(
+      'Could not reach `login.microsoftonline.com`. Outbound network access may be blocked in this environment (e.g. a sandboxed connector or corporate proxy). Check egress/firewall/proxy settings.'
+    );
+  }
+
+  const lines = ['## Device Code Authentication Failed', '', `Error: ${msg}`];
+  if (hints.length) {
+    lines.push('', 'Suggested fixes:', ...hints.map((h) => `- ${h}`));
+  }
+
+  console.error(`[AUTH] Device code initiation failed: ${msg}`);
+
+  return {
+    content: [{ type: 'text', text: lines.join('\n') }],
+    isError: true,
   };
 }
 

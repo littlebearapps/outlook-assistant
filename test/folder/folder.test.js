@@ -3,14 +3,17 @@ const {
   handleCreateFolder,
   handleMoveEmails,
   handleGetFolderStats,
+  handleDeleteFolder,
 } = require('../../folder');
 const { callGraphAPI } = require('../../utils/graph-api');
 const { ensureAuthenticated } = require('../../auth');
-const { getFolderIdByName } = require('../../email/folder-utils');
+const { resolveFolder, listChildFolders } = require('../../folder/resolve');
 
 jest.mock('../../utils/graph-api');
 jest.mock('../../auth');
-jest.mock('../../email/folder-utils');
+// The shared resolver is unit-tested in resolve.test.js; here we mock it so
+// handler tests exercise handler logic, not Graph traversal. (#216)
+jest.mock('../../folder/resolve');
 
 const mockAccessToken = 'test_token';
 
@@ -44,18 +47,20 @@ afterEach(() => {
 });
 
 describe('handleListFolders', () => {
-  it('should list folders as flat list', async () => {
-    callGraphAPI.mockResolvedValue({ value: mockFolders });
+  it('should list folders as flat list with IDs', async () => {
+    listChildFolders.mockResolvedValue(mockFolders);
 
     const result = await handleListFolders({});
 
     expect(result.content[0].text).toContain('Found 2 folders');
     expect(result.content[0].text).toContain('Inbox');
     expect(result.content[0].text).toContain('Sent Items');
+    // #216: folder IDs surfaced so callers can address folders directly.
+    expect(result.content[0].text).toContain('[id: folder-1]');
   });
 
   it('should include item counts when requested', async () => {
-    callGraphAPI.mockResolvedValue({ value: mockFolders });
+    listChildFolders.mockResolvedValue(mockFolders);
 
     const result = await handleListFolders({ includeItemCounts: true });
 
@@ -64,15 +69,42 @@ describe('handleListFolders', () => {
   });
 
   it('should format as hierarchy when requested', async () => {
-    callGraphAPI.mockResolvedValue({ value: mockFolders });
+    listChildFolders.mockResolvedValue(mockFolders);
 
     const result = await handleListFolders({ includeChildren: true });
 
     expect(result.content[0].text).toContain('Folder Hierarchy');
   });
 
+  it('should show a nested folder with its full path', async () => {
+    listChildFolders
+      // top-level
+      .mockResolvedValueOnce([
+        {
+          id: 'triage',
+          displayName: 'Triage',
+          parentFolderId: 'root',
+          childFolderCount: 1,
+        },
+      ])
+      // children of Triage
+      .mockResolvedValueOnce([
+        {
+          id: 'del',
+          displayName: 'Delete',
+          parentFolderId: 'triage',
+          childFolderCount: 0,
+        },
+      ]);
+
+    const result = await handleListFolders({});
+
+    expect(result.content[0].text).toContain('Triage/Delete');
+    expect(result.content[0].text).toContain('[id: del]');
+  });
+
   it('should handle empty folders', async () => {
-    callGraphAPI.mockResolvedValue({ value: [] });
+    listChildFolders.mockResolvedValue([]);
 
     const result = await handleListFolders({});
 
@@ -88,7 +120,7 @@ describe('handleListFolders', () => {
   });
 
   it('should handle API error', async () => {
-    callGraphAPI.mockRejectedValue(new Error('API Error'));
+    listChildFolders.mockRejectedValue(new Error('API Error'));
 
     const result = await handleListFolders({});
 
@@ -98,7 +130,7 @@ describe('handleListFolders', () => {
 
 describe('handleCreateFolder', () => {
   it('should create a folder at root level', async () => {
-    getFolderIdByName.mockResolvedValueOnce(null); // No existing folder
+    listChildFolders.mockResolvedValue([]); // no siblings → no duplicate
     callGraphAPI.mockResolvedValue({ id: 'new-folder-id' });
 
     const result = await handleCreateFolder({ name: 'My Folder' });
@@ -109,7 +141,7 @@ describe('handleCreateFolder', () => {
   });
 
   it('should include the new folder ID in response (F-31)', async () => {
-    getFolderIdByName.mockResolvedValueOnce(null);
+    listChildFolders.mockResolvedValue([]);
     callGraphAPI.mockResolvedValue({ id: 'new-folder-id-12345' });
 
     const result = await handleCreateFolder({ name: 'WithId' });
@@ -118,23 +150,27 @@ describe('handleCreateFolder', () => {
     expect(result._meta.folderId).toBe('new-folder-id-12345');
   });
 
-  it('should create a folder inside a parent', async () => {
-    getFolderIdByName
-      .mockResolvedValueOnce(null) // No existing folder with same name
-      .mockResolvedValueOnce('parent-id'); // Parent folder found
+  it('should create a folder inside a parent path', async () => {
+    resolveFolder.mockResolvedValue({
+      id: 'parent-id',
+      displayName: 'Acme',
+      path: 'Clients/Acme',
+      parentId: 'clients-id',
+    });
+    listChildFolders.mockResolvedValue([]);
     callGraphAPI.mockResolvedValue({ id: 'new-folder-id' });
 
     const result = await handleCreateFolder({
       name: 'Subfolder',
-      parentFolder: 'Inbox',
+      parentFolder: 'Clients/Acme',
     });
 
     expect(result.content[0].text).toContain('Successfully created folder');
-    expect(result.content[0].text).toContain('inside "Inbox"');
+    expect(result.content[0].text).toContain('inside "Clients/Acme"');
   });
 
-  it('should not create if folder already exists', async () => {
-    getFolderIdByName.mockResolvedValueOnce('existing-id');
+  it('should not create if a sibling with the same name exists', async () => {
+    listChildFolders.mockResolvedValue([{ id: 'x', displayName: 'Existing' }]);
 
     const result = await handleCreateFolder({ name: 'Existing' });
 
@@ -142,9 +178,9 @@ describe('handleCreateFolder', () => {
   });
 
   it('should handle missing parent folder', async () => {
-    getFolderIdByName
-      .mockResolvedValueOnce(null) // No existing folder
-      .mockResolvedValueOnce(null); // Parent not found
+    resolveFolder.mockRejectedValue(
+      new Error('Folder "NonExistent" not found. Use `folders` action=list ...')
+    );
 
     const result = await handleCreateFolder({
       name: 'Subfolder',
@@ -169,7 +205,7 @@ describe('handleCreateFolder', () => {
   });
 
   it('should handle API error', async () => {
-    getFolderIdByName.mockResolvedValueOnce(null);
+    listChildFolders.mockResolvedValue([]);
     callGraphAPI.mockRejectedValue(new Error('Create failed'));
 
     const result = await handleCreateFolder({ name: 'Test' });
@@ -179,21 +215,50 @@ describe('handleCreateFolder', () => {
 });
 
 describe('handleMoveEmails', () => {
-  it('should move emails to target folder', async () => {
-    getFolderIdByName.mockResolvedValue('target-folder-id');
+  it('should move emails to a target folder (by path)', async () => {
+    resolveFolder.mockResolvedValue({
+      id: 'target-folder-id',
+      displayName: 'Delete',
+      path: 'Triage/Delete',
+      parentId: 'triage-id',
+    });
     callGraphAPI.mockResolvedValue({});
 
     const result = await handleMoveEmails({
       emailIds: 'msg-1,msg-2',
-      targetFolder: 'Archive',
+      targetFolder: 'Triage/Delete',
     });
 
     expect(result.content[0].text).toContain('Successfully moved 2 email(s)');
-    expect(result.content[0].text).toContain('Archive');
+    // Reports the resolved full path, not the raw input.
+    expect(result.content[0].text).toContain('Triage/Delete');
+  });
+
+  it('should move emails by explicit targetFolderId', async () => {
+    resolveFolder.mockResolvedValue({
+      id: 'abc123',
+      displayName: 'Archive',
+      path: 'Archive',
+      parentId: null,
+    });
+    callGraphAPI.mockResolvedValue({});
+
+    const result = await handleMoveEmails({
+      emailIds: 'msg-1',
+      targetFolderId: 'abc123',
+    });
+
+    expect(result.content[0].text).toContain('Successfully moved 1 email(s)');
+    expect(resolveFolder).toHaveBeenCalledWith(mockAccessToken, {
+      name: '',
+      id: 'abc123',
+    });
   });
 
   it('should handle target folder not found', async () => {
-    getFolderIdByName.mockResolvedValue(null);
+    resolveFolder.mockRejectedValue(
+      new Error('Folder "NonExistent" not found. Use `folders` action=list ...')
+    );
 
     const result = await handleMoveEmails({
       emailIds: 'msg-1',
@@ -203,8 +268,29 @@ describe('handleMoveEmails', () => {
     expect(result.content[0].text).toContain('not found');
   });
 
+  it('should surface an ambiguity error from the resolver', async () => {
+    resolveFolder.mockRejectedValue(
+      new Error(
+        'Folder "Delete" is ambiguous — 2 folders match:\n  - Triage/Delete  (folderId: a)\n  - Old/Delete  (folderId: b)'
+      )
+    );
+
+    const result = await handleMoveEmails({
+      emailIds: 'msg-1',
+      targetFolder: 'Delete',
+    });
+
+    expect(result.content[0].text).toContain('ambiguous');
+    expect(result.content[0].text).toContain('Triage/Delete');
+  });
+
   it('should handle partial failures', async () => {
-    getFolderIdByName.mockResolvedValue('target-id');
+    resolveFolder.mockResolvedValue({
+      id: 'target-id',
+      displayName: 'Archive',
+      path: 'Archive',
+      parentId: null,
+    });
     callGraphAPI
       .mockResolvedValueOnce({}) // First email succeeds
       .mockRejectedValueOnce(new Error('Move failed')); // Second fails
@@ -224,10 +310,10 @@ describe('handleMoveEmails', () => {
     expect(result.content[0].text).toContain('Email IDs are required');
   });
 
-  it('should require target folder', async () => {
+  it('should require a target folder or id', async () => {
     const result = await handleMoveEmails({ emailIds: 'msg-1' });
 
-    expect(result.content[0].text).toContain('Target folder name is required');
+    expect(result.content[0].text).toContain('Target folder is required');
   });
 
   it('should handle auth error', async () => {
@@ -244,9 +330,13 @@ describe('handleMoveEmails', () => {
 
 describe('handleGetFolderStats', () => {
   it('should return folder statistics', async () => {
-    // resolveFolderName: well-known folder lookup
+    resolveFolder.mockResolvedValue({
+      id: 'inbox-id',
+      displayName: 'Inbox',
+      path: 'Inbox',
+      parentId: null,
+    });
     callGraphAPI
-      .mockResolvedValueOnce({ id: 'inbox-id' }) // resolveFolderName
       .mockResolvedValueOnce({
         // folder details
         id: 'inbox-id',
@@ -271,10 +361,37 @@ describe('handleGetFolderStats', () => {
     expect(result._meta.totalItems).toBe(42);
   });
 
+  it('should resolve stats by a nested path', async () => {
+    resolveFolder.mockResolvedValue({
+      id: 'nested-id',
+      displayName: 'Delete',
+      path: 'Triage/Delete',
+      parentId: 'triage-id',
+    });
+    callGraphAPI.mockResolvedValueOnce({
+      id: 'nested-id',
+      displayName: 'Delete',
+      totalItemCount: 3,
+      unreadItemCount: 0,
+      childFolderCount: 0,
+    });
+
+    const result = await handleGetFolderStats({
+      folder: 'Triage/Delete',
+      outputVerbosity: 'minimal',
+    });
+
+    expect(resolveFolder).toHaveBeenCalledWith(mockAccessToken, {
+      name: 'Triage/Delete',
+      id: '',
+    });
+    expect(result._meta.folderId).toBe('nested-id');
+  });
+
   it('should handle folder not found', async () => {
-    // 'NonExistent' is not a well-known folder, so resolveFolderName goes
-    // straight to the name search, which returns empty
-    callGraphAPI.mockResolvedValueOnce({ value: [] });
+    resolveFolder.mockRejectedValue(
+      new Error('Folder "NonExistent" not found. Use `folders` action=list ...')
+    );
 
     const result = await handleGetFolderStats({ folder: 'NonExistent' });
 
@@ -282,16 +399,18 @@ describe('handleGetFolderStats', () => {
   });
 
   it('should handle minimal verbosity', async () => {
-    callGraphAPI
-      .mockResolvedValueOnce({ id: 'inbox-id' }) // resolveFolderName: well-known lookup
-      .mockResolvedValueOnce({
-        // folder details
-        id: 'inbox-id',
-        displayName: 'Inbox',
-        totalItemCount: 10,
-        unreadItemCount: 2,
-      });
-    // minimal verbosity skips date range fetch
+    resolveFolder.mockResolvedValue({
+      id: 'inbox-id',
+      displayName: 'Inbox',
+      path: 'Inbox',
+      parentId: null,
+    });
+    callGraphAPI.mockResolvedValueOnce({
+      id: 'inbox-id',
+      displayName: 'Inbox',
+      totalItemCount: 10,
+      unreadItemCount: 2,
+    });
 
     const result = await handleGetFolderStats({
       folder: 'inbox',
@@ -310,15 +429,81 @@ describe('handleGetFolderStats', () => {
   });
 
   it('should handle API error', async () => {
-    // resolveFolderName succeeds, but folder details call fails
-    callGraphAPI
-      .mockResolvedValueOnce({ id: 'inbox-id' }) // resolveFolderName
-      .mockRejectedValueOnce(new Error('Stats failed')); // folder details
+    resolveFolder.mockResolvedValue({
+      id: 'inbox-id',
+      displayName: 'Inbox',
+      path: 'Inbox',
+      parentId: null,
+    });
+    callGraphAPI.mockRejectedValueOnce(new Error('Stats failed'));
 
     const result = await handleGetFolderStats({});
 
     expect(result.content[0].text).toBe(
       'Error getting folder stats: Stats failed'
     );
+  });
+});
+
+describe('handleDeleteFolder', () => {
+  it('deletes a non-protected folder (resolved by name/path)', async () => {
+    resolveFolder.mockResolvedValue({
+      id: 'old-id',
+      displayName: 'Old',
+      path: 'Archive/Old',
+      wellKnownName: null,
+      parentId: 'archive-id',
+    });
+    callGraphAPI.mockResolvedValue({});
+
+    const result = await handleDeleteFolder({ folderName: 'Archive/Old' });
+
+    expect(result.content[0].text).toContain('deleted successfully');
+    expect(result.content[0].text).toContain('Archive/Old');
+    expect(callGraphAPI).toHaveBeenCalledWith(
+      mockAccessToken,
+      'DELETE',
+      'me/mailFolders/old-id'
+    );
+  });
+
+  it('blocks deleting a protected folder by literal name', async () => {
+    const result = await handleDeleteFolder({ folderName: 'Inbox' });
+
+    expect(result.content[0].text).toContain('Cannot delete protected folder');
+    // Never resolved or deleted.
+    expect(resolveFolder).not.toHaveBeenCalled();
+    expect(callGraphAPI).not.toHaveBeenCalled();
+  });
+
+  it('blocks deleting a system folder by display-name variant / alias', async () => {
+    // The WELL_KNOWN-based guard catches "Sent Items", "junk", "spam", etc.,
+    // not just the Graph names.
+    const sent = await handleDeleteFolder({ folderName: 'Sent Items' });
+    expect(sent.content[0].text).toContain('Cannot delete protected folder');
+
+    const junk = await handleDeleteFolder({ folderName: 'spam' });
+    expect(junk.content[0].text).toContain('Cannot delete protected folder');
+
+    expect(resolveFolder).not.toHaveBeenCalled();
+    expect(callGraphAPI).not.toHaveBeenCalled();
+  });
+
+  it('requires folderId or folderName', async () => {
+    const result = await handleDeleteFolder({});
+
+    expect(result.content[0].text).toContain(
+      'Either folderId or folderName is required'
+    );
+  });
+
+  it('surfaces a resolver not-found error', async () => {
+    resolveFolder.mockRejectedValue(
+      new Error('Folder "Ghost" not found. Use `folders` action=list ...')
+    );
+
+    const result = await handleDeleteFolder({ folderName: 'Ghost' });
+
+    expect(result.content[0].text).toContain('not found');
   });
 });

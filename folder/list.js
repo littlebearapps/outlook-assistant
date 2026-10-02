@@ -1,8 +1,8 @@
 /**
  * List folders functionality
  */
-const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
+const { listChildFolders } = require('./resolve');
 
 /**
  * List folders handler
@@ -74,73 +74,54 @@ async function handleListFolders(args) {
  * @returns {Promise<Array>} - Array of folder objects with hierarchy
  */
 async function getAllFoldersHierarchy(accessToken, includeItemCounts) {
-  try {
-    // Determine select fields based on whether to include counts
-    const selectFields = includeItemCounts
-      ? 'id,displayName,parentFolderId,childFolderCount,totalItemCount,unreadItemCount'
-      : 'id,displayName,parentFolderId,childFolderCount';
+  // Determine select fields based on whether to include counts
+  const selectFields = includeItemCounts
+    ? 'id,displayName,parentFolderId,childFolderCount,totalItemCount,unreadItemCount'
+    : 'id,displayName,parentFolderId,childFolderCount';
 
-    // Get all mail folders
-    const response = await callGraphAPI(
-      accessToken,
-      'GET',
-      'me/mailFolders',
-      null,
-      {
-        $top: 100,
-        $select: selectFields,
-      }
-    );
+  // Full recursive, paginated walk so nested folders at ANY depth appear with
+  // their complete path (not just one level). (#216 review)
+  const top = await listChildFolders(accessToken, null, selectFields);
+  const all = [];
+  const visited = new Set();
+  const queue = top.map((folder) => ({
+    folder,
+    path: folder.displayName,
+    parentPath: null,
+    depth: 1,
+    isTopLevel: true,
+  }));
 
-    if (!response.value) {
-      return [];
+  for (let i = 0; i < queue.length; i++) {
+    const { folder, path, parentPath, depth, isTopLevel } = queue[i];
+    if (visited.has(folder.id)) {
+      continue;
     }
+    visited.add(folder.id);
+    all.push({ ...folder, path, parentFolder: parentPath, isTopLevel });
 
-    // Get child folders for folders with children
-    const foldersWithChildren = response.value.filter(
-      (f) => f.childFolderCount > 0
-    );
-
-    const childFolderPromises = foldersWithChildren.map(async (folder) => {
+    if (folder.childFolderCount > 0 && depth < 20) {
+      let children;
       try {
-        const childResponse = await callGraphAPI(
-          accessToken,
-          'GET',
-          `me/mailFolders/${folder.id}/childFolders`,
-          null,
-          { $select: selectFields }
-        );
-
-        // Add parent folder info to each child
-        const childFolders = childResponse.value || [];
-        childFolders.forEach((child) => {
-          child.parentFolder = folder.displayName;
-        });
-
-        return childFolders;
+        children = await listChildFolders(accessToken, folder.id, selectFields);
       } catch (error) {
         console.error(
           `Error getting child folders for "${folder.displayName}": ${error.message}`
         );
-        return [];
+        continue;
       }
-    });
-
-    const childFolders = await Promise.all(childFolderPromises);
-    const allChildFolders = childFolders.flat();
-
-    // Add top-level flag to parent folders
-    const topLevelFolders = response.value.map((folder) => ({
-      ...folder,
-      isTopLevel: true,
-    }));
-
-    // Combine all folders
-    return [...topLevelFolders, ...allChildFolders];
-  } catch (error) {
-    console.error(`Error getting all folders: ${error.message}`);
-    throw error;
+      for (const child of children) {
+        queue.push({
+          folder: child,
+          path: `${path}/${child.displayName}`,
+          parentPath: path,
+          depth: depth + 1,
+          isTopLevel: false,
+        });
+      }
+    }
   }
+  return all;
 }
 
 /**
@@ -184,14 +165,13 @@ function formatFolderList(folders, includeItemCounts) {
     return a.displayName.localeCompare(b.displayName);
   });
 
-  // Format each folder
+  // Format each folder. Emit the full path and folder ID so callers can
+  // address nested folders directly — `folders move targetFolder="Parent/Child"`
+  // or `targetFolderId=...`. (#216)
   const folderLines = sortedFolders.map((folder) => {
-    let folderInfo = folder.displayName;
-
-    // Add parent folder info if available
-    if (folder.parentFolder) {
-      folderInfo += ` (in ${folder.parentFolder})`;
-    }
+    // Full path (computed during the recursive walk) so nested folders are
+    // addressable directly. (#216)
+    let folderInfo = folder.path || folder.displayName;
 
     // Add item counts if requested
     if (includeItemCounts) {
@@ -203,6 +183,8 @@ function formatFolderList(folders, includeItemCounts) {
         folderInfo += ` (${unreadCount} unread)`;
       }
     }
+
+    folderInfo += ` [id: ${folder.id}]`;
 
     return folderInfo;
   });
@@ -268,6 +250,9 @@ function formatFolderHierarchy(folders, includeItemCounts) {
         line += ` (${unreadCount} unread)`;
       }
     }
+
+    // Surface the folder ID so callers can address it directly. (#216)
+    line += ` [id: ${folder.id}]`;
 
     // Add children
     const childLines = folder.children

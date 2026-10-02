@@ -40,7 +40,7 @@ Practical guides for managing your Microsoft 365 email, calendar, contacts, and 
 
 | Guide | What it covers |
 |-------|---------------|
-| [Organise with Folders](organise/organise-with-folders.md) | List, create folders, move emails, folder statistics |
+| [Organise with Folders](organise/organise-with-folders.md) | List, create, move, delete folders (nested folders by path or ID), folder statistics |
 | [Create Inbox Rules](organise/create-inbox-rules.md) | Auto-sort by sender, subject, or attachments |
 | [Use Categories](organise/use-categories.md) | Colour-coded labels, apply to single or multiple emails |
 | [Manage Focused Inbox](organise/manage-focused-inbox.md) | Force senders into Focused or Other |
@@ -64,7 +64,7 @@ Practical guides for managing your Microsoft 365 email, calendar, contacts, and 
 
 | Guide | What it covers |
 |-------|---------------|
-| [KQL Search Reference](advanced/kql-search-reference.md) | Advanced search queries with Keyword Query Language |
+| [KQL Search Reference](advanced/kql-search-reference.md) | Advanced raw Graph `$search` expressions via `searchExpression` |
 | [Investigate Email Headers](advanced/investigate-email-headers.md) | Phishing investigation, DKIM, SPF, DMARC authentication, delivery chain, spam scores |
 | [Access Shared Mailboxes](advanced/access-shared-mailboxes.md) | Read from team inboxes and service accounts |
 | [Find Meeting Rooms](advanced/find-meeting-rooms.md) | Search by building, floor, or capacity |

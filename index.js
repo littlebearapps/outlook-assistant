@@ -5,12 +5,71 @@
  * A Model Context Protocol server that provides access to
  * Microsoft Outlook through the Microsoft Graph API.
  */
+// CLI flag handling (#68).
+//
+// Deliberately the first thing that runs: it must complete before the SDK
+// imports, before the auth modules load, and before the startup banner below
+// writes to stderr — otherwise `--version` output is buried in server noise and
+// the process never exits (the SIGTERM handler below keeps it alive).
+//
+// `config.js` is required lazily here so this costs nothing on the normal
+// server path; it is the single source of truth for the version, which it
+// reads from package.json.
+const cliArgs = process.argv.slice(2);
+if (cliArgs.length > 0) {
+  const HELP_TEXT = `outlook-assistant — MCP server for Microsoft Outlook via the Microsoft Graph API.
+
+Usage:
+  outlook-assistant [options]
+
+Options:
+  -v, --version   Print the version and exit
+  -h, --help      Show this help and exit
+
+With no options the server starts and speaks the Model Context Protocol over
+stdio. It is normally launched by an MCP client (Claude Desktop, Claude Code)
+rather than run by hand — started from a terminal it will simply wait on stdin.
+
+Key environment variables:
+  OUTLOOK_CLIENT_ID                 Azure app registration client ID
+  OUTLOOK_CLIENT_SECRET             Client secret VALUE (not the Secret ID)
+  OUTLOOK_AUTH_METHOD               device-code (default) | browser
+  OUTLOOK_AUTH_AUDIENCE             common | consumers | organizations | <tenant-guid>
+  OUTLOOK_MAX_EMAILS_PER_SESSION    Cap on sends per session
+  OUTLOOK_ALLOWED_RECIPIENTS        Comma-separated recipient allowlist
+  USE_TEST_MODE                     Set to "true" to run against mock data
+
+Documentation: https://github.com/littlebearapps/outlook-assistant`;
+
+  const KNOWN_FLAGS = new Set(['--version', '-v', '--help', '-h']);
+
+  // Validate every argument before acting on any of them. Checking for a
+  // recognised flag first would let `--version --nope` succeed and silently
+  // swallow the typo — an unrecognised argument is a user error regardless of
+  // what else is on the command line.
+  const unknown = cliArgs.find((arg) => !KNOWN_FLAGS.has(arg));
+  if (unknown) {
+    console.error(
+      `outlook-assistant: unrecognised argument '${unknown}'\nRun 'outlook-assistant --help' for usage.`
+    );
+    process.exit(1);
+  }
+
+  if (cliArgs.includes('--version') || cliArgs.includes('-v')) {
+    console.log(require('./config').SERVER_VERSION);
+    process.exit(0);
+  }
+
+  console.log(HELP_TEXT);
+  process.exit(0);
+}
+
 const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
 const {
   StdioServerTransport,
 } = require('@modelcontextprotocol/sdk/server/stdio.js');
 const config = require('./config');
-const { coerceArgsAgainstSchema } = require('./utils/schema-coerce');
+const { createRequestHandler } = require('./request-handler');
 
 // Import module tools
 const { authTools, setToolCount } = require('./auth');
@@ -69,118 +128,9 @@ const server = new Server(
   }
 );
 
-// Handle all requests
-server.fallbackRequestHandler = async (request) => {
-  try {
-    const { method, params, id } = request;
-    console.error(`REQUEST: ${method} [${id}]`);
-
-    // Initialize handler
-    if (method === 'initialize') {
-      console.error(`INITIALIZE REQUEST: ID [${id}]`);
-      return {
-        protocolVersion: '2024-11-05',
-        capabilities: {
-          tools: TOOLS.reduce((acc, tool) => {
-            acc[tool.name] = {};
-            return acc;
-          }, {}),
-        },
-        serverInfo: {
-          name: config.SERVER_NAME,
-          version: config.SERVER_VERSION,
-        },
-      };
-    }
-
-    // Tools list handler
-    if (method === 'tools/list') {
-      console.error(`TOOLS LIST REQUEST: ID [${id}]`);
-      console.error(`TOOLS COUNT: ${TOOLS.length}`);
-      console.error(`TOOLS NAMES: ${TOOLS.map((t) => t.name).join(', ')}`);
-
-      return {
-        tools: TOOLS.map((tool) => ({
-          name: tool.name,
-          description: tool.description,
-          inputSchema: tool.inputSchema,
-          ...(tool.annotations && { annotations: tool.annotations }),
-        })),
-      };
-    }
-
-    // Required empty responses for other capabilities
-    if (method === 'resources/list') return { resources: [] };
-    if (method === 'prompts/list') return { prompts: [] };
-
-    // Tool call handler
-    if (method === 'tools/call') {
-      try {
-        const { name, arguments: args = {} } = params || {};
-
-        console.error(`TOOL CALL: ${name}`);
-
-        // Find the tool handler
-        const tool = TOOLS.find((t) => t.name === name);
-
-        if (tool && tool.handler) {
-          // Coerce + validate args against the tool's inputSchema before
-          // dispatching. Catches array-as-string, boolean-as-string, unknown
-          // params, and out-of-enum action values at the MCP boundary so
-          // handlers receive properly-typed JS values. (#160, #162)
-          if (tool.inputSchema) {
-            const coerced = coerceArgsAgainstSchema(args, tool.inputSchema);
-            if (coerced.error) {
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: `Invalid arguments for tool '${name}':\n${coerced.error}`,
-                  },
-                ],
-                isError: true,
-              };
-            }
-            return await tool.handler(coerced.args);
-          }
-          return await tool.handler(args);
-        }
-
-        // Tool not found
-        return {
-          error: {
-            code: -32601,
-            message: `Tool not found: ${name}`,
-          },
-        };
-      } catch (error) {
-        console.error(`Error in tools/call:`, error);
-        return {
-          error: {
-            code: -32603,
-            message: `Error processing tool call: ${error.message}`,
-          },
-        };
-      }
-    }
-
-    // For any other method, return method not found
-    return {
-      error: {
-        code: -32601,
-        message: `Method not found: ${method}`,
-      },
-    };
-  } catch (error) {
-    console.error(`Error in fallbackRequestHandler:`, error);
-    return {
-      error: {
-        code: -32603,
-        message: `Error processing request: ${error.message}`,
-      },
-    };
-  }
-};
+// Handle all requests. Dispatch + error-shaping logic lives in
+// request-handler.js so it is unit-testable without starting the transport.
+server.fallbackRequestHandler = createRequestHandler(TOOLS);
 
 // Make the script executable
 process.on('SIGTERM', () => {

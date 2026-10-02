@@ -83,7 +83,7 @@ After authentication, test with:
 
 | Problem | Solution |
 |---------|----------|
-| "Invalid client secret" (AADSTS7000215) | Use the secret **Value**, not the Secret ID |
+| "Invalid client secret" (AADSTS7000215) | Use the secret **Value**, not the Secret ID. Also check it hasn't expired. v3.11.0+ appends an explanation to Microsoft's raw error |
 | Auth URL doesn't work | Start the auth server first |
 | "EADDRINUSE :3333" | Run `npx kill-port 3333` then restart auth server |
 | Empty API responses | Run `auth` tool with `action=status` to check token |

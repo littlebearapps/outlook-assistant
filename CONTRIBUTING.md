@@ -42,6 +42,8 @@ Feature requests are welcome! Use the [feature request template](https://github.
 
 ## Development Setup
 
+The server runs on Node.js 18.18+, but the development tooling (the lint-staged pre-commit hook and `npm run inspect`) needs **Node.js 22.22.1 or newer**.
+
 ```bash
 # Clone your fork
 git clone https://github.com/YOUR_USERNAME/outlook-assistant.git

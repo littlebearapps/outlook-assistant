@@ -805,7 +805,9 @@ const contactsTools = [
     annotations: {
       title: 'People Search',
       readOnlyHint: true,
-      openWorldHint: false,
+      // openWorldHint: returns directory/people data for external contacts
+      // (org directory + inferred from recent comms). (#92)
+      openWorldHint: true,
     },
     inputSchema: {
       type: 'object',

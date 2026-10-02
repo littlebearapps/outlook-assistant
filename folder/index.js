@@ -12,7 +12,7 @@ const folderTools = [
   {
     name: 'folders',
     description:
-      'Manage mail folders (tool-level destructiveHint=true because `delete` permanently removes a folder; `list` and `stats` are read-only sub-actions despite the annotation). action=`list` (default) returns the folder tree with id/displayName/parentFolderId (toggle `includeItemCounts` for unread/total, `includeChildren` for hierarchy). action=`create` makes a new folder under the inbox (or under `folder`/`folderId`/`folderName`) and returns its id. action=`move` relocates emails (`emailIds` array) into `targetFolder`. action=`stats` returns counts (totalItemCount/unreadItemCount) suitable for pagination planning — pair with `outputVerbosity` to limit noise. action=`delete` permanently removes a folder and its contents — there is no recycle-bin recovery.',
+      "Manage mail folders (tool-level destructiveHint=true because `delete` permanently removes a folder; `list` and `stats` are read-only sub-actions despite the annotation). Folders can be addressed by name, by a slash-separated PATH for nested folders (e.g. `Triage/Delete`, `Inbox/Clients/Acme`, case-insensitive), or by explicit ID; `list` output includes each folder's full path and `[id: …]`. A bare name resolves a unique top-level folder first, then searches nested folders (ambiguous names return the candidates — disambiguate with a path or ID). action=`list` (default) returns the folder tree (toggle `includeItemCounts` for unread/total, `includeChildren` for hierarchy). action=`create` makes a new folder under the root, or under `parentFolder` (name/path) / `parentFolderId`, and returns its id. action=`move` relocates emails (`emailIds`) into `targetFolder` (name/path) or `targetFolderId`. action=`stats` returns counts (totalItemCount/unreadItemCount) for `folder` (name/path) or `folderId`, suitable for pagination planning. action=`delete` removes a folder (by `folderName`/path or `folderId`) and its contents — on Outlook.com the folder is moved to Deleted Items (recoverable until you empty it); M365/Exchange accounts may hard-delete per retention policy.",
     annotations: {
       title: 'Mail Folders',
       readOnlyHint: false,
@@ -43,7 +43,13 @@ const folderTools = [
         },
         parentFolder: {
           type: 'string',
-          description: 'Parent folder name, default is root (action=create)',
+          description:
+            'Parent folder name or path (e.g. "Clients/Acme"); default is root (action=create)',
+        },
+        parentFolderId: {
+          type: 'string',
+          description:
+            'Parent folder ID — alternative to parentFolder for unambiguous targeting (action=create)',
         },
         // move params
         emailIds: {
@@ -53,7 +59,13 @@ const folderTools = [
         },
         targetFolder: {
           type: 'string',
-          description: 'Folder name to move emails to (action=move, required)',
+          description:
+            'Destination folder name or path, e.g. "Triage/Delete" (action=move; or use targetFolderId)',
+        },
+        targetFolderId: {
+          type: 'string',
+          description:
+            'Destination folder ID — alternative to targetFolder for unambiguous/nested targeting (action=move)',
         },
         sourceFolder: {
           type: 'string',
@@ -63,22 +75,22 @@ const folderTools = [
         folder: {
           type: 'string',
           description:
-            'Folder name (inbox, sent, drafts, etc.). Default: inbox (action=stats)',
+            'Folder name or path (inbox, sent, "Triage/Delete", etc.). Default: inbox (action=stats)',
         },
         outputVerbosity: {
           type: 'string',
           enum: ['minimal', 'standard', 'full'],
           description: 'Output detail level (action=stats, default: standard)',
         },
-        // delete params
+        // delete/stats params
         folderId: {
           type: 'string',
-          description: 'Folder ID to delete (action=delete)',
+          description: 'Folder ID (action=stats/delete)',
         },
         folderName: {
           type: 'string',
           description:
-            'Folder name to delete — resolved to ID (action=delete). Cannot delete protected folders (Inbox, Drafts, Sent, etc.)',
+            'Folder name or path to delete — resolved to ID (action=delete). Cannot delete protected folders (Inbox, Drafts, Sent, etc.)',
         },
       },
       additionalProperties: false,

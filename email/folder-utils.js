@@ -2,6 +2,7 @@
  * Email folder utilities
  */
 const { callGraphAPI } = require('../utils/graph-api');
+const { resolveFolder } = require('../folder/resolve');
 
 /**
  * Cache of folder information to reduce API calls
@@ -65,20 +66,19 @@ async function resolveFolderPath(accessToken, folderName) {
   }
 
   try {
-    // Try to find the folder by name
-    const folderId = await getFolderIdByName(accessToken, folderName);
-    if (folderId) {
-      const path = `me/mailFolders/${folderId}/messages`;
-      console.error(`Resolved folder "${folderName}" to path: ${path}`);
-      return path;
-    }
-
-    // If not found, throw error instead of silently falling back
-    throw new Error(
-      `Folder "${folderName}" not found. Use the folders tool (action=list) to see available folders.`
-    );
+    // Path-aware resolution: supports nested folders ("Parent/Child"),
+    // case-insensitive names, and reports ambiguity — the same shared resolver
+    // the `folders` tool uses, so search can now scope to nested folders. (#216)
+    const resolved = await resolveFolder(accessToken, { name: folderName });
+    const path = `me/mailFolders/${resolved.id}/messages`;
+    console.error(`Resolved folder "${folderName}" to path: ${path}`);
+    return path;
   } catch (error) {
-    if (error.message.includes('not found')) {
+    // Surface not-found / ambiguity messages verbatim; wrap anything else.
+    if (
+      error.message.includes('not found') ||
+      error.message.includes('ambiguous')
+    ) {
       throw error;
     }
     throw new Error(

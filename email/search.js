@@ -13,6 +13,23 @@ const {
   DEFAULT_LIMITS,
 } = require('../utils/response-formatter');
 const { getEmailFields } = require('../utils/field-presets');
+const { escapeODataString } = require('../utils/odata-helpers');
+
+// Upper bound on how many recent messages the client-side fallback scans
+// before giving up. Deliberately DECOUPLED from the requested result count so
+// that broadening the scope (searchAllFolders → me/messages) doesn't shrink
+// coverage — a maxCount*5 window spread across every folder used to drop inbox
+// matches that an inbox-only window retained. Surfaced as `truncated` in
+// searchMetadata when the budget is exhausted. Override with
+// OUTLOOK_SEARCH_SCAN_LIMIT. (#169 V37-F-2)
+const _parsedScanLimit = Number.parseInt(
+  process.env.OUTLOOK_SEARCH_SCAN_LIMIT || '',
+  10
+);
+const CLIENT_SCAN_LIMIT =
+  Number.isSafeInteger(_parsedScanLimit) && _parsedScanLimit > 0
+    ? Math.min(_parsedScanLimit, 5000)
+    : 500;
 
 /**
  * Search emails handler
@@ -40,7 +57,7 @@ async function handleSearchEmails(args) {
   const requestedCount =
     args.count ?? args.maxResults ?? DEFAULT_LIMITS.searchEmails;
   const verbosity = args.outputVerbosity || VERBOSITY.STANDARD;
-  const query = args.query || '';
+  const query = (args.query || '').trim();
   const from = args.from || '';
   const to = args.to || '';
   const subject = args.subject || '';
@@ -49,11 +66,32 @@ async function handleSearchEmails(args) {
   const receivedAfter = args.receivedAfter || '';
   const receivedBefore = args.receivedBefore || '';
   const searchAllFolders = args.searchAllFolders || false;
-  const kqlQuery = args.kqlQuery || ''; // Raw KQL for advanced users
+  // `searchExpression` is the accurate name — it's a Microsoft Graph $search
+  // expression, not full KQL. `kqlQuery` is retained as a deprecated alias.
+  // Trim so a whitespace-only value doesn't send `$search: '""'`. (#169)
+  const kqlQuery =
+    (args.searchExpression || '').trim() || (args.kqlQuery || '').trim();
 
-  // Select fields based on verbosity
+  // Select fields based on verbosity — but never at the cost of correctness.
+  // When more than one search term is supplied, the ladder may satisfy one
+  // server-side and narrow by the rest locally (#229), and those matchers read
+  // `toRecipients` and `bodyPreview`, which the `list` preset omits. Without
+  // this, a `from`+`to` search would drop every row at default verbosity and
+  // return "No emails found" — making `outputVerbosity`, a presentation
+  // parameter, decide which messages are found.
+  //
+  // A SINGLE term needs the richer preset too when it is `to` or `query`. The
+  // date/boolean rung applies no search term server-side, so it narrows by
+  // every supplied term locally — and `filterToClientSide` reads
+  // `toRecipients` while `filterQueryClientSide` reads `bodyPreview`, neither
+  // of which the `list` preset requests. Left lean, those matchers see
+  // `undefined` on every row and drop the entire result set.
+  const searchTermCount = [query, from, to, subject].filter(Boolean).length;
+  const needsMatcherFields = Boolean(to) || Boolean(query);
   const selectFields = getEmailFields(
-    verbosity === VERBOSITY.FULL ? 'search' : 'list'
+    verbosity === VERBOSITY.FULL || searchTermCount > 1 || needsMatcherFields
+      ? 'search'
+      : 'list'
   );
 
   try {
@@ -80,7 +118,14 @@ async function handleSearchEmails(args) {
       selectFields
     );
 
-    return formatSearchResults(response, folder, verbosity);
+    // Label the scope accurately — a cross-folder search is not "inbox". (#169)
+    const scopeLabel = searchAllFolders ? 'all folders' : folder;
+    return formatSearchResults(
+      response,
+      scopeLabel,
+      verbosity,
+      searchAllFolders
+    );
   } catch (error) {
     // Handle authentication errors
     if (error.message === 'Authentication required') {
@@ -106,6 +151,134 @@ async function handleSearchEmails(args) {
   }
 }
 
+/** Field prefixes a `searchExpression` can be translated into OData filters. */
+const TRANSLATABLE_KQL_FIELDS = new Set(['from', 'to', 'subject']);
+
+/**
+ * Parse a `searchExpression` that consists purely of recognised field-scoped
+ * terms, e.g. `from:info@example.com` or `subject:"Quarterly Report"`. (#217)
+ *
+ * Unscoped `$search` works fine on personal Outlook.com accounts; only the
+ * field-scoped forms come back empty. Those same messages are reachable
+ * through the OData filters the ladder already builds, so a recognised
+ * expression can be translated and retried rather than reported as absent.
+ *
+ * This parser is deliberately strict, and returns null for anything it does
+ * not fully understand — free text, `AND`/`OR`/`NOT`, parentheses, unknown
+ * prefixes, a repeated field, or free text mixed in with a scoped term. That
+ * keeps the terminal no-fallthrough behaviour for every expression whose
+ * meaning we cannot reproduce exactly, which is what #169 V37-F-1 shipped to
+ * guarantee. Translating a half-understood expression would reintroduce it.
+ *
+ * @param {string} expression - The trimmed raw search expression
+ * @returns {object|null} - Search terms to retry with, or null if not translatable
+ */
+function parseFieldScopedExpression(expression) {
+  const trimmed = (expression || '').trim();
+  if (!trimmed) return null;
+
+  const terms = {};
+  let i = 0;
+
+  while (i < trimmed.length) {
+    while (i < trimmed.length && /\s/.test(trimmed[i])) i++;
+    if (i >= trimmed.length) break;
+
+    // Every token must be `field:value`. A token without a colon is free
+    // text; a colon further along belongs to a later token, and the slice
+    // then carries whitespace or an operator, which fails the field check.
+    const colon = trimmed.indexOf(':', i);
+    if (colon === -1) return null;
+
+    const field = trimmed.slice(i, colon).toLowerCase();
+    if (!TRANSLATABLE_KQL_FIELDS.has(field)) return null;
+    if (terms[field]) return null; // repeated field — ambiguous, don't guess
+    i = colon + 1;
+
+    let value;
+    if (trimmed[i] === '"') {
+      const end = trimmed.indexOf('"', i + 1);
+      if (end === -1) return null; // unbalanced quote
+      value = trimmed.slice(i + 1, end);
+      i = end + 1;
+      // A quoted value must be followed by whitespace or end-of-string.
+      if (i < trimmed.length && !/\s/.test(trimmed[i])) return null;
+    } else {
+      let end = i;
+      while (end < trimmed.length && !/\s/.test(trimmed[end])) end++;
+      value = trimmed.slice(i, end);
+      i = end;
+    }
+
+    if (!value) return null;
+    // Wildcards and grouping mean something in KQL that an OData `eq` or
+    // `contains` does not reproduce. Rather than translate them literally,
+    // decline the whole expression.
+    if (/[()*]/.test(value)) return null;
+    terms[field] = value;
+  }
+
+  return Object.keys(terms).length > 0 ? terms : null;
+}
+
+/**
+ * Retry a field-scoped `searchExpression` as OData filters, down the normal
+ * ladder. Returns null when the expression is not translatable, which keeps
+ * the terminal no-fallthrough behaviour #169 V37-F-1 shipped. (#217)
+ *
+ * @param {object} ctx - Everything the retry needs from the raw-KQL branch
+ * @returns {Promise<object|null>} - A merged response, or null if untranslatable
+ */
+async function retryFieldScopedExpression(ctx) {
+  const {
+    endpoint,
+    accessToken,
+    trimmedKql,
+    kqlForSearch,
+    searchTerms,
+    filterTerms,
+    maxCount,
+    selectFields,
+    searchAttempts,
+  } = ctx;
+
+  const translated = parseFieldScopedExpression(trimmedKql);
+  if (!translated) return null;
+
+  console.error(
+    `Retrying field-scoped searchExpression as OData filters: ${JSON.stringify(translated)}`
+  );
+  const retry = await progressiveSearch(
+    endpoint,
+    accessToken,
+    translated,
+    filterTerms,
+    maxCount,
+    selectFields
+  );
+  const retryCount = retry.value?.length || 0;
+  const strategies = [
+    ...searchAttempts,
+    ...(retry._searchInfo?.strategies || []),
+    // Last, so finalStrategy names the translation rather than whichever rung
+    // of the ladder happened to answer it.
+    'raw-kql-translated',
+  ];
+  retry._searchInfo = {
+    ...retry._searchInfo,
+    attemptsCount: strategies.length,
+    strategies,
+    // Report what the caller actually asked for, not the rewrite.
+    originalTerms: searchTerms,
+    filterTerms,
+    kqlApplied: kqlForSearch,
+    kqlTranslatedTo: translated,
+    appliedTerms: ['kqlQuery'],
+    noResults: retryCount === 0,
+  };
+  return retry;
+}
+
 /**
  * Execute a search with progressively simpler fallback strategies
  * @param {string} endpoint - API endpoint
@@ -126,6 +299,9 @@ async function progressiveSearch(
 ) {
   // Track search strategies attempted
   const searchAttempts = [];
+  // Populated by the client-side fallback with its scan coverage so the final
+  // no-results response can still disclose whether the scan was bounded. (#169)
+  const scanState = {};
 
   // 0. If raw KQL query provided, use it directly. The kqlQuery branch
   //    *terminates* — if Graph returns 0 (or throws), we surface that
@@ -133,27 +309,42 @@ async function progressiveSearch(
   //    would drop the user's filter and return unrelated recent emails
   //    with a misleading "combined-search" strategy line. (#169)
   if (searchTerms.kqlQuery) {
-    try {
-      // Pass the user's KQL through as-is. The user is responsible for
-      // their own phrase quoting (e.g. `subject:"foo bar"`); we do NOT
-      // auto-wrap, which previously produced broken nested quotes like
-      // `"subject:"foo bar""` on Graph $search and silently returned
-      // recent unfiltered messages. (#169 V37-F-1)
-      const trimmedKql = searchTerms.kqlQuery.trim();
-      const alreadyQuoted =
-        trimmedKql.startsWith('"') && trimmedKql.endsWith('"');
-      const looksLikeExpression =
-        trimmedKql.includes(':') || /\s/.test(trimmedKql);
-      // Already-quoted phrases and KQL-looking expressions (field syntax
-      // or multi-word) are passed through as-is; only bare single tokens
-      // are wrapped so Graph treats them as phrase searches.
-      let kqlForSearch;
-      if (alreadyQuoted || looksLikeExpression) {
-        kqlForSearch = trimmedKql;
-      } else {
-        kqlForSearch = `"${trimmedKql}"`;
-      }
+    // Pass the user's KQL through as-is. The user is responsible for
+    // their own phrase quoting (e.g. `subject:"foo bar"`); we do NOT
+    // auto-wrap, which previously produced broken nested quotes like
+    // `"subject:"foo bar""` on Graph $search and silently returned
+    // recent unfiltered messages. (#169 V37-F-1)
+    const trimmedKql = searchTerms.kqlQuery.trim();
+    const alreadyQuoted =
+      trimmedKql.startsWith('"') && trimmedKql.endsWith('"');
+    const looksLikeExpression =
+      trimmedKql.includes(':') || /\s/.test(trimmedKql);
+    // Already-quoted phrases and KQL-looking expressions (field syntax
+    // or multi-word) are passed through as-is; only bare single tokens
+    // are wrapped so Graph treats them as phrase searches.
+    let kqlForSearch;
+    if (alreadyQuoted || looksLikeExpression) {
+      kqlForSearch = trimmedKql;
+    } else {
+      kqlForSearch = `"${trimmedKql}"`;
+    }
 
+    // Graph rejects field-scoped expressions outright on personal accounts
+    // ("Syntax error: character ':' is not valid"), so the translated retry
+    // has to be reachable from the catch as well as the empty-result path.
+    const translationContext = {
+      endpoint,
+      accessToken,
+      trimmedKql,
+      kqlForSearch,
+      searchTerms,
+      filterTerms,
+      maxCount,
+      selectFields,
+      searchAttempts,
+    };
+
+    try {
       console.error(`Attempting raw KQL search: ${kqlForSearch}`);
       searchAttempts.push('raw-kql');
 
@@ -180,19 +371,49 @@ async function progressiveSearch(
         originalTerms: searchTerms,
         filterTerms: filterTerms,
         kqlApplied: kqlForSearch,
+        appliedTerms: ['kqlQuery'],
         // noResults flips on the helpful "Suggestions" block in the
         // formatter — without it, an empty kqlQuery result would render
         // the bare "No emails found matching your search criteria" line
         // with no guidance.
         noResults: matched === 0,
       };
-      // Always return — never silently fall through to a path that
+      // Empty-but-successful is the other #217 shape: some tenants answer a
+      // field-scoped expression with 0 rather than a 400.
+      if (matched === 0) {
+        // Guarded like the error path below: if the translated ladder threw,
+        // an unguarded call here would land in the catch and run the whole
+        // retry a second time.
+        try {
+          const retry = await retryFieldScopedExpression(translationContext);
+          if (retry) return retry;
+        } catch (retryError) {
+          console.error(`Translated retry failed: ${retryError.message}`);
+        }
+      }
+
+      // Otherwise always return — never silently fall through to a path that
       // would ignore kqlQuery and return unrelated emails.
       return response;
     } catch (error) {
       console.error(`Raw KQL search failed: ${error.message}`);
-      // Surface the failure rather than masking it with unrelated results.
       searchAttempts.push('raw-kql-error');
+
+      // A field-scoped expression is what Graph rejects here on personal
+      // accounts. Translating and retrying beats reporting mail that plainly
+      // exists as absent — the same messages come back from the equivalent
+      // OData filter. Anything untranslatable still surfaces the error. (#217)
+      try {
+        const retry = await retryFieldScopedExpression(translationContext);
+        if (retry) {
+          retry._searchInfo.kqlError = error.message;
+          return retry;
+        }
+      } catch (retryError) {
+        console.error(`Translated retry also failed: ${retryError.message}`);
+      }
+
+      // Surface the failure rather than masking it with unrelated results.
       return {
         value: [],
         _searchInfo: {
@@ -201,6 +422,7 @@ async function progressiveSearch(
           originalTerms: searchTerms,
           filterTerms: filterTerms,
           kqlError: error.message,
+          appliedTerms: ['kqlQuery'],
           noResults: true,
         },
       };
@@ -248,6 +470,8 @@ async function progressiveSearch(
           strategies: searchAttempts,
           originalTerms: searchTerms,
           filterTerms: filterTerms,
+          // The combined $filter carried every supplied term. (#229)
+          appliedTerms: SEARCH_TERM_KEYS.filter((t) => searchTerms[t]),
         };
         return response;
       }
@@ -260,151 +484,127 @@ async function progressiveSearch(
   const searchPriority = ['from', 'to', 'subject', 'query'];
 
   for (const term of searchPriority) {
-    if (searchTerms[term]) {
-      try {
-        console.error(
-          `Attempting search with only ${term}: "${searchTerms[term]}"`
+    if (!searchTerms[term]) {
+      continue;
+    }
+
+    // 2a. Server-side single-term attempt (isolated try/catch — a failure
+    // here just falls through to the one client-side fallback below).
+    try {
+      console.error(
+        `Attempting search with only ${term}: "${searchTerms[term]}"`
+      );
+      searchAttempts.push(`single-term-${term}`);
+
+      const simplifiedParams = {
+        $top: Math.min(50, maxCount),
+        $select: selectFields,
+      };
+
+      // Use $filter for from/to/subject (more reliable on personal accounts),
+      // $search for free-text query only.
+      // NOTE: $filter and $orderby cannot be used together on mailbox - Graph API limitation
+      if (term === 'from') {
+        simplifiedParams.$filter = buildFromFilter(searchTerms[term]);
+      } else if (term === 'to') {
+        simplifiedParams.$filter = buildToFilter(searchTerms[term]);
+      } else if (term === 'subject') {
+        // Use $filter with contains() — $search silently fails on personal MS accounts
+        simplifiedParams.$filter = `contains(subject, '${escapeODataString(
+          searchTerms[term]
+        )}')`;
+      } else if (term === 'query') {
+        // On personal accounts, $search fails with 503. Use $filter with
+        // contains(subject) as a best-effort fallback for free-text queries.
+        // Split multi-word queries and AND a contains(subject) per word so a
+        // query like "github token" matches a subject where the words are
+        // non-contiguous ("[GitHub] ... personal access token"); single
+        // words behave exactly as before. (#169)
+        const queryWords = searchTerms[term]
+          .trim()
+          .split(/\s+/)
+          .filter(Boolean);
+        simplifiedParams.$filter = queryWords
+          .map((w) => `contains(subject, '${escapeODataString(w)}')`)
+          .join(' and ');
+      }
+
+      // Add boolean filters if applicable
+      addBooleanFilters(simplifiedParams, filterTerms);
+
+      const response = await callGraphAPIPaginated(
+        accessToken,
+        'GET',
+        endpoint,
+        simplifiedParams,
+        maxCount
+      );
+      if (response.value && response.value.length > 0) {
+        // This $filter carried only `term`. Apply every other supplied search
+        // term locally before returning — otherwise we hand back the
+        // single-term superset while claiming the filter was applied. (#229)
+        const { matched, secondaryApplied } = applySecondarySearchTerms(
+          response.value,
+          searchTerms,
+          term
         );
-        searchAttempts.push(`single-term-${term}`);
-
-        const simplifiedParams = {
-          $top: Math.min(50, maxCount),
-          $select: selectFields,
-        };
-
-        // Use $filter for from/to/subject (more reliable on personal accounts),
-        // $search for free-text query only.
-        // NOTE: $filter and $orderby cannot be used together on mailbox - Graph API limitation
-        if (term === 'from') {
-          simplifiedParams.$filter = buildFromFilter(searchTerms[term]);
-        } else if (term === 'to') {
-          simplifiedParams.$filter = buildToFilter(searchTerms[term]);
-        } else if (term === 'subject') {
-          // Use $filter with contains() — $search silently fails on personal MS accounts
-          simplifiedParams.$filter = `contains(subject, '${searchTerms[term].replace(/'/g, "''")}')`;
-        } else if (term === 'query') {
-          // On personal accounts, $search fails with 503. Use $filter with
-          // contains(subject) as a best-effort fallback for free-text queries.
-          simplifiedParams.$filter = `contains(subject, '${searchTerms[term].replace(/'/g, "''")}')`;
-        }
-
-        // Add boolean filters if applicable
-        addBooleanFilters(simplifiedParams, filterTerms);
-
-        const response = await callGraphAPIPaginated(
-          accessToken,
-          'GET',
-          endpoint,
-          simplifiedParams,
-          maxCount
-        );
-        if (response.value && response.value.length > 0) {
+        if (matched.length > 0) {
+          const narrowing =
+            secondaryApplied.length > 0
+              ? ` after local ${secondaryApplied.join(', ')} narrowing of ${response.value.length}`
+              : '';
           console.error(
-            `Search with ${term} successful: found ${response.value.length} results`
+            `Search with ${term} successful: found ${matched.length} results${narrowing}`
           );
+          narrowResponse(response, matched);
           response._searchInfo = {
             attemptsCount: searchAttempts.length,
             strategies: searchAttempts,
             originalTerms: searchTerms,
             filterTerms: filterTerms,
+            appliedTerms: [term, ...secondaryApplied],
+            ...(secondaryApplied.length > 0 && {
+              clientSideTerms: secondaryApplied,
+            }),
           };
           return response;
         }
+        recordNarrowingMiss(scanState, response.value.length);
+        console.error(
+          `Search with ${term} found ${response.value.length} results, but none also satisfied ${secondaryApplied.join(', ')} — continuing`
+        );
+      }
+    } catch (error) {
+      console.error(`Search with ${term} failed: ${error.message}`);
+      // Fall through to the client-side fallback below.
+    }
 
-        // Client-side fallback for 'to' filter — toRecipients/any() lambda
-        // returns 0 results on personal accounts even when emails exist
-        if (term === 'to') {
-          console.error(
-            'to filter returned 0 results, trying client-side filtering'
-          );
-          searchAttempts.push('client-side-to');
-          const messages = await fetchForClientSideFilter(
-            accessToken,
-            endpoint,
-            maxCount
-          );
-          const matched = filterToClientSide(messages, searchTerms[term]);
-          if (matched.length > 0) {
-            console.error(
-              `Client-side to filter matched ${matched.length} of ${messages.length} messages`
-            );
-            return { value: matched.slice(0, maxCount) };
-          }
-        }
-
-        // Client-side fallback for 'query' — search bodyPreview, subject, from
-        if (term === 'query') {
-          console.error(
-            'query contains(subject) returned 0 results, trying client-side body search'
-          );
-          searchAttempts.push('client-side-query');
-          const messages = await fetchForClientSideFilter(
-            accessToken,
-            endpoint,
-            maxCount
-          );
-          const matched = filterQueryClientSide(messages, searchTerms[term]);
-          if (matched.length > 0) {
-            console.error(
-              `Client-side query matched ${matched.length} of ${messages.length} messages`
-            );
-            return { value: matched.slice(0, maxCount) };
-          }
-        }
-      } catch (error) {
-        console.error(`Search with ${term} failed: ${error.message}`);
-
-        // Client-side fallback for 'to' when API throws (e.g. InefficientFilter)
-        if (term === 'to') {
-          try {
-            console.error(
-              'to filter threw error, trying client-side filtering'
-            );
-            searchAttempts.push('client-side-to');
-            const messages = await fetchForClientSideFilter(
-              accessToken,
-              endpoint,
-              maxCount
-            );
-            const matched = filterToClientSide(messages, searchTerms[term]);
-            if (matched.length > 0) {
-              console.error(
-                `Client-side to filter matched ${matched.length} of ${messages.length} messages`
-              );
-              return { value: matched.slice(0, maxCount) };
-            }
-          } catch (fallbackError) {
-            console.error(
-              `Client-side to fallback also failed: ${fallbackError.message}`
-            );
-          }
-        }
-
-        // Client-side fallback for 'query' when API throws
-        if (term === 'query') {
-          try {
-            console.error(
-              'query filter threw error, trying client-side body search'
-            );
-            searchAttempts.push('client-side-query');
-            const messages = await fetchForClientSideFilter(
-              accessToken,
-              endpoint,
-              maxCount
-            );
-            const matched = filterQueryClientSide(messages, searchTerms[term]);
-            if (matched.length > 0) {
-              console.error(
-                `Client-side query matched ${matched.length} of ${messages.length} messages`
-              );
-              return { value: matched.slice(0, maxCount) };
-            }
-          } catch (fallbackError) {
-            console.error(
-              `Client-side query fallback also failed: ${fallbackError.message}`
-            );
-          }
-        }
+    // 2b. Client-side fallback — runs EXACTLY ONCE per term whether the
+    // server-side attempt returned zero results OR threw. Only 'to' and
+    // 'query' have a local matcher. Keeping this outside the server-side
+    // try/catch prevents the double-scan/double-label a throw inside a
+    // success-path fallback would otherwise cause. (#169)
+    if (term === 'to' || term === 'query') {
+      console.error(
+        `${term} unsatisfied server-side, trying client-side filtering`
+      );
+      searchAttempts.push(`client-side-${term}`);
+      try {
+        const fallback = await runClientSideFallback(
+          accessToken,
+          endpoint,
+          maxCount,
+          searchAttempts,
+          searchTerms,
+          filterTerms,
+          term,
+          scanState
+        );
+        if (fallback) return fallback;
+      } catch (fallbackError) {
+        console.error(
+          `Client-side ${term} fallback also failed: ${fallbackError.message}`
+        );
       }
     }
   }
@@ -442,13 +642,32 @@ async function progressiveSearch(
       console.error(
         `Boolean filter search found ${response.value?.length || 0} results`
       );
-      response._searchInfo = {
-        attemptsCount: searchAttempts.length,
-        strategies: searchAttempts,
-        originalTerms: searchTerms,
-        filterTerms: filterTerms,
-      };
-      return response;
+      // This step applied only the boolean/date filters. Narrow by the
+      // caller's search terms rather than returning "every unread email" as
+      // though it were "every unread email from X". (#229)
+      const { matched, secondaryApplied } = applySecondarySearchTerms(
+        response.value || [],
+        searchTerms,
+        null
+      );
+      if (matched.length > 0 || secondaryApplied.length === 0) {
+        narrowResponse(response, matched);
+        response._searchInfo = {
+          attemptsCount: searchAttempts.length,
+          strategies: searchAttempts,
+          originalTerms: searchTerms,
+          filterTerms: filterTerms,
+          appliedTerms: secondaryApplied,
+          ...(secondaryApplied.length > 0 && {
+            clientSideTerms: secondaryApplied,
+          }),
+        };
+        return response;
+      }
+      recordNarrowingMiss(scanState, response.value.length);
+      console.error(
+        `Boolean filter search found ${response.value.length} results, but none satisfied ${secondaryApplied.join(', ')} — continuing`
+      );
     } catch (error) {
       console.error(`Boolean filter search failed: ${error.message}`);
       // Retry without $orderby if it was the issue
@@ -467,13 +686,33 @@ async function progressiveSearch(
             retryParams,
             maxCount
           );
-          response._searchInfo = {
-            attemptsCount: searchAttempts.length,
-            strategies: searchAttempts,
-            originalTerms: searchTerms,
-            filterTerms: filterTerms,
-          };
-          return response;
+          const { matched, secondaryApplied } = applySecondarySearchTerms(
+            response.value || [],
+            searchTerms,
+            null
+          );
+          // Same guard as the primary boolean path above: an empty set here
+          // means the search terms went unsatisfied, so fall through to the
+          // no-results rung rather than returning 0 with filterApplied true
+          // and no guidance.
+          if (matched.length > 0 || secondaryApplied.length === 0) {
+            narrowResponse(response, matched);
+            response._searchInfo = {
+              attemptsCount: searchAttempts.length,
+              strategies: searchAttempts,
+              originalTerms: searchTerms,
+              filterTerms: filterTerms,
+              appliedTerms: secondaryApplied,
+              ...(secondaryApplied.length > 0 && {
+                clientSideTerms: secondaryApplied,
+              }),
+            };
+            return response;
+          }
+          recordNarrowingMiss(scanState, response.value.length);
+          console.error(
+            `Boolean filter retry found ${response.value.length} results, but none satisfied ${secondaryApplied.join(', ')} — continuing`
+          );
         } catch (retryError) {
           console.error(
             `Boolean filter retry also failed: ${retryError.message}`
@@ -506,6 +745,18 @@ async function progressiveSearch(
         originalTerms: searchTerms,
         filterTerms: filterTerms,
         noResults: true,
+        // Disclose scan coverage if a client-side fallback ran but matched
+        // nothing — otherwise a bounded scan reads as a definitive "none". (#169)
+        ...(scanState.candidatesScanned !== undefined && {
+          candidatesScanned: scanState.candidatesScanned,
+          scanLimit: scanState.scanLimit,
+          truncated: scanState.truncated,
+        }),
+        // A local narrowing pass that matched nothing looked only at the page
+        // the winning filter returned, so say how much that was. (#229)
+        ...(scanState.narrowedCandidates !== undefined && {
+          narrowedCandidates: scanState.narrowedCandidates,
+        }),
       },
     };
   }
@@ -563,11 +814,13 @@ function buildFromFilter(val) {
   if (type === 'domain') {
     // Use contains() — endswith() not supported on personal accounts
     const domain = val.startsWith('@') ? val : `@${val}`;
-    return `contains(from/emailAddress/address, '${domain.substring(1)}')`;
+    return `contains(from/emailAddress/address, '${escapeODataString(
+      domain.substring(1)
+    )}')`;
   } else if (type === 'email') {
-    return `from/emailAddress/address eq '${val}'`;
+    return `from/emailAddress/address eq '${escapeODataString(val)}'`;
   }
-  return `contains(from/emailAddress/name, '${val}')`;
+  return `contains(from/emailAddress/name, '${escapeODataString(val)}')`;
 }
 
 /**
@@ -580,11 +833,17 @@ function buildToFilter(val) {
   if (type === 'domain') {
     const domain = val.startsWith('@') ? val : `@${val}`;
     // Use contains() — endswith() not supported on personal accounts
-    return `toRecipients/any(r: contains(r/emailAddress/address, '${domain.substring(1)}'))`;
+    return `toRecipients/any(r: contains(r/emailAddress/address, '${escapeODataString(
+      domain.substring(1)
+    )}'))`;
   } else if (type === 'email') {
-    return `toRecipients/any(r: r/emailAddress/address eq '${val}')`;
+    return `toRecipients/any(r: r/emailAddress/address eq '${escapeODataString(
+      val
+    )}')`;
   }
-  return `toRecipients/any(r: contains(r/emailAddress/name, '${val}'))`;
+  return `toRecipients/any(r: contains(r/emailAddress/name, '${escapeODataString(
+    val
+  )}'))`;
 }
 
 /**
@@ -638,18 +897,167 @@ function filterQueryClientSide(messages, queryText) {
   });
 }
 
+/** Relabel internal keys to the caller-facing param names. (#169) */
+const FILTER_LABELS = { kqlQuery: 'searchExpression' };
+
+/** Every filter key a caller can supply, including the terminal raw-KQL one. */
+const SEARCH_FILTER_KEYS = ['from', 'to', 'subject', 'query', 'kqlQuery'];
+
 /**
- * Fetch recent messages for client-side filtering fallback.
- * Uses the 'search' field preset which includes toRecipients and bodyPreview.
+ * The search terms a caller can supply, in ladder-priority order. `kqlQuery`
+ * is handled by the terminal raw-KQL branch and never mixes with these.
+ */
+const SEARCH_TERM_KEYS = ['from', 'to', 'subject', 'query'];
+
+/**
+ * Client-side matcher for a `from` value. Mirrors filterToClientSide, matching
+ * either the sender address or the display name. (#229)
+ * @param {Array} messages - Messages to filter
+ * @param {string} fromValue - The from filter value
+ * @returns {Array} - Matching messages
+ */
+function filterFromClientSide(messages, fromValue) {
+  // Mirror buildFromFilter branch for branch. A plain substring test over both
+  // address and name diverges from the server in both directions: it misses
+  // `@example.com` against `alerts@mail.example.com` (the server strips the
+  // leading @ and does contains), and it wrongly keeps `bbob@x.com` for
+  // `bob@x.com` (the server uses eq).
+  const type = classifyEmailFilter(fromValue);
+
+  if (type === 'domain') {
+    const domain = (
+      fromValue.startsWith('@') ? fromValue.slice(1) : fromValue
+    ).toLowerCase();
+    return messages.filter((m) =>
+      (m.from?.emailAddress?.address || '').toLowerCase().includes(domain)
+    );
+  }
+
+  if (type === 'email') {
+    const needle = fromValue.toLowerCase();
+    return messages.filter(
+      (m) => (m.from?.emailAddress?.address || '').toLowerCase() === needle
+    );
+  }
+
+  const needle = fromValue.toLowerCase();
+  return messages.filter((m) =>
+    (m.from?.emailAddress?.name || '').toLowerCase().includes(needle)
+  );
+}
+
+/**
+ * Client-side matcher for a `subject` value — the local equivalent of the
+ * server-side `contains(subject, '…')`. (#229)
+ * @param {Array} messages - Messages to filter
+ * @param {string} subjectValue - The subject filter value
+ * @returns {Array} - Matching messages
+ */
+function filterSubjectClientSide(messages, subjectValue) {
+  const needle = subjectValue.toLowerCase().trim();
+  if (!needle) return messages;
+  return messages.filter((m) =>
+    (m.subject || '').toLowerCase().includes(needle)
+  );
+}
+
+const CLIENT_SIDE_TERM_MATCHERS = {
+  from: filterFromClientSide,
+  to: filterToClientSide,
+  subject: filterSubjectClientSide,
+  query: filterQueryClientSide,
+};
+
+/**
+ * Narrow a result set by every supplied search term that the winning strategy
+ * did NOT apply server-side. (#229)
+ *
+ * Steps 2 and 3 of the ladder each satisfy at most one search term — step 2
+ * returns on the first single term that yields results, and step 3 applies
+ * only the boolean/date filters. Both used to return that set verbatim, so
+ * `from=X` + `subject=Y` handed back every email from X while
+ * `searchMetadata.filterApplied` still said `true`. For an AI caller asking
+ * "find the email from X about Y", a confident superset is strictly worse
+ * than returning nothing.
+ *
+ * Narrowing runs over the rows the winning strategy already fetched, so it can
+ * miss a match beyond that page; the ladder continues to the next strategy when
+ * it comes up empty, and `recordNarrowingMiss` records how much was examined so
+ * the no-results response can disclose it rather than implying the mailbox was
+ * exhausted.
+ *
+ * The local matchers mirror their server-side counterparts but are not
+ * identical to them — `filterQueryClientSide` searches the body preview, and a
+ * display-name match is a substring test either side — so a narrowed set is a
+ * close approximation of the combined filter, not a formal equivalent.
+ *
+ * @param {Array} messages - Messages returned by the winning strategy
+ * @param {object} searchTerms - All search terms the caller supplied
+ * @param {string|null} appliedTerm - The term already satisfied server-side
+ * @returns {{matched: Array, secondaryApplied: string[]}}
+ */
+/**
+ * Replace a response's rows with the narrowed subset, keeping the reported
+ * totals honest. `@odata.count` was set from the pre-narrowing page, so
+ * leaving it makes `_meta.totalAvailable` claim matches that do not exist and
+ * invites a caller to paginate for them. (#229)
+ *
+ * @param {object} response - The Graph response being narrowed in place
+ * @param {Array} matched - The rows that survived narrowing
+ */
+function narrowResponse(response, matched) {
+  const dropped = (response.value || []).length !== matched.length;
+  response.value = matched;
+  if (dropped) {
+    delete response['@odata.count'];
+    delete response['@odata.nextLink'];
+  }
+}
+
+/**
+ * Note that a narrowing pass examined rows and matched none of them, so the
+ * eventual no-results response can say how much was actually looked at rather
+ * than implying the mailbox was exhausted. (#229)
+ *
+ * @param {object} scanState - Side-channel carried to the no-results rung
+ * @param {number} examined - How many rows the narrowing pass saw
+ */
+function recordNarrowingMiss(scanState, examined) {
+  if (!scanState) return;
+  scanState.narrowedCandidates = Math.max(
+    scanState.narrowedCandidates || 0,
+    examined
+  );
+}
+
+function applySecondarySearchTerms(messages, searchTerms, appliedTerm) {
+  const secondary = SEARCH_TERM_KEYS.filter(
+    (t) => t !== appliedTerm && searchTerms[t]
+  );
+  let matched = messages;
+  for (const term of secondary) {
+    matched = CLIENT_SIDE_TERM_MATCHERS[term](matched, searchTerms[term]);
+  }
+  return { matched, secondaryApplied: secondary };
+}
+
+/**
+ * Fetch a window of recent messages for the client-side filtering fallback.
+ * Uses the 'search' field preset (includes toRecipients and bodyPreview).
+ *
+ * Scan depth is bounded by `scanLimit` and decoupled from the requested result
+ * count (see CLIENT_SCAN_LIMIT). Returns scan metadata so callers can surface
+ * whether coverage was truncated. (#169 V37-F-2)
+ *
  * @param {string} accessToken - Access token
  * @param {string} endpoint - API endpoint
- * @param {number} maxCount - Maximum results to fetch
- * @returns {Promise<Array>} - Array of message objects
+ * @param {number} scanLimit - Max messages to scan
+ * @returns {Promise<{messages: Array, candidatesScanned: number, truncated: boolean}>}
  */
-async function fetchForClientSideFilter(accessToken, endpoint, maxCount) {
+async function fetchRecentCandidates(accessToken, endpoint, scanLimit) {
   const searchFields = getEmailFields('search');
   const params = {
-    $top: Math.min(200, maxCount * 5),
+    $top: Math.min(50, scanLimit),
     $select: searchFields,
     $orderby: 'receivedDateTime desc',
   };
@@ -658,9 +1066,122 @@ async function fetchForClientSideFilter(accessToken, endpoint, maxCount) {
     'GET',
     endpoint,
     params,
-    Math.min(200, maxCount * 5)
+    scanLimit
   );
-  return response.value || [];
+  const messages = response.value || [];
+  return {
+    messages,
+    candidatesScanned: messages.length,
+    // Filled the scan budget → older unscanned messages may also match.
+    truncated: messages.length >= scanLimit,
+  };
+}
+
+/**
+ * Re-apply active boolean/date filters to a client-side result set so the
+ * local fallback honours the same constraints the server-side $filter path
+ * enforces (hasAttachments, unreadOnly, receivedAfter/Before). The 'search'
+ * field preset includes hasAttachments/isRead/receivedDateTime. (#169)
+ * @param {Array} messages - Messages already matched by the term filter
+ * @param {object} filterTerms - Active boolean/date filters
+ * @returns {Array} - Messages that also satisfy the boolean/date filters
+ */
+function applyBooleanDateFilters(messages, filterTerms) {
+  const after = filterTerms.receivedAfter
+    ? Date.parse(filterTerms.receivedAfter)
+    : null;
+  const before = filterTerms.receivedBefore
+    ? Date.parse(filterTerms.receivedBefore)
+    : null;
+  return messages.filter((m) => {
+    if (filterTerms.hasAttachments === true && m.hasAttachments !== true) {
+      return false;
+    }
+    if (filterTerms.unreadOnly === true && m.isRead !== false) {
+      return false;
+    }
+    if (after !== null && !Number.isNaN(after)) {
+      const rec = Date.parse(m.receivedDateTime);
+      if (Number.isNaN(rec) || rec < after) return false;
+    }
+    if (before !== null && !Number.isNaN(before)) {
+      const rec = Date.parse(m.receivedDateTime);
+      if (Number.isNaN(rec) || rec > before) return false;
+    }
+    return true;
+  });
+}
+
+/**
+ * Run a client-side fallback scan for a 'to' or 'query' term: fetch a bounded
+ * window of recent messages, filter locally, and (on a match) return a result
+ * carrying full `_searchInfo` including scan metadata. Returns null when nothing
+ * matches so the caller can continue its strategy ladder. (#169)
+ *
+ * @param {string} accessToken - Access token
+ * @param {string} endpoint - API endpoint
+ * @param {number} maxCount - Requested result count
+ * @param {string[]} searchAttempts - Accumulated strategy labels
+ * @param {object} searchTerms - Search terms
+ * @param {object} filterTerms - Filter terms
+ * @param {'to'|'query'} kind - Which term to filter on
+ * @returns {Promise<object|null>}
+ */
+async function runClientSideFallback(
+  accessToken,
+  endpoint,
+  maxCount,
+  searchAttempts,
+  searchTerms,
+  filterTerms,
+  kind,
+  scanState
+) {
+  const { messages, candidatesScanned, truncated } =
+    await fetchRecentCandidates(accessToken, endpoint, CLIENT_SCAN_LIMIT);
+  // Record scan coverage even when nothing matches, so the eventual
+  // no-results response can still disclose that the scan was bounded. (#169)
+  if (scanState) {
+    scanState.candidatesScanned = candidatesScanned;
+    scanState.scanLimit = CLIENT_SCAN_LIMIT;
+    scanState.truncated = truncated;
+  }
+  // Apply the term matcher, then RE-APPLY any active boolean/date filters —
+  // the server-side path enforces these via $filter, so the local fallback
+  // must too, otherwise e.g. `unreadOnly:true` would leak read mail while
+  // searchMetadata still claims filterApplied. (#169)
+  const termMatched =
+    kind === 'to'
+      ? filterToClientSide(messages, searchTerms.to)
+      : filterQueryClientSide(messages, searchTerms.query);
+  // The local matcher covers only `kind`; narrow by the caller's other search
+  // terms too, or this path returns the same superset step 2 used to. (#229)
+  const { matched: narrowed, secondaryApplied } = applySecondarySearchTerms(
+    termMatched,
+    searchTerms,
+    kind
+  );
+  const matched = applyBooleanDateFilters(narrowed, filterTerms);
+  if (matched.length === 0) {
+    return null;
+  }
+  console.error(
+    `Client-side ${kind} matched ${matched.length} of ${messages.length} scanned messages`
+  );
+  return {
+    value: matched.slice(0, maxCount),
+    _searchInfo: {
+      attemptsCount: searchAttempts.length,
+      strategies: searchAttempts,
+      originalTerms: searchTerms,
+      filterTerms,
+      appliedTerms: [kind, ...secondaryApplied],
+      ...(secondaryApplied.length > 0 && { clientSideTerms: secondaryApplied }),
+      candidatesScanned,
+      scanLimit: CLIENT_SCAN_LIMIT,
+      truncated,
+    },
+  };
 }
 
 /**
@@ -693,7 +1214,7 @@ function buildSearchParams(searchTerms, filterTerms, count, selectFields) {
   // Use $filter for subject — $search silently fails on personal MS accounts
   if (searchTerms.subject) {
     filterConditions.push(
-      `contains(subject, '${searchTerms.subject.replace(/'/g, "''")}')`
+      `contains(subject, '${escapeODataString(searchTerms.subject)}')`
     );
   }
 
@@ -789,10 +1310,109 @@ function addBooleanFilters(params, filterTerms) {
     }
   }
 
-  // Add $filter parameter if we have any filter conditions
+  // AND onto any $filter the caller already built — never replace it.
+  //
+  // The single-term rung sets `$filter` from the search term (e.g.
+  // `toRecipients/any(...)`) and then calls this to add the date/boolean
+  // window. Assigning here silently dropped that term, so a `to` + date-window
+  // search issued a DATE-ONLY request and returned the whole window labelled
+  // `single-term-to` with `appliedTerms: ['to']` — a superset presented as a
+  // filtered result. Affected `from`, `to`, `subject` and `query` alike.
+  //
+  // Every condition either side is a conjunct, so a flat ' and ' join is
+  // sound; there is no top-level `or` that would need parenthesising.
   if (filterConditions.length > 0) {
-    params.$filter = filterConditions.join(' and ');
+    const added = filterConditions.join(' and ');
+    params.$filter = params.$filter ? `${params.$filter} and ${added}` : added;
   }
+}
+
+/**
+ * Build no-results guidance from what the caller actually supplied and what the
+ * progressive-search ladder actually attempted, rather than printing the same
+ * four lines on every empty search. (#231)
+ *
+ * The previous fixed list included "use `from` filter instead of `to` (more
+ * reliable on personal accounts)", which has been untrue since v3.7.1 added the
+ * client-side `to` fallback (#139 / PR #141). The tool was teaching its callers
+ * something false about itself.
+ *
+ * @param {object} searchInfo - The _searchInfo block from progressiveSearch
+ * @param {boolean} searchAllFolders - Whether the search already spanned all folders
+ * @returns {string[]} - Ordered suggestion lines, without the leading bullet
+ */
+function buildNoResultsSuggestions(searchInfo, searchAllFolders) {
+  const filters = searchInfo.originalTerms || {};
+  const strategies = searchInfo.strategies || [];
+  const suggestions = [];
+
+  // Scope — only worth suggesting when it isn't already what we just did.
+  if (searchAllFolders) {
+    suggestions.push(
+      'All folders were already searched, so no message in this mailbox matches these filters'
+    );
+  } else {
+    suggestions.push(
+      'Try `searchAllFolders: true` to search across all folders including Archive'
+    );
+    suggestions.push(
+      'Specify the correct folder if emails have been moved (use the `folders` tool to list folders)'
+    );
+  }
+
+  // Report the fallback the ladder actually took, instead of guessing at one.
+  const clientSide = strategies.filter((s) => s.startsWith('client-side-'));
+  if (clientSide.length > 0) {
+    const fields = clientSide
+      .map((s) => `\`${s.slice('client-side-'.length)}\``)
+      .join(', ');
+    let note = `${fields} was matched locally after the server-side filter came back empty`;
+    if (searchInfo.candidatesScanned) {
+      note += ` — ${searchInfo.candidatesScanned} recent messages examined`;
+      if (searchInfo.truncated) {
+        note += `, hitting the ${searchInfo.scanLimit} scan limit, so older matches were not seen (narrow with \`receivedAfter\`)`;
+      }
+    }
+    suggestions.push(note);
+  }
+
+  // A narrowing pass that matched nothing saw only the page the winning
+  // server-side filter returned — a much weaker basis for "none exists" than
+  // the bounded client-side scan, so say so rather than implying otherwise.
+  if (searchInfo.narrowedCandidates) {
+    suggestions.push(
+      `The other filters were applied locally to the ${searchInfo.narrowedCandidates} message${searchInfo.narrowedCandidates === 1 ? '' : 's'} the server-side filter returned, so a match beyond that page would not have been seen — raise \`count\`, or narrow with \`receivedAfter\``
+    );
+  }
+
+  if (filters.kqlQuery) {
+    suggestions.push(
+      'Structured filters (`from`, `to`, `subject`) reach messages that `searchExpression` cannot on personal accounts'
+    );
+  }
+
+  if (filters.query) {
+    suggestions.push(
+      'Free-text `query` falls back to a subject match on personal accounts — try `subject` directly, or fewer words'
+    );
+  }
+
+  if (filters.subject) {
+    suggestions.push(
+      '`subject` is a substring match — try a shorter, more distinctive fragment'
+    );
+  }
+
+  const applied = ['from', 'to', 'subject', 'query', 'kqlQuery'].filter(
+    (k) => filters[k]
+  );
+  if (applied.length > 1) {
+    suggestions.push(
+      `All ${applied.length} filters must match the same message — try removing one`
+    );
+  }
+
+  return suggestions;
 }
 
 /**
@@ -800,9 +1420,10 @@ function addBooleanFilters(params, filterTerms) {
  * @param {object} response - The API response object
  * @param {string} folder - Folder that was searched
  * @param {string} verbosity - Output verbosity level
+ * @param {boolean} [searchAllFolders] - Whether the search spanned all folders
  * @returns {object} - MCP response object
  */
-function formatSearchResults(response, folder, verbosity) {
+function formatSearchResults(response, folder, verbosity, searchAllFolders) {
   // Build metadata
   const meta = {
     returned: (response.value || []).length,
@@ -817,11 +1438,42 @@ function formatSearchResults(response, folder, verbosity) {
       response._searchInfo.strategies[
         response._searchInfo.strategies.length - 1
       ];
+    // Which supplied filters actually reached the result set, and which the
+    // winning strategy could not honour. `droppedFilters` is normally empty;
+    // a non-empty value means the response is a superset of what was asked
+    // for, and `filterApplied` must not claim otherwise. (#229)
+    const suppliedTerms = SEARCH_FILTER_KEYS.filter(
+      (k) => response._searchInfo.originalTerms?.[k]
+    );
+    const appliedTerms = response._searchInfo.appliedTerms ?? suppliedTerms;
+    const droppedFilters = suppliedTerms
+      .filter((k) => !appliedTerms.includes(k))
+      .map((k) => FILTER_LABELS[k] || k);
+
     meta.searchMetadata = {
       strategiesAttempted: response._searchInfo.strategies,
       finalStrategy: finalStrategy,
-      filterApplied: !response._searchInfo.noResults,
+      filterApplied:
+        !response._searchInfo.noResults && droppedFilters.length === 0,
+      droppedFilters,
+      ...(response._searchInfo.clientSideTerms && {
+        clientSideFilters: response._searchInfo.clientSideTerms,
+      }),
       originalFilters: response._searchInfo.originalTerms,
+      // A field-scoped `searchExpression` that personal accounts reject is
+      // retried as OData filters, which is a rewrite of what the caller asked
+      // for. Report the rewrite, so `raw-kql-translated` is inspectable rather
+      // than something the caller has to take on trust. (#217)
+      ...(response._searchInfo.kqlTranslatedTo && {
+        kqlTranslatedTo: response._searchInfo.kqlTranslatedTo,
+      }),
+      // Surface client-side scan coverage so callers can tell when a fallback
+      // result may be incomplete (older matches beyond the scan budget). (#169)
+      ...(response._searchInfo.candidatesScanned !== undefined && {
+        candidatesScanned: response._searchInfo.candidatesScanned,
+        scanLimit: response._searchInfo.scanLimit,
+        truncated: response._searchInfo.truncated,
+      }),
     };
   }
 
@@ -832,19 +1484,19 @@ function formatSearchResults(response, folder, verbosity) {
       const filters = response._searchInfo.originalTerms || {};
       const activeFilters = Object.entries(filters)
         .filter(([, v]) => v)
-        .map(([k]) => k);
+        .map(([k]) => FILTER_LABELS[k] || k);
       const filterDesc =
         activeFilters.length > 0
           ? ` (filters: ${activeFilters.join(', ')})`
           : '';
 
-      const text =
-        `No emails found matching your filters in "${folder}"${filterDesc}.\n\n` +
-        '**Suggestions:**\n' +
-        '- Try `searchAllFolders: true` to search across all folders including Archive\n' +
-        '- Specify the correct folder if emails have been moved (use `folders` tool to list folders)\n' +
-        '- Use `from` filter instead of `to` (more reliable on personal accounts)\n' +
-        '- Use `kqlQuery` with `searchAllFolders: true` for cross-folder search';
+      const suggestions = buildNoResultsSuggestions(
+        response._searchInfo,
+        searchAllFolders
+      );
+
+      const bullets = suggestions.map((line) => `- ${line}`).join('\n');
+      const text = `No emails found matching your filters in "${folder}"${filterDesc}.\n\n**Suggestions:**\n${bullets}`;
 
       return {
         content: [{ type: 'text', text }],
@@ -874,6 +1526,17 @@ function formatSearchResults(response, folder, verbosity) {
       searchNote = `\n\n_Search strategy: ${strategy} (filtered locally due to personal account API limitations)_`;
     } else {
       searchNote = `\n\n_Search strategy: ${strategy}_`;
+    }
+
+    // A local scan that filled its budget did not see the whole mailbox, so
+    // these results are a bounded sample rather than the complete set. #231
+    // says so only when the search returns nothing; a truncated scan that
+    // DID match is exactly as incomplete and reads as authoritative. On a
+    // large archive that silently caps historical searches.
+    if (response._searchInfo.truncated) {
+      const scanned = response._searchInfo.candidatesScanned;
+      const limit = response._searchInfo.scanLimit;
+      searchNote += `\n\n> **Partial coverage**: matched locally within the ${scanned} most recent messages, hitting the ${limit} scan limit — older matches were not seen. Narrow with \`receivedAfter\`/\`receivedBefore\` to search further back.`;
     }
   }
 
@@ -928,7 +1591,7 @@ async function handleSearchByMessageId(args) {
 
     // Build filter - need to escape the Message-ID properly
     // Graph API expects: internetMessageId eq '<value>'
-    const escapedMessageId = messageId.replace(/'/g, "''");
+    const escapedMessageId = escapeODataString(messageId);
 
     const params = {
       $filter: `internetMessageId eq '${escapedMessageId}'`,
@@ -1011,4 +1674,6 @@ module.exports = {
   classifyEmailFilter,
   filterToClientSide,
   filterQueryClientSide,
+  filterFromClientSide,
+  filterSubjectClientSide,
 };

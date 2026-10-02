@@ -3,26 +3,21 @@
  */
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
-const { getFolderIdByName } = require('../email/folder-utils');
-
-/**
- * Protected folder names that cannot be deleted
- */
-const PROTECTED_FOLDERS = [
-  'inbox',
-  'drafts',
-  'sentitems',
-  'deleteditems',
-  'junkemail',
-  'archive',
-  'outbox',
-];
+const { resolveFolder, WELL_KNOWN } = require('./resolve');
 
 /**
  * Delete folder handler
+ *
+ * System folders are guarded by NAME/alias below — `WELL_KNOWN` covers the
+ * Graph names, display-name variants ("Sent Items", "Deleted Items") and short
+ * aliases ("sent"/"junk"/"spam"). A raw `folderId` that happens to point at a
+ * system folder is backstopped by Graph, which rejects deleting distinguished
+ * folders (mailFolder exposes no selectable `wellKnownName`, so we can't cheaply
+ * re-check protection on a resolved-by-ID folder).
+ *
  * @param {object} args - Tool arguments
  * @param {string} [args.folderId] - Folder ID to delete
- * @param {string} [args.folderName] - Folder name to delete (resolved to ID)
+ * @param {string} [args.folderName] - Folder name/path to delete (resolved to ID)
  * @returns {object} - MCP response
  */
 async function handleDeleteFolder(args) {
@@ -39,8 +34,8 @@ async function handleDeleteFolder(args) {
     };
   }
 
-  // Guard against deleting protected folders
-  if (folderName && PROTECTED_FOLDERS.includes(folderName.toLowerCase())) {
+  // Name/alias guard for the common accidental case.
+  if (folderName && WELL_KNOWN[folderName.toLowerCase().trim()]) {
     return {
       content: [
         {
@@ -54,32 +49,27 @@ async function handleDeleteFolder(args) {
   try {
     const accessToken = await ensureAuthenticated();
 
-    let resolvedId = folderId;
-
-    // Resolve folder name to ID if needed
-    if (!resolvedId && folderName) {
-      resolvedId = await getFolderIdByName(accessToken, folderName);
-      if (!resolvedId) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Folder "${folderName}" not found. Use folders (action=list) to see available folders.`,
-            },
-          ],
-        };
-      }
+    // Resolve (by name/path OR explicit ID) so nested folders are addressable
+    // and the confirmation can report the full path. (#216)
+    let resolved;
+    try {
+      resolved = await resolveFolder(accessToken, {
+        id: folderId,
+        name: folderName,
+      });
+    } catch (resolveError) {
+      return {
+        content: [{ type: 'text', text: resolveError.message }],
+      };
     }
 
     // Delete the folder
-    await callGraphAPI(accessToken, 'DELETE', `me/mailFolders/${resolvedId}`);
-
-    const displayName = folderName || resolvedId;
+    await callGraphAPI(accessToken, 'DELETE', `me/mailFolders/${resolved.id}`);
     return {
       content: [
         {
           type: 'text',
-          text: `Folder "${displayName}" deleted successfully.`,
+          text: `Folder "${resolved.path}" deleted successfully.`,
         },
       ],
     };

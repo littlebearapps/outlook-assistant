@@ -11,6 +11,10 @@ const https = require('https');
 const querystring = require('querystring');
 const config = require('../config');
 
+// Fail fast if the OAuth endpoint is unreachable (e.g. blocked outbound
+// egress in a sandboxed connector) instead of hanging indefinitely. (#213)
+const REQUEST_TIMEOUT_MS = 15000;
+
 /**
  * POST helper for OAuth2 endpoints
  * @param {string} url - Full URL to POST to
@@ -41,6 +45,13 @@ function postRequest(url, postData) {
       }
     );
     req.on('error', reject);
+    req.setTimeout(REQUEST_TIMEOUT_MS, () => {
+      req.destroy(
+        new Error(
+          'Device code request timed out — network egress to login.microsoftonline.com may be blocked.'
+        )
+      );
+    });
     req.write(postData);
     req.end();
   });

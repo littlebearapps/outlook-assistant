@@ -611,7 +611,9 @@ const advancedTools = [
     annotations: {
       title: 'Shared Mailbox',
       readOnlyHint: true,
-      openWorldHint: false,
+      // openWorldHint: returns shared-mailbox messages authored by external
+      // senders. (#92)
+      openWorldHint: true,
     },
     inputSchema: {
       type: 'object',

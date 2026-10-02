@@ -39,7 +39,7 @@ Outlook Assistant connects AI assistants to your Microsoft Outlook account throu
 - 📅 **Manage your calendar** — view upcoming events, schedule meetings with attendees, decline or cancel invitations
 - 📦 **Export emails** — save individual messages to Markdown, EML, JSON, or CSV; export full conversation threads to MBOX or HTML; bulk-export search results in one call
 - 🔍 **Investigate email headers** — full raw header access (DKIM, SPF, DMARC, delivery chain, X-Mailer, X-Originating-IP) for phishing investigation and compliance review
-- 🗂️ **Organise your inbox** — create folders, set up inbox rules, colour-code with categories, manage Focused Inbox — all work together for complete inbox automation
+- 🗂️ **Organise your inbox** — create nested folders (addressable by path), set up inbox rules, colour-code with categories, manage Focused Inbox — all work together for complete inbox automation
 - 🔄 **Track inbox changes** — delta sync detects new, modified, and deleted emails since your last check, with tokens for incremental polling
 - 👥 **Manage contacts** — search your contact book and organisational directory, create and update contact records
 - ⚙️ **Configure settings** — set out-of-office auto-replies, working hours, and time zone
@@ -67,7 +67,7 @@ Outlook Assistant connects AI assistants to your Microsoft Outlook account throu
 | **Contacts** | 2 | `manage-contact` (list/search/get/create/update/delete), `search-people` |
 | **Categories** | 3 | `manage-category` (CRUD), `apply-category`, `manage-focused-inbox` |
 | **Settings** | 1 | `mailbox-settings` (get/set auto-replies/set working hours) |
-| **Folder** | 1 | `folders` (list/create/move/stats/delete) |
+| **Folder** | 1 | `folders` (list/create/move/stats/delete) — nested folders addressable by path (`Parent/Child`) or ID |
 | **Rules** | 1 | `manage-rules` (list/create/update/reorder/delete) |
 | **Advanced** | 2 | `access-shared-mailbox`, `find-meeting-rooms` |
 | **Auth** | 1 | `auth` (status/authenticate/about) |
@@ -100,7 +100,7 @@ Outlook Assistant works with both personal and work/school Microsoft accounts, b
 | Contacts CRUD | Full support | Full support |
 | Inbox rules | Full support | Full support |
 | Folders | Full support | Full support |
-| Free-text `query` search | Limited — use `subject`, `from`, `to` filters instead | Full KQL support |
+| Free-text `query` search | Limited — progressive fallback; `subject`, `from`, `to` filters are more direct | Full `$search` support |
 | Categories | Full support | Full support |
 | Mailbox settings | Full support | Full support |
 | Focused Inbox | API works (overrides stored) but mail routing not affected | Full support |
@@ -111,8 +111,8 @@ Outlook Assistant works with both personal and work/school Microsoft accounts, b
 
 ### What Makes This Different
 
-- **Progressive search** — on accounts where Microsoft's `$search` API is limited, Outlook Assistant automatically falls back through up to 4 search strategies to find your emails. Most Graph API wrappers fail silently; this one adapts.
-- **Email forensics** — raw header access for DKIM, SPF, DMARC, delivery chain, X-Mailer, X-Originating-IP, and spam scores. Returns the full data so you can investigate phishing, audit compliance, or trace delivery issues. (Auto-verdict is on the v3.8.0 roadmap; today the data is surfaced and analysed in-conversation.)
+- **Progressive search** — on accounts where Microsoft's `$search` API is limited, Outlook Assistant automatically falls back through up to 4 search strategies to find your emails, and reports which one answered in `_meta.searchMetadata` along with any filter it could not honour (`droppedFilters`). Most Graph API wrappers fail silently; this one adapts and tells you.
+- **Email forensics** — raw header access for DKIM, SPF, DMARC, delivery chain, X-Mailer, X-Originating-IP, and spam scores. Returns the full data so you can investigate phishing, audit compliance, or trace delivery issues. (Auto-verdict is on the roadmap; today the data is surfaced and analysed in-conversation.)
 - **Delta sync** — incremental inbox monitoring returns only what changed since your last check, with tokens for continuous polling. Designed for agent workflows that need to watch a mailbox.
 - **Batch operations** — flag, move, export, or categorise multiple emails in a single call. Search-driven export lets you batch-export results without collecting IDs manually.
 - **Pre-send intelligence** — check recipients for out-of-office, full mailbox, delivery restrictions, and moderation status before sending — no other Outlook MCP server offers this.
@@ -160,6 +160,17 @@ Or run directly without installing:
 ```bash
 npx @littlebearapps/outlook-assistant
 ```
+
+To check which version you have, or to see the available options:
+
+```bash
+outlook-assistant --version     # prints e.g. 3.11.2
+outlook-assistant --help        # usage, options and key environment variables
+```
+
+With no arguments the server speaks the Model Context Protocol over stdio. It's
+normally launched by your MCP client rather than run by hand — started from a
+terminal it will simply wait on stdin.
 
 ### 2. Register an Azure App
 
@@ -278,6 +289,17 @@ cd outlook-assistant
 npm install
 ```
 
+### CLI options
+
+| Option | What it does |
+|--------|-------------|
+| `-v`, `--version` | Print the version to stdout and exit 0 |
+| `-h`, `--help` | Print usage, options and key environment variables, and exit 0 |
+| _(none)_ | Start the MCP server on stdio — the normal mode, invoked by your MCP client |
+
+An unrecognised argument is reported on stderr and exits 1, rather than starting
+a server that would ignore it.
+
 ## Azure App Registration
 
 > **First time with Azure?** The [Azure Setup Guide](docs/guides/azure-setup.md) covers everything from creating an account to your first authentication, including billing setup and common pitfalls.
@@ -344,6 +366,7 @@ USE_TEST_MODE=false
 | `OUTLOOK_DEFAULT_TIMEZONE` | IANA timezone applied to calendar events when callers don't pass one (e.g. `Europe/London`, `America/New_York`). | `Australia/Melbourne` |
 | `OUTLOOK_MAX_EMAILS_PER_SESSION` | Cap on `send-email` + `draft send` per MCP server lifetime. | unlimited |
 | `OUTLOOK_ALLOWED_RECIPIENTS` | Comma-separated allowlist of domains/addresses for sends, drafts, and rule forwards. | unrestricted |
+| `OUTLOOK_SEARCH_SCAN_LIMIT` | How many recent messages the client-side search fallback scans. Personal accounts match `to` locally within this window, so the default caps how far back a `to` search reaches. Max 5000. | `500` |
 
 ### MCP Client Configuration
 
@@ -446,7 +469,11 @@ npm run auth-server
 
 ### "Invalid client secret" (AADSTS7000215)
 
-You're using the Secret **ID** instead of the Secret **Value**. Go to Azure Portal > Certificates & secrets and copy the **Value** column.
+You're using the Secret **ID** instead of the Secret **Value**. Go to Azure Portal > Certificates & secrets and copy the **Value** column into `OUTLOOK_CLIENT_SECRET`.
+
+The Value is shown only once, when the secret is created — if you've navigated away it can't be read again, so create a new secret. An **expired** secret produces this same error, so check the Expires column too.
+
+Since v3.11.0 the server detects this error and appends the explanation to Microsoft's original message, so you see both the raw error code and what to do about it.
 
 ### Authentication URL doesn't work
 
@@ -497,7 +524,7 @@ USE_TEST_MODE=true npm start
 | [Getting Started](docs/how-to/getting-started/connect-outlook-to-claude.md) | Install, configure, and authenticate — start here |
 | [Azure Setup Guide](docs/guides/azure-setup.md) | Azure account creation, app registration, permissions, and secrets |
 | [How-To Guides](docs/how-to/index.md) | 29 practical guides for email, calendar, contacts, and settings |
-| [Roadmap](ROADMAP.md) | Active milestones (v3.7.5, v3.8.0, v3.9.0) and recent releases |
+| [Roadmap](ROADMAP.md) | Active milestones (v3.11.2, v3.8.x, v3.12.0+) and recent releases |
 | [Troubleshooting & FAQ](docs/how-to/getting-started/verify-your-connection.md#common-connection-problems) | Common problems, re-authentication, and frequently asked questions |
 | [Tools Reference](docs/quickrefs/tools-reference.md) | All 22 tools with parameters |
 | [AI Agent Guide](docs/how-to/ai-agents/using-outlook-assistant-in-agents.md) | Tool selection and workflow patterns for AI agents |
@@ -506,7 +533,8 @@ Full documentation: [docs/](docs/README.md)
 
 ## Known Limitations
 
-- **Personal account search**: Free-text `query` and `kqlQuery` rely on Microsoft's `$search` API, which has limited support on personal Outlook.com accounts. Outlook Assistant mitigates this with progressive search fallback (trying OData filters automatically), but for the most direct results, use structured filters (`from`, `subject`, `to`, `receivedAfter`).
+- **Personal account search**: Free-text `query` and the raw `searchExpression` (formerly `kqlQuery`) rely on Microsoft's `$search` API, which has limited support on personal Outlook.com accounts. `query` mitigates this with progressive fallback (OData filters, boolean filters, then a client-side scan). Field-scoped `$search` (e.g. `subject:"…"`) is rejected outright there; since v3.10.0 `from:`/`to:`/`subject:` expressions are translated into the closest equivalent OData filters and retried, but boolean operators, grouping, wildcards and other field prefixes are not — those still terminate with an explicit no-results rather than a silent broader search. Structured filters (`from`, `subject`, `to`, `receivedAfter`) remain the most direct route. Cross-folder search (`searchAllFolders: true`) returns a superset of inbox-only results. Note that `query` and `searchExpression` are not interchangeable there: `searchExpression` goes to `$search`, which matches the whole message including the body and ranks by relevance rather than date, while `query` falls back to a subject substring match that never reads bodies.
+- **`to` search depth on personal accounts**: the server-side recipient filter is rejected, so `to` is matched locally over the 500 most recent messages (`OUTLOOK_SEARCH_SCAN_LIMIT`, max 5000). On a large archive that excludes older mail — pair `to` with `receivedAfter`/`receivedBefore`. Since v3.11.1 the response says so whenever the scan was truncated, whether or not it matched.
 - **Focused Inbox**: Only available on work/school Microsoft 365 accounts.
 - **Shared mailboxes**: Require `Mail.Read.Shared` permission and a work/school account.
 - **Meeting room search**: Requires `Place.Read.All` permission with admin consent (work/school accounts only).

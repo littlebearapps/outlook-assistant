@@ -60,7 +60,7 @@ params:
   query: "budget approval"
 ```
 
-The `query` parameter searches across subject, body, and other fields.
+The `query` parameter searches across subject, body, and other fields **on work/school Microsoft 365 accounts**. On personal Outlook.com accounts Graph `$search` is unavailable, so `query` falls back to a subject substring match (every word must appear in the subject) — precise, but it does not read message bodies. Use `searchExpression` when you need body content there.
 
 > **Personal accounts**: Free-text `query` search uses Microsoft's `$search` API, which has limited support on personal Outlook.com accounts. Outlook Assistant handles this automatically — if `$search` returns no results, it progressively falls back to OData filters (`from`, `subject`, `to`), then boolean filters, then recent message listing. For the most direct results on personal accounts, use the structured filter parameters below. See [Account Compatibility](../../../README.md#account-compatibility) for details.
 
@@ -113,7 +113,7 @@ params:
 
 Common folder names: `inbox`, `sentitems`, `drafts`, `deleteditems`, `archive`, `junkemail`.
 
-You can also search custom folders by display name:
+You can also search custom folders by display name, including nested folders addressed with a `/` path (v3.9.0) — each segment is resolved from its parent:
 
 ```
 tool: search-emails
@@ -144,7 +144,9 @@ params:
   hasAttachments: true
 ```
 
-> **Personal accounts**: Free-text `query` searches use Microsoft's `$search` API, which has limited support on personal Outlook.com accounts. Use structured filters (`to`, `subject`, `receivedAfter`, `hasAttachments`) for the most reliable results in any folder. These use `$filter` which works consistently across both personal and work accounts.
+> **Personal accounts**: Free-text `query` searches use Microsoft's `$search` API, which has limited support on personal Outlook.com accounts. Use structured filters (`subject`, `receivedAfter`, `hasAttachments`) for the most reliable results in any folder. These use `$filter` which works consistently across both personal and work accounts.
+>
+> `to` is the exception: personal accounts reject the server-side recipient filter, so it is matched **locally over the 500 most recent messages** (`OUTLOOK_SEARCH_SCAN_LIMIT`, max 5000). On a large mailbox that excludes older mail, so pair `to` with `receivedAfter`/`receivedBefore` to reach further back. Since v3.11.1 the response says so whenever that scan was truncated, whether or not it matched.
 
 ## Search Across All Folders
 
@@ -156,6 +158,10 @@ params:
   query: "contract document"
   searchAllFolders: true
 ```
+
+Cross-folder search is a strict **superset** of an inbox-only search — it never returns fewer results than searching the inbox alone (v3.9.0). Multi-word queries also match when the words aren't adjacent in the subject, and if nothing turns up the result explicitly reports that it searched **all folders**.
+
+> **Personal accounts**: `searchAllFolders` uses the same `$search` API, so pair it with a plain-text `query` (which falls back to filters) or the structured filters for the most reliable coverage. Field-scoped `searchExpression` works too as of v3.10.0 — `from:`/`to:`/`subject:` expressions are translated to the equivalent filters and retried — but expressions using `AND`/`OR`, grouping or other field prefixes are not translated there.
 
 ## Combine Filters
 
@@ -171,6 +177,8 @@ params:
   hasAttachments: true
   receivedAfter: "2026-02-24"
 ```
+
+Every filter you supply is honoured. If Microsoft Graph rejects a combined filter, Outlook Assistant applies the remaining terms locally rather than returning the broader single-filter result set, and reports anything it could not honour in `_meta.searchMetadata.droppedFilters` (v3.10.0). That field should always be empty — if it isn't, the results are wider than what you asked for.
 
 ## Control the Number of Results
 
@@ -214,7 +222,7 @@ Delta sync is useful for inbox monitoring workflows, audit trails, and notificat
 
 | Parameter | What it does | Example |
 |-----------|-------------|---------|
-| `query` | Free-text search across all fields | `"budget approval"` |
+| `query` | Free-text search across all fields (subject-only on personal accounts — see above) | `"budget approval"` |
 | `from` | Filter by sender email or name | `"sarah@company.com"` |
 | `to` | Filter by recipient | `"team@company.com"` |
 | `subject` | Filter by subject line | `"quarterly report"` |
@@ -225,7 +233,7 @@ Delta sync is useful for inbox monitoring workflows, audit trails, and notificat
 | `receivedBefore` | Received before this date | `"2026-02-01"` |
 | `searchAllFolders` | Search every folder | `true` |
 | `count` | Number of results to return | `10` |
-| `kqlQuery` | Raw KQL for advanced queries | `"from:ceo AND hasAttachment:true"` |
+| `searchExpression` | Raw Graph `$search` expression for advanced queries (formerly `kqlQuery`) — see the [KQL Search Reference](../advanced/kql-search-reference.md) for personal-account support | `"subject:\"quarterly report\""` |
 | `outputVerbosity` | Detail level: minimal, standard, full | `"minimal"` |
 
 ## Tips

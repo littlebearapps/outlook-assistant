@@ -149,17 +149,14 @@ describe('callGraphAPI', () => {
       );
     });
 
-    it('should use full URL directly when path starts with http://', async () => {
+    it('should refuse a full URL that is not the Graph host over https (GHSA-mqfm)', async () => {
       const httpLink = 'http://localhost/test';
       mockHttpsRequest(200, {});
 
-      await callGraphAPI('token', 'GET', httpLink);
-
-      expect(https.request).toHaveBeenCalledWith(
-        httpLink,
-        expect.any(Object),
-        expect.any(Function)
+      await expect(callGraphAPI('token', 'GET', httpLink)).rejects.toThrow(
+        /Refusing to call non-Graph URL/
       );
+      expect(https.request).not.toHaveBeenCalled();
     });
   });
 

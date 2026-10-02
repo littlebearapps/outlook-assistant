@@ -1,6 +1,6 @@
 {
   "name": "@littlebearapps/outlook-assistant",
-  "version": "3.9.1",
+  "version": "3.11.2",
   "mcpName": "io.github.littlebearapps/outlook-assistant",
   "description": "Outlook Assistant — MCP server with 22 tools for email, calendar, contacts, and settings via Microsoft Graph API",
   "main": "index.js",
@@ -84,12 +84,12 @@
     "@commitlint/cli": "^20.4.3",
     "@commitlint/config-conventional": "^20.4.3",
     "@eslint/js": "^10.0.1",
-    "@modelcontextprotocol/inspector": "^0.21.1",
+    "@modelcontextprotocol/inspector": "^2.8.0",
     "eslint": "^10.0.2",
     "globals": "^17.4.0",
     "husky": "^9.1.7",
     "jest": "^30.2.0",
-    "lint-staged": "^16.3.2",
+    "lint-staged": "^17.6.0",
     "prettier": "^3.8.1",
     "supertest": "^7.2.2"
   },
@@ -98,8 +98,11 @@
   },
   "overrides": {
     "minimatch": ">=3.1.3",
-    "hono": "^4.12.31",
-    "fast-uri": "^3.1.4",
+    "hono": "^4.13.7",
+    "@hono/node-server": "^1.19.17",
+    "fast-uri": "^3.1.8",
+    "ip-address": "^10.7.2",
+    "qs": "^6.16.0",
     "body-parser": "^2.3.0"
   }
 }

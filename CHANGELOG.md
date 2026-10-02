@@ -75,6 +75,325 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unrecognized folder name was forwarded to Graph as a folder ID. Custom and
   nested folders in a shared mailbox now resolve through the shared resolver.
 
+## [3.11.2] - 2026-09-30
+
+Security release. Upgrading is recommended for everyone on 3.11.1 or earlier.
+
+### Security
+
+- **Attachment downloads can no longer write outside `outputDir`**
+  ([GHSA-755c-c45g-69rv](https://github.com/littlebearapps/outlook-assistant/security/advisories/GHSA-755c-c45g-69rv)).
+  The saved filename came straight from the email sender, so a name such as
+  `../../.bashrc` escaped the download folder. Names are now reduced to a safe
+  basename, and an existing file or planted symlink is never overwritten or
+  followed; a collision gets a numbered suffix (`invoice-1.pdf`).
+- **The access token is only ever sent to Microsoft Graph**
+  ([GHSA-mqfm-wfjq-jxq2](https://github.com/littlebearapps/outlook-assistant/security/advisories/GHSA-mqfm-wfjq-jxq2)).
+  A caller-supplied `deltaToken` (or any continuation link) pointing at another
+  host received the `Authorization` header. Full URLs must now be `https` on
+  `graph.microsoft.com`; anything else is refused before a request is built.
+- **Dependencies:** `fast-uri` ≥ 3.1.8 and `ip-address` ≥ 10.7.2 (runtime,
+  moderate advisories); `npm audit` reports 0 vulnerabilities (#252).
+
+### Fixed
+
+- **HTML-to-text conversion decodes entities once and runs in linear time.**
+  `&amp;lt;` now reads `&lt;` rather than `<`, nested fragments such as
+  `<scr<script>ipt>` leave no markup behind, and the conversation Markdown
+  export uses the same helper (#252; CodeQL alerts #8–#10).
+
+### Changed
+
+- CodeQL now also scans the GitHub Actions workflows (#252).
+
+## [3.11.1] - 2026-09
+
+Correctness release for two critical defects found during heavy real-world use
+against a personal Outlook.com mailbox of ~56,000 archived messages, plus the
+documentation half of a third. Both critical defects returned HTTP 200 with
+well-formed output and a success summary — neither was visible without
+independently reconciling the results against what was asked for. No API
+change; every fix is behavioural.
+
+### Fixed
+
+- **`search-emails` no longer returns a superset when a search term is combined
+  with a date or boolean filter.** `addBooleanFilters` assigned `params.$filter`
+  rather than composing with the filter already built, so the single-term rung
+  constructed its term predicate (`toRecipients/any(...)`,
+  `contains(subject, ...)`) and then had it silently overwritten by the date
+  window. The request went out carrying only the date/boolean predicate and the
+  entire window came back labelled `single-term-to` with `filterApplied: true`
+  and `droppedFilters: []`. Verified live: a `to` search for an address that
+  appears nowhere in the mailbox, bounded by a one-month window, returned four
+  unrelated newsletters; it now returns no results with accurate guidance.
+  `from`, `subject` and `query` were affected by the same line.
+- **`search-emails` no longer drops every row of a single-term `to` or `query`
+  narrowing pass.** The lean `list` field preset omits `toRecipients` and
+  `bodyPreview`, which are exactly the fields the local matchers read. The
+  preset widened only when more than one search term was supplied, but the
+  date/boolean rung narrows locally for a single term too — so once filter
+  composition was fixed, a legitimate `to` + date-window search would have
+  returned nothing. `outputVerbosity` is a presentation parameter and must not
+  decide which messages are found.
+- **`export target=messages` no longer loses messages to filename collisions.**
+  Per-message files were named `<date>_<subject>`, so every message in a
+  same-day reply chain resolved to one path and all but the last were
+  overwritten, while the summary still reported `Failed 0`. Filenames now carry
+  the message time; a name already taken — on disk or by another message in the
+  same batch — gets a `_2`/`_3` suffix instead of clobbering; and `_meta.manifest`
+  maps each requested ID to the path actually written so callers can reconcile
+  without listing the directory. Attachment naming had the same defect, since
+  `emailId.substring(0, 8)` is a prefix shared across a mailbox rather than a
+  disambiguator. Single-message export gets the same treatment when the
+  destination is a directory; an explicit `savePath` file still wins. Extends
+  #82, which covered only the aggregated CSV.
+- **A truncated local scan is now disclosed even when it matched.** #231 added
+  scan-coverage guidance to empty results only. A `to` scan that fills its
+  500-message budget and returns three hits is exactly as incomplete but reads
+  as authoritative — on a large archive that silently caps every historical
+  search.
+
+### Notes
+
+- **`searchExpression` returning different — and sometimes stranger — results
+  than `query` is expected behaviour, now documented.** The two issue
+  structurally different Graph requests rather than the same request ranked
+  differently: an untranslated `searchExpression` is answered by `$search` over
+  the whole message including the body, ranked by relevance with no date sort,
+  while `query` on a personal account falls back to a subject substring match
+  that never reads bodies. Confirmed live — a `searchExpression` search for
+  `Telstra` surfaced a genuine Telstra billing email that the `query` search
+  missed entirely, because the term is not in that message's subject. The
+  `search-emails` description, the `query`/`to`/`searchExpression` parameter
+  descriptions, `docs/quickrefs/tools-reference.md` and `docs/troubleshooting.md`
+  now say which to reach for.
+- **The `to` scan cap is documented.** Personal Outlook.com rejects the
+  server-side recipient filter, so `to` is matched locally over the 500 most
+  recent messages (`OUTLOOK_SEARCH_SCAN_LIMIT`, max 5000). That was not stated
+  anywhere a caller would see it.
+- Tests assert result sets — every returned message satisfies every supplied
+  filter, N requested exports produce N distinct files — rather than that the
+  call succeeded. All three defects returned HTTP 200, so success-shaped
+  assertions could not have caught any of them. Suite: 961 tests.
+- `scripts/e2e-stdio.js` (dev-only, not published) spawns a fresh server per
+  invocation so a working-tree change can be A/B'd against another checkout on
+  the same mailbox. A running MCP server holds the code it started with, which
+  makes in-session tool calls useless for verifying a fix.
+
+
+## [3.11.0] - 2026-09
+
+Polish release clearing the `v3.7.5 — Fixes & Polish` milestone: the three
+long-standing "good first issue" items plus a full development-dependency
+advisory sweep. No behavioural change to any of the 22 tools — the additions
+are at the CLI entry point and in how authentication failures are explained.
+
+### Added
+
+- **`--version` and `--help` CLI flags** (#68). `npx @littlebearapps/outlook-assistant --version`
+  previously started the MCP server and hung on stdin instead of printing a
+  version — `index.js` had no `process.argv` handling at all. Argv handling now
+  runs as the very first statement, before the SDK imports and before the
+  startup banner writes to stderr, so output is clean and the process exits
+  immediately. `--version`/`-v` print the version to stdout; `--help`/`-h`
+  print usage, options and the key environment variables; an unrecognised
+  argument goes to stderr and exits 1 rather than booting a server that would
+  ignore it. The version is read from `config.SERVER_VERSION`, which reads
+  `package.json` — still a single source of truth.
+
+### Fixed
+
+- **`AADSTS7000215` now explains itself** (#69).
+  Pasting the Azure client secret's **ID** instead of its **Value** is the most
+  common setup failure — it is the first row of `docs/troubleshooting.md` — but
+  nothing in the code said so. Microsoft's raw `error_description` went straight
+  to the user, correlation ID and all, with no indication of what to change. A
+  new `auth/auth-errors.js` holds one AADSTS hint table; the 7000215 hint names
+  Secret ID versus Secret Value, names `OUTLOOK_CLIENT_SECRET`, says where in
+  Azure to look, notes the Value is displayed only once, and flags expiry as
+  producing the identical symptom. Wired into both token-endpoint failure paths
+  (`exchangeCodeForTokens` and `refreshAccessToken`). The raw Azure error is
+  always preserved, so searching for the code still works, and unknown errors
+  are returned untouched rather than guessed at.
+
+- **One hint table instead of two.** `buildDeviceCodeErrorResponse` carried its
+  own duplicate copy of the AADSTS remediation logic; it now reads the shared
+  table, so the two cannot drift apart. `invalid_client` is suppressed when
+  `AADSTS7000215` is present — the same HTTP error with the opposite cause, and
+  showing the "enable public client flows" hint there sent people the wrong way.
+
+- **Browser-flow error pages keep their line breaks.** The OAuth error page
+  rendered the message inline, which collapsed multi-line remediation text into
+  one unreadable run. It now renders in a `pre-wrap` block.
+
+### Security
+
+- **All 17 development-dependency advisories cleared** (1 critical, 11 high,
+  4 moderate, 1 low). Every one was `scope=development` — eslint, babel, jest
+  and prettier toolchain transitives — so the required CI gate
+  (`npm audit --omit=dev --audit-level=high`) and the weekly watchdog were both
+  already passing; neither was blocking. A critical-severity alert on the
+  default branch is still worth clearing. `npm audit fix` resolved all of them
+  without `--force`, so `package.json` is untouched and only the lockfile moves:
+  33 transitive entries, notably `shell-quote` 1.8.3 → 1.9.0 (the critical),
+  `js-yaml` 3.14.2 → 3.15.2 and 4.1.1 → 4.3.2, `ws` 8.20.0 → 8.21.3,
+  `brace-expansion` 5.0.5 → 5.0.9, `form-data` 4.0.5 → 4.0.6 and the
+  `@babel/*` set. `npm audit` now reports 0 vulnerabilities at every severity,
+  not just in the production scope.
+
+### Notes
+
+- **Token-refresh round trip is now covered end to end** (#72). The issue was
+  stale — `test/auth/token-refresh.test.js` existed but only asserted whether
+  `client_secret` is sent per auth method, and `token-storage.test.js` already
+  covered expiry detection and `invalid_grant`. The untested part was the join:
+  expired tokens on disk → load → detect → refresh over the wire → persist →
+  use the **new** access token on the next Graph call. A single HTTPS mock now
+  serves both the Microsoft token endpoint and the Graph endpoint, routed by
+  URL, so the outgoing `Authorization: Bearer …` header is asserted rather than
+  inferred. Also covers rotated-refresh-token persistence, `0600` file mode,
+  concurrent callers coalescing into one request, and the network-failure path.
+
+- **A misleading comment corrected, not the behaviour.** `getValidAccessToken`
+  read `this.tokens = null; await this._saveTokensToFile(); // Persist invalidation`,
+  but `_saveTokensToFile` returns early when `tokens` is null, so nothing was
+  ever persisted. The behaviour is correct — a transient network blip must not
+  erase a still-valid refresh token from disk — but the comment claimed the
+  opposite. Now documented as the deliberate no-op it is, and pinned by a test.
+
+- **Test suite: 37 suites / 937 tests**, up from 33 / 881.
+
+- **#93** (audit all 22 tool descriptions) is deliberately **not** in this
+  release. It touches every module and is scoped as its own piece of work.
+
+## [3.10.0] - 2026-09
+
+Search-correctness release. Four bugs in `email/search.js`, all found by
+investigating a claim that "`from:` search works, only `to:` and
+`searchExpression` are broken". `to` turned out to have been working since
+v3.7.1 — the claim came from the tool's own stale advice — while two further
+bugs surfaced along the way. Validated with a live end-to-end sweep against a
+personal Outlook.com account.
+
+### Fixed
+
+- **Field-scoped `searchExpression` now reaches your mail on personal
+  accounts** (#217). `from:`, `to:` and `subject:` expressions were reported
+  as returning nothing even when matching mail plainly existed. Personal
+  Outlook.com accounts reject field-scoped `$search` outright —
+  `400 BadRequest: Syntax error: character ':' is not valid` — and the
+  deliberately terminal `raw-kql` branch (#169 V37-F-1) surfaced that as an
+  empty result. Expressions built purely from `from:`, `to:` and `subject:`
+  terms are now translated into the closest equivalent OData filters and
+  retried down the normal ladder, reported as strategy `raw-kql-translated`,
+  with `searchMetadata.kqlTranslatedTo` recording the rewrite — a translated
+  retry answers a rewritten query, so the rewrite is inspectable rather than
+  something the caller takes on trust. Close, not
+  identical — a KQL `subject:` term becomes a substring match — and the tool
+  description says so rather than calling the result equivalent. Unscoped
+  `$search` was never affected and is unchanged. Expressions that cannot be
+  reproduced exactly — free text, `AND`/`OR`, parentheses, wildcards, unknown
+  prefixes, a repeated field — are still not retried, preserving the
+  no-silent-fallthrough guarantee #169 shipped.
+
+- **Searches combining two filters no longer return a superset** (#229).
+  When Graph rejected the combined `$filter`, the ladder returned the first
+  single term that yielded results and silently discarded the rest, while
+  `searchMetadata.filterApplied` still reported `true`. `from=X` plus
+  `subject=Y` returned every email from X. Three paths shared the defect —
+  the single-term walk, the client-side `to` fallback, and the boolean/date
+  filter step, where `from=X` plus `unreadOnly` could return every unread
+  message in the mailbox. Remaining terms are now applied locally before
+  returning, and `searchMetadata.droppedFilters` reports anything that could
+  not be honoured, with `filterApplied` false whenever it is non-empty. This
+  is the partial-fallback analogue of #138, which fixed the total case.
+
+  The local narrowing is honest about its own limits. It reads
+  `toRecipients` and `bodyPreview`, which the default `list` field preset
+  omits, so a multi-term search now selects the `search` preset — otherwise
+  `outputVerbosity`, a presentation parameter, would have decided which
+  messages were found. It runs only over the page the winning filter
+  returned, so a narrowing pass that matches nothing reports how many rows it
+  examined (`searchMetadata.narrowedCandidates`) rather than implying the
+  mailbox was searched. `@odata.count` and `@odata.nextLink` are dropped when
+  a result set is narrowed, so `totalAvailable` can no longer invite you to
+  paginate for matches that do not exist. And the `from` matcher mirrors
+  `buildFromFilter` branch for branch — bare domains use `contains`, full
+  addresses use `eq` — instead of a substring test that both missed and
+  over-matched.
+
+- **Contextual no-results guidance** (#231). Every empty search printed the
+  same four suggestions, one of which — "use `from` filter instead of `to`
+  (more reliable on personal accounts)" — had been false since v3.7.1 added
+  the client-side `to` fallback (#139). That line is the traceable origin of
+  a "`to:` search is broken" belief that propagated into another agent's
+  stored notes and cost a full investigation to disprove. Guidance is now
+  derived from what the caller actually supplied and what the ladder actually
+  attempted: no `searchAllFolders` advice when it was already set, no
+  `to`-related advice when `to` was never used, and an explicit report of any
+  client-side fallback including how many messages it examined.
+
+### Security
+
+- **`from` and `to` filter values are now OData-escaped** (#230).
+  `buildFromFilter` and `buildToFilter` interpolated caller values straight
+  into the `$filter` string across all six branches. A legitimate apostrophe
+  (`O'Brien`, `d'angelo@example.com`) produced a malformed filter, a Graph
+  400, and a swallowed "No emails found" for mail that exists; a crafted value
+  such as `x' or startswith(subject,'` closed the literal and rewrote the
+  filter's semantics. Scope was bounded — these queries are already
+  `me/messages` under `Mail.Read`, so nothing crossed the mailbox boundary —
+  but it changed which of the user's own messages were returned. Now routed
+  through the existing `escapeODataString` helper, along with the four inline
+  escaping copies that had drifted alongside it.
+
+- **Production dependency audit gate cleared** (#215). Two HIGH advisories
+  were live: `fast-uri` 3.1.4, where our own override floor sat inside the
+  vulnerable range, and `ip-address` 10.2.0 via
+  `@modelcontextprotocol/sdk` → `express-rate-limit` with no override at all.
+  Plus moderates in `hono`, `@hono/node-server` and `qs`. Every bump stays
+  inside the major its parent declares. Because `npm audit --omit=dev
+  --audit-level=high` is a required CI job, this had been blocking every pull
+  request.
+
+### Added
+
+- **Weekly security-audit watchdog** (`.github/workflows/scheduled-audit.yml`).
+  Runs the production audit gate on a schedule and opens — or comments on — a
+  `security` issue when it fails. The gate in `ci.yml` only fires on push and
+  pull request, so a pinned override floor rotting back into a newly published
+  advisory range produced no signal until an unrelated PR failed. That is how
+  #215 happened twice.
+
+### Notes
+
+- Test suite grew from 826 to 881 across 33 suites. Two existing tests were
+  retargeted rather than deleted: the #169 no-fallthrough test used a
+  field-scoped expression to assert termination, which is now deliberately
+  translated, so it was pointed at a free-form expression — the case the
+  invariant is actually about — and a parameterised test now covers all five
+  non-translatable shapes.
+- The `searchExpression` tool description no longer tells callers that
+  field-scoped search "may return nothing — prefer `query` there". That text
+  is what an AI caller reads when choosing a parameter, so leaving it stale
+  would have kept steering callers away from a path that now works.
+- `CHANGELOG.md` was missing its `## [3.9.0]` heading; the 3.9.0 notes were
+  orphaned inside the 3.9.1 section, so anyone tracing "which release fixed
+  #169" read them as part of 3.9.1. Heading restored.
+
+- Documentation was swept for claims this release falsified. The KQL Search
+  Reference still told readers field-scoped `$search` was "best-effort (no
+  fallback)" on personal accounts, and now carries a table of exactly which
+  expression shapes translate and which do not. The README's known-limitation
+  and account-compatibility entries, `llms.txt`, the AI-agent guide's search
+  tip (which still said `kqlQuery`), the find-emails guide and the
+  troubleshooting table were all updated to match shipped behaviour. Separately,
+  every relative link in `docs/faq/faq.md` was one directory level short — the
+  file moved to `docs/faq/` in v3.8.1 and the links were never repointed, so
+  each one 404'd on GitHub. All eleven fixed, along with a dead
+  `docs/faq/index.md` reference in the docs index.
+
 ## [3.9.1] - 2026-08
 
 Packaging hotfix. **Every published release from 3.9.0 back to 3.8.2 is
@@ -107,6 +426,8 @@ behavioural changes; the source tree was never affected.
 - Consider adding a CI job that installs the output of `npm pack` and runs a
   handshake against it. The existing suite passes 826/826 against the working
   tree and still missed a broken package for two releases.
+
+## [3.9.0] - 2026-07
 
 Feature release adding nested-folder addressing and making cross-folder email
 search reliable. Validated with a live end-to-end sweep against a personal

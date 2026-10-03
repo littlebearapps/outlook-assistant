@@ -131,7 +131,7 @@ Set a per-session send limit to prevent runaway sends:
 OUTLOOK_MAX_EMAILS_PER_SESSION=10
 ```
 
-Add this to your MCP server environment variables. Once the limit is reached, further sends are refused with a "Rate limit reached" error until the server restarts. Sending a draft (`draft action=send`) counts towards the same limit. The value is also the default cap for `draft` create/update and `manage-rules`, each counted separately; set `OUTLOOK_MAX_<TOOL>_PER_SESSION` (for example `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION`) to override one tool.
+Add this to your MCP server environment variables. Once the limit is reached, further sends are refused with a "Rate limit reached" error until the server restarts. Sending a draft (`draft action=send`) counts towards the same limit. The value is also the default cap for `draft` create/update, `manage-rules` and `create-event`, each counted separately (dry runs don't count); set `OUTLOOK_MAX_<TOOL>_PER_SESSION` (for example `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION`) to override one tool.
 
 ### Recipient Allowlist
 
@@ -141,7 +141,19 @@ Restrict who your AI assistant can send to:
 OUTLOOK_ALLOWED_RECIPIENTS=company.com,partner.org
 ```
 
-With this set, emails can only be sent to addresses ending in `@company.com` or `@partner.org`. Sends to any other domain are blocked.
+With this set, emails can only be sent to addresses ending in `@company.com` or `@partner.org`. Sends to any other domain are blocked. An entry with an `@` (for example `boss@partner.org`) allows that one address.
+
+Each recipient must be a single plain address. While the allowlist is set, a string such as `someone@other.org;alice@company.com` or `Alice <alice@company.com>` is refused, even though it ends with an allowed domain: separate addresses with commas and leave out display names.
+
+The allowlist applies to:
+
+- `send-email`: `to`, `cc` and `bcc`
+- `draft`: create, update and forward; reply and reply-all (the recipients Graph fills in; a refused draft is deleted); and the draft's current recipients when you send it
+- `manage-rules`: `forwardTo` and `redirectTo`
+- `create-event`: every attendee, rooms included
+- `manage-event` action=`update`: the whole attendee list you set
+
+It does **not** apply to cancellation messages (`manage-event` cancel, or deleting a meeting you organised), decline responses (`manage-event` decline), updates sent to attendees already on an event when you change other fields, or automatic replies set with `mailbox-settings`, including replies to external senders. A refused call changes nothing, and a `dryRun` reports the same refusal.
 
 ![Safety configuration with allowed recipients and rate limiting](../../assets/screenshots/send-email-safely-02.png)
 

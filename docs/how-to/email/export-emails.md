@@ -202,18 +202,19 @@ Two guarantees now hold:
 Attachment files are named the same way and carry the same guarantee.
 
 - **Files stay in the output directory.** Every name the exporter chooses is built from sanitised parts and written with exclusive create, so it can't escape `outputDir`, overwrite an existing file or follow a planted symlink (v3.12.0).
-- **An explicit file path is never replaced unless you ask.** If you pass a file path as `savePath` for a single message, that exact path is used for a new file. If a file is already there, the export is refused and the file is left alone; pass `overwrite: true` to replace it. Even with `overwrite: true`, a symlink, a file with other hard links, a dotfile or a file inside a dot-directory is never replaced.
+- **An explicit file path is never replaced unless you ask.** If you pass a file path as `savePath` for a single message, that exact path is used for a new file. If a file is already there, the export is refused and the file is left alone; pass `overwrite: true` to replace it. Even with `overwrite: true`, a symlink (wherever it points), a file with other hard links, a dotfile or a file inside a dot-directory below the allowed folder is never replaced. A replaced file keeps its previous permissions.
+- **Exported files are private.** New files are created readable and writable only by you (mode `0600`), and folders the export creates are `0700`, whatever your umask. Folders that already existed keep their permissions.
 
 ## Where exports can be written
 
-Every export path (`savePath`, `outputDir`, and the `attachments` tool's `outputDir`) must be inside one of:
+Every export path (`savePath`, `outputDir`, and the `attachments` tool's `outputDir`) must be absolute, or start with `~/` for your home directory (for example `~/Downloads/report.md`). A relative path such as `report.md` is refused, because it would land in whatever folder the server happens to run from; leave the path out to use the temp directory. The path must be inside one of:
 
 - your system's temp directory (the default)
 - `~/Downloads`
 - `~/Documents`
 - the folder named in `OUTLOOK_EXPORT_DIR`, if you set it
 
-The path is resolved first, so `..` and symlinked folders count as wherever they really lead. Nothing is written to a dotfile or into a dot-directory (a name starting with `.`) below those folders. Anything else is refused with an error that lists the allowed folders.
+The path is resolved first, so `..` and symlinked folders count as wherever they really lead. A `savePath` that is itself a symlink to a file isn't followed: it's refused, with or without `overwrite: true`. Nothing is written to a dotfile or into a dot-directory (a name starting with `.`) below those folders; a dot in the `OUTLOOK_EXPORT_DIR` folder itself (for example `~/.mail-exports`) is fine. Anything else is refused with an error that lists the allowed folders.
 
 To export somewhere else, set `OUTLOOK_EXPORT_DIR` to an absolute path (a leading `~` is expanded) in your MCP client's `env` block for the server, then restart the server:
 

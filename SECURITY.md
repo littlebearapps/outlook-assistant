@@ -137,8 +137,8 @@ The `send-email` tool includes additional server-side controls:
 |---------|---------------------|---------|-------------|
 | Pre-send mail tips | — (use `checkRecipients: true` param) | Disabled | Refuses to send when Microsoft 365 mail tips show an out-of-office reply, a full mailbox, a delivery restriction, an external recipient or a group with external members, or when the check fails. Send anyway with `acknowledgeWarnings: true` |
 | Dry-run mode | — (use `dryRun: true` param) | Disabled | Preview composed email without sending |
-| Session rate limit | `OUTLOOK_MAX_EMAILS_PER_SESSION` | Unlimited | Default per-session cap for `send-email`, `draft` and `manage-rules`; override one tool with `OUTLOOK_MAX_<TOOL>_PER_SESSION` |
-| Recipient allowlist | `OUTLOOK_ALLOWED_RECIPIENTS` | Allow all | Comma-separated domains/addresses |
+| Session rate limit | `OUTLOOK_MAX_EMAILS_PER_SESSION` | Unlimited | Default per-session cap for `send-email`, `draft`, `manage-rules` and `create-event`; override one tool with `OUTLOOK_MAX_<TOOL>_PER_SESSION` |
+| Recipient allowlist | `OUTLOOK_ALLOWED_RECIPIENTS` | Allow all | Comma-separated domains/addresses for outgoing mail, rule forwards and event attendees (scope below) |
 
 Example configuration:
 
@@ -158,6 +158,14 @@ OUTLOOK_ALLOWED_RECIPIENTS=mycompany.com,partner@example.com
   sanitised filenames with exclusive create (no overwriting, no following
   symlinks) and stay inside the chosen output directory. A write that fails
   part-way removes the partly written file.
+- Output paths must be absolute (a leading `~` means your home directory);
+  relative paths are refused. Files are only written inside the system temp
+  directory, `~/Downloads`, `~/Documents` or `OUTLOOK_EXPORT_DIR`, never to a
+  dot-prefixed name below them. A `savePath` that is a symlink to a file is
+  refused, with or without `overwrite: true`.
+- Exported and downloaded files are created readable only by you (mode
+  `0600`), and folders the server creates with mode `0700`. A file replaced
+  with `overwrite: true` keeps its previous mode.
 - Shared-mailbox addresses must be printable-ASCII email addresses, and
   shared-mailbox access is off unless `OUTLOOK_SHARED_MAILBOX` is set.
 
@@ -179,7 +187,8 @@ These controls are not a substitute for careful oversight:
 - Annotations depend on the AI client respecting them — not all clients support MCP annotations, and a client set to auto-approve tools (or running in a mode that bypasses prompts) won't ask before sending or deleting
 - The safety hook runs only where the plugin is installed (Claude Code, GitHub Copilot, Cursor), and each of those clients can run a call without the hook's prompt in some modes (see the table above). Read-only mode, the allowlist, rate limits and mail-tips refusals are enforced by the server in every client
 - Rate limits reset when the MCP server restarts
-- The recipient allowlist applies to `send-email`, `draft` (create, update, forward, reply, reply-all, and the draft's current recipients on send) and `manage-rules` forward/redirect targets (a rule with a blocked target is refused whole) — it doesn't cover anything done outside Outlook Assistant
+- The recipient allowlist applies to `send-email` (to, cc, bcc), `draft` (create, update, forward, reply, reply-all, and the draft's current recipients on send), `manage-rules` forward/redirect targets (a rule with a blocked target is refused whole), `create-event` attendees, and the attendee list set by `manage-event` update. With an allowlist set, a recipient that isn't a single plain email address (for example `a@other.test;b@example.com` or `Name <b@example.com>`) is refused
+- The allowlist does **not** cover: cancellation messages from `manage-event` cancel (or deleting a meeting you organised), responses sent by `manage-event` decline, updates sent to attendees already on an event when you change other fields with `manage-event` update, automatic replies set with `mailbox-settings` (including replies to external senders), or anything done outside Outlook Assistant
 - Mail tips are Microsoft 365 only: on personal Outlook.com accounts `checkRecipients` returns no tips and can't refuse a send
 - AI models can still make mistakes in composing email content, selecting recipients, or interpreting instructions
 - No automated system can fully prevent prompt injection attacks or adversarial manipulation

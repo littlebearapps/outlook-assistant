@@ -12,6 +12,7 @@ const {
 } = require('@modelcontextprotocol/sdk/types.js');
 const config = require('../config');
 const { createServer } = require('../server');
+const { serverInstructions } = require('../utils/server-instructions');
 
 let client;
 let nextId;
@@ -89,6 +90,53 @@ describe('initialize', () => {
       name: config.SERVER_NAME,
       version: config.SERVER_VERSION,
     });
+  });
+
+  // #271
+  test('sends the server instructions', async () => {
+    const res = await initialize();
+    expect(res.result.instructions).toBe(
+      serverInstructions({ readOnly: false })
+    );
+  });
+
+  test('says so in the instructions when read-only mode is on', async () => {
+    const original = config.READ_ONLY;
+    config.READ_ONLY = true;
+    try {
+      await client.close();
+      await connect();
+      const res = await initialize();
+      expect(res.result.instructions).toBe(
+        serverInstructions({ readOnly: true })
+      );
+    } finally {
+      config.READ_ONLY = original;
+    }
+  });
+});
+
+describe('tools/list _meta (#271)', () => {
+  beforeEach(async () => {
+    await initialize();
+  });
+
+  test('only send-email and create-event require user interaction', async () => {
+    const res = await rpc('tools/list', {});
+    const flagged = res.result.tools
+      .filter((t) => t._meta?.['anthropic/requiresUserInteraction'] === true)
+      .map((t) => t.name)
+      .sort();
+    expect(flagged).toEqual(['create-event', 'send-email']);
+  });
+
+  test('no other tool carries _meta', async () => {
+    const res = await rpc('tools/list', {});
+    const withMeta = res.result.tools
+      .filter((t) => t._meta !== undefined)
+      .map((t) => t.name)
+      .sort();
+    expect(withMeta).toEqual(['create-event', 'send-email']);
   });
 });
 

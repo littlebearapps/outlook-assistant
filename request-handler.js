@@ -18,6 +18,7 @@
  */
 const { McpError, ErrorCode } = require('@modelcontextprotocol/sdk/types.js');
 const { coerceArgsAgainstSchema } = require('./utils/schema-coerce');
+const { riskMeta } = require('./utils/risk-classes');
 
 /**
  * A visible tool-error result.
@@ -35,13 +36,19 @@ function toolErrorResult(text) {
 function listTools(TOOLS) {
   console.error(`TOOLS COUNT: ${TOOLS.length}`);
   return {
-    tools: TOOLS.map((tool) => ({
-      name: tool.name,
-      ...(tool.title && { title: tool.title }),
-      description: tool.description,
-      inputSchema: tool.inputSchema,
-      ...(tool.annotations && { annotations: tool.annotations }),
-    })),
+    tools: TOOLS.map((tool) => {
+      // Client-specific flags derived from the risk map (#271), e.g.
+      // Claude's anthropic/requiresUserInteraction. Others ignore them.
+      const meta = riskMeta(tool.name);
+      return {
+        name: tool.name,
+        ...(tool.title && { title: tool.title }),
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+        ...(tool.annotations && { annotations: tool.annotations }),
+        ...(meta && { _meta: meta }),
+      };
+    }),
   };
 }
 

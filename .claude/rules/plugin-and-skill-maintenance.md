@@ -15,7 +15,7 @@ The marketplace plugin (`plugins/outlook-assistant/`) ships the MCP server pinne
 
 ## When you add or change a tool or action
 
-1. **Classify it** in the risk-class map (`utils/risk-classes.js`, #270, in place) as `read`, `reversible`, `outward`, `destructive` or `persistent`, and spread `...toolMetadata(name, title)` into the definition. The `title` and all four annotation hints derive from it, and `test/utils/risk-classes.test.js` fails on any unclassified tool or action. The planned `OUTLOOK_READ_ONLY` mode (#271), the hook's `risk-map.json` and the skill's risk table are to derive from it too.
+1. **Classify it** in the risk-class map (`utils/risk-classes.js`, #270, in place) as `read`, `reversible`, `outward`, `destructive` or `persistent`, and spread `...toolMetadata(name, title)` into the definition. The `title` and all four annotation hints derive from it, and `test/utils/risk-classes.test.js` fails on any unclassified tool or action. `OUTLOOK_READ_ONLY` (#271) refuses every non-`read` call from it; if `action` is optional, set the map's `defaultAction` to the handler's default. The hook's `risk-map.json` and the skill's risk table are to derive from it too.
 
 Once the skill and hooks exist:
 

@@ -47,6 +47,8 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 ## Safety Controls
 
 - **MCP annotations** on all 22 tools: all four hints set explicitly and derived from the risk-class map (`utils/risk-classes.js`: `read`/`reversible`/`outward`/`destructive`/`persistent` per tool and action), plus a top-level `title`. `destructiveHint` = any outward, destructive or persistent action; `openWorldHint` = surfaces untrusted content (#92) or reaches other people; `idempotentHint` = read-only or the tool's `idempotent` flag. A test fails on any unclassified tool or action (#270, #277)
+- **Read-only mode** (`OUTLOOK_READ_ONLY`, #271): `request-handler.js` refuses every call whose risk class isn't `read` after validation and before the handler (`utils/read-only.js`), dry runs included; unclassified calls fail closed; `auth` is exempt so sign-in works. Calls that leave `action` out are classified by the map's `defaultAction`
+- **Server `instructions`** (`utils/server-instructions.js`, #271): hard rules in the first 512 characters, under 2,000 in total; `send-email` and `create-event` carry `_meta["anthropic/requiresUserInteraction"]` (risk-map flag, never on mixed read/write tools)
 - **get-mail-tips**: pre-send recipient validation (out-of-office, mailbox full, delivery restrictions)
 - **send-email**: `dryRun` param, `checkRecipients` param (mail tips), session rate limiting (`OUTLOOK_MAX_EMAILS_PER_SESSION`), recipient allowlist (`OUTLOOK_ALLOWED_RECIPIENTS`)
 - **draft**: `dryRun` on create, `checkRecipients` (mail tips), recipient allowlist, rate limiting. Send action shares limit with `send-email`. `update`/`send`/`delete` look the ID up first and refuse anything that isn't an unsent draft (`assertIsDraft` in `email/draft.js`).
@@ -67,6 +69,8 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 | `server.js` | `createServer()`: SDK `Server` with `tools: {listChanged: false}` and the dispatcher |
 | `request-handler.js` | MCP request dispatcher: `tools/list`/`tools/call` with schema coercion. Protocol errors are thrown as JSON-RPC errors (-32601 unknown method, -32602 unknown tool, -32603 internal); tool failures return visible `isError` content |
 | `utils/risk-classes.js` | Risk-class map per tool/action; derives every tool's annotations (`toolMetadata`) |
+| `utils/server-instructions.js` | Server `instructions` text (hard rules first); read-only note follows `config.READ_ONLY` |
+| `utils/read-only.js` | `OUTLOOK_READ_ONLY` gate: refusal for any non-`read` call (`auth` exempt) |
 | `utils/tool-error.js` | `toolError(message, { nextStep })` and `authRequiredError()`: every handler error returns `isError: true` |
 | `config.js` | API endpoint, auth settings, defaults |
 | `utils/schema-coerce.js` | MCP-boundary param coercion + validation (string→array/boolean/number, `additionalProperties: false`, required, enums) |
@@ -93,6 +97,7 @@ OUTLOOK_CLIENT_SECRET=your-secret-VALUE    # Browser flow only; NOT the Secret I
 USE_TEST_MODE=false
 OUTLOOK_MAX_EMAILS_PER_SESSION=10          # Optional: default per-session cap for send-email, draft, manage-rules (per tool: OUTLOOK_MAX_<TOOL>_PER_SESSION)
 OUTLOOK_ALLOWED_RECIPIENTS=example.com     # Optional: restrict recipients
+OUTLOOK_READ_ONLY=true                     # Optional: refuse every non-read tool call (true|1|yes; unrecognised = on)
 OUTLOOK_IMMUTABLE_IDS=true                 # Optional: IDs persist through folder moves
 OUTLOOK_AUTH_METHOD=device-code            # Optional: default auth method (device-code|browser)
 OUTLOOK_AUTH_AUDIENCE=common               # Optional: common|consumers|organizations|<tenant-guid> (v3.8.0; fixes AADSTS9002331 for personal-only Azure apps)

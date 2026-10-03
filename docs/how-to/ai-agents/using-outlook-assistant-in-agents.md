@@ -53,7 +53,7 @@ Every tool includes MCP annotations that indicate its safety profile:
 
 ### Destructive Tools (always require confirmation)
 
-`send-email` (destructive + openWorld), `draft` (destructive + openWorld), `manage-event`, `manage-contact`, `folders`, `manage-rules`
+`send-email`, `draft`, `create-event`, `manage-event`, `manage-rules` and `mailbox-settings` (all destructive + openWorld: they reach other people), plus `folders`, `manage-contact`, `manage-category` and `manage-focused-inbox` (destructive: they can delete)
 
 ### Other Tools
 

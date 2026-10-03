@@ -97,7 +97,7 @@ Flag dates: a `dueDateTime`/`startDateTime` with `Z` or a ±hh:mm offset is kept
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
 | `list-events` | List events: upcoming by default, or past/current/by name with filters (times as canonical UTC ISO-8601 + labelled local) | read-only | `count` (default 10, max 100), `startAfter`/`startBefore` (ISO 8601 with `Z` or ±hh:mm, normalised to UTC), `subject` (case-insensitive contains, ≤ 255 chars). Supplying any filter replaces the default `start ≥ now` bound and filters are AND-ed; backward-looking searches (`startBefore` alone, or `subject` alone) return newest first. Invalid values return a tool error before any Graph call |
-| `create-event` | Create new event | moderate write | `subject`, `start`, `end`, `attendees` (email strings are required attendees; `{email, type}` objects set `type` to `required`/`optional`/`resource`), `body`. Times use configured timezone (default: Australia/Melbourne; override with `OUTLOOK_DEFAULT_TIMEZONE` env var) — omit `Z` suffix for local time |
+| `create-event` | Create new event | **destructive** (sends invitations) | `subject`, `start`, `end`, `attendees` (email strings are required attendees; `{email, type}` objects set `type` to `required`/`optional`/`resource`), `body`. Times use configured timezone (default: Australia/Melbourne; override with `OUTLOOK_DEFAULT_TIMEZONE` env var) — omit `Z` suffix for local time |
 | `manage-event` | Update, decline, cancel, or delete (delete removes the event and Graph doesn't document a guaranteed recovery path; deleting a meeting you organised that has attendees emails them a cancellation; use `cancel` with a `comment` to control the message) | **destructive** | `action` (`update`/`decline`/`cancel`/`delete`), `eventId` (or alias `id`), `comment` (decline/cancel; omitted if not given), `sendResponse` (decline only; `false` declines without notifying the organiser), `subject`/`start`/`end`/`attendees`/`body`/`location`/`isOnlineMeeting`/`sensitivity`/`showAs`/`importance`/`categories`/`reminderMinutesBeforeStart` (update only — only the fields you pass are changed; `attendees` is a full replacement list of email strings or `{email, type}` objects, and an entry without a type keeps the type that address already has, new addresses being required), `dryRun` (preview the PATCH without applying it; with untyped attendees it reads the event first so the preview shows the resolved types) |
 
 ## Folder (1 tool)
@@ -123,9 +123,9 @@ Flag dates: a `dueDateTime`/`startDateTime` with `Z` or a ±hh:mm offset is kept
 
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
-| `manage-category` | CRUD: `list` (default), `create`, `update`/`set` (alias), `delete` | moderate write | `action`, `displayName`, `color`, `id` (or deprecated alias `categoryId`) |
-| `apply-category` | Apply/add/remove categories on messages. With `sharedMailbox`, category names must already exist in that mailbox's master list (`manage-category` manages the signed-in account only) | moderate write | `messageId`/`messageIds`, `categories`, `action`, `sharedMailbox` (alias `email`) |
-| `manage-focused-inbox` | Focused Inbox overrides: `list` (default), `set`, `delete` | moderate write | `action`, `emailAddress`, `classifyAs` |
+| `manage-category` | CRUD: `list` (default), `create`, `update`/`set` (alias), `delete` | **destructive** (`delete`) | `action`, `displayName`, `color`, `id` (or deprecated alias `categoryId`) |
+| `apply-category` | Apply/add/remove categories on messages. With `sharedMailbox`, category names must already exist in that mailbox's master list (`manage-category` manages the signed-in account only) | idempotent | `messageId`/`messageIds`, `categories`, `action`, `sharedMailbox` (alias `email`) |
+| `manage-focused-inbox` | Focused Inbox overrides: `list` (default), `set`, `delete` | **destructive** (`delete`) | `action`, `emailAddress`, `classifyAs` |
 
 ### Category colours
 
@@ -135,7 +135,7 @@ Flag dates: a `dueDateTime`/`startDateTime` with `Z` or a ±hh:mm offset is kept
 
 | Tool | Actions | Safety | Key Parameters |
 |------|---------|--------|----------------|
-| `mailbox-settings` | `get` (default), `set-auto-replies`, `set-working-hours` | idempotent | `section`, `enabled`, `startDateTime`, `endDateTime`, `internalReplyMessage`, `startTime`, `endTime`, `daysOfWeek` |
+| `mailbox-settings` | `get` (default), `set-auto-replies`, `set-working-hours` | **destructive** (auto-replies reach external senders), idempotent | `section`, `enabled`, `startDateTime`, `endDateTime`, `internalReplyMessage`, `startTime`, `endTime`, `daysOfWeek` |
 
 ## Advanced (2 tools)
 
@@ -146,14 +146,17 @@ Flag dates: a `dueDateTime`/`startDateTime` with `Z` or a ±hh:mm offset is kept
 
 ## Safety Annotations
 
+All four hints are set explicitly on every tool, and derived from the risk-class map in `utils/risk-classes.js`, so they can't drift from what the tool does. `destructiveHint` covers deletes, and also anything that reaches other people or keeps acting after the call (sends, invitations, cancellations, inbox rules, automatic replies).
+
 | Category | Tools | Client Behaviour |
 |----------|-------|------------------|
 | **Read-only** (7) | `search-emails`, `read-email`, `list-events`, `search-people`, `access-shared-mailbox`, `find-meeting-rooms`, `get-mail-tips` | Auto-approved by MCP clients that support annotations |
-| **Destructive** (6) | `send-email`, `draft`, `manage-event`, `manage-contact`, `folders`, `manage-rules` | Client prompts for confirmation |
-| **Idempotent** (2) | `update-email`, `mailbox-settings` | Safe to retry |
-| **Moderate write** (7) | `attachments`, `export`, `create-event`, `manage-category`, `apply-category`, `manage-focused-inbox`, `auth` | Normal approval flow |
+| **Destructive** (10) | `send-email`, `draft`, `create-event`, `manage-event`, `manage-rules`, `mailbox-settings`, `folders`, `manage-contact`, `manage-category`, `manage-focused-inbox` | Client prompts for confirmation |
+| **Other writes** (5) | `auth`, `update-email`, `apply-category`, `attachments`, `export` | Normal approval flow |
 
-> **`openWorldHint: true`** is set on tools that return content authored by external/untrusted parties (`search-emails`, `read-email`, `search-people`, `access-shared-mailbox`, `attachments`, `export`) or send to them (`send-email`, `draft`), signalling MCP clients to apply appropriate caution (e.g. prompt-injection defences).
+`idempotentHint: true` (safe to retry) is set on every read-only tool and on `update-email`, `apply-category` and `mailbox-settings`.
+
+> **`openWorldHint: true`** is set on tools that return content authored by external/untrusted parties (`search-emails`, `read-email`, `search-people`, `access-shared-mailbox`, `attachments`, `export`, `draft`) or that reach other people (`send-email`, `draft`, `create-event`, `manage-event`, `manage-rules`, `mailbox-settings`), signalling MCP clients to apply appropriate caution (e.g. prompt-injection defences).
 
 ## send-email Safety Controls
 

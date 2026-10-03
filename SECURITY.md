@@ -90,8 +90,8 @@ Every tool carries [MCP annotations](https://modelcontextprotocol.io/docs/concep
 | `idempotentHint: true` | Safe to retry without side effects | Client may auto-retry on failure |
 
 - **7 read-only tools** are auto-approved (search, read, list operations)
-- **6 destructive tools** (`send-email`, `draft`, `manage-event`, `manage-contact`, `folders`, `manage-rules`) prompt for confirmation
-- **9 other tools** (2 idempotent, 7 moderate-write) follow normal approval flows
+- **10 destructive tools** (`send-email`, `draft`, `create-event`, `manage-event`, `manage-rules`, `mailbox-settings`, `folders`, `manage-contact`, `manage-category`, `manage-focused-inbox`) prompt for confirmation. Destructive here also covers anything that reaches other people or keeps acting after the call, such as invitations, inbox rules and automatic replies
+- **5 other write tools** (`auth`, `update-email`, `apply-category`, `attachments`, `export`) follow normal approval flows
 
 See the [Tools Reference](docs/quickrefs/tools-reference.md#safety-annotations) for the full list.
 

@@ -122,7 +122,7 @@ Outlook Assistant works with both personal and work/school Microsoft accounts, b
 
 Outlook Assistant is designed with safety-first principles for AI-driven email access:
 
-**Destructive action safeguards** — Every tool carries [MCP annotations](https://modelcontextprotocol.io/docs/concepts/tools#annotations) (`readOnlyHint`, `destructiveHint`, `idempotentHint`) so AI clients can auto-approve safe reads and prompt for confirmation on destructive operations like sending email or deleting events.
+**Destructive action safeguards** — Every tool carries [MCP annotations](https://modelcontextprotocol.io/docs/concepts/tools#annotations) (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`), all four set explicitly on every tool, so AI clients can auto-approve safe reads and prompt for confirmation on destructive operations like sending email, inviting attendees or deleting events.
 
 **Send-email protections** — The `send-email` tool includes:
 - **Pre-send mail tips** (`checkRecipients: true`) — check recipients for out-of-office, mailbox full, delivery restrictions before sending

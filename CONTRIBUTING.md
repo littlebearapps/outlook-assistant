@@ -78,8 +78,8 @@ When adding new tools:
 1. Create a new module directory if needed (e.g. `tasks/`)
 2. Implement tool handlers in separate files
 3. Export tool definitions from the module's `index.js` — prefer consolidating related operations into a single tool with an `action` parameter (STRAP pattern)
-4. Include an `annotations` object on each tool definition (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) — see the [Tools Reference](docs/quickrefs/tools-reference.md#safety-annotations) for examples
-5. Add tools to the `TOOLS` array in main `index.js`
+4. Classify the tool, and each of its actions, in `utils/risk-classes.js`, then spread `...toolMetadata(name, title)` into the definition. The annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) are derived from the class, and a test fails on anything unclassified — see the [Tools Reference](docs/quickrefs/tools-reference.md#safety-annotations)
+5. Add the module's tools to `TOOLS` in `tools.js`, and return errors with `toolError()` from `utils/tool-error.js`
 6. Add tests in the `test/` directory
 7. Update `docs/quickrefs/tools-reference.md`
 

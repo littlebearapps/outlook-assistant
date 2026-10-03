@@ -5,6 +5,7 @@ const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { resolveFolder, WELL_KNOWN } = require('./resolve');
 const { buildMailboxPrefix } = require('../utils/mailbox');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 /**
  * Delete folder handler
@@ -27,26 +28,14 @@ async function handleDeleteFolder(args) {
   const prefix = buildMailboxPrefix(sharedMailbox);
 
   if (!folderId && !folderName) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Either folderId or folderName is required.',
-        },
-      ],
-    };
+    return toolError('Either folderId or folderName is required.');
   }
 
   // Name/alias guard for the common accidental case.
   if (folderName && WELL_KNOWN[folderName.toLowerCase().trim()]) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Cannot delete protected folder "${folderName}". Protected folders: Inbox, Drafts, Sent Items, Deleted Items, Junk Email, Archive, Outbox.`,
-        },
-      ],
-    };
+    return toolError(
+      `Cannot delete protected folder "${folderName}". Protected folders: Inbox, Drafts, Sent Items, Deleted Items, Junk Email, Archive, Outbox.`
+    );
   }
 
   try {
@@ -62,9 +51,7 @@ async function handleDeleteFolder(args) {
         mailbox: sharedMailbox,
       });
     } catch (resolveError) {
-      return {
-        content: [{ type: 'text', text: resolveError.message }],
-      };
+      return toolError(resolveError.message);
     }
 
     // Delete the folder
@@ -83,23 +70,9 @@ async function handleDeleteFolder(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error deleting folder: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error deleting folder: ${error.message}`);
   }
 }
 

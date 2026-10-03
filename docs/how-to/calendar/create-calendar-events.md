@@ -101,6 +101,7 @@ Times are interpreted using the server's configured timezone (default: `Australi
 - The body field supports plain text — add agendas, links, or preparation notes
 - Check your calendar first with `list-events` to avoid double-booking, or use its `subject` filter to find the last occurrence of a meeting you're rescheduling
 - Omit the `Z` suffix on times unless you specifically mean UTC
+- `create-event` is marked destructive because attendees are sent invitations, so clients that honour MCP annotations ask before running it
 - For finding available rooms, see [Find Meeting Rooms](../advanced/find-meeting-rooms.md)
 
 ## Related

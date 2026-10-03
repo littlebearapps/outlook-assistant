@@ -3,6 +3,7 @@
  */
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 /**
  * Delete event handler
@@ -13,14 +14,7 @@ async function handleDeleteEvent(args) {
   const { eventId } = args;
 
   if (!eventId) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Event ID is required to delete an event.',
-        },
-      ],
-    };
+    return toolError('Event ID is required to delete an event.');
   }
 
   try {
@@ -43,24 +37,10 @@ async function handleDeleteEvent(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'authenticate' tool first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error deleting event: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error deleting event: ${error.message}`);
   }
 }
 

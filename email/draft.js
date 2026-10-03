@@ -12,6 +12,7 @@ const {
   formatDryRunPreview,
 } = require('../utils/safety');
 const { handleGetMailTips } = require('./mail-tips');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 /**
  * Format comma-separated email string into Graph API recipient objects
@@ -148,14 +149,9 @@ async function handleDraft(args) {
   const { action } = args;
 
   if (!action) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: "Action is required. Use 'create', 'update', 'send', 'delete', 'reply', 'reply-all', or 'forward'.",
-        },
-      ],
-    };
+    return toolError(
+      "Action is required. Use 'create', 'update', 'send', 'delete', 'reply', 'reply-all', or 'forward'."
+    );
   }
 
   switch (action) {
@@ -174,14 +170,9 @@ async function handleDraft(args) {
     case 'forward':
       return handleForwardDraft(args);
     default:
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Invalid action '${action}'. Use 'create', 'update', 'send', 'delete', 'reply', 'reply-all', or 'forward'.`,
-          },
-        ],
-      };
+      return toolError(
+        `Invalid action '${action}'. Use 'create', 'update', 'send', 'delete', 'reply', 'reply-all', or 'forward'.`
+      );
   }
 }
 
@@ -267,11 +258,7 @@ async function handleUpdateDraft(args) {
   const { id } = args;
 
   if (!id) {
-    return {
-      content: [
-        { type: 'text', text: 'Draft ID (id) is required for update.' },
-      ],
-    };
+    return toolError('Draft ID (id) is required for update.');
   }
 
   const message = buildMessageObject(args);
@@ -314,9 +301,7 @@ async function handleSendDraft(args) {
   const { id } = args;
 
   if (!id) {
-    return {
-      content: [{ type: 'text', text: 'Draft ID (id) is required for send.' }],
-    };
+    return toolError('Draft ID (id) is required for send.');
   }
 
   try {
@@ -348,11 +333,7 @@ async function handleDeleteDraft(args) {
   const { id } = args;
 
   if (!id) {
-    return {
-      content: [
-        { type: 'text', text: 'Draft ID (id) is required for delete.' },
-      ],
-    };
+    return toolError('Draft ID (id) is required for delete.');
   }
 
   try {
@@ -379,25 +360,15 @@ async function handleReplyDraft(args, endpoint) {
   const { id, body, comment } = args;
 
   if (!id) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Message ID (id) is required for ${endpoint === 'createReplyAll' ? 'reply-all' : 'reply'}.`,
-        },
-      ],
-    };
+    return toolError(
+      `Message ID (id) is required for ${endpoint === 'createReplyAll' ? 'reply-all' : 'reply'}.`
+    );
   }
 
   if (comment && body) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Cannot use both comment and body. Use comment for a short prepended note, or body for full HTML/text content.',
-        },
-      ],
-    };
+    return toolError(
+      'Cannot use both comment and body. Use comment for a short prepended note, or body for full HTML/text content.'
+    );
   }
 
   const requestBody = {};
@@ -440,33 +411,17 @@ async function handleForwardDraft(args) {
   const { id, to, body, comment } = args;
 
   if (!id) {
-    return {
-      content: [
-        { type: 'text', text: 'Message ID (id) is required for forward.' },
-      ],
-    };
+    return toolError('Message ID (id) is required for forward.');
   }
 
   if (!to) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Forward recipient (to) is required for forward.',
-        },
-      ],
-    };
+    return toolError('Forward recipient (to) is required for forward.');
   }
 
   if (comment && body) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Cannot use both comment and body. Use comment for a short prepended note, or body for full HTML/text content.',
-        },
-      ],
-    };
+    return toolError(
+      'Cannot use both comment and body. Use comment for a short prepended note, or body for full HTML/text content.'
+    );
   }
 
   const toRecipients = formatRecipients(to);
@@ -516,24 +471,10 @@ function handleError(actionLabel, error) {
   }
 
   if (error.message === 'Authentication required') {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-        },
-      ],
-    };
+    return authRequiredError();
   }
 
-  return {
-    content: [
-      {
-        type: 'text',
-        text: `Error ${actionLabel}: ${error.message}`,
-      },
-    ],
-  };
+  return toolError(`Error ${actionLabel}: ${error.message}`);
 }
 
 module.exports = handleDraft;

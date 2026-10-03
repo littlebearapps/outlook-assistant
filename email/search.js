@@ -19,6 +19,7 @@ const {
   escapeSearchPhrase,
   quoteSearchPhrase,
 } = require('../utils/odata-helpers');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 // Upper bound on how many recent messages the client-side fallback scans
 // before giving up. Deliberately DECOUPLED from the requested result count so
@@ -50,9 +51,7 @@ async function handleSearchEmails(args) {
 
   // Validate count
   if (args.count !== undefined && args.count < 1) {
-    return {
-      content: [{ type: 'text', text: 'count must be at least 1.' }],
-    };
+    return toolError('count must be at least 1.');
   }
 
   // F-17: accept `maxResults` as an alias for `count` in non-delta mode.
@@ -140,25 +139,11 @@ async function handleSearchEmails(args) {
   } catch (error) {
     // Handle authentication errors
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'authenticate' tool first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
     // General error response
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error searching emails: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error searching emails: ${error.message}`);
   }
 }
 
@@ -1585,14 +1570,9 @@ async function handleSearchByMessageId(args) {
   const prefix = buildMailboxPrefix(args.sharedMailbox || args.email || null);
 
   if (!messageId) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Message-ID is required. Provide the full Message-ID header value (e.g., <abc123@example.com>)',
-        },
-      ],
-    };
+    return toolError(
+      'Message-ID is required. Provide the full Message-ID header value (e.g., <abc123@example.com>)'
+    );
   }
 
   try {
@@ -1659,24 +1639,10 @@ async function handleSearchByMessageId(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'authenticate' tool first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error searching by Message-ID: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error searching by Message-ID: ${error.message}`);
   }
 }
 

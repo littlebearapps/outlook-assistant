@@ -9,6 +9,8 @@ const {
 } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { quoteSearchPhrase } = require('../utils/odata-helpers');
+const { toolMetadata } = require('../utils/risk-classes');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 /**
  * Contact field presets for different use cases
@@ -195,20 +197,9 @@ async function handleListContacts(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        { type: 'text', text: `Error listing contacts: ${error.message}` },
-      ],
-    };
+    return toolError(`Error listing contacts: ${error.message}`);
   }
 }
 
@@ -221,7 +212,7 @@ async function handleSearchContacts(args) {
   const verbosity = args.outputVerbosity || 'standard';
 
   if (!query) {
-    return { content: [{ type: 'text', text: 'Search query is required.' }] };
+    return toolError('Search query is required.');
   }
 
   try {
@@ -295,20 +286,9 @@ async function handleSearchContacts(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        { type: 'text', text: `Error searching contacts: ${error.message}` },
-      ],
-    };
+    return toolError(`Error searching contacts: ${error.message}`);
   }
 }
 
@@ -319,7 +299,7 @@ async function handleGetContact(args) {
   const contactId = args.id;
 
   if (!contactId) {
-    return { content: [{ type: 'text', text: 'Contact ID is required.' }] };
+    return toolError('Contact ID is required.');
   }
 
   try {
@@ -346,20 +326,9 @@ async function handleGetContact(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        { type: 'text', text: `Error getting contact: ${error.message}` },
-      ],
-    };
+    return toolError(`Error getting contact: ${error.message}`);
   }
 }
 
@@ -387,14 +356,9 @@ async function handleCreateContact(args) {
     (Array.isArray(emails) && emails[0]);
 
   if (!resolvedDisplayName && !email && !(emails && emails.length > 0)) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'At least displayName, firstName/lastName, email, or emails is required.',
-        },
-      ],
-    };
+    return toolError(
+      'At least displayName, firstName/lastName, email, or emails is required.'
+    );
   }
 
   try {
@@ -453,20 +417,9 @@ async function handleCreateContact(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        { type: 'text', text: `Error creating contact: ${error.message}` },
-      ],
-    };
+    return toolError(`Error creating contact: ${error.message}`);
   }
 }
 
@@ -478,7 +431,7 @@ async function handleUpdateContact(args) {
     args;
 
   if (!id) {
-    return { content: [{ type: 'text', text: 'Contact ID is required.' }] };
+    return toolError('Contact ID is required.');
   }
 
   try {
@@ -521,20 +474,9 @@ async function handleUpdateContact(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        { type: 'text', text: `Error updating contact: ${error.message}` },
-      ],
-    };
+    return toolError(`Error updating contact: ${error.message}`);
   }
 }
 
@@ -545,7 +487,7 @@ async function handleDeleteContact(args) {
   const contactId = args.id;
 
   if (!contactId) {
-    return { content: [{ type: 'text', text: 'Contact ID is required.' }] };
+    return toolError('Contact ID is required.');
   }
 
   try {
@@ -565,20 +507,9 @@ async function handleDeleteContact(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        { type: 'text', text: `Error deleting contact: ${error.message}` },
-      ],
-    };
+    return toolError(`Error deleting contact: ${error.message}`);
   }
 }
 
@@ -590,7 +521,7 @@ async function handleSearchPeople(args) {
   const count = Math.min(args.count || 25, 50);
 
   if (!query) {
-    return { content: [{ type: 'text', text: 'Search query is required.' }] };
+    return toolError('Search query is required.');
   }
 
   try {
@@ -658,20 +589,9 @@ async function handleSearchPeople(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        { type: 'text', text: `Error searching people: ${error.message}` },
-      ],
-    };
+    return toolError(`Error searching people: ${error.message}`);
   }
 }
 
@@ -681,12 +601,7 @@ const contactsTools = [
     name: 'manage-contact',
     description:
       "Full CRUD over the signed-in user's personal Outlook contacts (destructive: covers `delete` action). action=`list` (default) returns contacts with pagination via `skip`/`count` (default 50). action=`search` returns contacts matching `query` against name/email (default 25). action=`get` returns full contact detail by `id`. action=`create` adds a new contact and returns its `id`. action=`update` patches the given fields by `id` (only fields passed are changed). action=`delete` permanently removes the contact by `id`. Use `outputVerbosity` (minimal/standard/full) on list/search to control field count. Prefer `search-people` for cross-source relevance ranking (contacts + directory + recent comms) — this tool only searches your personal contact store.",
-    annotations: {
-      title: 'Contacts',
-      readOnlyHint: false,
-      destructiveHint: true,
-      openWorldHint: false,
-    },
+    ...toolMetadata('manage-contact', 'Contacts'),
     inputSchema: {
       type: 'object',
       properties: {
@@ -788,14 +703,9 @@ const contactsTools = [
         case 'list':
           return handleListContacts(args);
         default:
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Unknown action '${action}'. Valid actions: list, search, get, create, update, delete.`,
-              },
-            ],
-          };
+          return toolError(
+            `Unknown action '${action}'. Valid actions: list, search, get, create, update, delete.`
+          );
       }
     },
   },
@@ -803,13 +713,7 @@ const contactsTools = [
     name: 'search-people',
     description:
       'Relevance-ranked search across personal contacts, organisation directory, and recent communications via the Microsoft Graph People API (read-only). Returns people objects with `displayName`, `emailAddresses`, `companyName`, `jobTitle`, and relevance metadata — ideal for "who is X?" or "who do I email about Y?" lookups. Use `manage-contact` action=`search` instead when you specifically need entries from your personal contact store only.',
-    annotations: {
-      title: 'People Search',
-      readOnlyHint: true,
-      // openWorldHint: returns directory/people data for external contacts
-      // (org directory + inferred from recent comms). (#92)
-      openWorldHint: true,
-    },
+    ...toolMetadata('search-people', 'People Search'),
     inputSchema: {
       type: 'object',
       properties: {

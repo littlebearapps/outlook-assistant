@@ -1,0 +1,149 @@
+/**
+ * Risk-class map contract (#270, #277).
+ *
+ * `utils/risk-classes.js` is the single source of truth for how risky each
+ * tool and action is. Annotations are derived from it, so this suite fails if
+ * any tool or action is unclassified (new surfaces must be classified on
+ * purpose), if the map names something that no longer exists, or if a tool's
+ * published annotations drift from the map.
+ */
+const { TOOLS } = require('../../tools');
+const {
+  RISK_CLASSES,
+  TOOL_RISK,
+  classify,
+  riskAnnotations,
+} = require('../../utils/risk-classes');
+
+const byName = Object.fromEntries(TOOLS.map((t) => [t.name, t]));
+const actionEnum = (tool) => tool.inputSchema?.properties?.action?.enum;
+
+describe('risk-class map coverage', () => {
+  test.each(TOOLS.map((t) => t.name))('%s is classified', (name) => {
+    const entry = TOOL_RISK[name];
+    expect(entry).toBeDefined();
+    const actions = actionEnum(byName[name]);
+    if (actions) {
+      expect(Object.keys(entry.actions || {}).sort()).toEqual(
+        [...actions].sort()
+      );
+      expect(entry.default).toBeUndefined();
+    } else {
+      expect(entry.actions).toBeUndefined();
+      expect(RISK_CLASSES).toContain(entry.default);
+    }
+  });
+
+  test('the map names no tool that does not exist', () => {
+    for (const name of Object.keys(TOOL_RISK)) {
+      expect(byName[name]).toBeDefined();
+    }
+  });
+
+  test('every class used is a known class', () => {
+    for (const entry of Object.values(TOOL_RISK)) {
+      const classes = entry.actions
+        ? Object.values(entry.actions)
+        : [entry.default];
+      for (const c of classes) expect(RISK_CLASSES).toContain(c);
+    }
+  });
+});
+
+describe('classify', () => {
+  test('returns the action class for action-based tools', () => {
+    expect(classify('draft', 'send')).toBe('outward');
+    expect(classify('draft', 'create')).toBe('reversible');
+    expect(classify('manage-rules', 'create')).toBe('persistent');
+    expect(classify('folders', 'delete')).toBe('destructive');
+    expect(classify('folders', 'list')).toBe('read');
+  });
+
+  test('returns the default class for single-purpose tools', () => {
+    expect(classify('send-email')).toBe('outward');
+    expect(classify('search-emails')).toBe('read');
+  });
+
+  test('returns undefined for an unknown tool or action', () => {
+    expect(classify('no-such-tool')).toBeUndefined();
+    expect(classify('draft', 'no-such-action')).toBeUndefined();
+  });
+});
+
+describe('riskAnnotations', () => {
+  test('throws for an unclassified tool, so it cannot ship unannotated', () => {
+    expect(() => riskAnnotations('no-such-tool', 'X')).toThrow(/no-such-tool/);
+  });
+
+  test('a read tool is read-only, non-destructive and idempotent', () => {
+    expect(riskAnnotations('find-meeting-rooms', 'Rooms')).toEqual({
+      title: 'Rooms',
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    });
+  });
+
+  test('a tool that surfaces untrusted content is open-world', () => {
+    expect(riskAnnotations('read-email', 'Read').openWorldHint).toBe(true);
+  });
+
+  test('calendar and mail-tip text from other people is untrusted', () => {
+    // Event subjects/previews come from external organisers; mail tips echo
+    // recipients' out-of-office messages.
+    for (const name of ['list-events', 'get-mail-tips']) {
+      expect(riskAnnotations(name, name).openWorldHint).toBe(true);
+    }
+  });
+
+  test('outward and persistent actions are destructive and open-world', () => {
+    for (const name of ['create-event', 'mailbox-settings', 'manage-rules']) {
+      const a = riskAnnotations(name, name);
+      expect(a.destructiveHint).toBe(true);
+      expect(a.openWorldHint).toBe(true);
+    }
+  });
+
+  test('a delete action makes a tool destructive (#277)', () => {
+    for (const name of ['manage-category', 'manage-focused-inbox']) {
+      expect(riskAnnotations(name, name).destructiveHint).toBe(true);
+    }
+  });
+
+  test('reversible-only write tools are not destructive', () => {
+    const a = riskAnnotations('update-email', 'Update');
+    expect(a.readOnlyHint).toBe(false);
+    expect(a.destructiveHint).toBe(false);
+    expect(a.idempotentHint).toBe(true);
+  });
+});
+
+describe('published tool metadata matches the map (#277)', () => {
+  test.each(TOOLS.map((t) => t.name))(
+    '%s sets all four hints explicitly, from the map',
+    (name) => {
+      const tool = byName[name];
+      const a = tool.annotations;
+      for (const hint of [
+        'readOnlyHint',
+        'destructiveHint',
+        'idempotentHint',
+        'openWorldHint',
+      ]) {
+        expect(typeof a[hint]).toBe('boolean');
+      }
+      expect(a).toEqual(riskAnnotations(name, a.title));
+    }
+  );
+
+  test.each(TOOLS.map((t) => t.name))(
+    '%s has a top-level title matching annotations.title',
+    (name) => {
+      const tool = byName[name];
+      expect(typeof tool.title).toBe('string');
+      expect(tool.title.length).toBeGreaterThan(0);
+      expect(tool.annotations.title).toBe(tool.title);
+    }
+  );
+});

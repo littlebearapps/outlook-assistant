@@ -7,6 +7,8 @@ const handleUpdateRule = require('./update');
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { checkRateLimit } = require('../utils/safety');
+const { toolMetadata } = require('../utils/risk-classes');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 /**
  * Delete rule handler
@@ -21,14 +23,7 @@ async function handleDeleteRule(args) {
   if (rateLimitError) return rateLimitError;
 
   if (!ruleName && !ruleId) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Either ruleName or ruleId is required.',
-        },
-      ],
-    };
+    return toolError('Either ruleName or ruleId is required.');
   }
 
   try {
@@ -42,14 +37,7 @@ async function handleDeleteRule(args) {
       const rules = await getInboxRules(accessToken);
       const rule = rules.find((r) => r.displayName === ruleName);
       if (!rule) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Rule with name "${ruleName}" not found.`,
-            },
-          ],
-        };
+        return toolError(`Rule with name "${ruleName}" not found.`);
       }
       resolvedId = rule.id;
       displayName = ruleName;
@@ -71,23 +59,9 @@ async function handleDeleteRule(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error deleting rule: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error deleting rule: ${error.message}`);
   }
 }
 
@@ -100,25 +74,15 @@ async function handleEditRuleSequence(args) {
   const { ruleName, sequence } = args;
 
   if (!ruleName) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Rule name is required. Please specify the exact name of an existing rule.',
-        },
-      ],
-    };
+    return toolError(
+      'Rule name is required. Please specify the exact name of an existing rule.'
+    );
   }
 
   if (!sequence || isNaN(sequence) || sequence < 1) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'A positive sequence number is required. Lower numbers run first (higher priority).',
-        },
-      ],
-    };
+    return toolError(
+      'A positive sequence number is required. Lower numbers run first (higher priority).'
+    );
   }
 
   try {
@@ -127,14 +91,7 @@ async function handleEditRuleSequence(args) {
 
     const rule = rules.find((r) => r.displayName === ruleName);
     if (!rule) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Rule with name "${ruleName}" not found.`,
-          },
-        ],
-      };
+      return toolError(`Rule with name "${ruleName}" not found.`);
     }
 
     await callGraphAPI(
@@ -154,24 +111,10 @@ async function handleEditRuleSequence(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error updating rule sequence: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error updating rule sequence: ${error.message}`);
   }
 }
 
@@ -181,12 +124,7 @@ const rulesTools = [
     name: 'manage-rules',
     description:
       'Server-side inbox rule CRUD (destructive: covers `delete`; supports `dryRun` on create/update for preview). Rules run on the Exchange server regardless of which client is open. action=`list` (default) returns rules with id/name/sequence — pass `includeDetails: true` to expand conditions/actions/exceptions. action=`create` builds a new rule from condition params (12 supported: fromAddresses, containsSubject, bodyContains, hasAttachments, importance, sentTo, sensitivity, etc.), action params (9 supported: moveToFolder/copyToFolder — folder name, nested path like `Triage/Delete`, or ID — forwardTo, redirectTo, assignCategories, markAsRead, delete, etc.), and optional `except*` exceptions. action=`update` patches the named fields by `ruleId`. action=`reorder` changes execution priority via `sequence` (lower = earlier). action=`delete` removes a rule. Recipient allowlist applies to forwardTo/redirectTo. `permanentDelete` action is intentionally omitted (too dangerous for AI use — use the Outlook UI). Subject to session rate limits (`OUTLOOK_MAX_MANAGE_RULES_PER_SESSION`).',
-    annotations: {
-      title: 'Inbox Rules',
-      readOnlyHint: false,
-      destructiveHint: true,
-      openWorldHint: false,
-    },
+    ...toolMetadata('manage-rules', 'Inbox Rules'),
     inputSchema: {
       type: 'object',
       properties: {
@@ -404,14 +342,9 @@ const rulesTools = [
         case 'list':
           return handleListRules(args);
         default:
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Unknown action '${action}'. Valid actions: list, create, update, reorder, delete.`,
-              },
-            ],
-          };
+          return toolError(
+            `Unknown action '${action}'. Valid actions: list, create, update, reorder, delete.`
+          );
       }
     },
   },

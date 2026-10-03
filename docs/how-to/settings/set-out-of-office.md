@@ -108,6 +108,7 @@ This shows whether auto-replies are enabled, the schedule, and the current messa
 - Include `startDateTime` and `endDateTime` for scheduled auto-activate/deactivate
 - You can include HTML in your reply messages for formatting
 - Check your current status with `action: "get"` before making changes
+- `mailbox-settings` is marked destructive because automatic replies go to other people, so clients that honour MCP annotations ask before running it, even for `get`
 - If you enable auto-replies without providing a message, the server warns you — it will note if a previously configured message will be reused, or warn that recipients will receive a blank reply
 
 ## Related

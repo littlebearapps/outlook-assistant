@@ -46,24 +46,28 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 
 ## Safety Controls
 
-- **MCP annotations** on all 22 tools (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`). `openWorldHint: true` on tools that surface or send external content (`search-emails`, `read-email`, `search-people`, `access-shared-mailbox`, `attachments`, `export`, `send-email`, `draft`) (#92)
+- **MCP annotations** on all 22 tools: all four hints set explicitly and derived from the risk-class map (`utils/risk-classes.js`: `read`/`reversible`/`outward`/`destructive`/`persistent` per tool and action), plus a top-level `title`. `destructiveHint` = any outward, destructive or persistent action; `openWorldHint` = surfaces untrusted content (#92) or reaches other people; `idempotentHint` = read-only or the tool's `idempotent` flag. A test fails on any unclassified tool or action (#270, #277)
 - **get-mail-tips**: pre-send recipient validation (out-of-office, mailbox full, delivery restrictions)
 - **send-email**: `dryRun` param, `checkRecipients` param (mail tips), session rate limiting (`OUTLOOK_MAX_EMAILS_PER_SESSION`), recipient allowlist (`OUTLOOK_ALLOWED_RECIPIENTS`)
 - **draft**: `dryRun` on create, `checkRecipients` (mail tips), recipient allowlist, rate limiting. Send action shares limit with `send-email`. `update`/`send`/`delete` look the ID up first and refuse anything that isn't an unsent draft (`assertIsDraft` in `email/draft.js`).
 - **manage-rules**: `dryRun` on create/update, rate limiting (`OUTLOOK_MAX_MANAGE_RULES_PER_SESSION`), recipient allowlist on forwardTo/redirectTo, no `permanentDelete` (too dangerous for AI). Supports 12 conditions, 9 actions, and exceptions.
-- **manage-event**: marked `destructiveHint: true` (covers `decline`/`cancel`/`delete`; `update` action added v3.8.0 is non-destructive in isolation but inherits the tool-level annotation — use `dryRun: true` to preview update payloads). `accept` is deliberately omitted — Microsoft Graph doesn't expose an `accept` verb in a way that works across personal/M365 reliably; use the Outlook UI to accept invitations.
+- **manage-event**: every action is `outward` (updates, declines, cancellations and organiser deletes notify attendees) — use `dryRun: true` to preview update payloads. `accept` is deliberately omitted — Microsoft Graph doesn't expose an `accept` verb in a way that works across personal/M365 reliably; use the Outlook UI to accept invitations.
 - **Shared mailboxes**: off unless `OUTLOOK_SHARED_MAILBOX` is set (`read` = read-only shared access); addresses must be printable-ASCII emails (`utils/mailbox.js`); sending from a shared mailbox is never supported (`Mail.Send.Shared` not requested)
 - **Path/ID hardening** (`utils/graph-api.js`): `.`/`..` segments in resource paths (incl. percent-encoded, `$batch`, relative delta tokens) are refused before any request; full URLs (deltaToken/nextLink) must be `https://graph.microsoft.com`, so the token never leaves Graph
 - **File writes** (`attachments` download, `export` incl. conversations; all via `utils/safe-write.js`): server-chosen names are sanitised, written with exclusive create (no overwrite, no symlink following, `-1`, `-2`, … suffixes) and confined to `outputDir` (default system tmpdir); a write that fails part-way removes the partial file; only an explicit single-message `export` file path is written as given
 - **list-events**: invalid `startAfter`/`startBefore`/`subject` return `isError` before any Graph call
-- 7 read-only tools auto-approved by Claude Code; 6 destructive tools (`manage-event`, `manage-contact`, `send-email`, `draft`, `folders`, `manage-rules`) prompt for confirmation
+- 7 read-only tools auto-approved by Claude Code; 10 destructive tools (`send-email`, `draft`, `create-event`, `manage-event`, `manage-rules`, `mailbox-settings`, `folders`, `manage-contact`, `manage-category`, `manage-focused-inbox`) prompt for confirmation
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `index.js` | Entry point: combines all tools into `TOOLS`, creates the MCP server, wires `request-handler.js`, connects the stdio transport |
-| `request-handler.js` | MCP request dispatcher (extracted from `index.js` for testability): routes `initialize`/`tools/list`/`tools/call`, runs schema coercion, and returns tool errors as visible `isError` content (never empty output) |
+| `index.js` | Entry point: CLI flags, startup warnings, connects `createServer()` to the stdio transport |
+| `tools.js` | Tool registry: every module's tools combined into `TOOLS` (tests import it) |
+| `server.js` | `createServer()`: SDK `Server` with `tools: {listChanged: false}` and the dispatcher |
+| `request-handler.js` | MCP request dispatcher: `tools/list`/`tools/call` with schema coercion. Protocol errors are thrown as JSON-RPC errors (-32601 unknown method, -32602 unknown tool, -32603 internal); tool failures return visible `isError` content |
+| `utils/risk-classes.js` | Risk-class map per tool/action; derives every tool's annotations (`toolMetadata`) |
+| `utils/tool-error.js` | `toolError(message, { nextStep })` and `authRequiredError()`: every handler error returns `isError: true` |
 | `config.js` | API endpoint, auth settings, defaults |
 | `utils/schema-coerce.js` | MCP-boundary param coercion + validation (string→array/boolean/number, `additionalProperties: false`, required, enums) |
 | `auth/client-config.js` | Runtime client ID: GUID validation, `~/.outlook-assistant-config.json` read/save, env → saved resolution (must not require `config.js`) |
@@ -112,10 +116,10 @@ OUTLOOK_REQUEST_TIMEOUT_MS=60000           # Optional: per-attempt Graph inactiv
 
 ## Adding New Tools
 
-1. Create handler in module directory (e.g., `email/new-tool.js`)
+1. Create handler in module directory (e.g., `email/new-tool.js`); return errors with `toolError()` / `authRequiredError()` (`utils/tool-error.js`)
 2. Export from module `index.js`
-3. Add to `TOOLS` array in main `index.js`
-4. Include `annotations` object on tool definition
+3. Add the module's tools to `TOOLS` in `tools.js`
+4. Classify the tool and each action in `utils/risk-classes.js`, and spread `...toolMetadata(name, title)` into the definition (never hand-write hints)
 5. Add test in `test/[module]/`
 6. Keep the plugin in step: see [`.claude/rules/plugin-and-skill-maintenance.md`](.claude/rules/plugin-and-skill-maintenance.md) (risk class, skill reference, hook map)
 
@@ -126,11 +130,10 @@ Common errors (auth, device code, search, timezones) and fixes live in [`docs/tr
 ## Testing
 
 ```bash
-npm test                    # Jest unit tests (60 suites / 1544 tests at v3.13.0)
+npm test                    # Jest unit tests (71 suites / 1866 tests with the unreleased v3.14.0 work)
 npm run lint                # ESLint (0 errors expected)
 npm run format:check        # Prettier (CI runs this)
-./test-modular-server.sh    # MCP Inspector interactive
-./test-direct.sh            # Direct testing
+node scripts/e2e-stdio.js <tool> '<argsJson>'  # Fresh stdio server: initialize + one tools/call
 USE_TEST_MODE=true npm start # Mock data mode
 ```
 

@@ -6,6 +6,8 @@
  */
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
+const { toolMetadata } = require('../utils/risk-classes');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 // Days of the week for working hours
 const DAYS_OF_WEEK = [
@@ -189,23 +191,9 @@ async function handleGetMailboxSettings(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error getting mailbox settings: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error getting mailbox settings: ${error.message}`);
   }
 }
 
@@ -273,14 +261,9 @@ async function handleSetAutomaticReplies(args) {
     // External audience
     if (externalAudience) {
       if (!['none', 'contactsOnly', 'all'].includes(externalAudience)) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: "externalAudience must be 'none', 'contactsOnly', or 'all'.",
-            },
-          ],
-        };
+        return toolError(
+          "externalAudience must be 'none', 'contactsOnly', or 'all'."
+        );
       }
       settings.externalAudience = externalAudience;
     }
@@ -290,14 +273,9 @@ async function handleSetAutomaticReplies(args) {
     // externalAudience without enabled/scheduled — previously the wrapper
     // announced "Automatic replies updated!" with no actual state change.
     if (Object.keys(settings).length === 0) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: 'No automatic-reply settings were provided. To change state, pass `enabled: true|false` or `startDateTime` + `endDateTime`. To update messages or audience, pass `internalReplyMessage`, `externalReplyMessage`, or `externalAudience`.',
-          },
-        ],
-      };
+      return toolError(
+        'No automatic-reply settings were provided. To change state, pass `enabled: true|false` or `startDateTime` + `endDateTime`. To update messages or audience, pass `internalReplyMessage`, `externalReplyMessage`, or `externalAudience`.'
+      );
     }
 
     // Apply settings
@@ -377,23 +355,9 @@ async function handleSetAutomaticReplies(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error setting automatic replies: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error setting automatic replies: ${error.message}`);
   }
 }
 
@@ -405,37 +369,22 @@ async function handleSetWorkingHours(args) {
 
   // Validate inputs
   if (!startTime && !endTime && !daysOfWeek && !timeZone) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'At least one of startTime, endTime, daysOfWeek, or timeZone is required.',
-        },
-      ],
-    };
+    return toolError(
+      'At least one of startTime, endTime, daysOfWeek, or timeZone is required.'
+    );
   }
 
   // Validate time format (HH:MM or HH:MM:SS)
   const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$/;
   if (startTime && !timeRegex.test(startTime)) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: "startTime must be in HH:MM or HH:MM:SS format (e.g., '09:00' or '09:00:00').",
-        },
-      ],
-    };
+    return toolError(
+      "startTime must be in HH:MM or HH:MM:SS format (e.g., '09:00' or '09:00:00')."
+    );
   }
   if (endTime && !timeRegex.test(endTime)) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: "endTime must be in HH:MM or HH:MM:SS format (e.g., '17:00' or '17:00:00').",
-        },
-      ],
-    };
+    return toolError(
+      "endTime must be in HH:MM or HH:MM:SS format (e.g., '17:00' or '17:00:00')."
+    );
   }
 
   // Validate days of week
@@ -444,14 +393,9 @@ async function handleSetWorkingHours(args) {
       (d) => !DAYS_OF_WEEK.includes(d.toLowerCase())
     );
     if (invalidDays.length > 0) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Invalid days: ${invalidDays.join(', ')}. Valid days: ${DAYS_OF_WEEK.join(', ')}`,
-          },
-        ],
-      };
+      return toolError(
+        `Invalid days: ${invalidDays.join(', ')}. Valid days: ${DAYS_OF_WEEK.join(', ')}`
+      );
     }
   }
 
@@ -506,23 +450,9 @@ async function handleSetWorkingHours(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error setting working hours: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error setting working hours: ${error.message}`);
   }
 }
 
@@ -548,23 +478,9 @@ async function handleGetAutomaticReplies() {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error getting automatic replies: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error getting automatic replies: ${error.message}`);
   }
 }
 
@@ -590,23 +506,9 @@ async function handleGetWorkingHours() {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error getting working hours: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error getting working hours: ${error.message}`);
   }
 }
 
@@ -616,12 +518,7 @@ const settingsTools = [
     name: 'mailbox-settings',
     description:
       'Read or update mailbox-level settings (idempotent — safe to retry; sets are PATCH-style and merge with existing state). action=`get` (default) returns settings — use `section` to filter (`language`, `timeZone`, `workingHours`, `automaticRepliesSetting`, or `all`). action=`set-auto-replies` configures out-of-office: `enabled` true/false, optional `startDateTime`/`endDateTime` (ISO 8601) for scheduled mode, `internalReplyMessage` and (optionally) `externalReplyMessage`. action=`set-working-hours` updates the schedule: `startTime`/`endTime` (HH:MM) and `daysOfWeek` (array of `monday`..`sunday`). Returns the updated settings object on set actions.',
-    annotations: {
-      title: 'Mailbox Settings',
-      readOnlyHint: false,
-      destructiveHint: false,
-      idempotentHint: true,
-    },
+    ...toolMetadata('mailbox-settings', 'Mailbox Settings'),
     inputSchema: {
       type: 'object',
       properties: {
@@ -713,14 +610,9 @@ const settingsTools = [
         case 'get':
           return handleGetMailboxSettings(args);
         default:
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Unknown action '${action}'. Valid actions: get, set-auto-replies, set-working-hours.`,
-              },
-            ],
-          };
+          return toolError(
+            `Unknown action '${action}'. Valid actions: get, set-auto-replies, set-working-hours.`
+          );
       }
     },
   },

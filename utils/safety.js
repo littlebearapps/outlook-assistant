@@ -4,6 +4,7 @@
  * Provides rate limiting, recipient allowlists, and content safety markers
  * to protect against unintended destructive actions.
  */
+const { toolError } = require('./tool-error');
 
 // Per-tool session counters for rate limiting
 const sessionCounters = {};
@@ -29,14 +30,9 @@ function checkRateLimit(toolName, limit) {
   if (!sessionCounters[toolName]) sessionCounters[toolName] = 0;
 
   if (sessionCounters[toolName] >= maxPerSession) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Rate limit reached: ${maxPerSession} ${toolName} operations per session. Restart the server to reset. Configure via ${envKey} environment variable.`,
-        },
-      ],
-    };
+    return toolError(
+      `Rate limit reached: ${maxPerSession} ${toolName} operations per session. Restart the server to reset. Configure via ${envKey} environment variable.`
+    );
   }
 
   sessionCounters[toolName]++;
@@ -71,14 +67,9 @@ function checkRecipientAllowlist(recipients) {
   }
 
   if (blocked.length > 0) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Recipient not allowed: ${blocked.join(', ')}. Allowed recipients/domains: ${allowed.join(', ')}. Configure via OUTLOOK_ALLOWED_RECIPIENTS environment variable.`,
-        },
-      ],
-    };
+    return toolError(
+      `Recipient not allowed: ${blocked.join(', ')}. Allowed recipients/domains: ${allowed.join(', ')}. Configure via OUTLOOK_ALLOWED_RECIPIENTS environment variable.`
+    );
   }
 
   return null;

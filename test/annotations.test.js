@@ -24,10 +24,10 @@ const OPEN_WORLD_TRUE = [
   'draft', // send/reply/forward reach external recipients (pre-existing)
   'search-people', // external directory / people data
   'access-shared-mailbox', // external-sender content in a shared mailbox
+  'get-mail-tips', // echoes recipients' out-of-office messages
 ];
 
 const OPEN_WORLD_FALSE = [
-  'get-mail-tips', // structured recipient metadata, not free-form content
   'update-email', // mutates local message state only
   'manage-contact', // caller-controlled personal contact store
   'find-meeting-rooms', // bounded org-configured resource directory

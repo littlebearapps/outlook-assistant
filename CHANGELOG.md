@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Failed tool calls now look like failures.** About 260 error results,
+  including missing-parameter, not-found and Graph errors and the rate-limit
+  and allowlist refusals, came back without `isError`, so clients and models
+  read them as successes. They now all set `isError: true` (#275).
+- **Sign-in errors name the right tool.** "Authentication required" now tells
+  the model to sign in with the `auth` tool with `action=authenticate`; 24 of
+  these messages pointed to an `authenticate` tool that no longer exists
+  (#275).
+- **An export search that matches nothing says so.** A search-driven batch
+  export (`target=messages` with `searchQuery` or `query`) that found no
+  messages replied "Provide emailIds or searchQuery", although you had. It
+  now reports that nothing matched and nothing was exported (#275).
+- **Protocol errors are real JSON-RPC errors** (#276).
+  - Unknown methods (including the 2026-07-28 `server/discover` probe)
+    return `-32601`, internal failures `-32603`, and an unknown tool `-32602`,
+    instead of a success result carrying an error.
+  - `capabilities` now declares `tools: { listChanged: false }`, and
+    `resources/list` and `prompts/list` are no longer answered with empty
+    stubs.
+- **Accurate safety annotations on every tool** (#277).
+  - All four hints (`readOnlyHint`, `destructiveHint`, `idempotentHint`,
+    `openWorldHint`) are now set explicitly, and every tool has a top-level
+    `title`.
+  - `create-event` and `mailbox-settings` are now marked destructive and
+    open-world (invitations and automatic replies reach other people).
+    `manage-event` and `manage-rules` are now open-world.
+    `manage-category` and `manage-focused-inbox` are now destructive, because
+    they can delete. `list-events` and `get-mail-tips` are now open-world,
+    because event text and out-of-office replies are written by other people.
+    Clients that prompt on destructive tools will now prompt for these too.
+
+### Changed
+
+- **Risk classes drive the annotations.** `utils/risk-classes.js` classifies
+  every tool and action as `read`, `reversible`, `outward`, `destructive` or
+  `persistent`, and the annotations are derived from it. A test fails on any
+  unclassified tool or action (#270).
+- **Registry metadata** (#281).
+  - `server.json` gains a title, website and icon.
+  - `OUTLOOK_CLIENT_ID` is no longer marked required, since it can be given at
+    sign-in.
+  - Smithery no longer requires the client ID or the client secret.
+- **Schema check in CI.** Every tool's `inputSchema` is validated against JSON
+  Schema 2020-12 with Ajv, along with client portability rules (an object
+  root, no root `oneOf`/`anyOf`/`allOf`, `items` on every array) (#281).
+
 ## [3.13.0] - 2026-10-03
 
 ### Added

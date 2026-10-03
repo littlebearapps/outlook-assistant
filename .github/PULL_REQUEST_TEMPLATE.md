@@ -31,6 +31,7 @@ Brief description of changes.
 - [ ] Formatting passes (`npm run format:check`)
 - [ ] Documentation updated if needed
 - [ ] `docs/quickrefs/tools-reference.md` updated (if tools changed)
+- [ ] New tools and actions classified in `utils/risk-classes.js` (if tools changed)
 - [ ] Follows code style guidelines
 
 ## Related Issues

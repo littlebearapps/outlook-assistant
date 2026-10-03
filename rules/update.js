@@ -10,6 +10,7 @@ const {
   buildActions,
   buildExceptions,
 } = require('./rule-builder');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 /**
  * Update rule handler — modify an existing rule by name or ID.
@@ -25,25 +26,13 @@ async function handleUpdateRule(args) {
   if (rateLimitError) return rateLimitError;
 
   if (!ruleName && !ruleId) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Either ruleName or ruleId is required to identify the rule to update.',
-        },
-      ],
-    };
+    return toolError(
+      'Either ruleName or ruleId is required to identify the rule to update.'
+    );
   }
 
   if (sequence !== undefined && (isNaN(sequence) || sequence < 1)) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Sequence must be a positive number greater than zero.',
-        },
-      ],
-    };
+    return toolError('Sequence must be a positive number greater than zero.');
   }
 
   try {
@@ -63,14 +52,7 @@ async function handleUpdateRule(args) {
     }
 
     if (!currentRule) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Rule "${ruleName || ruleId}" not found.`,
-          },
-        ],
-      };
+      return toolError(`Rule "${ruleName || ruleId}" not found.`);
     }
 
     // Build PATCH payload — only include fields the user provided
@@ -107,14 +89,9 @@ async function handleUpdateRule(args) {
     // Check for fatal folder-not-found
     const folderNotFound = actWarnings.some((w) => w.includes('not found'));
     if (folderNotFound && Object.keys(actions).length === 0) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: actWarnings.filter((w) => w.includes('not found')).join('\n'),
-          },
-        ],
-      };
+      return toolError(
+        actWarnings.filter((w) => w.includes('not found')).join('\n')
+      );
     }
 
     // Build exceptions if any except* param was provided
@@ -126,14 +103,9 @@ async function handleUpdateRule(args) {
 
     // Check that something is actually being changed
     if (Object.keys(patch).length === 0) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `No changes specified for rule "${currentRule.displayName}". Provide at least one parameter to update (name, isEnabled, sequence, conditions, actions, or exceptions).`,
-          },
-        ],
-      };
+      return toolError(
+        `No changes specified for rule "${currentRule.displayName}". Provide at least one parameter to update (name, isEnabled, sequence, conditions, actions, or exceptions).`
+      );
     }
 
     // Dry-run: show before/after preview
@@ -197,24 +169,10 @@ async function handleUpdateRule(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error updating rule: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error updating rule: ${error.message}`);
   }
 }
 

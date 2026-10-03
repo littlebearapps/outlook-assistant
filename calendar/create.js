@@ -5,6 +5,7 @@ const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { DEFAULT_TIMEZONE } = require('../config');
 const { buildAttendees } = require('./attendees');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 /**
  * Create event handler
@@ -15,14 +16,9 @@ async function handleCreateEvent(args) {
   const { subject, start, end, attendees, body } = args;
 
   if (!subject || !start || !end) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Subject, start, and end times are required to create an event.',
-        },
-      ],
-    };
+    return toolError(
+      'Subject, start, and end times are required to create an event.'
+    );
   }
 
   // Plain strings are required attendees; {email, type} sets the type (#249).
@@ -102,24 +98,10 @@ async function handleCreateEvent(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'authenticate' tool first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error creating event: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error creating event: ${error.message}`);
   }
 }
 

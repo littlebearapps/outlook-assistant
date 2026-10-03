@@ -74,23 +74,14 @@ Documentation: https://github.com/littlebearapps/outlook-assistant`;
   process.exit(0);
 }
 
-const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
 const {
   StdioServerTransport,
 } = require('@modelcontextprotocol/sdk/server/stdio.js');
 const config = require('./config');
-const { createRequestHandler } = require('./request-handler');
+const { createServer } = require('./server');
 
-// Import module tools
-const { authTools, setToolCount } = require('./auth');
-const { calendarTools } = require('./calendar');
-const { emailTools } = require('./email');
-const { folderTools } = require('./folder');
-const { rulesTools } = require('./rules');
-const { contactsTools } = require('./contacts');
-const { categoriesTools } = require('./categories');
-const { settingsTools } = require('./settings');
-const { advancedTools } = require('./advanced');
+const { setToolCount } = require('./auth');
+const { TOOLS } = require('./tools');
 
 // Log startup information
 console.error(`STARTING ${config.SERVER_NAME.toUpperCase()} MCP SERVER`);
@@ -109,38 +100,10 @@ if (
   );
 }
 
-// Combine all tools
-const TOOLS = [
-  ...authTools,
-  ...calendarTools,
-  ...emailTools,
-  ...folderTools,
-  ...rulesTools,
-  ...contactsTools,
-  ...categoriesTools,
-  ...settingsTools,
-  ...advancedTools,
-];
-
 // Set dynamic tool count for auth about handler
 setToolCount(TOOLS.length);
 
-// Create server with tools capabilities
-const server = new Server(
-  { name: config.SERVER_NAME, version: config.SERVER_VERSION },
-  {
-    capabilities: {
-      tools: TOOLS.reduce((acc, tool) => {
-        acc[tool.name] = {};
-        return acc;
-      }, {}),
-    },
-  }
-);
-
-// Handle all requests. Dispatch + error-shaping logic lives in
-// request-handler.js so it is unit-testable without starting the transport.
-server.fallbackRequestHandler = createRequestHandler(TOOLS);
+const server = createServer(TOOLS);
 
 // Make the script executable
 process.on('SIGTERM', () => {

@@ -1,4 +1,5 @@
 const handleUpdateEvent = require('../../calendar/update');
+const { authRequiredError } = require('../../utils/tool-error');
 const { DEFAULT_TIMEZONE } = require('../../config');
 const { callGraphAPI } = require('../../utils/graph-api');
 const { ensureAuthenticated } = require('../../auth');
@@ -340,9 +341,7 @@ describe('handleUpdateEvent', () => {
       eventId: 'evt_1',
       subject: 'New',
     });
-    expect(result.content[0].text).toBe(
-      "Authentication required. Please use the 'authenticate' tool first."
-    );
+    expect(result.content[0].text).toBe(authRequiredError().content[0].text);
     expect(callGraphAPI).not.toHaveBeenCalled();
   });
 

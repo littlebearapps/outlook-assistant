@@ -22,6 +22,7 @@ const {
   stripHtml,
   VERBOSITY,
 } = require('../utils/response-formatter');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 // Note: buildFromFilter/buildToFilter from search.js use OData $filter which causes
 // InefficientFilter on personal accounts with $orderby. Client-side filtering used instead.
 
@@ -235,20 +236,9 @@ async function handleListConversations(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'authenticate' tool first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        { type: 'text', text: `Error listing conversations: ${error.message}` },
-      ],
-    };
+    return toolError(`Error listing conversations: ${error.message}`);
   }
 }
 
@@ -364,9 +354,7 @@ async function handleGetConversation(args) {
   const prefix = buildMailboxPrefix(sharedMailbox);
 
   if (!conversationId) {
-    return {
-      content: [{ type: 'text', text: 'Conversation ID is required.' }],
-    };
+    return toolError('Conversation ID is required.');
   }
 
   try {
@@ -386,14 +374,9 @@ async function handleGetConversation(args) {
     );
 
     if (messages.length === 0) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `No messages found for conversation ID: ${conversationId}`,
-          },
-        ],
-      };
+      return toolError(
+        `No messages found for conversation ID: ${conversationId}`
+      );
     }
 
     // Format output
@@ -427,20 +410,9 @@ async function handleGetConversation(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'authenticate' tool first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        { type: 'text', text: `Error getting conversation: ${error.message}` },
-      ],
-    };
+    return toolError(`Error getting conversation: ${error.message}`);
   }
 }
 
@@ -467,21 +439,12 @@ async function handleExportConversation(args) {
   const prefix = buildMailboxPrefix(sharedMailbox);
 
   if (!conversationId) {
-    return {
-      content: [{ type: 'text', text: 'Conversation ID is required.' }],
-    };
+    return toolError('Conversation ID is required.');
   }
 
   const validFormats = ['eml', 'mbox', 'markdown', 'json', 'html', 'csv'];
   if (!validFormats.includes(format)) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Invalid format. Use: ${validFormats.join(', ')}`,
-        },
-      ],
-    };
+    return toolError(`Invalid format. Use: ${validFormats.join(', ')}`);
   }
 
   try {
@@ -500,14 +463,9 @@ async function handleExportConversation(args) {
     );
 
     if (messages.length === 0) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `No messages found for conversation ID: ${conversationId}`,
-          },
-        ],
-      };
+      return toolError(
+        `No messages found for conversation ID: ${conversationId}`
+      );
     }
 
     // Create output directory
@@ -788,23 +746,9 @@ async function handleExportConversation(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'authenticate' tool first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error exporting conversation: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error exporting conversation: ${error.message}`);
   }
 }
 

@@ -27,11 +27,11 @@ In Claude Code you can also enter the client ID when you enable the plugin.
 
 22 tools across email, calendar, contacts, folders, rules, categories and mailbox settings. Full list: [tools reference](https://github.com/littlebearapps/outlook-assistant/blob/main/docs/quickrefs/tools-reference.md).
 
-**It can act on your behalf.** It can send email, send or delete drafts, decline or cancel meetings, and create or change inbox rules. Clients that honour MCP safety annotations, such as Claude Code, ask before running these tools. The built-in safety controls are:
+**It can act on your behalf.** It can send email and meeting invitations, send or delete drafts, decline, cancel or delete meetings, set automatic replies, create or change inbox rules, and delete folders, contacts and categories. These tools are marked destructive, so clients that honour MCP safety annotations, such as Claude Code, ask before running them unless you've set the client to auto-approve them. The built-in safety controls are:
 
 - `dryRun` previews for sending, drafts, rules and event updates.
 - Pre-send recipient checks (out-of-office, full mailbox).
-- A per-session send limit (10 by default in this plugin).
+- A per-session limit on sends, drafts and rule changes (10 each by default in this plugin).
 - An optional recipient allowlist.
 - MCP safety annotations on every tool.
 - Sending from shared mailboxes is never supported.

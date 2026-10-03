@@ -4,6 +4,7 @@
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { toolError, authRequiredError } = require('../utils/tool-error');
+const { log } = require('../utils/logger');
 
 /**
  * List rules handler
@@ -51,7 +52,7 @@ async function getInboxRules(accessToken) {
 
     return response.value || [];
   } catch (error) {
-    console.error(`Error getting inbox rules: ${error.message}`);
+    log.debug(`Error getting inbox rules: ${error.message}`);
     throw error;
   }
 }

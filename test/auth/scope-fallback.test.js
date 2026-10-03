@@ -271,6 +271,15 @@ describe('config scope exports', () => {
       );
       warn.mockRestore();
     });
+
+    it('never echoes an address set by mistake (#278)', () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      loadConfigWith('shared.team@example.com');
+      const text = warn.mock.calls.map((c) => c.join(' ')).join('\n');
+      expect(text).toContain('OUTLOOK_SHARED_MAILBOX');
+      expect(text).not.toContain('shared.team@example.com');
+      warn.mockRestore();
+    });
   });
 
   it('AUTH_CONFIG.fallbackScopes matches BASE_SCOPES content', () => {

@@ -38,6 +38,8 @@ Key environment variables:
   OUTLOOK_AUTH_METHOD               device-code (default) | browser
   OUTLOOK_AUTH_AUDIENCE             common | consumers | organizations | <tenant-guid>
   OUTLOOK_SHARED_MAILBOX            Opt in to shared mailboxes: read | true (work/school only)
+  OUTLOOK_READ_ONLY                 Set to "true" to refuse every tool call that would change,
+                                    send or delete anything (reads and sign-in still work)
   OUTLOOK_ALLOWED_RECIPIENTS        Comma-separated recipient allowlist
   OUTLOOK_MAX_EMAILS_PER_SESSION    Default cap per session for every rate-limited tool
                                     (send-email, draft, manage-rules); 0 or unset = no cap
@@ -47,6 +49,7 @@ Key environment variables:
   OUTLOOK_IMMUTABLE_IDS             Set to "true" for message IDs that survive folder moves
   OUTLOOK_SEARCH_SCAN_LIMIT         Local search fallback window (default 500, max 5000)
   OUTLOOK_REQUEST_TIMEOUT_MS        Graph request inactivity timeout (default 60000)
+  OUTLOOK_DEBUG                     Set to "true" for detailed stderr logs (addresses redacted)
   USE_TEST_MODE                     Set to "true" to run against mock data
 
 Documentation: https://github.com/littlebearapps/outlook-assistant`;
@@ -82,10 +85,18 @@ const { createServer } = require('./server');
 
 const { setToolCount } = require('./auth');
 const { TOOLS } = require('./tools');
+const { isDebugEnabled } = require('./utils/logger');
 
 // Log startup information
-console.error(`STARTING ${config.SERVER_NAME.toUpperCase()} MCP SERVER`);
+console.error(
+  `STARTING ${config.SERVER_NAME.toUpperCase()} MCP SERVER v${config.SERVER_VERSION}`
+);
 console.error(`Test mode is ${config.USE_TEST_MODE ? 'enabled' : 'disabled'}`);
+if (isDebugEnabled()) {
+  console.error(
+    'Debug logging is on (OUTLOOK_DEBUG): stderr includes search terms, subjects and Graph errors, with addresses and IDs redacted.'
+  );
+}
 
 // F-1 / F-48: warn at startup when safety belts are unset. Mirrors the
 // warning surfaced by `auth action=about`. Visible to operators reading

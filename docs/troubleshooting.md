@@ -53,6 +53,9 @@ Common issues and their fixes. For getting-started guidance, see [`docs/how-to/g
 | Shared-mailbox **read** works but **move/categorise/flag/create-folder** fails with `404 ErrorInvalidMailboxItemId`, "folder not found", or the change lands in your own mailbox | The write tool must target the shared mailbox, and the token must carry `Mail.ReadWrite.Shared`. (1) Pass `sharedMailbox` (alias `email`) on the write tool — `folders action=move`, `folders action=create`, `apply-category`, `update-email`. (2) Set `OUTLOOK_SHARED_MAILBOX=true` (`read` requests only `Mail.Read.Shared`), add the delegated `Mail.ReadWrite.Shared` permission to your Azure app and grant consent. (3) Restart and **re-authenticate** with `auth action=authenticate force=true` so the token includes the new scope. Omitting `sharedMailbox` targets your own mailbox, where the shared message ID doesn't exist (the 404); a missing scope makes the shared-scoped request fail with 403 — it never falls back to your own mailbox. |
 | `Invalid mailbox "…" — expected a shared mailbox email address` | `sharedMailbox` (or `email`) must be a plain email address such as `team@contoso.com`. Since v3.12.0 only printable ASCII is accepted, so look-alike characters (full-width `／`, zero-width spaces), `#`, `%`, `/` and spaces are refused. User GUIDs aren't accepted either. |
 | Mail sent/replied/forwarded "from" a shared mailbox arrives from your own address | Working as designed — shared-mailbox support covers reading and organising only. `send-email` and `draft` (create/update/send/delete, reply, reply-all, forward) always act on the signed-in user's mailbox and accept no `sharedMailbox` parameter; `Mail.Send.Shared` is not requested. Use the Outlook UI for send-as / send-on-behalf. |
+| A change is refused with "Outlook Assistant is in read-only mode (OUTLOOK_READ_ONLY)" | Read-only mode is on, so every call that isn't a read is refused before it runs, including dry runs, exports and attachment downloads. Nothing was changed. To allow changes, remove `OUTLOOK_READ_ONLY` from the server's `env` block (or set it to `false`; in the Claude Code plugin, turn off **Read-only mode**) and restart the server. A value the server doesn't recognise, such as a typo, turns the mode on and logs a warning on stderr. `auth action=about` shows whether it's on. |
+| `send-email` says "Email not sent: the recipient check flagged …" | You passed `checkRecipients: true` and the mail tips showed an out-of-office reply, a full mailbox, a delivery restriction, an external recipient or a group with external members. Nothing was sent and the send limit wasn't used. Check the listed warnings; to send anyway, repeat the call with `acknowledgeWarnings: true`. "Email not sent: the recipient check failed" means the mail tips lookup itself failed: retry, or send without `checkRecipients`. See [When send-email Refuses to Send](how-to/email/check-recipients-before-sending.md#when-send-email-refuses-to-send). |
+| `manage-rules` says "Rule refused: OUTLOOK_ALLOWED_RECIPIENTS does not allow …" | A `forwardTo` or `redirectTo` address isn't on the recipient allowlist, so the whole rule (or update) was refused and nothing was created or changed. Remove the blocked address, or add it to `OUTLOOK_ALLOWED_RECIPIENTS` and restart the server. Earlier versions saved such a rule with the forwarding silently dropped. |
 
 ## Checking Authentication State
 
@@ -77,11 +80,28 @@ rm ~/.outlook-assistant-tokens.json ~/.outlook-assistant-pending-auth.json
 # Then call the auth tool again with action=authenticate
 ```
 
+## Server Logs and Debug Logging
+
+The server writes its logs to stderr (stdout carries the MCP protocol). Where you read them depends on the client: Claude Desktop writes them to `mcp-server-<name>.log` in its logs folder (`<name>` is the key in your MCP config), and the MCP Inspector (`npm run inspect`) shows them live.
+
+By default, after the startup lines, each tool call logs exactly one line and never its arguments:
+
+```text
+tool=search-emails outcome=ok ms=412
+tool=folders action=create outcome=isError ms=230 graph="409 POST me/mailFolders/{id}/childFolders"
+tool=read-email outcome=isError ms=95 auth=refresh-failed:AADSTS70008
+```
+
+`outcome` is `ok`, `isError` (the tool returned an error to the assistant), `thrown` (with `error=<class>`) or `unknown-tool`. Optional fields: `graph=` is the last failed Graph request in the call (status or network error code, method, and the path with IDs shown as `{id}` and mailboxes as `<mailbox>`), `graphRetries=` counts throttling retries, and `auth=` is a sign-in or token problem with its `AADSTS` code. Search terms, filters, addresses, folder names, subjects and Message-IDs don't appear.
+
+To see what a tool actually did, set `OUTLOOK_DEBUG=true` (also `1`, `yes`, `on`) in the server's `env` block and restart it. Lines starting `[debug]` then show the search strategy and filters tried, the Graph request and error bodies, folder resolution and the auth steps. Even then, email addresses (including Message-IDs) become `<redacted-email>` and long IDs `<id>`; tokens, device codes and the client secret are never logged in either mode. Debug output can still include search terms, subjects and folder names, so check it before pasting it into an issue, and turn debug off when you're done.
+
 ## Reporting Issues
 
 Report issues at <https://github.com/littlebearapps/outlook-assistant/issues> with:
 
 - Error message (full text)
+- The server's stderr lines for the failing call (the default one-line log is safe to share; check `OUTLOOK_DEBUG` output for search terms or subjects first)
 - The output of `auth action=about` (version, configured and granted scopes; it never includes tokens). Don't paste the token file.
 - Auth method: device code or browser
 - Account type: personal (Microsoft/Outlook.com) or work/school

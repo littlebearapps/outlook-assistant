@@ -10,6 +10,7 @@ const { resolveFolder } = require('./resolve');
 const { buildMailboxPrefix } = require('../utils/mailbox');
 const config = require('../config');
 const { toolError, authRequiredError } = require('../utils/tool-error');
+const { log } = require('../utils/logger');
 
 const { VERBOSITY, DEFAULT_LIMITS } = config;
 
@@ -124,7 +125,7 @@ async function getEmailDateRange(accessToken, folderId, mailbox = null) {
       return { newest, oldest };
     }
   } catch (error) {
-    console.error(`Error getting date range: ${error.message}`);
+    log.debug(`Error getting date range: ${error.message}`);
   }
 
   return null;

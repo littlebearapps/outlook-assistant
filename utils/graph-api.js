@@ -4,6 +4,7 @@
 const https = require('https');
 const config = require('../config');
 const mockData = require('./mock-data');
+const { log, graphPathShape } = require('./logger');
 
 /**
  * Guard for caller-supplied full URLs (nextLink/deltaLink continuations).
@@ -270,7 +271,7 @@ function sleep(ms) {
  *   final response (2xx, or the last non-retried error status)
  * @throws {Error} The network error of the final attempt
  */
-async function requestWithRetry(request) {
+async function sendWithRetry(request) {
   const method = String(request.method).toUpperCase();
   const timeoutMs = request.timeoutMs || config.REQUEST_TIMEOUT_MS;
   let networkRetryUsed = false;
@@ -316,12 +317,43 @@ async function requestWithRetry(request) {
       }
     }
 
-    console.error(
+    log.increment('graphRetries');
+    log.debug(
       `[GRAPH-API] ${method} ${networkError ? networkError.code : response.status}; ` +
         `retry ${retry + 1}/${MAX_RETRIES} in ${delayMs} ms`
     );
     totalSleepMs += delayMs;
     await sleep(delayMs);
+  }
+}
+
+/**
+ * sendWithRetry, noting a final failure on the current tool call's log line
+ * as status (or network error code), method and a PII-free path shape (#278).
+ * @param {object} request - See sendWithRetry
+ * @returns {Promise<{status: number, headers: object, text: string}>}
+ */
+async function requestWithRetry(request) {
+  const method = String(request.method).toUpperCase();
+  try {
+    const response = await sendWithRetry(request);
+    if (response.status >= 400) {
+      log.note(
+        'graph',
+        `${response.status} ${method} ${graphPathShape(request.url)}`
+      );
+      log.debug(
+        `[GRAPH-API] ${method} ${request.url} failed with ${response.status}: ${response.text}`
+      );
+    }
+    return response;
+  } catch (error) {
+    log.note(
+      'graph',
+      `${error.code || 'network-error'} ${method} ${graphPathShape(request.url)}`
+    );
+    log.debug(`[GRAPH-API] ${method} ${request.url} failed:`, error);
+    throw error;
   }
 }
 
@@ -357,7 +389,7 @@ async function callGraphAPI(
   try {
     finalUrl = buildGraphUrl(path, queryParams);
   } catch (error) {
-    console.error('Error calling Graph API:', error);
+    log.debug('Error calling Graph API:', error);
     throw error;
   }
 
@@ -422,12 +454,18 @@ async function callGraphAPI(
 
 /**
  * Calls Graph API with pagination support to retrieve all results up to maxCount
+ *
+ * Reports truncation (#279): `hasMore` is true when it stopped with more
+ * available (at maxCount with items trimmed or a further page, or because
+ * Graph repeated a nextLink). `@odata.count` is set only when every item was
+ * returned, so a page size is never presented as a total. `@odata.nextLink`
+ * is kept only when it continues exactly after the returned items.
  * @param {string} accessToken - The access token for authentication
  * @param {string} method - HTTP method (GET only for pagination)
  * @param {string} path - API endpoint path
  * @param {object} queryParams - Initial query parameters
  * @param {number} maxCount - Maximum number of items to retrieve (0 = all)
- * @returns {Promise<object>} - Combined API response with all items
+ * @returns {Promise<{value: Array<object>, hasMore: boolean, '@odata.count'?: number, '@odata.nextLink'?: string}>}
  * @throws {Error} If method is not 'GET'
  * @throws {Error} If any page request fails for any other reason
  */
@@ -443,13 +481,14 @@ async function callGraphAPIPaginated(
   }
 
   const allItems = [];
-  let nextLink;
+  const seenLinks = new Set();
   let currentUrl = path;
   let currentParams = { ...queryParams };
+  let nextLink;
+  let hasMore = false;
 
   try {
-    do {
-      // Make API call
+    for (;;) {
       const response = await callGraphAPI(
         accessToken,
         method,
@@ -458,35 +497,39 @@ async function callGraphAPIPaginated(
         currentParams
       );
 
-      // Add items from this page
       if (response.value && Array.isArray(response.value)) {
         allItems.push(...response.value);
       }
-
-      // Check if we've reached the desired count
-      if (maxCount > 0 && allItems.length >= maxCount) {
-        break;
-      }
-
-      // Get next page URL
       nextLink = response['@odata.nextLink'];
 
-      if (nextLink) {
-        // Pass the full nextLink URL directly to callGraphAPI
-        currentUrl = nextLink;
-        currentParams = {}; // nextLink already contains all params
+      // Stop at the desired count; more remain if items were trimmed or
+      // there is another page.
+      if (maxCount > 0 && allItems.length >= maxCount) {
+        hasMore = allItems.length > maxCount || Boolean(nextLink);
+        if (allItems.length > maxCount) nextLink = undefined;
+        break;
       }
-    } while (nextLink);
+      if (!nextLink) break;
+      // A repeated link would loop forever; stop and say there is more.
+      if (seenLinks.has(nextLink)) {
+        hasMore = true;
+        nextLink = undefined;
+        break;
+      }
+      seenLinks.add(nextLink);
+      currentUrl = nextLink; // the full nextLink URL carries every param
+      currentParams = {};
+    }
 
-    // Trim to exact count if needed
     const finalItems = maxCount > 0 ? allItems.slice(0, maxCount) : allItems;
-
     return {
       value: finalItems,
-      '@odata.count': finalItems.length,
+      hasMore,
+      ...(!hasMore && { '@odata.count': finalItems.length }),
+      ...(hasMore && nextLink && { '@odata.nextLink': nextLink }),
     };
   } catch (error) {
-    console.error('Error during pagination:', error);
+    log.debug('Error during pagination:', error);
     throw error;
   }
 }

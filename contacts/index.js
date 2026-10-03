@@ -11,6 +11,8 @@ const { ensureAuthenticated } = require('../auth');
 const { quoteSearchPhrase } = require('../utils/odata-helpers');
 const { toolMetadata } = require('../utils/risk-classes');
 const { toolError, authRequiredError } = require('../utils/tool-error');
+const { dryRunResult, dryRunUnsupported } = require('../utils/safety');
+const { log } = require('../utils/logger');
 
 /**
  * Contact field presets for different use cases
@@ -243,7 +245,7 @@ async function handleSearchContacts(args) {
       );
     } catch (filterError) {
       // Fallback: fetch all contacts and filter client-side if $filter is unsupported
-      console.error(
+      log.debug(
         `Contact $filter failed (${filterError.message}), falling back to client-side filter`
       );
       const allParams = {
@@ -481,6 +483,31 @@ async function handleUpdateContact(args) {
 }
 
 /**
+ * dryRun preview for delete (#274): which contact would be lost. Reads only.
+ */
+async function previewDeleteContact(accessToken, contactId) {
+  const contact = await callGraphAPI(
+    accessToken,
+    'GET',
+    `me/contacts/${contactId}`,
+    null,
+    { $select: 'displayName,emailAddresses,companyName' }
+  );
+  const details = [
+    ...(contact.emailAddresses || []).map((e) => e.address).filter(Boolean),
+    contact.companyName,
+  ].filter(Boolean);
+  const name = contact.displayName || '(no name)';
+  return dryRunResult(
+    [
+      `Deletes contact '${name}'${details.length > 0 ? ` (${details.join('; ')})` : ''}.`,
+      "It doesn't go to Deleted Items, and Graph doesn't document a way to restore it (Outlook's \"Recover deleted items\" may work for a limited time, but don't rely on it), so treat it as permanent.",
+    ],
+    { action: 'delete', contactId, displayName: contact.displayName }
+  );
+}
+
+/**
  * Delete contact handler
  */
 async function handleDeleteContact(args) {
@@ -492,6 +519,11 @@ async function handleDeleteContact(args) {
 
   try {
     const accessToken = await ensureAuthenticated();
+
+    // dryRun: say which contact would be lost; delete nothing.
+    if (args.dryRun) {
+      return await previewDeleteContact(accessToken, contactId);
+    }
 
     const endpoint = `me/contacts/${contactId}`;
     await callGraphAPI(accessToken, 'DELETE', endpoint);
@@ -600,7 +632,7 @@ const contactsTools = [
   {
     name: 'manage-contact',
     description:
-      "Full CRUD over the signed-in user's personal Outlook contacts (destructive: covers `delete` action). action=`list` (default) returns contacts with pagination via `skip`/`count` (default 50). action=`search` returns contacts matching `query` against name/email (default 25). action=`get` returns full contact detail by `id`. action=`create` adds a new contact and returns its `id`. action=`update` patches the given fields by `id` (only fields passed are changed). action=`delete` permanently removes the contact by `id`. Use `outputVerbosity` (minimal/standard/full) on list/search to control field count. Prefer `search-people` for cross-source relevance ranking (contacts + directory + recent comms) — this tool only searches your personal contact store.",
+      "Full CRUD over the signed-in user's personal Outlook contacts (destructive: covers `delete` action). action=`list` (default) returns contacts with pagination via `skip`/`count` (default 50). action=`search` returns contacts matching `query` against name/email (default 25). action=`get` returns full contact detail by `id`. action=`create` adds a new contact and returns its `id`. action=`update` patches the given fields by `id` (only fields passed are changed). action=`delete` removes the contact by `id`; it skips Deleted Items, so treat it as permanent and pass `dryRun: true` first to confirm which contact it is. Use `outputVerbosity` (minimal/standard/full) on list/search to control field count. Searches only your personal contact store; for relevance-ranked search across contacts, the directory and recent communications, use `search-people`.",
     ...toolMetadata('manage-contact', 'Contacts'),
     inputSchema: {
       type: 'object',
@@ -683,12 +715,20 @@ const contactsTools = [
           type: 'string',
           description: 'Personal notes (action=create/update)',
         },
+        dryRun: {
+          type: 'boolean',
+          description:
+            'Preview only (action=delete): nothing is deleted. Shows which contact would be removed. Other actions refuse dryRun and change nothing. Default false.',
+        },
       },
       additionalProperties: false,
       required: [],
     },
     handler: async (args) => {
       const action = args.action || 'list';
+      if (args.dryRun && action !== 'delete') {
+        return dryRunUnsupported('manage-contact', action, 'delete');
+      }
       switch (action) {
         case 'search':
           return handleSearchContacts(args);
@@ -712,7 +752,7 @@ const contactsTools = [
   {
     name: 'search-people',
     description:
-      'Relevance-ranked search across personal contacts, organisation directory, and recent communications via the Microsoft Graph People API (read-only). Returns people objects with `displayName`, `emailAddresses`, `companyName`, `jobTitle`, and relevance metadata — ideal for "who is X?" or "who do I email about Y?" lookups. Use `manage-contact` action=`search` instead when you specifically need entries from your personal contact store only.',
+      'Relevance-ranked search across personal contacts, organisation directory, and recent communications via the Microsoft Graph People API (read-only). Returns people objects with `displayName`, `emailAddresses`, `companyName`, `jobTitle`, and relevance metadata, for "who is X?" or "who do I email about Y?" lookups. For entries from your personal contact store only, use `manage-contact` action=`search`.',
     ...toolMetadata('search-people', 'People Search'),
     inputSchema: {
       type: 'object',

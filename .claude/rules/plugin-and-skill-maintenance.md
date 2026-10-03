@@ -13,9 +13,15 @@ The marketplace plugin (`plugins/outlook-assistant/`) ships the MCP server pinne
 - **The Agent Plugins `plugin.json` schema is closed:** only `$schema`, `name`, `version`, `description`, `author`, `homepage`, `repository`, `license`, `keywords` and `extensions` are allowed.
 - **Before committing plugin changes,** run both `claude plugin validate --strict plugins/outlook-assistant` and `claude plugin validate --strict .claude-plugin/marketplace.json`.
 
+## Added for v3.14.0 (in place, unreleased)
+
+- **`read_only` `userConfig`** (Claude manifest) maps to `OUTLOOK_READ_ONLY` (#271); the gate is `utils/read-only.js`, driven by the risk map.
+- **Server `instructions`** (`utils/server-instructions.js`, #271): the skill and hook must restate these hard rules, so change them together. The hard rules stay within the first 512 characters.
+- **`requiresUserInteraction`** in `utils/risk-classes.js` publishes `_meta["anthropic/requiresUserInteraction"]` (`riskMeta`); only single-purpose tools whose every call reaches other people (`send-email`, `create-event`) get it.
+
 ## When you add or change a tool or action
 
-1. **Classify it** in the risk-class map (`utils/risk-classes.js`, #270, in place) as `read`, `reversible`, `outward`, `destructive` or `persistent`, and spread `...toolMetadata(name, title)` into the definition. The `title` and all four annotation hints derive from it, and `test/utils/risk-classes.test.js` fails on any unclassified tool or action. The planned `OUTLOOK_READ_ONLY` mode (#271), the hook's `risk-map.json` and the skill's risk table are to derive from it too.
+1. **Classify it** in the risk-class map (`utils/risk-classes.js`, #270, in place) as `read`, `reversible`, `outward`, `destructive` or `persistent`, and spread `...toolMetadata(name, title)` into the definition. The `title` and all four annotation hints derive from it, and `test/utils/risk-classes.test.js` fails on any unclassified tool or action. `OUTLOOK_READ_ONLY` (#271) refuses every non-`read` call from it; if `action` is optional, set the map's `defaultAction` to the handler's default. The hook's `risk-map.json` and the skill's risk table are to derive from it too.
 
 Once the skill and hooks exist:
 
@@ -31,7 +37,8 @@ Once the skill and hooks exist:
 ## Tool design rules (all clients, not just one)
 
 - Never hand-write annotation hints; get the risk class right for **every** action and `toolMetadata` derives them: `destructiveHint` = any `outward`, `destructive` or `persistent` action; `openWorldHint` = `untrustedContent` or any `outward`/`persistent` action; `idempotentHint` = read-only or the tool's `idempotent` flag.
-- Keep descriptions to 1,024 characters or less, with the key fact first. VS Code truncates at 1,024 and Claude Code at 2,048.
+- Keep descriptions to 1,024 characters or less, with the key fact first. VS Code truncates at 1,024 and Claude Code at 2,048. State facts and boundaries, never steer between tools ("instead of", "rather than", "prefer"); `test/tools-registry.test.js` enforces both.
+- A tool or action that emails or notifies people gets a `dryRun` preview built with `dryRunResult` (`utils/safety.js`), saying exactly who would be told.
 - Every array has `items`. Never put `oneOf`/`anyOf`/`allOf` at the root of an `inputSchema`. `test/schemas.test.js` enforces both and compiles every schema as JSON Schema 2020-12 (Ajv).
 - Tool errors return `isError: true` via `toolError(message, { nextStep })` or `authRequiredError()` (`utils/tool-error.js`) and say what to do next. Protocol errors are thrown as `McpError` (JSON-RPC -32601 unknown method, -32602 unknown tool), never returned as results.
 - From v3.15.0 (#285): `structuredContent` and the text block must each stand alone, because clients differ in which one the model sees.

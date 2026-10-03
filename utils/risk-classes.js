@@ -21,6 +21,14 @@
  *                       makes the tool open-world (#92)
  *   - idempotent        repeating a write with the same arguments has no
  *                       further effect (reads are always idempotent)
+ *   - defaultAction     the action the handler runs when a call leaves
+ *                       `action` out (only where the schema makes it
+ *                       optional), so such calls classify correctly
+ *   - requiresUserInteraction
+ *                       publish Claude's `anthropic/requiresUserInteraction`
+ *                       flag, so Claude clients always ask before running it.
+ *                       Only for single-purpose tools whose every call reaches
+ *                       other people; mixed read/write tools never get it (D1)
  *
  * Pure data with no requires, so any module can load it.
  */
@@ -42,13 +50,14 @@ const TOOL_RISK = {
       'device-code-complete': 'reversible',
       about: 'read',
     },
+    defaultAction: 'status',
   },
 
   // Calendar
   // Event subjects and previews come from external organisers.
   'list-events': { default: 'read', untrustedContent: true },
   // Saving an event with attendees sends them invitations.
-  'create-event': { default: 'outward' },
+  'create-event': { default: 'outward', requiresUserInteraction: true },
   'manage-event': {
     actions: {
       // Organiser updates are sent to attendees.
@@ -63,7 +72,7 @@ const TOOL_RISK = {
   // Email
   'search-emails': { default: 'read', untrustedContent: true },
   'read-email': { default: 'read', untrustedContent: true },
-  'send-email': { default: 'outward' },
+  'send-email': { default: 'outward', requiresUserInteraction: true },
   draft: {
     actions: {
       create: 'reversible',
@@ -91,6 +100,7 @@ const TOOL_RISK = {
   attachments: {
     // download writes a new local file (never overwrites).
     actions: { list: 'read', view: 'read', download: 'reversible' },
+    defaultAction: 'list',
     untrustedContent: true,
   },
   // Writes local files.
@@ -108,6 +118,7 @@ const TOOL_RISK = {
       stats: 'read',
       delete: 'destructive',
     },
+    defaultAction: 'list',
   },
 
   // Rules: create/update/reorder change what happens to future mail,
@@ -120,6 +131,7 @@ const TOOL_RISK = {
       reorder: 'persistent',
       delete: 'destructive',
     },
+    defaultAction: 'list',
   },
 
   // Contacts
@@ -132,6 +144,7 @@ const TOOL_RISK = {
       update: 'reversible',
       delete: 'destructive',
     },
+    defaultAction: 'list',
   },
   'search-people': { default: 'read', untrustedContent: true },
 
@@ -144,13 +157,16 @@ const TOOL_RISK = {
       set: 'reversible',
       delete: 'destructive',
     },
+    defaultAction: 'list',
   },
   'apply-category': {
     actions: { set: 'reversible', add: 'reversible', remove: 'reversible' },
+    defaultAction: 'set',
     idempotent: true,
   },
   'manage-focused-inbox': {
     actions: { list: 'read', set: 'reversible', delete: 'destructive' },
+    defaultAction: 'list',
   },
 
   // Settings: auto-replies answer external senders until switched off.
@@ -160,6 +176,7 @@ const TOOL_RISK = {
       'set-auto-replies': 'persistent',
       'set-working-hours': 'reversible',
     },
+    defaultAction: 'get',
     idempotent: true,
   },
 
@@ -185,14 +202,19 @@ function classesOf(entry) {
 /**
  * Risk class for a tool call.
  * @param {string} toolName
- * @param {string} [action] - the call's `action` argument, for action tools
+ * @param {string|null} [action] - the call's `action` argument, for action
+ *   tools; when left out or null (handlers treat both alike), the tool's
+ *   defaultAction (if any) is classified
  * @returns {string|undefined} the class, or undefined if unclassified
  */
 function classify(toolName, action) {
   const entry = TOOL_RISK[toolName];
   if (!entry) return undefined;
   if (!entry.actions) return entry.default;
-  return entry.actions[action];
+  const effective = action ?? entry.defaultAction;
+  return Object.hasOwn(entry.actions, effective)
+    ? entry.actions[effective]
+    : undefined;
 }
 
 /**
@@ -233,10 +255,23 @@ function toolMetadata(toolName, title) {
   return { title, annotations: riskAnnotations(toolName, title) };
 }
 
+/**
+ * Tool-level `_meta` for tools/list, derived from the map (#271). Currently
+ * only Claude's `anthropic/requiresUserInteraction`; other clients ignore it.
+ * @param {string} toolName
+ * @returns {object|undefined} the `_meta` object, or undefined for none
+ */
+function riskMeta(toolName) {
+  const entry = TOOL_RISK[toolName];
+  if (!entry || entry.requiresUserInteraction !== true) return undefined;
+  return { 'anthropic/requiresUserInteraction': true };
+}
+
 module.exports = {
   RISK_CLASSES,
   TOOL_RISK,
   classify,
   riskAnnotations,
+  riskMeta,
   toolMetadata,
 };

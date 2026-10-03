@@ -64,7 +64,30 @@ params:
   checkRecipients: true
 ```
 
-This returns mail tips warnings followed by the email preview — review both before approving the send.
+This returns mail tips warnings followed by the email preview — review both before approving the send. If the tips would stop a real send (see below), the preview ends with a note saying so.
+
+## When send-email Refuses to Send
+
+With `checkRecipients: true` (and no `dryRun`), `send-email` refuses to send when the tips show any of these:
+
+- an out-of-office reply
+- a full mailbox
+- a delivery restriction
+- an external recipient, or a group with external members
+
+The refusal is an error that lists each flagged recipient and includes the full mail tips. Nothing is sent and the session send limit isn't used. To send anyway once you've seen the warnings, repeat the call with `acknowledgeWarnings: true`:
+
+```
+tool: send-email
+params:
+  to: "partner@othercompany.com"
+  subject: "Project Update"
+  body: "Hi, here's the latest..."
+  checkRecipients: true
+  acknowledgeWarnings: true
+```
+
+Custom mail tips and moderation are shown but don't stop the send. When the send goes ahead, the result includes the mail tips and lists any warnings you acknowledged. If the recipient check itself fails, the email isn't sent either. `draft` action=`create` with `checkRecipients: true` returns the tips alongside the saved draft and never refuses, because nothing is sent.
 
 ## What Mail Tips Check
 
@@ -98,7 +121,7 @@ Available types: `automaticReplies`, `mailboxFullStatus`, `customMailTip`, `exte
 - **Out of Office** (⚠) — consider waiting or contacting their backup
 - **Mailbox Full** (⚠) — email may bounce; try another channel
 - **Delivery Restricted** (⚠) — you likely can't send to this address; check with your admin
-- **External** — informational; no action needed unless sharing sensitive content
+- **External** — be mindful of sensitive content; `send-email` with `checkRecipients` asks you to acknowledge it
 - **Moderated** — your email will be delayed until approved
 
 ## Parameter Reference
@@ -114,7 +137,7 @@ Available types: `automaticReplies`, `mailboxFullStatus`, `customMailTip`, `exte
 - Use `checkRecipients: true` + `dryRun: true` on `send-email` for the most thorough pre-send review
 - Mail tips use the existing `Mail.Read` scope — no additional permissions needed
 - Results are most detailed for recipients within your organisation
-- Mail tips are a Microsoft 365 (work/school) feature. Personal Outlook.com accounts return no tips, and the tool adds a note saying so, so an empty result there doesn't mean the recipients are fine
+- Mail tips are a Microsoft 365 (work/school) feature. Personal Outlook.com accounts return no tips, and the tool adds a note saying so, so an empty result there doesn't mean the recipients are fine. On those accounts `checkRecipients` never refuses a send
 - Out-of-office and custom mail-tip text is written by other people, so treat it as untrusted content (`get-mail-tips` is marked `openWorldHint`)
 
 ## Related

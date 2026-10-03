@@ -3,9 +3,108 @@
  */
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
-const { resolveFolder, WELL_KNOWN } = require('./resolve');
+const { resolveFolder, listChildFolders, WELL_KNOWN } = require('./resolve');
 const { buildMailboxPrefix } = require('../utils/mailbox');
 const { toolError, authRequiredError } = require('../utils/tool-error');
+const { dryRunResult } = require('../utils/safety');
+
+const COUNT_FIELDS = 'totalItemCount,unreadItemCount';
+const COUNT_SELECT = `id,displayName,childFolderCount,${COUNT_FIELDS}`;
+/** Most subfolders a dry run counts before reporting "at least". */
+const PREVIEW_FOLDER_LIMIT = 100;
+
+const LOSS_NOTE =
+  "It doesn't go to Deleted Items, and Graph doesn't document a way to restore it (Outlook's \"Recover deleted items\" may work for a limited time, but don't rely on it). Move out anything you need first.";
+
+function plural(count, word) {
+  return `${count} ${word}${count === 1 ? '' : 's'}`;
+}
+
+/** The folder's quoted path, or its ID if Graph gave it no name. */
+function folderLabel(resolved, quote = "'") {
+  return resolved.path
+    ? `${quote}${resolved.path}${quote}`
+    : `(unnamed, id ${resolved.id})`;
+}
+
+/**
+ * Count every subfolder below `root`, and the items in them, breadth-first.
+ * Stops after PREVIEW_FOLDER_LIMIT subfolders and flags the count partial.
+ */
+async function countSubfolders(accessToken, root, mailbox) {
+  let subfolders = 0;
+  let items = 0;
+  let partial = false;
+  const queue = root.childFolderCount > 0 ? [root.id] : [];
+  while (queue.length > 0) {
+    if (subfolders >= PREVIEW_FOLDER_LIMIT) {
+      partial = true;
+      break;
+    }
+    const children = await listChildFolders(
+      accessToken,
+      queue.shift(),
+      COUNT_SELECT,
+      mailbox
+    );
+    for (const child of children) {
+      subfolders += 1;
+      items += child.totalItemCount || 0;
+      if (child.childFolderCount > 0) queue.push(child.id);
+    }
+  }
+  return { subfolders, items, partial };
+}
+
+/**
+ * dryRun preview for delete (#274): the folder, and the items and
+ * subfolders that would be lost with it. Reads only, and reads the folder
+ * itself only if resolving it didn't already (`resolved.fields`).
+ */
+async function previewDeleteFolder(accessToken, resolved, mailbox) {
+  const prefix = buildMailboxPrefix(mailbox);
+  const folder =
+    resolved.fields ||
+    (await callGraphAPI(
+      accessToken,
+      'GET',
+      `${prefix}/mailFolders/${resolved.id}`,
+      null,
+      { $select: COUNT_SELECT }
+    ));
+  const items = folder.totalItemCount || 0;
+  const unread = folder.unreadItemCount || 0;
+  const below = await countSubfolders(
+    accessToken,
+    { ...folder, id: resolved.id },
+    mailbox
+  );
+  const where = mailbox ? ` in ${mailbox}` : '';
+  const name = `${folderLabel(resolved)}${where}`;
+
+  let summary;
+  if (items === 0 && below.subfolders === 0) {
+    summary = `Deletes folder ${name}. It's empty: no items or subfolders.`;
+  } else {
+    const atLeast = below.partial ? 'at least ' : '';
+    summary = `Deletes folder ${name} and everything in it: ${plural(items, 'item')}`;
+    if (unread > 0) summary += ` (${unread} unread)`;
+    if (below.subfolders > 0) {
+      summary += `, plus ${atLeast}${plural(below.subfolders, 'subfolder')} holding ${atLeast}${below.items} more ${below.items === 1 ? 'item' : 'items'}`;
+    }
+    summary += '.';
+  }
+
+  return dryRunResult([summary, LOSS_NOTE], {
+    action: 'delete',
+    folderId: resolved.id,
+    path: resolved.path,
+    items,
+    subfolders: below.subfolders,
+    subfolderItems: below.items,
+    partial: below.partial,
+  });
+}
 
 /**
  * Delete folder handler
@@ -23,7 +122,7 @@ const { toolError, authRequiredError } = require('../utils/tool-error');
  * @returns {object} - MCP response
  */
 async function handleDeleteFolder(args) {
-  const { folderId, folderName } = args;
+  const { folderId, folderName, dryRun = false } = args;
   const sharedMailbox = args.sharedMailbox || args.email || null;
   const prefix = buildMailboxPrefix(sharedMailbox);
 
@@ -49,9 +148,16 @@ async function handleDeleteFolder(args) {
         id: folderId,
         name: folderName,
         mailbox: sharedMailbox,
+        // A dry run by ID reads the counts in the same request.
+        ...(dryRun && { extraSelect: COUNT_FIELDS }),
       });
     } catch (resolveError) {
       return toolError(resolveError.message);
+    }
+
+    // dryRun: say what would be lost; delete nothing.
+    if (dryRun) {
+      return await previewDeleteFolder(accessToken, resolved, sharedMailbox);
     }
 
     // Delete the folder
@@ -64,7 +170,7 @@ async function handleDeleteFolder(args) {
       content: [
         {
           type: 'text',
-          text: `Folder "${resolved.path}" deleted successfully.`,
+          text: `Folder ${folderLabel(resolved, '"')} deleted successfully.`,
         },
       ],
     };

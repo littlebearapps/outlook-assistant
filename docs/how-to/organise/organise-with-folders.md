@@ -147,6 +147,24 @@ params:
 
 Deleting a folder doesn't put it in **Deleted Items**, and Microsoft Graph doesn't document whether a deleted folder can be restored. On some accounts it may be restorable for a limited time with **Recover deleted items** in Outlook, but don't rely on it: move anything you might need out of the folder before deleting it.
 
+To see what would be lost first, add `dryRun: true`. Nothing is deleted; the preview names the folder and counts its items (and unread items), plus every subfolder below it and the items they hold:
+
+```
+tool: folders
+params:
+  action: "delete"
+  folderName: "Clients/Acme"
+  dryRun: true
+```
+
+```
+DRY RUN — nothing was changed.
+
+Deletes folder 'Clients/Acme' and everything in it: 42 items (5 unread), plus 3 subfolders holding 20 more items.
+```
+
+The preview counts up to 100 subfolders; beyond that it says "at least".
+
 ## Parameter Reference
 
 | Parameter | What it does | Used with |
@@ -164,6 +182,7 @@ Deleting a folder doesn't put it in **Deleted Items**, and Microsoft Graph doesn
 | `folder` | Folder to get stats for (alias, path, or name) | `stats` |
 | `folderId` | Folder ID (stats or delete) | `stats`, `delete` |
 | `folderName` | Folder name or path to delete (resolved to ID) | `delete` |
+| `dryRun` | Preview the folder, items and subfolders that would be lost, without deleting | `delete` |
 | `sharedMailbox` | Act on a shared mailbox's folders instead of your own (alias `email`; opt-in, `create`/`move`/`delete` need `OUTLOOK_SHARED_MAILBOX=true`) | All |
 
 ## Tips

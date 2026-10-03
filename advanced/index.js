@@ -748,7 +748,7 @@ const advancedTools = [
   {
     name: 'access-shared-mailbox',
     description:
-      "List emails — or enumerate folders — from a shared mailbox the signed-in user has been granted access to (read-only). Returns paged messages from the named `sharedMailbox` (or alias `email`) and `folder` (default `inbox`) with id/subject/from/receivedDateTime/preview — same shape as `search-emails` list mode. `folder` accepts a well-known name (inbox, sent, archive…), a custom/localized folder display name (e.g. `Archiv`), a nested folder path (e.g. `Inbox/Vendors/Acme`), or pass a raw `folderId`. Set `listFolders: true` to enumerate the shared mailbox's full folder tree (names, paths, IDs, counts) — use this to discover custom subfolders before reading them. Requires that the shared mailbox has been delegated to the signed-in user in Exchange (admin-configured). Use `outputVerbosity` to control field count and `count` (default 25, max 50) for page size. For full search/filter capability over a shared mailbox, prefer `search-emails` with `sharedMailbox` set. Custom/localized names, nested paths and `listFolders` need the server opt-in setting OUTLOOK_SHARED_MAILBOX (work/school only); without it `folder` must be a well-known name or a folder ID, as before.",
+      "List emails or folders in a shared mailbox the signed-in user can access (read-only). Returns messages from `sharedMailbox` (alias `email`) and `folder` (default `inbox`) with id/subject/from/receivedDateTime/preview, the same shape as `search-emails` list mode. `folder` takes a well-known name (inbox, sent, archive…), a custom/localized display name (e.g. `Archiv`), a nested path (e.g. `Inbox/Vendors/Acme`), or pass a raw `folderId`. `listFolders: true` enumerates the shared mailbox's folder tree (names, paths, IDs, counts), to find custom subfolders before reading them. Needs the mailbox delegated to the signed-in user in Exchange (admin-configured). `outputVerbosity` sets field count and `count` (default 25, max 50) page size. For search and filters over a shared mailbox, use `search-emails` with `sharedMailbox` set. Custom/localized names, nested paths and `listFolders` need the server opt-in setting OUTLOOK_SHARED_MAILBOX (work/school only); without it `folder` must be a well-known name or a folder ID.",
     ...toolMetadata('access-shared-mailbox', 'Shared Mailbox'),
     inputSchema: {
       type: 'object',
@@ -775,7 +775,7 @@ const advancedTools = [
         listFolders: {
           type: 'boolean',
           description:
-            "Enumerate the shared mailbox's full folder tree (names, paths, IDs, item counts) instead of reading messages.",
+            "Enumerate the shared mailbox's full folder tree (names, paths, IDs, item counts) in place of reading messages.",
         },
         count: {
           type: 'number',

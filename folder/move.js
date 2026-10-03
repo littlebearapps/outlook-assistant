@@ -6,6 +6,7 @@ const { ensureAuthenticated } = require('../auth');
 const { resolveFolder } = require('./resolve');
 const { buildMailboxPrefix } = require('../utils/mailbox');
 const { toolError, authRequiredError } = require('../utils/tool-error');
+const { log } = require('../utils/logger');
 
 /**
  * Move emails handler
@@ -127,7 +128,7 @@ async function moveEmailsToFolder(
           newId: moved?.id || emailId,
         });
       } catch (error) {
-        console.error(`Error moving email ${emailId}: ${error.message}`);
+        log.debug(`Error moving email ${emailId}: ${error.message}`);
         results.failed.push({
           id: emailId,
           error: error.message,
@@ -173,7 +174,7 @@ async function moveEmailsToFolder(
       results,
     };
   } catch (error) {
-    console.error(`Error in moveEmailsToFolder: ${error.message}`);
+    log.debug(`Error in moveEmailsToFolder: ${error.message}`);
     throw error;
   }
 }

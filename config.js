@@ -15,6 +15,7 @@ const {
 } = require('./utils/field-presets');
 const { VERBOSITY, DEFAULT_LIMITS } = require('./utils/response-formatter');
 const { resolveClientId } = require('./auth/client-config');
+const { redact } = require('./utils/logger');
 
 // Ensure we have a home directory path — never fall back to /tmp (world-readable)
 const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
@@ -90,7 +91,8 @@ function parseSharedMailboxMode(raw) {
   if (['true', 'readwrite', '1'].includes(value)) return 'readwrite';
   if (value && !['false', '0', 'off', 'no'].includes(value)) {
     console.warn(
-      `[outlook-assistant] OUTLOOK_SHARED_MAILBOX="${raw}" is not a recognised value. ` +
+      // redact(): people sometimes put the shared mailbox's address here.
+      `[outlook-assistant] OUTLOOK_SHARED_MAILBOX="${redact(raw)}" is not a recognised value. ` +
         'Expected read, true/readwrite/1, or unset. Shared-mailbox support stays off.'
     );
   }
@@ -124,6 +126,27 @@ const BASE_SCOPES = [
   // 'Place.Read.All',     // find-meeting-rooms tool
 ];
 
+/**
+ * Parse OUTLOOK_READ_ONLY. On: true/1/yes/on; off: unset, empty,
+ * false/0/no/off (any case). Anything else fails closed (read-only on, with
+ * a warning), because whoever set the variable meant to restrict the server.
+ * @param {string|undefined} raw
+ * @returns {boolean}
+ */
+function parseReadOnly(raw) {
+  const value = String(raw ?? '')
+    .trim()
+    .toLowerCase();
+  if (['true', '1', 'yes', 'on'].includes(value)) return true;
+  if (['', 'false', '0', 'no', 'off'].includes(value)) return false;
+  // Redacted and capped: the value is echoed only to spot a typo.
+  console.warn(
+    `[outlook-assistant] OUTLOOK_READ_ONLY="${redact(String(raw).slice(0, 40))}" is not a recognised value. ` +
+      'Expected true, 1, yes or on to switch it on, or false, 0, no or off (or unset) to switch it off. Treating it as on: read-only mode is on.'
+  );
+  return true;
+}
+
 const DEFAULT_REQUEST_TIMEOUT_MS = 60000;
 
 /**
@@ -154,6 +177,11 @@ module.exports = {
 
   // Test mode setting
   USE_TEST_MODE: process.env.USE_TEST_MODE === 'true',
+
+  // Read-only mode (OUTLOOK_READ_ONLY, #271): every tool call that isn't
+  // classified `read` in utils/risk-classes.js is refused before it runs.
+  READ_ONLY: parseReadOnly(process.env.OUTLOOK_READ_ONLY),
+  parseReadOnly,
 
   // OAuth scope sets (exported so tests + the fallback logic can reference them)
   BASE_SCOPES,

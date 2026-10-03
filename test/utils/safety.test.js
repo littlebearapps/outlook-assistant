@@ -3,6 +3,8 @@
 const {
   checkRateLimit,
   checkRecipientAllowlist,
+  DRY_RUN_LABEL,
+  dryRunResult,
 } = require('../../utils/safety');
 
 const recipient = (address) => ({ emailAddress: { address } });
@@ -34,6 +36,28 @@ describe('checkRecipientAllowlist', () => {
     expect(refusal.isError).toBe(true);
     expect(refusal.content[0].text).toMatch(
       /Recipient not allowed: x@evil\.test/
+    );
+  });
+});
+
+// #274: every dry-run preview carries the same label, so it can't be read as
+// a result.
+describe('dryRunResult', () => {
+  test('labels the preview and flags _meta.dryRun', () => {
+    const result = dryRunResult(['Deletes contact X.', 'Second line.'], {
+      contactId: 'c1',
+    });
+    expect(DRY_RUN_LABEL).toBe('DRY RUN — nothing was changed.');
+    expect(result.content[0].text).toBe(
+      'DRY RUN — nothing was changed.\n\nDeletes contact X.\nSecond line.'
+    );
+    expect(result._meta).toEqual({ dryRun: true, contactId: 'c1' });
+    expect(result.isError).toBeUndefined();
+  });
+
+  test('accepts a single string', () => {
+    expect(dryRunResult('One line.').content[0].text).toBe(
+      'DRY RUN — nothing was changed.\n\nOne line.'
     );
   });
 });

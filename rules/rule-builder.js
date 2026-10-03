@@ -4,6 +4,7 @@
  */
 const { resolveFolder, looksLikeFolderId } = require('../folder/resolve');
 const { checkRecipientAllowlist } = require('../utils/safety');
+const { toolError } = require('../utils/tool-error');
 
 const VALID_IMPORTANCE = ['low', 'normal', 'high'];
 const VALID_SENSITIVITY = ['normal', 'personal', 'private', 'confidential'];
@@ -197,38 +198,35 @@ async function buildActions(args, accessToken) {
     }
   }
 
-  // Recipient-based actions (comma-separated emails → recipient objects)
+  // Recipient-based actions (comma-separated emails → recipient objects).
+  // create/update refuse blocked recipients up front (checkRuleRecipients);
+  // this is the backstop, so a blocked forward is never silently dropped.
   if (args.forwardTo) {
     const recipients = formatRecipientObjects(args.forwardTo);
     if (recipients.length > 0) {
-      // Check allowlist if configured
-      const allowlistError = checkRecipientAllowlist(recipients);
-      if (allowlistError) {
-        warnings.push(
-          `Forward recipients blocked by allowlist: ${args.forwardTo}`
-        );
-      } else {
-        actions.forwardTo = recipients;
-        warnings.push(
-          `This rule will forward all matching emails to: ${args.forwardTo}. Verify these addresses are correct.`
+      if (checkRecipientAllowlist(recipients)) {
+        throw new Error(
+          `forwardTo recipients blocked by OUTLOOK_ALLOWED_RECIPIENTS: ${args.forwardTo}`
         );
       }
+      actions.forwardTo = recipients;
+      warnings.push(
+        `This rule will forward all matching emails to: ${args.forwardTo}. Verify these addresses are correct.`
+      );
     }
   }
   if (args.redirectTo) {
     const recipients = formatRecipientObjects(args.redirectTo);
     if (recipients.length > 0) {
-      const allowlistError = checkRecipientAllowlist(recipients);
-      if (allowlistError) {
-        warnings.push(
-          `Redirect recipients blocked by allowlist: ${args.redirectTo}`
-        );
-      } else {
-        actions.redirectTo = recipients;
-        warnings.push(
-          `This rule will redirect all matching emails to: ${args.redirectTo}. The original sender will appear as the sender.`
+      if (checkRecipientAllowlist(recipients)) {
+        throw new Error(
+          `redirectTo recipients blocked by OUTLOOK_ALLOWED_RECIPIENTS: ${args.redirectTo}`
         );
       }
+      actions.redirectTo = recipients;
+      warnings.push(
+        `This rule will redirect all matching emails to: ${args.redirectTo}. The original sender will appear as the sender.`
+      );
     }
   }
 
@@ -238,6 +236,44 @@ async function buildActions(args, accessToken) {
   }
 
   return { actions, warnings };
+}
+
+/** Rule actions that send matching mail to other people. */
+const RECIPIENT_ACTIONS = ['forwardTo', 'redirectTo'];
+
+/**
+ * Refuse a rule whose forwardTo/redirectTo includes an address that
+ * OUTLOOK_ALLOWED_RECIPIENTS blocks. The whole rule (or update) is refused,
+ * never saved with the blocked forwarding dropped, and a dry run reports the
+ * refusal too. Needs no Graph call, so it runs before sign-in. (#273)
+ * @param {object} args - Tool arguments
+ * @param {{operation?: 'create'|'update', dryRun?: boolean}} [options]
+ * @returns {object|null} - toolError naming the blocked addresses, or null
+ */
+function checkRuleRecipients(args, { operation = 'create', dryRun } = {}) {
+  const blocked = [];
+  for (const param of RECIPIENT_ACTIONS) {
+    const addresses = formatRecipientObjects(args[param])
+      .filter((recipient) => checkRecipientAllowlist([recipient]))
+      .map((recipient) => recipient.emailAddress.address);
+    if (addresses.length > 0) {
+      blocked.push(`${param}: ${addresses.join(', ')}`);
+    }
+  }
+  if (blocked.length === 0) return null;
+
+  const subject = operation === 'update' ? 'Rule update' : 'Rule';
+  const lead = dryRun
+    ? `DRY RUN — ${subject.toLowerCase()} would be refused`
+    : `${subject} refused`;
+  const outcome = operation === 'update' ? 'changed' : 'created';
+  return toolError(
+    `${lead}: OUTLOOK_ALLOWED_RECIPIENTS does not allow ${blocked.join('; ')}. Nothing was ${outcome}; a rule is refused whole rather than saved without the blocked forwarding.`,
+    {
+      nextStep:
+        'Remove the blocked addresses from forwardTo/redirectTo and retry, or ask the user to add them to OUTLOOK_ALLOWED_RECIPIENTS in the server configuration and restart the server.',
+    }
+  );
 }
 
 /**
@@ -324,6 +360,7 @@ module.exports = {
   buildConditions,
   buildActions,
   buildExceptions,
+  checkRuleRecipients,
   hasAnyCondition,
   hasAnyAction,
 };

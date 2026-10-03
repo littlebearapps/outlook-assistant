@@ -26,6 +26,10 @@ const DEFAULT_LIMITS = {
   bodyPreviewLength: 100,
   batchExport: 25,
   maxBodyTruncation: 2000,
+  // Cap on one body at outputVerbosity=full in a tool result (#279). About
+  // 10,000 tokens, where Claude Code starts warning about MCP output, and well
+  // under its 25,000-token default limit. File exports are never capped.
+  maxFullBodyChars: 40000,
   maxTableRows: 50,
 };
 
@@ -44,8 +48,38 @@ function truncateWithMeta(text, maxChars = DEFAULT_LIMITS.maxBodyTruncation) {
     content: text.substring(0, maxChars),
     _truncated: true,
     _fullLength: text.length,
-    _hint: 'Use read-email with includeFullBody=true for complete content',
   };
+}
+
+/**
+ * Tells the caller how to get the rest of a truncated body, naming only real
+ * parameters: read-email at outputVerbosity=full, then export for anything
+ * longer than the full-body cap.
+ * @param {object} email - Email object from Graph API
+ * @param {number} shown - Characters shown
+ * @param {number} fullLength - Characters in the whole body
+ * @param {object} context
+ * @param {boolean} context.atFull - Whether this was already full verbosity
+ * @param {string} [context.sharedMailbox] - Mailbox the email came from, if shared
+ * @returns {string} - Markdown note
+ */
+function bodyTruncationNote(
+  email,
+  shown,
+  fullLength,
+  { atFull, sharedMailbox }
+) {
+  const id = email.id ? `id=\`${email.id}\`` : 'the same id';
+  const mailbox = sharedMailbox ? `, sharedMailbox=${sharedMailbox}` : '';
+  const exportHint = `For the whole message, call export with target=message, ${id}${mailbox} and format=markdown (or eml), which writes it to a file.`;
+  let note = `Body truncated at ${shown.toLocaleString('en-AU')} of ${fullLength.toLocaleString('en-AU')} characters.`;
+  if (!atFull) {
+    note += ` For more, call read-email with ${id}${mailbox} and outputVerbosity=full (up to ${DEFAULT_LIMITS.maxFullBodyChars.toLocaleString('en-AU')} characters).`;
+    if (fullLength > DEFAULT_LIMITS.maxFullBodyChars) note += ` ${exportHint}`;
+  } else {
+    note += ` ${exportHint}`;
+  }
+  return `\n\n---\n_${note}_`;
 }
 
 /**
@@ -128,7 +162,7 @@ function formatEmailFull(email, index) {
  * @param {Array} emails - Array of email objects from Graph API
  * @param {string} folder - Folder name
  * @param {string} verbosity - Verbosity level (minimal/standard/full)
- * @param {object} meta - Metadata (totalAvailable, hasMore, nextPageToken)
+ * @param {object} meta - Metadata (totalAvailable, hasMore)
  * @returns {string} - Formatted Markdown string
  */
 function formatEmailList(
@@ -155,8 +189,9 @@ function formatEmailList(
   output += emails.map((email, i) => formatFn(email, i + 1)).join('\n\n');
 
   // Add metadata footer
-  if (meta.hasMore || meta.nextPageToken) {
-    output += `\n\n---\n_More emails available. ${meta.nextPageToken ? 'Use nextPageToken to continue.' : ''}_`;
+  // There is no page cursor yet (#286): say what reaches the rest today.
+  if (meta.hasMore) {
+    output += `\n\n---\n_More emails available. To see them, raise \`count\` (up to 50) or narrow the date range with \`receivedAfter\`/\`receivedBefore\` (for older mail, set \`receivedBefore\` to the oldest date shown)._`;
   }
 
   return output;
@@ -207,7 +242,9 @@ function formatEmailListAsTable(emails, folder, meta = {}) {
  * Formats a single email for reading (full content)
  * @param {object} email - Email object from Graph API
  * @param {string} verbosity - Verbosity level
- * @param {object} options - Additional options (includeHeaders, includeRaw)
+ * @param {object} options - Additional options (includeHeaders,
+ *   includeAllHeaders, sharedMailbox for hints, and maxFullBodyChars to cap
+ *   the body at full verbosity; uncapped when omitted, as file exports need)
  * @returns {string} - Formatted Markdown string
  */
 function formatEmailContent(
@@ -266,15 +303,18 @@ function formatEmailContent(
   // per message, bloating token usage.
   body = stripZeroWidth(body);
 
-  // Truncate if needed (unless full verbosity requested)
-  if (verbosity !== VERBOSITY.FULL) {
-    const truncated = truncateWithMeta(body, DEFAULT_LIMITS.maxBodyTruncation);
-    if (typeof truncated === 'object') {
-      output += truncated.content;
-      output += `\n\n---\n_Content truncated (${truncated._fullLength} chars). ${truncated._hint}_`;
-    } else {
-      output += body;
-    }
+  // Truncate if needed: standard always, full only when a cap is given
+  const maxChars =
+    verbosity === VERBOSITY.FULL
+      ? options.maxFullBodyChars
+      : DEFAULT_LIMITS.maxBodyTruncation;
+  const truncated = maxChars ? truncateWithMeta(body, maxChars) : body;
+  if (truncated && typeof truncated === 'object') {
+    output += truncated.content;
+    output += bodyTruncationNote(email, maxChars, truncated._fullLength, {
+      atFull: verbosity === VERBOSITY.FULL,
+      sharedMailbox: options.sharedMailbox,
+    });
   } else {
     output += body;
   }
@@ -388,7 +428,6 @@ function createResponseMeta(data) {
     returned: data.returned || 0,
     totalAvailable: data.totalAvailable || null,
     hasMore: data.hasMore || false,
-    nextPageToken: data.nextPageToken || null,
     verbosity: data.verbosity || VERBOSITY.STANDARD,
     truncated: data.truncated || false,
   };

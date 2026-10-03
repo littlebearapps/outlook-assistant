@@ -688,6 +688,36 @@ describe('handleAbout — F-1/F-2/F-48', () => {
     expect(result.content[0].text).not.toMatch(/Safety Belts Not Configured/);
   });
 
+  describe('read-only mode row (#271)', () => {
+    const config = require('../../config');
+    let saved;
+
+    beforeEach(() => {
+      saved = config.READ_ONLY;
+      callGraphAPI.mockResolvedValue({ userPrincipalName: 'u@example.com' });
+    });
+
+    afterEach(() => {
+      config.READ_ONLY = saved;
+    });
+
+    test('reports read-only mode on', async () => {
+      config.READ_ONLY = true;
+      const text = (await handleAbout()).content[0].text;
+      expect(text).toMatch(
+        /\| Read-only mode \| On \(OUTLOOK_READ_ONLY\): only read tools and actions run \|/
+      );
+    });
+
+    test('reports read-only mode off', async () => {
+      config.READ_ONLY = false;
+      const text = (await handleAbout()).content[0].text;
+      expect(text).toMatch(
+        /\| Read-only mode \| Off \(set OUTLOOK_READ_ONLY=true/
+      );
+    });
+  });
+
   describe('shared-mailbox status and granted scopes', () => {
     const auth = require('../../auth');
     const config = require('../../config');

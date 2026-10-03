@@ -71,7 +71,7 @@ This returns:
 
 - the server version and tool count
 - the connected **mailbox** (display name and address)
-- timezone, test mode, and the send safety belts (rate limit, recipient allowlist), with a setup hint if they're off
+- timezone, test mode, the send safety belts (rate limit, recipient allowlist) with a setup hint if they're off, and whether read-only mode (`OUTLOOK_READ_ONLY`) is on
 - the **configured** and **granted** scopes
 - **shared-mailbox** status: whether `OUTLOOK_SHARED_MAILBOX` is on and whether each `.Shared` scope was actually granted
 

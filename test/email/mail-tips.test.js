@@ -279,3 +279,232 @@ describe('mail-tips', () => {
     });
   });
 });
+
+// Graph's mailTips resource uses `mailboxFull`, `deliveryRestricted` and
+// `isModerated`. send-email's refusal (#272) relies on these being flagged,
+// so the formatter must recognise the real field names, and report each
+// issue as structured data rather than only as text.
+describe('mail-tips issues (#272)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    ensureAuthenticated.mockResolvedValue('test_token');
+  });
+
+  it('flags the Graph field names for full mailbox, restriction and moderation', () => {
+    const { formatted, warningCount, issues } = formatMailTips([
+      { emailAddress: { address: 'full@example.com' }, mailboxFull: true },
+      {
+        emailAddress: { address: 'locked@example.com' },
+        deliveryRestricted: true,
+      },
+      { emailAddress: { address: 'mod@example.com' }, isModerated: true },
+    ]);
+
+    expect(warningCount).toBe(3);
+    expect(formatted).toContain('Mailbox Full');
+    expect(formatted).toContain('Delivery Restricted');
+    expect(formatted).toContain('Moderated');
+    expect(issues).toEqual([
+      { address: 'full@example.com', type: 'mailboxFull' },
+      { address: 'locked@example.com', type: 'deliveryRestricted' },
+      { address: 'mod@example.com', type: 'moderated' },
+    ]);
+  });
+
+  it('does not flag false or notModerated values', () => {
+    const { warningCount, issues } = formatMailTips([
+      {
+        emailAddress: { address: 'ok@example.com' },
+        mailboxFull: false,
+        deliveryRestricted: false,
+        isModerated: false,
+        moderationStatus: 'notModerated',
+        recipientScope: 'internal',
+        automaticReplies: { message: '' },
+      },
+    ]);
+
+    expect(warningCount).toBe(0);
+    expect(issues).toEqual([]);
+  });
+
+  it('reports out-of-office, custom tips and every external scope as issues', () => {
+    const { issues } = formatMailTips([
+      {
+        emailAddress: { address: 'ooo@example.com' },
+        automaticReplies: { message: 'Away' },
+      },
+      {
+        emailAddress: { address: 'tip@example.com' },
+        customMailTip: 'Monitored',
+      },
+      { emailAddress: { address: 'a@other.com' }, recipientScope: 'external' },
+      {
+        emailAddress: { address: 'b@partner.com' },
+        recipientScope: 'externalPartner',
+      },
+      {
+        emailAddress: { address: 'c@other.com' },
+        recipientScope: 'externalNonPartner',
+      },
+    ]);
+
+    expect(issues).toEqual([
+      { address: 'ooo@example.com', type: 'outOfOffice' },
+      { address: 'tip@example.com', type: 'customTip' },
+      { address: 'a@other.com', type: 'external' },
+      { address: 'b@partner.com', type: 'external' },
+      { address: 'c@other.com', type: 'external' },
+    ]);
+  });
+
+  it('reports a group with external members as an external issue', () => {
+    const { issues, formatted } = formatMailTips([
+      {
+        emailAddress: { address: 'team@example.com' },
+        totalMemberCount: 20,
+        externalMemberCount: 3,
+      },
+    ]);
+
+    expect(issues).toEqual([
+      { address: 'team@example.com', type: 'externalMembers' },
+    ]);
+    expect(formatted).toContain('3 external');
+  });
+
+  it('returns the issues in _meta from handleGetMailTips', async () => {
+    callGraphAPI.mockResolvedValue({
+      value: [
+        { emailAddress: { address: 'full@example.com' }, mailboxFull: true },
+      ],
+    });
+
+    const result = await handleGetMailTips({
+      recipients: ['full@example.com'],
+    });
+
+    expect(result._meta.issues).toEqual([
+      { address: 'full@example.com', type: 'mailboxFull' },
+    ]);
+  });
+
+  it('returns an empty issues list when Graph returns no tips', async () => {
+    callGraphAPI.mockResolvedValue({ value: [] });
+
+    const result = await handleGetMailTips({
+      recipients: ['someone@outlook.com'],
+    });
+
+    expect(result._meta).toEqual(
+      expect.objectContaining({
+        recipientCount: 0,
+        warningCount: 0,
+        issues: [],
+      })
+    );
+  });
+});
+
+describe('mail-tips text agrees with the issues (#272)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    ensureAuthenticated.mockResolvedValue('test_token');
+  });
+
+  it('counts an external recipient as a warning, not a ✓', () => {
+    const { formatted, warningCount } = formatMailTips([
+      { emailAddress: { address: 'a@other.com' }, recipientScope: 'external' },
+    ]);
+
+    expect(warningCount).toBe(1);
+    expect(formatted).toContain('### ⚠ a@other.com');
+    expect(formatted).toContain('**Warnings**: External');
+  });
+
+  it('counts a group with external members as a warning, not a ✓', () => {
+    const { formatted, warningCount } = formatMailTips([
+      {
+        emailAddress: { address: 'team@example.com' },
+        totalMemberCount: 20,
+        externalMemberCount: 3,
+      },
+    ]);
+
+    expect(warningCount).toBe(1);
+    expect(formatted).toContain('### ⚠ team@example.com');
+    expect(formatted).toContain('**Warnings**: External Members');
+  });
+
+  it('shows Warnings: 1 in the header for an external recipient', async () => {
+    callGraphAPI.mockResolvedValue({
+      value: [
+        {
+          emailAddress: { address: 'a@other.com' },
+          recipientScope: 'external',
+        },
+      ],
+    });
+
+    const result = await handleGetMailTips({ recipients: ['a@other.com'] });
+
+    expect(result.content[0].text).toContain('**Warnings**: 1');
+    expect(result._meta.warningCount).toBe(1);
+  });
+
+  it.each([
+    ['an internal recipient scope', { recipientScope: 'internal' }],
+    ['an external member count alone', { externalMemberCount: 2 }],
+    [
+      'a per-recipient error',
+      { error: { code: 'ErrorMailTipsFailed', message: 'x' } },
+    ],
+  ])('does not call %s an empty response', async (_label, fields) => {
+    callGraphAPI.mockResolvedValue({
+      value: [{ emailAddress: { address: 'a@example.com' }, ...fields }],
+    });
+
+    const result = await handleGetMailTips({ recipients: ['a@example.com'] });
+
+    expect(result._meta.allEmpty).toBe(false);
+  });
+
+  it('ignores recipientNotFound, which Graph does not return', async () => {
+    callGraphAPI.mockResolvedValue({
+      value: [
+        {
+          emailAddress: { address: 'a@example.com' },
+          recipientNotFound: true,
+        },
+      ],
+    });
+
+    const result = await handleGetMailTips({ recipients: ['a@example.com'] });
+
+    expect(result._meta.allEmpty).toBe(true);
+  });
+
+  it('still calls a response with only a "none" scope empty', async () => {
+    callGraphAPI.mockResolvedValue({
+      value: [
+        { emailAddress: { address: 'a@outlook.com' }, recipientScope: 'none' },
+      ],
+    });
+
+    const result = await handleGetMailTips({ recipients: ['a@outlook.com'] });
+
+    expect(result._meta.allEmpty).toBe(true);
+  });
+
+  it('says a recipient could not be checked when Graph returns an error for it', () => {
+    const { formatted } = formatMailTips([
+      {
+        emailAddress: { address: 'a@example.com' },
+        error: { code: 'ErrorMailTipsFailed', message: 'Lookup failed' },
+      },
+    ]);
+
+    expect(formatted).not.toContain('No issues detected');
+    expect(formatted).toContain('ErrorMailTipsFailed');
+  });
+});

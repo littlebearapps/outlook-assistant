@@ -18,8 +18,8 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
 | `search-emails` | Search, list, delta sync, conversations | read-only | `query`, `from`, `to`, `folder` (name or nested path), `searchAllFolders`, `searchExpression`, `deltaMode`, `conversationId`, `groupByConversation`, `internetMessageId`, `sharedMailbox` (alias `email`), `maxResults` (delta page size) |
-| `read-email` | Read content or forensic headers | read-only | `id`, `headersMode`, `groupByType`, `importantOnly`, `sharedMailbox` (alias `email`) |
-| `send-email` | Send email with safety controls | **destructive** | `to`, `subject`, `body`, `dryRun`, `checkRecipients`, `cc`, `bcc`, `importance` |
+| `read-email` | Read content or forensic headers | read-only | `id`, `outputVerbosity` (body up to 2,000 characters, or 40,000 at `full`), `headersMode`, `groupByType`, `importantOnly`, `sharedMailbox` (alias `email`) |
+| `send-email` | Send email with safety controls | **destructive** | `to`, `subject`, `body`, `dryRun`, `checkRecipients`, `acknowledgeWarnings`, `cc`, `bcc`, `importance` |
 | `draft` | Create, update, send, delete, reply, forward drafts | **destructive** | `action` (required), `id`, `to`, `subject`, `body`, `comment`, `dryRun`, `checkRecipients` |
 | `get-mail-tips` | Pre-send recipient validation | read-only | `recipients`, `tipTypes` |
 | `update-email` | Mark read/unread, flag/unflag/complete | idempotent | `action` (required), `id`, `ids`, `dueDateTime`, `startDateTime`, `sharedMailbox` (alias `email`) |
@@ -48,6 +48,8 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 > **`query` vs `searchExpression`**: these issue structurally different Graph requests, so they surface different messages. An untranslated `searchExpression` is answered by `$search` over the entire message — body included — ranked by relevance with no date ordering, so a term buried in a body can outrank an obvious subject-line match. On personal accounts `query` falls back to a subject substring match (every word must appear in the subject), which is precise but never reads bodies. Use `query` for a term you expect in a subject, `searchExpression` when you need body content.
 
 > **`to` scan cap**: personal Outlook.com rejects the server-side recipient filter, so `to` falls back to a local match over the 500 most recent messages (`OUTLOOK_SEARCH_SCAN_LIMIT`, max 5000). On a large archive that excludes older mail; pair `to` with `receivedAfter`/`receivedBefore` to reach it. The response discloses a truncated scan whether or not it matched.
+
+> **More results and long bodies**: list and search have no page cursor yet (#286). When a result says more emails are available, raise `count` (max 50) or narrow `receivedAfter`/`receivedBefore`. A body cut at 2,000 characters names the `read-email` call with `outputVerbosity: full` (up to 40,000); anything longer can be written whole to a file with `export target=message`. A batch `export target=messages` takes at most 100 messages per call and says when some were left out.
 
 > **Search metadata**: every `search-emails` response carries `_meta.searchMetadata`. `finalStrategy` names the rung that answered (`combined-search`, `single-term-*`, `client-side-*`, `boolean-filters-only`, `raw-kql-translated`, `recent-emails`); `filterApplied` says whether every supplied filter was honoured; `droppedFilters` lists any that were not — it should always be empty, and a non-empty value means the result set is broader than the query (#229). `candidatesScanned` (with `scanLimit` and `truncated`) discloses how many messages a client-side fallback examined, so a bounded scan never reads as a whole-mailbox answer; `kqlTranslatedTo` records the rewrite when a field-scoped `searchExpression` was translated. An empty search additionally reports in its guidance text how many messages any local narrowing pass looked at.
 
@@ -97,26 +99,26 @@ Flag dates: a `dueDateTime`/`startDateTime` with `Z` or a ±hh:mm offset is kept
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
 | `list-events` | List events: upcoming by default, or past/current/by name with filters (times as canonical UTC ISO-8601 + labelled local) | read-only | `count` (default 10, max 100), `startAfter`/`startBefore` (ISO 8601 with `Z` or ±hh:mm, normalised to UTC), `subject` (case-insensitive contains, ≤ 255 chars). Supplying any filter replaces the default `start ≥ now` bound and filters are AND-ed; backward-looking searches (`startBefore` alone, or `subject` alone) return newest first. Invalid values return a tool error before any Graph call |
-| `create-event` | Create new event | **destructive** (sends invitations) | `subject`, `start`, `end`, `attendees` (email strings are required attendees; `{email, type}` objects set `type` to `required`/`optional`/`resource`), `body`. Times use configured timezone (default: Australia/Melbourne; override with `OUTLOOK_DEFAULT_TIMEZONE` env var) — omit `Z` suffix for local time |
-| `manage-event` | Update, decline, cancel, or delete (delete removes the event and Graph doesn't document a guaranteed recovery path; deleting a meeting you organised that has attendees emails them a cancellation; use `cancel` with a `comment` to control the message) | **destructive** | `action` (`update`/`decline`/`cancel`/`delete`), `eventId` (or alias `id`), `comment` (decline/cancel; omitted if not given), `sendResponse` (decline only; `false` declines without notifying the organiser), `subject`/`start`/`end`/`attendees`/`body`/`location`/`isOnlineMeeting`/`sensitivity`/`showAs`/`importance`/`categories`/`reminderMinutesBeforeStart` (update only — only the fields you pass are changed; `attendees` is a full replacement list of email strings or `{email, type}` objects, and an entry without a type keeps the type that address already has, new addresses being required), `dryRun` (preview the PATCH without applying it; with untyped attendees it reads the event first so the preview shows the resolved types) |
+| `create-event` | Create new event | **destructive** (sends invitations) | `subject`, `start`, `end`, `attendees` (email strings are required attendees; `{email, type}` objects set `type` to `required`/`optional`/`resource`), `body`, `dryRun` (preview who would be invited, with an external count, without creating anything). Times use configured timezone (default: Australia/Melbourne; override with `OUTLOOK_DEFAULT_TIMEZONE` env var) — omit `Z` suffix for local time |
+| `manage-event` | Update, decline, cancel, or delete (delete removes the event and Graph doesn't document a guaranteed recovery path; deleting a meeting you organised that has attendees emails them a cancellation; use `cancel` with a `comment` to control the message) | **destructive** | `action` (`update`/`decline`/`cancel`/`delete`), `eventId` (or alias `id`), `comment` (decline/cancel; omitted if not given), `sendResponse` (decline only; `false` declines without notifying the organiser), `subject`/`start`/`end`/`attendees`/`body`/`location`/`isOnlineMeeting`/`sensitivity`/`showAs`/`importance`/`categories`/`reminderMinutesBeforeStart` (update only — only the fields you pass are changed; `attendees` is a full replacement list of email strings or `{email, type}` objects, and an entry without a type keeps the type that address already has, new addresses being required), `dryRun` (all actions; nothing is changed or sent: decline/cancel/delete read the event and say who would be emailed, with an external count; update previews the PATCH, reading the event first when attendees are untyped so the preview shows the resolved types) |
 
 ## Folder (1 tool)
 
 | Tool | Actions | Safety | Key Parameters |
 |------|---------|--------|----------------|
-| `folders` | `list` (default), `create`, `move`, `stats`, `delete` | **destructive** | `name`, `parentFolder`/`parentFolderId` (create), `emailIds`, `targetFolder`/`targetFolderId` (move), `folder`/`folderId` (stats), `folderName`/`folderId` (delete), `outputVerbosity`. Folders addressable by nested path (`Parent/Child`) or ID; `list` shows full paths + IDs. All actions accept `sharedMailbox` (alias `email`) |
+| `folders` | `list` (default), `create`, `move`, `stats`, `delete` | **destructive** | `name`, `parentFolder`/`parentFolderId` (create), `emailIds`, `targetFolder`/`targetFolderId` (move), `folder`/`folderId` (stats), `folderName`/`folderId` (delete), `dryRun` (delete: preview the items and subfolders that would be lost), `outputVerbosity`. Folders addressable by nested path (`Parent/Child`) or ID; `list` shows full paths + IDs. All actions accept `sharedMailbox` (alias `email`) |
 
 ## Rules (1 tool)
 
 | Tool | Actions | Safety | Key Parameters |
 |------|---------|--------|----------------|
-| `manage-rules` | `list` (default), `create`, `update`, `reorder`, `delete` | **destructive** | `name` (or alias `displayName`), `fromAddresses`, `containsSubject`, `bodyContains`, `hasAttachments`, `moveToFolder`/`copyToFolder` (name, nested path like `Triage/Delete`, or ID), `forwardTo`, `assignCategories`, `dryRun`, `except*`, `ruleName`, `ruleId`, `sequence` |
+| `manage-rules` | `list` (default), `create`, `update`, `reorder`, `delete` | **destructive** | `name` (or alias `displayName`), `fromAddresses`, `containsSubject`, `bodyContains`, `hasAttachments`, `moveToFolder`/`copyToFolder` (name, nested path like `Triage/Delete`, or ID), `forwardTo`/`redirectTo` (a rule with any address blocked by `OUTLOOK_ALLOWED_RECIPIENTS` is refused whole), `assignCategories`, `dryRun` (create/update; doesn't count towards the rate limit), `except*`, `ruleName`, `ruleId`, `sequence`. Create, update, reorder and delete count towards `OUTLOOK_MAX_MANAGE_RULES_PER_SESSION` |
 
 ## Contacts (2 tools)
 
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
-| `manage-contact` | Full CRUD: `list` (default), `search`, `get`, `create`, `update`, `delete` | **destructive** | `action`, `query`, `id`, `displayName`, `email`, `count` |
+| `manage-contact` | Full CRUD: `list` (default), `search`, `get`, `create`, `update`, `delete` | **destructive** | `action`, `query`, `id`, `displayName`, `email`, `count`, `dryRun` (delete: preview which contact would be removed) |
 | `search-people` | Relevance-based search (People API) | read-only | `query`, `count` |
 
 ## Categories (3 tools)
@@ -135,7 +137,7 @@ Flag dates: a `dueDateTime`/`startDateTime` with `Z` or a ±hh:mm offset is kept
 
 | Tool | Actions | Safety | Key Parameters |
 |------|---------|--------|----------------|
-| `mailbox-settings` | `get` (default), `set-auto-replies`, `set-working-hours` | **destructive** (auto-replies reach external senders), idempotent | `section`, `enabled`, `startDateTime`, `endDateTime`, `internalReplyMessage`, `startTime`, `endTime`, `daysOfWeek` |
+| `mailbox-settings` | `get` (default), `set-auto-replies`, `set-working-hours` | **destructive** (auto-replies reach external senders), idempotent | `section`, `enabled`, `startDateTime`, `endDateTime`, `internalReplyMessage`, `externalReplyMessage`, `externalAudience`, `dryRun` (set-auto-replies: preview who would get replies, the schedule and message lengths), `startTime`, `endTime`, `daysOfWeek` |
 
 ## Advanced (2 tools)
 
@@ -156,13 +158,18 @@ All four hints are set explicitly on every tool, and derived from the risk-class
 
 `idempotentHint: true` (repeating the call has no further effect) is set on every read-only tool and on `update-email`, `apply-category` and `mailbox-settings`.
 
+`send-email` and `create-event` also carry `_meta["anthropic/requiresUserInteraction"]`, so Claude Code asks before every call to them, dry runs included, even in auto-accept or bypass modes. Other clients ignore it.
+
+> **Read-only mode**: with `OUTLOOK_READ_ONLY=true` the server refuses every tool call or action that isn't a read before it runs, whatever the client's approval settings. That includes `dryRun` previews, `export` and `attachments action=download`; `auth` sign-in still works. See the [README's environment variables](../../README.md#environment-variables).
+
 > **`openWorldHint: true`** is set on tools that return content authored by external/untrusted parties (`search-emails`, `read-email`, `list-events`, `get-mail-tips`, `search-people`, `access-shared-mailbox`, `attachments`, `export`, `draft`) or that reach other people (`send-email`, `draft`, `create-event`, `manage-event`, `manage-rules`, `mailbox-settings`), signalling MCP clients to apply appropriate caution (e.g. prompt-injection defences).
 
 ## send-email Safety Controls
 
 | Control | Config | Default |
 |---------|--------|---------|
-| Pre-send mail tips | `checkRecipients: true` param | Disabled |
+| Pre-send mail tips | `checkRecipients: true` param. Out-of-office, mailbox full, delivery restricted or external recipients refuse the send | Disabled |
+| Send despite mail-tip warnings | `acknowledgeWarnings: true` param (with `checkRecipients`) | `false` |
 | Dry-run preview | `dryRun: true` param | Disabled |
 | Session rate limit | `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION` (shared with `draft action=send`) | Unlimited (0) |
 | Recipient allowlist | `OUTLOOK_ALLOWED_RECIPIENTS` env | Allow all |
@@ -182,20 +189,22 @@ Check recipients before sending — detects out-of-office, mailbox full, deliver
 | `maxMessageSize` | Maximum message size limit |
 | `totalMemberCount` | Group size (total and external members) |
 
+These are the names you pass in `tipTypes`. Graph's response uses some different field names (`mailboxFull`, `deliveryRestricted`, `isModerated`), and both forms are recognised. `_meta.issues` lists each flagged condition per recipient as `{address, type}`, with `type` one of `outOfOffice`, `mailboxFull`, `customTip`, `deliveryRestricted`, `moderated`, `external` or `externalMembers`. Mail tips are Microsoft 365 only; personal accounts return none.
+
 ## Output Verbosity
 
 | Level | Description |
 |-------|-------------|
 | `minimal` | Essential fields only (token efficient) |
 | `standard` | Common fields (default) |
-| `full` | All available fields |
+| `full` | All available fields (`read-email` body up to 40,000 characters; `standard` stops at 2,000) |
 
 ## draft Safety Controls
 
 | Control | Config | Default |
 |---------|--------|---------|
 | Dry-run preview | `dryRun: true` param (create only) | Disabled |
-| Pre-save mail tips | `checkRecipients: true` param (create only) | Disabled |
+| Pre-save mail tips | `checkRecipients: true` param (create only; the tips are returned with the saved draft and never stop it) | Disabled |
 | Session rate limit (create/update) | `OUTLOOK_MAX_DRAFT_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION` | Unlimited (0) |
 | Session rate limit (send) | Counts towards the `send-email` limit (`OUTLOOK_MAX_SEND_EMAIL_PER_SESSION`, else `OUTLOOK_MAX_EMAILS_PER_SESSION`) | Unlimited (0) |
 | Recipient allowlist | `OUTLOOK_ALLOWED_RECIPIENTS` env | Allow all |

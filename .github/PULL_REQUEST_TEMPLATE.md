@@ -28,6 +28,7 @@ Brief description of changes.
 
 - [ ] Tests pass (`npm test`)
 - [ ] Linting passes (`npm run lint`)
+- [ ] Formatting passes (`npm run format:check`)
 - [ ] Documentation updated if needed
 - [ ] `docs/quickrefs/tools-reference.md` updated (if tools changed)
 - [ ] Follows code style guidelines

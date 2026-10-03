@@ -78,7 +78,7 @@ When adding new tools:
 1. Create a new module directory if needed (e.g. `tasks/`)
 2. Implement tool handlers in separate files
 3. Export tool definitions from the module's `index.js` — prefer consolidating related operations into a single tool with an `action` parameter (STRAP pattern)
-4. Include an `annotations` object on each tool definition (`readOnlyHint`, `destructiveHint`, `idempotentHint`) — see the [Tools Reference](docs/quickrefs/tools-reference.md#safety-annotations) for examples
+4. Include an `annotations` object on each tool definition (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) — see the [Tools Reference](docs/quickrefs/tools-reference.md#safety-annotations) for examples
 5. Add tools to the `TOOLS` array in main `index.js`
 6. Add tests in the `test/` directory
 7. Update `docs/quickrefs/tools-reference.md`
@@ -103,7 +103,7 @@ test: add tests for contacts module
 
 ## Questions?
 
-If you have questions, feel free to [open a discussion](https://github.com/littlebearapps/outlook-assistant/issues).
+If you have questions, feel free to [open a discussion](https://github.com/littlebearapps/outlook-assistant/discussions).
 
 ## License
 

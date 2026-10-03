@@ -85,7 +85,7 @@ params:
   id: "draft-id"
 ```
 
-The draft skips **Deleted Items** and goes straight to Recoverable Items. It isn't gone for good: Outlook's **Recover deleted items** (in the Deleted Items folder) can restore it for a limited time. Like `update` and `send`, `delete` refuses any `id` that is not an unsent draft, so it can't remove a received or sent message.
+The draft skips **Deleted Items** and goes straight to Recoverable Items. It isn't gone for good: Outlook's **Recover deleted items** (in the Deleted Items folder) can restore it for a limited time, depending on your account. Like `update` and `send`, `delete` refuses any `id` that is not an unsent draft, so it can't remove a received or sent message.
 
 ## Reply as Draft
 

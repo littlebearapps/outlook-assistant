@@ -72,7 +72,7 @@ Flag dates: a `dueDateTime`/`startDateTime` with `Z` or a ±hh:mm offset is kept
 | `create` | Save new draft to Drafts folder | — (all optional) |
 | `update` | Edit an existing draft (refuses non-drafts) | `id` |
 | `send` | Send an existing draft (refuses non-drafts) | `id` |
-| `delete` | Delete a draft to Recoverable Items, skipping Deleted Items (refuses non-drafts) | `id` |
+| `delete` | Delete a draft to Recoverable Items (restorable for a limited time, depending on your account), skipping Deleted Items (refuses non-drafts) | `id` |
 | `reply` | Create reply draft from message | `id` |
 | `reply-all` | Create reply-all draft from message | `id` |
 | `forward` | Create forward draft with new recipients | `id`, `to` |
@@ -98,7 +98,7 @@ Flag dates: a `dueDateTime`/`startDateTime` with `Z` or a ±hh:mm offset is kept
 |------|-------------|--------|----------------|
 | `list-events` | List events: upcoming by default, or past/current/by name with filters (times as canonical UTC ISO-8601 + labelled local) | read-only | `count` (default 10, max 100), `startAfter`/`startBefore` (ISO 8601 with `Z` or ±hh:mm, normalised to UTC), `subject` (case-insensitive contains, ≤ 255 chars). Supplying any filter replaces the default `start ≥ now` bound and filters are AND-ed; backward-looking searches (`startBefore` alone, or `subject` alone) return newest first. Invalid values return a tool error before any Graph call |
 | `create-event` | Create new event | moderate write | `subject`, `start`, `end`, `attendees` (email strings are required attendees; `{email, type}` objects set `type` to `required`/`optional`/`resource`), `body`. Times use configured timezone (default: Australia/Melbourne; override with `OUTLOOK_DEFAULT_TIMEZONE` env var) — omit `Z` suffix for local time |
-| `manage-event` | Update, decline, cancel, or delete (deleting a meeting you organised that has attendees emails them a cancellation; use `cancel` with a `comment` to control the message) | **destructive** | `action` (`update`/`decline`/`cancel`/`delete`), `eventId` (or alias `id`), `comment` (decline/cancel; omitted if not given), `sendResponse` (decline only; `false` declines without notifying the organiser), `subject`/`start`/`end`/`attendees`/`body`/`location`/`isOnlineMeeting`/`sensitivity`/`showAs`/`importance`/`categories`/`reminderMinutesBeforeStart` (update only — only the fields you pass are changed; `attendees` is a full replacement list of email strings or `{email, type}` objects, and an entry without a type keeps the type that address already has, new addresses being required), `dryRun` (preview the PATCH without applying it; with untyped attendees it reads the event first so the preview shows the resolved types) |
+| `manage-event` | Update, decline, cancel, or delete (delete removes the event and Graph doesn't document a guaranteed recovery path; deleting a meeting you organised that has attendees emails them a cancellation; use `cancel` with a `comment` to control the message) | **destructive** | `action` (`update`/`decline`/`cancel`/`delete`), `eventId` (or alias `id`), `comment` (decline/cancel; omitted if not given), `sendResponse` (decline only; `false` declines without notifying the organiser), `subject`/`start`/`end`/`attendees`/`body`/`location`/`isOnlineMeeting`/`sensitivity`/`showAs`/`importance`/`categories`/`reminderMinutesBeforeStart` (update only — only the fields you pass are changed; `attendees` is a full replacement list of email strings or `{email, type}` objects, and an entry without a type keeps the type that address already has, new addresses being required), `dryRun` (preview the PATCH without applying it; with untyped attendees it reads the event first so the preview shows the resolved types) |
 
 ## Folder (1 tool)
 
@@ -270,11 +270,11 @@ folders(action: "list", sharedMailbox: "team@company.com", includeChildren: true
 search-emails(sharedMailbox: "team@company.com", folder: "Archiv", query: "invoice")
 
 // Delta sync (initial — returns emails + deltaToken)
-search-emails(deltaMode: true)
+search-emails(deltaMode: true, maxResults: 50)
 
 // Delta sync paging (continuation token from the previous page, same page size)
 search-emails(deltaMode: true, deltaToken: "continuation-token...", maxResults: 50)
 
 // Delta sync (incremental — returns only changes)
-search-emails(deltaMode: true, deltaToken: "previous-token...")
+search-emails(deltaMode: true, deltaToken: "previous-token...", maxResults: 50)
 ```

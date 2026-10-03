@@ -363,7 +363,7 @@ async function handleDeleteDraft(args) {
       content: [
         {
           type: 'text',
-          text: `Draft \`${id}\` deleted. It skips Deleted Items and goes to Recoverable Items, where Outlook's "Recover deleted items" can restore it for a limited time.`,
+          text: `Draft \`${id}\` deleted. It skips Deleted Items and goes to Recoverable Items, where Outlook's "Recover deleted items" can restore it for a limited time, depending on your account.`,
         },
       ],
     };

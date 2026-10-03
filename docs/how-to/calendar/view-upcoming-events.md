@@ -28,7 +28,7 @@ params:
   count: 30
 ```
 
-Maximum is 50 events per request.
+Maximum is 100 events per request.
 
 ## Look Back at Past Events
 

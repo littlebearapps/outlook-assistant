@@ -92,7 +92,7 @@ params:
 
 Delete removes the event from your calendar. It isn't always silent: if you organised the meeting and it has attendees, Microsoft emails them a cancellation (with no message from you). To control what they receive, use `cancel` with a `comment` instead.
 
-The event goes to Recoverable Items rather than Deleted Items; Outlook's "Recover deleted items" can restore it for a limited time.
+Microsoft Graph doesn't document a guaranteed recovery path for a deleted event, so don't count on getting it back.
 
 ## Update vs Decline vs Cancel vs Delete
 

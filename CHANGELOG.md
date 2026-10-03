@@ -53,7 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and a refusal doesn't use up a rate-limit slot); an ID that no longer exists
   reports "Draft not found". The tool description also said `delete` was
   permanent: the draft skips Deleted Items and goes to Recoverable Items, where
-  Outlook's "Recover deleted items" can restore it for a limited time.
+  Outlook's "Recover deleted items" can restore it for a limited time,
+  depending on your account.
 - **`update-email` flag dates ignored `Z` and offsets** (#247). The trailing
   `Z` was stripped and the time read in the default timezone, and offsets such
   as `+10:00` were passed through, so `09:00Z` became 09:00 Melbourne (10 or 11
@@ -126,13 +127,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   directory, so it never touches your own files.
 - **Three tool descriptions misdescribed what happens.** `manage-event` said
   `delete` "permanently" removes the event and the how-to called it silent:
-  the event goes to Recoverable Items, and deleting a meeting you organised
-  that has attendees emails them a cancellation (use `cancel` with a
-  `comment` to control that message). `update-email` said batch
+  it now says only that the event is removed (Graph doesn't document a
+  guaranteed recovery path), and that deleting a meeting you organised that
+  has attendees emails them a cancellation (use `cancel` with a `comment` to
+  control that message). `update-email` said batch
   flag/unflag/complete used Graph `$batch`; the messages are updated one at a
   time. `folders` said a deleted folder goes to Deleted Items on Outlook.com;
-  it skips Deleted Items and goes to Recoverable Items, restorable for a
-  limited time with Outlook's "Recover deleted items".
+  it doesn't, and Graph doesn't document whether it can be restored (some
+  accounts may offer Outlook's "Recover deleted items" for a limited time),
+  so move out anything you might need before deleting a folder.
 
 ### Changed
 

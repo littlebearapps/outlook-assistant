@@ -24,6 +24,7 @@ Each incremental call returns a new `deltaToken` for the next round.
 tool: search-emails
 params:
   deltaMode: true
+  maxResults: 50
 ```
 
 The response includes:
@@ -51,6 +52,7 @@ tool: search-emails
 params:
   deltaMode: true
   deltaToken: "your-saved-token-here"
+  maxResults: 50
 ```
 
 The response includes:

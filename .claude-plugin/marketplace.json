@@ -1,0 +1,17 @@
+{
+  "name": "littlebearapps",
+  "owner": {
+    "name": "Little Bear Apps",
+    "url": "https://littlebearapps.com"
+  },
+  "metadata": {
+    "description": "Little Bear Apps plugins for Claude Code"
+  },
+  "plugins": [
+    {
+      "name": "outlook-assistant",
+      "source": "./plugins/outlook-assistant",
+      "description": "Microsoft Outlook email, calendar and contacts: 22 tools via Microsoft Graph, with dry-run previews, send limits and recipient allowlists."
+    }
+  ]
+}

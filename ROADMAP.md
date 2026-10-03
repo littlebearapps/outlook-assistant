@@ -86,6 +86,13 @@ shipped"), so these carry forward to the next one.
 
 ## Recently shipped
 
+- **v3.13.0** (Oct 2026) — **Marketplace plugins**. A plugin bundle
+  (`plugins/outlook-assistant/`) for Claude Code (installable now via
+  `claude plugin marketplace add littlebearapps/outlook-assistant`) and, in
+  the Agent Plugins format, GitHub Copilot and Cursor. The Azure client ID can
+  be given at sign-in (`auth action=authenticate clientId=…`, saved locally)
+  for clients that can't set environment variables. The client secret is
+  documented as browser-flow only. Token-storage logs moved off stdout.
 - **v3.12.1** (Oct 2026) — **Graph reliability and correctness fixes**. Graph
   requests retry throttling (`429`, and `503`/`504` for non-POST) with a
   request inactivity timeout and at most 4 requests in flight (#244); delta

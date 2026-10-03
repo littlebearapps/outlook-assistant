@@ -31,8 +31,10 @@ stdio. It is normally launched by an MCP client (Claude Desktop, Claude Code)
 rather than run by hand — started from a terminal it will simply wait on stdin.
 
 Key environment variables:
-  OUTLOOK_CLIENT_ID                 Azure app registration client ID
-  OUTLOOK_CLIENT_SECRET             Client secret VALUE (not the Secret ID)
+  OUTLOOK_CLIENT_ID                 Azure Application (client) ID. If you can't set env
+                                    vars, pass it to the auth tool instead (action=authenticate
+                                    clientId=<id>); it's saved to ~/.outlook-assistant-config.json
+  OUTLOOK_CLIENT_SECRET             Client secret VALUE (not the Secret ID); browser flow only
   OUTLOOK_AUTH_METHOD               device-code (default) | browser
   OUTLOOK_AUTH_AUDIENCE             common | consumers | organizations | <tenant-guid>
   OUTLOOK_SHARED_MAILBOX            Opt in to shared mailboxes: read | true (work/school only)

@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.13.0] - 2026-10-03
+
+### Added
+
+- **Plugin bundle for Claude Code, GitHub Copilot and Cursor**
+  (`plugins/outlook-assistant/`).
+  - It ships a Claude Code manifest (`.claude-plugin/plugin.json`). That
+    manifest prompts for the client ID, sign-in audience, send limit and
+    recipient allowlist when you enable the plugin.
+  - It also ships Agent Plugins 1.0 files (`plugin.json` + `mcp.json`) for
+    Copilot, VS Code and Cursor.
+  - Both pin the npx launcher to the exact release.
+  - Claude Code users can install now:
+    `claude plugin marketplace add littlebearapps/outlook-assistant`, then
+    `claude plugin install outlook-assistant@littlebearapps`.
+  - `npm version` keeps every manifest in step through
+    `scripts/sync-version.js` (`npm run version:check` reports drift).
+- **Give your Azure client ID at sign-in instead of in the config.**
+  - If `OUTLOOK_CLIENT_ID` isn't set, `auth action=authenticate` explains what
+    to ask for. `auth action=authenticate clientId=<id>` then saves the ID to
+    `~/.outlook-assistant-config.json` (mode 0600) and starts device-code
+    sign-in.
+  - This lets clients that can't set environment variables, such as
+    marketplace plugins, work. An environment value always takes precedence:
+    a conflicting `clientId` is refused rather than silently ignored.
+  - `auth action=about` reports where the client ID comes from, without
+    showing it.
+  - A pending device-code sign-in now completes with the client ID it was
+    started with.
+- **VS Code / GitHub Copilot setup** in the README (`.vscode/mcp.json`, with
+  the client ID prompted for and stored by VS Code).
+
+### Changed
+
+- **The client secret is now documented as optional.** Device-code sign-in
+  (the default) never used it; only the browser flow does. The quick-start
+  configs and the Cursor install link no longer include it, and `server.json`
+  marks `OUTLOOK_CLIENT_SECRET` as not required.
+- `auth action=authenticate method=browser` with no client ID now returns a
+  clear error, instead of a sign-in URL with an empty `client_id`.
+
+### Fixed
+
+- **Token-storage log lines went to stdout**, the MCP protocol stream, so a
+  strict client could see non-JSON output during token refresh or sign-out.
+  They now go to stderr.
+
 ## [3.12.1] - 2026-10-03
 
 ### Fixed

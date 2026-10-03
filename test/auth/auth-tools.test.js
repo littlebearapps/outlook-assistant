@@ -8,6 +8,11 @@ const path = require('path');
 const ORIGINAL_HOME = process.env.HOME;
 const TEST_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'oa-auth-tools-'));
 process.env.HOME = TEST_HOME;
+// AUTH_CONFIG.clientId below resolves through the real auth/client-config
+// (env → saved ~/.outlook-assistant-config.json in TEST_HOME). Existing tests
+// rely on the env var; the clientId suite clears it to exercise the rest.
+process.env.OUTLOOK_CLIENT_ID = 'test-client-id';
+delete process.env.MS_CLIENT_ID;
 
 afterAll(() => {
   if (ORIGINAL_HOME === undefined) {
@@ -31,7 +36,9 @@ const DEVICE_CODE_STATE_PATH = path.join(
 // Mock config
 jest.mock('../../config', () => ({
   AUTH_CONFIG: {
-    clientId: 'test-client-id',
+    get clientId() {
+      return jest.requireActual('../../auth/client-config').resolveClientId();
+    },
     clientSecret: 'test-client-secret',
     scopes: [
       'offline_access',
@@ -56,8 +63,11 @@ jest.mock('../../config', () => ({
 }));
 
 const {
+  authTools,
+  handleAuthenticate,
   handleDeviceCodeAuth,
   handleDeviceCodeComplete,
+  handleCheckAuthStatus,
   handleAbout,
 } = require('../../auth/tools');
 jest.mock('../../utils/graph-api');
@@ -749,5 +759,305 @@ describe('handleAbout — F-1/F-2/F-48', () => {
     const result = await handleAbout();
 
     expect(result.content[0].text).toMatch(/Not authenticated/);
+  });
+});
+
+// Runtime client ID (`auth action=authenticate clientId=…`) for MCP clients
+// that can't set env vars, e.g. Copilot/Cursor plugin marketplaces.
+describe('auth clientId param — runtime Azure Application (client) ID', () => {
+  const GUID = '0a1b2c3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d';
+  const OTHER_GUID = 'ffffffff-eeee-dddd-cccc-bbbbbbbbbbbb';
+  const CONFIG_PATH = path.join(TEST_HOME, '.outlook-assistant-config.json');
+  const originalEnv = process.env;
+
+  const readSaved = () => JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+
+  beforeEach(async () => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    // Drain any in-memory pending device code left by earlier tests: a
+    // failed completion clears it.
+    process.env.OUTLOOK_CLIENT_ID = 'drain';
+    pollForToken.mockRejectedValue(new Error('reset'));
+    await handleDeviceCodeComplete();
+    pollForToken.mockReset();
+    jest.clearAllMocks();
+    process.env = { ...originalEnv };
+    delete process.env.OUTLOOK_CLIENT_ID;
+    delete process.env.MS_CLIENT_ID;
+    fs.rmSync(CONFIG_PATH, { force: true });
+    fs.rmSync(DEVICE_CODE_STATE_PATH, { force: true });
+    initiateDeviceCodeFlow.mockResolvedValue({
+      deviceCode: 'dc_runtime',
+      userCode: 'RUNTIME1',
+      verificationUri: 'https://microsoft.com/devicelogin',
+      interval: 5,
+      expiresIn: 900,
+    });
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+    console.error.mockRestore();
+    fs.rmSync(CONFIG_PATH, { force: true });
+    fs.rmSync(DEVICE_CODE_STATE_PATH, { force: true });
+  });
+
+  test('schema exposes an optional string clientId that schema-coerce accepts', () => {
+    const { coerceArgsAgainstSchema } = require('../../utils/schema-coerce');
+    const authTool = authTools.find((t) => t.name === 'auth');
+    const prop = authTool.inputSchema.properties.clientId;
+    expect(prop.type).toBe('string');
+    expect(prop.description).toMatch(/Application \(client\) ID/);
+    expect(prop.description).toMatch(/\.outlook-assistant-config\.json/);
+    expect(prop.description).toMatch(/not a secret/);
+    expect(prop.description).toMatch(/OUTLOOK_CLIENT_ID/);
+    expect(authTool.inputSchema.required).not.toContain('clientId');
+    expect(
+      coerceArgsAgainstSchema(
+        { action: 'authenticate', clientId: GUID },
+        authTool.inputSchema
+      )
+    ).toEqual({ args: { action: 'authenticate', clientId: GUID } });
+  });
+
+  test('saves a valid ID (mode 0600) and proceeds to device-code sign-in with it', async () => {
+    const result = await handleAuthenticate({
+      action: 'authenticate',
+      clientId: `  ${GUID}  `,
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(readSaved()).toEqual({ clientId: GUID });
+    if (process.platform !== 'win32') {
+      expect(fs.statSync(CONFIG_PATH).mode & 0o777).toBe(0o600);
+    }
+    expect(initiateDeviceCodeFlow).toHaveBeenCalledWith(
+      GUID,
+      expect.any(Array)
+    );
+    const text = result.content[0].text;
+    expect(text).toMatch(/Saved your Azure Application \(client\) ID/);
+    expect(text).toContain('RUNTIME1');
+    // The pending state records the client ID the code was issued to
+    expect(
+      JSON.parse(fs.readFileSync(DEVICE_CODE_STATE_PATH, 'utf8')).clientId
+    ).toBe(GUID);
+  });
+
+  test('device-code-complete polls with the saved ID', async () => {
+    await handleAuthenticate({ action: 'authenticate', clientId: GUID });
+    pollForToken.mockResolvedValue({
+      access_token: 'a',
+      refresh_token: 'r',
+      expires_in: 3600,
+      scope: 'User.Read',
+      token_type: 'Bearer',
+    });
+    TokenStorage.mockImplementation(() => ({
+      tokens: null,
+      _saveTokensToFile: jest.fn().mockResolvedValue(undefined),
+    }));
+
+    const result = await handleDeviceCodeComplete();
+
+    expect(result.content[0].text).toContain('Authentication successful');
+    expect(pollForToken).toHaveBeenCalledWith(
+      GUID,
+      'dc_runtime',
+      5,
+      expect.any(Number)
+    );
+    expect(TokenStorage).toHaveBeenCalledWith(
+      expect.objectContaining({ clientId: GUID })
+    );
+  });
+
+  test('a saved ID is used later without passing clientId again', async () => {
+    await handleAuthenticate({ action: 'authenticate', clientId: GUID });
+    initiateDeviceCodeFlow.mockClear();
+
+    await handleAuthenticate({ action: 'authenticate' });
+
+    expect(initiateDeviceCodeFlow).toHaveBeenCalledWith(
+      GUID,
+      expect.any(Array)
+    );
+  });
+
+  test.each(['not-a-guid', 'test-client-id', `${GUID}-extra`, 42])(
+    'rejects invalid clientId %p without saving or starting sign-in',
+    async (bad) => {
+      const result = await handleAuthenticate({
+        action: 'authenticate',
+        clientId: bad,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toMatch(
+        /not a valid Azure Application \(client\) ID/
+      );
+      expect(fs.existsSync(CONFIG_PATH)).toBe(false);
+      expect(initiateDeviceCodeFlow).not.toHaveBeenCalled();
+    }
+  );
+
+  test.each([null, '', '   '])(
+    'treats clientId %p as not supplied (some clients send empty optionals)',
+    async (empty) => {
+      process.env.OUTLOOK_CLIENT_ID = GUID;
+
+      const result = await handleAuthenticate({
+        action: 'authenticate',
+        clientId: empty,
+      });
+
+      expect(result.isError).toBeUndefined();
+      expect(fs.existsSync(CONFIG_PATH)).toBe(false);
+      expect(initiateDeviceCodeFlow).toHaveBeenCalledWith(
+        GUID,
+        expect.any(Array)
+      );
+    }
+  );
+
+  test.each(['OUTLOOK_CLIENT_ID', 'MS_CLIENT_ID'])(
+    'refuses when %s is set to a different ID (env wins)',
+    async (envName) => {
+      process.env[envName] = OTHER_GUID;
+
+      const result = await handleAuthenticate({
+        action: 'authenticate',
+        clientId: GUID,
+      });
+
+      expect(result.isError).toBe(true);
+      const text = result.content[0].text;
+      expect(text).toContain(envName);
+      expect(text).toMatch(/takes precedence/);
+      expect(text).toMatch(/change or remove/);
+      expect(text).not.toContain(OTHER_GUID);
+      expect(fs.existsSync(CONFIG_PATH)).toBe(false);
+      expect(initiateDeviceCodeFlow).not.toHaveBeenCalled();
+    }
+  );
+
+  test('accepts a clientId matching the env var (case-insensitive)', async () => {
+    process.env.OUTLOOK_CLIENT_ID = GUID.toUpperCase();
+
+    const result = await handleAuthenticate({
+      action: 'authenticate',
+      clientId: GUID,
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(initiateDeviceCodeFlow).toHaveBeenCalledWith(
+      GUID.toUpperCase(),
+      expect.any(Array)
+    );
+  });
+
+  test('no client ID anywhere → guidance error for the AI client', async () => {
+    const result = await handleAuthenticate({ action: 'authenticate' });
+
+    expect(result.isError).toBe(true);
+    const text = result.content[0].text;
+    expect(text).toMatch(/OUTLOOK_CLIENT_ID is not configured/);
+    expect(text).toMatch(/Ask the user for the \*\*Application \(client\) ID/);
+    expect(text).toContain('auth action=authenticate clientId=<id>');
+    expect(text).toContain(
+      'https://github.com/littlebearapps/outlook-assistant/blob/main/docs/how-to/getting-started/connect-outlook-to-claude.md'
+    );
+    expect(text).toMatch(/client secret is not needed for device-code/);
+    expect(initiateDeviceCodeFlow).not.toHaveBeenCalled();
+  });
+
+  test('browser method with no client ID → same guidance error', async () => {
+    const result = await handleAuthenticate({
+      action: 'authenticate',
+      method: 'browser',
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(
+      /OUTLOOK_CLIENT_ID is not configured/
+    );
+  });
+
+  test('browser method with a saved ID notes the auth server needs env vars', async () => {
+    const result = await handleAuthenticate({
+      action: 'authenticate',
+      method: 'browser',
+      clientId: GUID,
+    });
+
+    const text = result.content[0].text;
+    expect(result.isError).toBeUndefined();
+    expect(readSaved()).toEqual({ clientId: GUID });
+    expect(text).toContain(`client_id=${GUID}`);
+    expect(text).toMatch(/OUTLOOK_CLIENT_SECRET/);
+    expect(initiateDeviceCodeFlow).not.toHaveBeenCalled();
+  });
+
+  test('device-code-complete with no client ID anywhere → guidance error', async () => {
+    fs.writeFileSync(
+      DEVICE_CODE_STATE_PATH,
+      JSON.stringify({
+        deviceCode: 'dc_old',
+        interval: 5,
+        expiresIn: 900,
+        expiresAt: Date.now() + 900 * 1000,
+      }),
+      { mode: 0o600 }
+    );
+
+    const result = await handleDeviceCodeComplete();
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(
+      /OUTLOOK_CLIENT_ID is not configured/
+    );
+    expect(pollForToken).not.toHaveBeenCalled();
+    expect(fs.existsSync(DEVICE_CODE_STATE_PATH)).toBe(false);
+  });
+
+  test('status with no client ID guides the AI client', async () => {
+    TokenStorage.mockImplementation(() => ({
+      getValidAccessToken: jest.fn().mockResolvedValue(null),
+    }));
+
+    const text = (await handleCheckAuthStatus()).content[0].text;
+
+    expect(text).toMatch(/^Not authenticated/);
+    expect(text).toContain('auth action=authenticate clientId=<id>');
+  });
+
+  describe('auth about — Client ID row', () => {
+    beforeEach(() => {
+      callGraphAPI.mockResolvedValue({ userPrincipalName: 'u@example.com' });
+    });
+
+    test('Not set', async () => {
+      const text = (await handleAbout()).content[0].text;
+      expect(text).toMatch(/\| Client ID \| Not set/);
+    });
+
+    test('Configured (environment)', async () => {
+      process.env.OUTLOOK_CLIENT_ID = GUID;
+      const text = (await handleAbout()).content[0].text;
+      expect(text).toMatch(
+        /\| Client ID \| Configured \(environment: OUTLOOK_CLIENT_ID\) \|/
+      );
+      expect(text).not.toContain(GUID);
+    });
+
+    test('Configured (saved) — never prints the ID', async () => {
+      fs.writeFileSync(CONFIG_PATH, JSON.stringify({ clientId: GUID }));
+      const text = (await handleAbout()).content[0].text;
+      expect(text).toMatch(
+        /\| Client ID \| Configured \(saved in ~\/\.outlook-assistant-config\.json\) \|/
+      );
+      expect(text).not.toContain(GUID);
+      expect(text).not.toContain(GUID.slice(-4));
+    });
   });
 });

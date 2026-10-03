@@ -17,7 +17,7 @@
   <a href="https://glama.ai/mcp/servers/littlebearapps/outlook-assistant"><img src="https://glama.ai/mcp/servers/littlebearapps/outlook-assistant/badges/score.svg" alt="Glama score" /></a>
 </p>
 
-Outlook Assistant connects AI assistants to your Microsoft Outlook account through the [Model Context Protocol](https://modelcontextprotocol.io/). Ask your AI assistant to search your inbox, send emails, schedule meetings, manage contacts, and configure mailbox settings — without leaving the conversation. Works with Claude, Cursor, Windsurf, and any MCP-compatible client.
+Outlook Assistant connects AI assistants to your Microsoft Outlook account through the [Model Context Protocol](https://modelcontextprotocol.io/). Ask your AI assistant to search your inbox, send emails, schedule meetings, manage contacts, and configure mailbox settings — without leaving the conversation. Works with Claude, GitHub Copilot, Cursor, Windsurf, and any MCP-compatible client.
 
 **Works with personal Outlook.com and work/school Microsoft 365 accounts.**
 
@@ -135,7 +135,6 @@ Outlook Assistant is designed with safety-first principles for AI-driven email a
 > ```json
 > "env": {
 >   "OUTLOOK_CLIENT_ID": "…",
->   "OUTLOOK_CLIENT_SECRET": "…",
 >   "OUTLOOK_MAX_EMAILS_PER_SESSION": "10",
 >   "OUTLOOK_ALLOWED_RECIPIENTS": "your-domain.com,trusted@example.com"
 > }
@@ -166,7 +165,7 @@ npx @littlebearapps/outlook-assistant
 To check which version you have, or to see the available options:
 
 ```bash
-outlook-assistant --version     # prints e.g. 3.12.1
+outlook-assistant --version     # prints e.g. 3.13.0
 outlook-assistant --help        # usage, options and key environment variables
 ```
 
@@ -180,14 +179,23 @@ You need a Microsoft Azure app registration to authenticate. See the **[Azure Se
 
 1. Create a new app registration at [portal.azure.com](https://portal.azure.com/)
 2. Add Microsoft Graph delegated permissions (Mail, Calendar, Contacts)
-3. Create a client secret and copy the **Value** (not the Secret ID)
+3. _(Browser flow only)_ Create a client secret and copy the **Value** (not the Secret ID). The default device-code sign-in doesn't need one
 4. Under Authentication > **Add a platform** > **Mobile and desktop applications** — check `nativeclient` URI
 5. Enable **"Allow public client flows"** in Authentication > Advanced settings
 6. _(Optional)_ Set redirect URI to `http://localhost:3333/auth/callback` — only needed for browser auth flow
 
 ### 3. Configure Your MCP Client
 
-Add to your MCP client config:
+**Plugin install (Claude Code).** The plugin bundles the server pinned to an exact version and asks for your settings when you enable it:
+
+```bash
+claude plugin marketplace add littlebearapps/outlook-assistant
+claude plugin install outlook-assistant@littlebearapps
+```
+
+The same plugin folder ([`plugins/outlook-assistant`](plugins/outlook-assistant/)) also follows the [Agent Plugins](https://agent-plugins.org/) format used by GitHub Copilot and Cursor.
+
+**Manual config.** Add to your MCP client config. Only `OUTLOOK_CLIENT_ID` is needed for the default device-code sign-in; add `OUTLOOK_CLIENT_SECRET` only if you use the [browser flow](#browser-redirect-flow-alternative). You can also leave the client ID out and give it to your assistant when you first connect (`auth action=authenticate clientId=…`), which saves it to `~/.outlook-assistant-config.json`. An `OUTLOOK_CLIENT_ID` in the environment always takes precedence.
 
 <details>
 <summary><strong>Claude Desktop</strong> (<code>claude_desktop_config.json</code>)</summary>
@@ -199,8 +207,7 @@ Add to your MCP client config:
       "command": "npx",
       "args": ["@littlebearapps/outlook-assistant"],
       "env": {
-        "OUTLOOK_CLIENT_ID": "your-application-client-id",
-        "OUTLOOK_CLIENT_SECRET": "your-client-secret-VALUE"
+        "OUTLOOK_CLIENT_ID": "your-application-client-id"
       }
     }
   }
@@ -214,7 +221,6 @@ Add to your MCP client config:
 ```bash
 claude mcp add outlook \
   -e OUTLOOK_CLIENT_ID=your-application-client-id \
-  -e OUTLOOK_CLIENT_SECRET=your-client-secret-VALUE \
   -- npx -y @littlebearapps/outlook-assistant
 ```
 
@@ -222,9 +228,39 @@ The MCP server reads its settings from the environment your client passes it; it
 </details>
 
 <details>
+<summary><strong>VS Code / GitHub Copilot</strong> (<code>.vscode/mcp.json</code>)</summary>
+
+VS Code prompts for the client ID the first time the server starts and stores it securely:
+
+```json
+{
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "outlook-client-id",
+      "description": "Azure application (client) ID"
+    }
+  ],
+  "servers": {
+    "outlook": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@littlebearapps/outlook-assistant"],
+      "env": {
+        "OUTLOOK_CLIENT_ID": "${input:outlook-client-id}"
+      }
+    }
+  }
+}
+```
+
+Use it from Copilot Chat in **Agent** mode. To use it in every workspace, add the same entry to your user `mcp.json` (Command Palette → **MCP: Open User Configuration**).
+</details>
+
+<details>
 <summary><strong>Cursor</strong> (<code>.cursor/mcp.json</code>)</summary>
 
-[![Install in Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](cursor://anysphere.cursor-deeplink/mcp/install?name=Outlook%20Assistant&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBsaXR0bGViZWFyYXBwcy9vdXRsb29rLWFzc2lzdGFudCJdLCJlbnYiOnsiT1VUTE9PS19DTElFTlRfSUQiOiIiLCJPVVRMT09LX0NMSUVOVF9TRUNSRVQiOiIifX0=)
+[![Install in Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](cursor://anysphere.cursor-deeplink/mcp/install?name=Outlook%20Assistant&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBsaXR0bGViZWFyYXBwcy9vdXRsb29rLWFzc2lzdGFudCJdLCJlbnYiOnsiT1VUTE9PS19DTElFTlRfSUQiOiIifX0=)
 
 Or add manually to `.cursor/mcp.json`:
 
@@ -235,8 +271,7 @@ Or add manually to `.cursor/mcp.json`:
       "command": "npx",
       "args": ["@littlebearapps/outlook-assistant"],
       "env": {
-        "OUTLOOK_CLIENT_ID": "your-application-client-id",
-        "OUTLOOK_CLIENT_SECRET": "your-client-secret-VALUE"
+        "OUTLOOK_CLIENT_ID": "your-application-client-id"
       }
     }
   }
@@ -254,8 +289,7 @@ Or add manually to `.cursor/mcp.json`:
       "command": "npx",
       "args": ["@littlebearapps/outlook-assistant"],
       "env": {
-        "OUTLOOK_CLIENT_ID": "your-application-client-id",
-        "OUTLOOK_CLIENT_SECRET": "your-client-secret-VALUE"
+        "OUTLOOK_CLIENT_ID": "your-application-client-id"
       }
     }
   }
@@ -339,6 +373,8 @@ a server that would ignore it.
 
 ### Create a Client Secret
 
+Only needed for the [browser redirect flow](#browser-redirect-flow-alternative). Skip this if you sign in with the default device code.
+
 1. Go to **Certificates & secrets** > **New client secret**
 2. Enter a description and select expiration
 3. Click **Add**
@@ -378,7 +414,7 @@ USE_TEST_MODE=false
 
 ### MCP Client Configuration
 
-See [Quick Start — Configure Your MCP Client](#3-configure-your-mcp-client) above for Claude Desktop, Claude Code, Cursor, and Windsurf configs.
+See [Quick Start — Configure Your MCP Client](#3-configure-your-mcp-client) above for Claude Desktop, Claude Code, VS Code / GitHub Copilot, Cursor, and Windsurf configs.
 
 If installed from source, use `node` instead of `npx`:
 
@@ -389,8 +425,7 @@ If installed from source, use `node` instead of `npx`:
       "command": "node",
       "args": ["/path/to/outlook-assistant/index.js"],
       "env": {
-        "OUTLOOK_CLIENT_ID": "your-application-client-id",
-        "OUTLOOK_CLIENT_SECRET": "your-client-secret-VALUE"
+        "OUTLOOK_CLIENT_ID": "your-application-client-id"
       }
     }
   }

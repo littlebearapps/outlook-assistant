@@ -15,6 +15,7 @@ auth/                 # 1 tool: auth (action: status|authenticate|device-code-co
   ├── token-storage.js    # Token storage with auto-refresh (granted scopes + offline_access)
   ├── device-code.js      # Device code flow (headless/remote auth), .Shared scope fallback detection
   ├── auth-errors.js      # AADSTS error → remediation hint table
+  ├── client-config.js    # Runtime client ID saved to ~/.outlook-assistant-config.json; env → saved resolution
   └── tools.js            # Tool definitions
 
 email/                # 8 tools: search-emails, read-email, send-email, draft, update-email, attachments, export, get-mail-tips
@@ -79,6 +80,7 @@ The server consolidated 55 original tools into 22 action-based tools to save ~11
 
 ## History
 
+- **v3.13.0**: `plugins/outlook-assistant/` plugin bundle (Claude Code manifest + Agent Plugins 1.0 `plugin.json`/`mcp.json`), kept in version step by `scripts/sync-version.js`; `auth/client-config.js` resolves the client ID (env → saved `~/.outlook-assistant-config.json`) lazily for config, token storage and the auth tool.
 - **v3.12.1**: `utils/graph-api.js` gains throttling retries, a per-attempt inactivity timeout and a 4-request concurrency gate; file writes consolidated in `utils/safe-write.js`; shared attendee builder `calendar/attendees.js`; `manage-rules` folder targets resolved via `folder/resolve.js`; unused `calendar/accept.js` removed.
 - **v3.12.0**: Opt-in shared-mailbox scoping (`sharedMailbox`, `OUTLOOK_SHARED_MAILBOX`) threaded through readers, organise actions and folder resolution via `utils/mailbox.js`; `list-events` filters.
 - **v3.9.0**: Nested folder addressing via `folder/resolve.js`.

@@ -32,7 +32,7 @@ Follow the full walkthrough in the [Azure Setup Guide](../../guides/azure-setup.
 
 1. Go to [Azure Portal → App registrations](https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade)
 2. Click **New registration** (no redirect URI needed at this stage)
-3. Under **Certificates & secrets**, create a new client secret — copy the **Value** (not the Secret ID)
+3. Copy the **Application (client) ID** from the app's **Overview** page. *Browser flow only:* under **Certificates & secrets**, also create a client secret and copy its **Value** (not the Secret ID). The default device code sign-in doesn't use a secret.
 4. Under **Authentication** > **Add a platform** > **Mobile and desktop applications** — check `https://login.microsoftonline.com/common/oauth2/nativeclient`
 5. Under **Authentication** > **Advanced settings** — set **"Allow public client flows"** to **Yes**
 6. Under **API permissions**, add these Microsoft Graph **delegated** permissions:
@@ -51,7 +51,7 @@ Follow the full walkthrough in the [Azure Setup Guide](../../guides/azure-setup.
 
    The two `.Shared` scopes are only requested when you opt in with `OUTLOOK_SHARED_MAILBOX` — see [Access Shared Mailboxes](../advanced/access-shared-mailboxes.md).
 
-> **Common mistake**: Copy the secret **Value**, not the Secret ID. Using the wrong one causes `AADSTS7000215` errors.
+> **Common mistake**: If you create a client secret, copy its **Value**, not the Secret ID. Using the wrong one causes `AADSTS7000215` errors.
 
 ## Add to Your AI Tool
 
@@ -106,7 +106,22 @@ Or add to your `.mcp.json` or project settings:
 
 ### Other MCP Clients
 
-Any MCP-compatible client can use Outlook Assistant. Set the command to `npx -y @littlebearapps/outlook-assistant` and pass the two environment variables in the client's `env` settings. The MCP server doesn't read a `.env` file.
+Any MCP-compatible client can use Outlook Assistant. Set the command to `npx -y @littlebearapps/outlook-assistant` and pass the environment variables in the client's `env` settings. The MCP server doesn't read a `.env` file.
+
+`OUTLOOK_CLIENT_SECRET` is only used by the [browser redirect flow](#browser-redirect-flow-alternative). With device code sign-in (the default) you can leave it out and set just `OUTLOOK_CLIENT_ID`.
+
+### Clients That Can't Set Environment Variables
+
+Some clients, such as the GitHub Copilot and Cursor plugin marketplaces, install the server with a fixed configuration and give you nowhere to enter `OUTLOOK_CLIENT_ID`. In that case, give the client ID to your AI assistant when you sign in:
+
+> "Connect to my Outlook account. My Azure Application (client) ID is 00000000-0000-0000-0000-000000000000"
+
+Your AI assistant calls the `auth` tool with `action: authenticate, clientId: <your ID>`. If you don't mention the ID, sign-in reports that `OUTLOOK_CLIENT_ID` is not configured and your assistant should ask you for it.
+
+- The ID is saved to `~/.outlook-assistant-config.json` (owner read/write only) and used from then on, including for token refresh, without restarting the server. It identifies your app registration and isn't a secret.
+- Only device code sign-in works this way. The browser flow also needs the client secret, which the auth server reads from its own environment.
+- `OUTLOOK_CLIENT_ID` takes precedence when it's set. If it holds a different ID, the `auth` tool refuses the new one rather than saving an ID that would be ignored. Change or remove the environment variable instead.
+- `auth action=about` shows whether the client ID comes from the environment or the saved file (never the ID itself). To forget a saved ID, delete `~/.outlook-assistant-config.json`.
 
 Optional settings such as `OUTLOOK_AUTH_AUDIENCE`, `OUTLOOK_DEFAULT_TIMEZONE`, the send safety belts and `OUTLOOK_SHARED_MAILBOX` go in the same `env` block — see the [README's environment variables table](../../../README.md#environment-variables).
 
@@ -202,6 +217,7 @@ If you see your recent emails, everything is connected.
 
 | Problem | Solution |
 |---------|----------|
+| "OUTLOOK_CLIENT_ID is not configured" | Set `OUTLOOK_CLIENT_ID` in your client's `env` block, or give your assistant the Application (client) ID so it can call `auth action=authenticate clientId=<id>` (see [Clients That Can't Set Environment Variables](#clients-that-cant-set-environment-variables)) |
 | `AADSTS7000215` (invalid secret) | Use the secret **Value**, not the Secret ID |
 | `EADDRINUSE :3333` | Run `npx kill-port 3333` then restart the auth server |
 | Auth URL doesn't open | Browser flow only: start the auth server first (`npm run auth-server` from source). The default device code flow uses `microsoft.com/devicelogin` and needs no auth server |

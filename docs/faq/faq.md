@@ -30,7 +30,9 @@ The fastest path is to use `npx` directly in your MCP client config — no globa
 
 If you prefer a global install, `npm install -g @littlebearapps/outlook-assistant`. From source, clone the repo and run `npm install`. You also need a Microsoft Azure app registration (free tier is sufficient) — see the [Azure Setup Guide](../guides/azure-setup.md) for a full walkthrough including first-time Azure account creation.
 
-Configuration snippets for Claude Desktop, Claude Code, Cursor, and Windsurf are in the [README](../../README.md#3-configure-your-mcp-client). Any other MCP client works the same way: run `npx -y @littlebearapps/outlook-assistant` and pass the two environment variables in the client's `env` settings (the server doesn't read a `.env` file).
+Configuration snippets for Claude Desktop, Claude Code, Cursor, and Windsurf are in the [README](../../README.md#3-configure-your-mcp-client). Any other MCP client works the same way: run `npx -y @littlebearapps/outlook-assistant` and pass the environment variables in the client's `env` settings (the server doesn't read a `.env` file). `OUTLOOK_CLIENT_SECRET` is only needed for the browser sign-in flow; the default device code flow uses just `OUTLOOK_CLIENT_ID`.
+
+If your client can't set environment variables at all (for example, the GitHub Copilot and Cursor plugin marketplaces), give your AI assistant your Azure Application (client) ID when you sign in. It calls `auth action=authenticate clientId=<id>`, which saves the ID to `~/.outlook-assistant-config.json` and starts device code sign-in. A client ID isn't a secret, and `OUTLOOK_CLIENT_ID` takes precedence whenever it's set. See [Clients That Can't Set Environment Variables](../how-to/getting-started/connect-outlook-to-claude.md#clients-that-cant-set-environment-variables).
 
 ## Does Outlook Assistant work with personal Outlook.com accounts?
 
@@ -117,6 +119,8 @@ Microsoft does not offer a "shared multi-tenant client ID" that any open-source 
 **Device code flow (default since v3.5.1, recommended)** doesn't need an auth server, port forwarding, or local browser — you call `auth action=authenticate`, visit a URL on any device with the displayed code, sign in, then call `auth action=device-code-complete`. It works headless, over SSH, and through remote bridges like Telegram. Device code state is persisted to `~/.outlook-assistant-pending-auth.json` so the flow survives MCP server restarts (a real issue for hosts that restart between tool calls; fixed in v3.7.2).
 
 **Browser redirect flow (optional)** runs a local auth server on port 3333 and uses the standard OAuth redirect URI (`http://localhost:3333/auth/callback`). Convenient on a graphical workstation, but it needs an open port and a local browser — neither is available in many MCP host environments. Start it with `npm run auth-server` from a source checkout (or `node "$(npm root -g)/@littlebearapps/outlook-assistant/outlook-auth-server.js"` from a global install), then call `auth action=authenticate method=browser`.
+
+They also need different credentials. Device code is a public-client flow, so it needs only your Application (client) ID, which you can set with `OUTLOOK_CLIENT_ID` or pass at sign-in as `auth action=authenticate clientId=<id>`. The browser flow is a confidential-client flow: its auth server also needs `OUTLOOK_CLIENT_SECRET`, and reads both values from its own environment.
 
 Most users should pick device code unless they have a specific reason to use the redirect flow. Both write to the same token file and the resulting MCP server behaviour is identical. One difference matters if you turn on `OUTLOOK_SHARED_MAILBOX`: when an account can't be granted the shared-mailbox scopes (a personal account, for example), the device code flow retries once with the standard scopes, while the browser flow has no fallback. Use device code if you enable that setting.
 

@@ -14,6 +14,7 @@ const {
   getFolderFields,
 } = require('./utils/field-presets');
 const { VERBOSITY, DEFAULT_LIMITS } = require('./utils/response-formatter');
+const { resolveClientId } = require('./auth/client-config');
 
 // Ensure we have a home directory path — never fall back to /tmp (world-readable)
 const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
@@ -165,7 +166,12 @@ module.exports = {
 
   // Authentication configuration
   AUTH_CONFIG: {
-    clientId: process.env.OUTLOOK_CLIENT_ID || '',
+    // Getter, resolved on every read: OUTLOOK_CLIENT_ID → MS_CLIENT_ID →
+    // ~/.outlook-assistant-config.json (saved via `auth action=authenticate
+    // clientId=…`), so a saved ID takes effect without a restart.
+    get clientId() {
+      return resolveClientId();
+    },
     clientSecret: process.env.OUTLOOK_CLIENT_SECRET || '',
     redirectUri: 'http://localhost:3333/auth/callback',
     // Base scopes, plus the `.Shared` scopes only when OUTLOOK_SHARED_MAILBOX

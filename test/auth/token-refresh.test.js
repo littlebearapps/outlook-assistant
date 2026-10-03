@@ -253,3 +253,111 @@ describe('TokenStorage.refreshAccessToken — client_secret handling', () => {
     expect(storage.tokens.auth_method).toBe('device-code');
   });
 });
+
+// Runtime client ID (`auth action=authenticate clientId=…`): with no env var,
+// TokenStorage resolves the ID saved in ~/.outlook-assistant-config.json on
+// each use, so the long-lived singleton picks it up without a restart.
+describe('TokenStorage — client ID resolved lazily (saved config file)', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const { saveClientId } = require('../../auth/client-config');
+
+  const SAVED_ID = '0a1b2c3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d';
+  const originalEnv = process.env;
+  let testHome;
+
+  const deviceCodeTokens = () => ({
+    access_token: 'expired_access',
+    refresh_token: 'valid_refresh',
+    expires_at: Date.now() - 60000,
+    auth_method: 'device-code',
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.spyOn(console, 'log').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    testHome = fs.mkdtempSync(path.join(os.tmpdir(), 'oa-token-refresh-'));
+    process.env = { ...originalEnv, HOME: testHome };
+    delete process.env.OUTLOOK_CLIENT_ID;
+    delete process.env.MS_CLIENT_ID;
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+    fs.rmSync(testHome, { recursive: true, force: true });
+    console.log.mockRestore();
+    console.error.mockRestore();
+    console.warn.mockRestore();
+  });
+
+  const newStorage = (extra = {}) =>
+    new TokenStorage({
+      tokenStorePath: path.join(testHome, '.outlook-assistant-tokens.json'),
+      tokenEndpoint:
+        'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+      scopes: ['offline_access', 'User.Read'],
+      ...extra,
+    });
+
+  test('refresh uses an ID saved after construction, with env empty', async () => {
+    const storage = newStorage();
+    // Nothing resolved at construction → warned once
+    expect(console.warn).toHaveBeenCalledWith(
+      expect.stringContaining('OUTLOOK_CLIENT_ID is not configured')
+    );
+
+    saveClientId(SAVED_ID);
+    storage.tokens = deviceCodeTokens();
+    storage._saveTokensToFile = jest.fn().mockResolvedValue(undefined);
+    const { getCapturedPostData } = mockHttpsResponse(200, {
+      access_token: 'new_access_token',
+      expires_in: 3600,
+    });
+
+    await storage.refreshAccessToken();
+
+    expect(getCapturedPostData()).toContain(`client_id=${SAVED_ID}`);
+    expect(getCapturedPostData()).not.toContain('client_secret');
+  });
+
+  test('does not warn when a saved ID resolves', () => {
+    saveClientId(SAVED_ID);
+    newStorage();
+    expect(console.warn).not.toHaveBeenCalled();
+  });
+
+  test('env var beats the saved ID', async () => {
+    saveClientId(SAVED_ID);
+    process.env.OUTLOOK_CLIENT_ID = 'env-client-id';
+    const storage = newStorage();
+    storage.tokens = deviceCodeTokens();
+    storage._saveTokensToFile = jest.fn().mockResolvedValue(undefined);
+    const { getCapturedPostData } = mockHttpsResponse(200, {
+      access_token: 'new_access_token',
+      expires_in: 3600,
+    });
+
+    await storage.refreshAccessToken();
+
+    expect(getCapturedPostData()).toContain('client_id=env-client-id');
+  });
+
+  test('an explicitly passed clientId still wins', async () => {
+    saveClientId(SAVED_ID);
+    process.env.OUTLOOK_CLIENT_ID = 'env-client-id';
+    const storage = newStorage({ clientId: 'explicit-id' });
+    storage.tokens = deviceCodeTokens();
+    storage._saveTokensToFile = jest.fn().mockResolvedValue(undefined);
+    const { getCapturedPostData } = mockHttpsResponse(200, {
+      access_token: 'new_access_token',
+      expires_in: 3600,
+    });
+
+    await storage.refreshAccessToken();
+
+    expect(getCapturedPostData()).toContain('client_id=explicit-id');
+  });
+});

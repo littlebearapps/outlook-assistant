@@ -664,13 +664,17 @@ describe('TokenStorage', () => {
 
     it('should log if token file does not exist during unlink', async () => {
       fs.unlink.mockRejectedValue({ code: 'ENOENT' });
+      // stderr, never stdout: stdout carries the MCP stdio protocol stream
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
       const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
 
       await tokenStorage.clearTokens();
 
-      expect(consoleLogSpy).toHaveBeenCalledWith(
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
         'Token file not found, nothing to delete.'
       );
+      expect(consoleLogSpy).not.toHaveBeenCalled();
+      consoleErrorSpy.mockRestore();
       consoleLogSpy.mockRestore();
     });
 

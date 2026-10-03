@@ -1,6 +1,6 @@
 # CLAUDE.md - Outlook Assistant
 
-MCP server for Microsoft Outlook via Graph API (v3.12.1). 22 tools across 9 modules. Runtime Node ≥ 18.18; dev tooling (lint-staged hook, `npm run inspect`) needs Node ≥ 22.22.1.
+MCP server for Microsoft Outlook via Graph API (v3.13.0). 22 tools across 9 modules. Runtime Node ≥ 18.18; dev tooling (lint-staged hook, `npm run inspect`) needs Node ≥ 22.22.1.
 
 ## Commands
 
@@ -34,6 +34,8 @@ Full walkthrough: [`docs/how-to/getting-started/connect-outlook-to-claude.md`](d
 - Enable "Allow public client flows" in Authentication > Advanced settings
 - Use a **private/incognito browser** for `microsoft.com/devicelogin` (avoids cached session interference)
 
+**Client ID without env vars** (plugin marketplaces with static `mcp.json`): `auth action=authenticate clientId=<GUID>` validates and saves it to `~/.outlook-assistant-config.json` (0600, atomic) via `auth/client-config.js`, then signs in. Resolution is lazy everywhere (`AUTH_CONFIG.clientId` is a getter; `TokenStorage.getClientId()`): `OUTLOOK_CLIENT_ID` → `MS_CLIENT_ID` → saved file. A different env value wins, so the tool refuses rather than saving. Device code needs no secret; `outlook-auth-server.js` (browser) stays env-only.
+
 **Token refresh**: Tokens auto-refresh when expired (via `token-storage.js`). Re-authentication only needed when the refresh token expires (~90 days). Refresh re-requests only the **granted** scopes (persisted as `granted_scopes`, falling back to the stored `scope`) plus `offline_access`, not the full configured set.
 
 **Shared-mailbox scopes are opt-in**: `OUTLOOK_SHARED_MAILBOX` (`read` → `Mail.Read.Shared`; `true`/`readwrite`/`1` → both `.Shared` scopes; unset → sign-in requests `BASE_SCOPES` only, unchanged). Parsed in `config.js` (`SHARED_MAILBOX_MODE`, `SHARED_SCOPES`); `utils/mailbox.js` `buildMailboxPrefix` refuses non-`me` mailboxes while it's off. With it on, the device-code path in `auth/tools.js` (at code request or in `handleDeviceCodeComplete`) falls back once to `AUTH_CONFIG.fallbackScopes` when `isScopeConsentError` (`auth/device-code.js`) matches; AADSTS65001 surfaces remediation instead. The browser auth server (`outlook-auth-server.js`) has no fallback. `auth action=about` reports configured vs granted scopes and shared-mailbox status. `sharedMailbox` (alias `email`) is accepted by `search-emails`, `read-email`, `attachments`, `update-email`, `apply-category`, `export` and `folders`; `send-email`/`draft` deliberately have no such param.
@@ -64,6 +66,7 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 | `request-handler.js` | MCP request dispatcher (extracted from `index.js` for testability): routes `initialize`/`tools/list`/`tools/call`, runs schema coercion, and returns tool errors as visible `isError` content (never empty output) |
 | `config.js` | API endpoint, auth settings, defaults |
 | `utils/schema-coerce.js` | MCP-boundary param coercion + validation (string→array/boolean/number, `additionalProperties: false`, required, enums) |
+| `auth/client-config.js` | Runtime client ID: GUID validation, `~/.outlook-assistant-config.json` read/save, env → saved resolution (must not require `config.js`) |
 | `auth/token-storage.js` | Token storage with auto-refresh at `~/.outlook-assistant-tokens.json` (includes `auth_method` field) |
 | `auth/device-code.js` | Device code flow for headless/remote authentication |
 | `auth/auth-errors.js` | AADSTS error → remediation hint table (shared by token-storage and the device-code path) |
@@ -81,8 +84,8 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 
 **Environment** (set in the MCP client's `env` block; a `.env` file is read only by the auth server):
 ```
-OUTLOOK_CLIENT_ID=your-client-id
-OUTLOOK_CLIENT_SECRET=your-secret-VALUE    # NOT the Secret ID!
+OUTLOOK_CLIENT_ID=your-client-id           # or save at runtime: auth action=authenticate clientId=<id>
+OUTLOOK_CLIENT_SECRET=your-secret-VALUE    # Browser flow only; NOT the Secret ID!
 USE_TEST_MODE=false
 OUTLOOK_MAX_EMAILS_PER_SESSION=10          # Optional: default per-session cap for send-email, draft, manage-rules (per tool: OUTLOOK_MAX_<TOOL>_PER_SESSION)
 OUTLOOK_ALLOWED_RECIPIENTS=example.com     # Optional: restrict recipients
@@ -122,7 +125,7 @@ Common errors (auth, device code, search, timezones) and fixes live in [`docs/tr
 ## Testing
 
 ```bash
-npm test                    # Jest unit tests (58 suites / 1472 tests at v3.12.1)
+npm test                    # Jest unit tests (60 suites / 1544 tests at v3.13.0)
 npm run lint                # ESLint (0 errors expected)
 npm run format:check        # Prettier (CI runs this)
 ./test-modular-server.sh    # MCP Inspector interactive

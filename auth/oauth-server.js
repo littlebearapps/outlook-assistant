@@ -4,6 +4,7 @@ const _https = require('https'); // Reserved for future HTTPS support
 const _fs = require('fs'); // Reserved for future HTTPS support
 const crypto = require('crypto'); // Added for generating random string
 const TokenStorage = require('./token-storage'); // Assuming TokenStorage is in the same directory
+const { loadSavedClientId } = require('./client-config');
 
 // HTML templates
 function escapeHtml(unsafe) {
@@ -54,8 +55,11 @@ const templates = {
 
 function createAuthConfig(envPrefix = 'OUTLOOK_') {
   return {
+    // Env first; then the ID saved via `auth action=authenticate clientId=…`.
     clientId:
-      process.env[`${envPrefix}CLIENT_ID`] || process.env.MS_CLIENT_ID || '',
+      process.env[`${envPrefix}CLIENT_ID`] ||
+      process.env.MS_CLIENT_ID ||
+      loadSavedClientId(),
     clientSecret:
       process.env[`${envPrefix}CLIENT_SECRET`] ||
       process.env.MS_CLIENT_SECRET ||

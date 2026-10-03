@@ -301,24 +301,28 @@ describe('draft guard: update/send/delete only act on drafts', () => {
       args: { subject: 'Weekly newsletter' },
       method: 'PATCH',
       path: 'me/messages/msg-received',
+      select: 'id,isDraft,subject',
     },
     {
       action: 'send',
       args: {},
       method: 'POST',
       path: 'me/messages/msg-received/send',
+      // send also re-reads the recipients for the allowlist check
+      select: 'id,isDraft,subject,toRecipients,ccRecipients,bccRecipients',
     },
     {
       action: 'delete',
       args: {},
       method: 'DELETE',
       path: 'me/messages/msg-received',
+      select: 'id,isDraft,subject',
     },
   ];
 
   it.each(mutations)(
     'action=$action refuses a non-draft with one GET and no mutation',
-    async ({ action, args }) => {
+    async ({ action, args, select }) => {
       callGraphAPI.mockResolvedValueOnce(receivedMessage);
 
       const result = await handleDraft({ action, id: 'msg-received', ...args });
@@ -332,7 +336,7 @@ describe('draft guard: update/send/delete only act on drafts', () => {
         'GET',
         'me/messages/msg-received',
         null,
-        { $select: 'id,isDraft,subject' }
+        { $select: select }
       );
     }
   );

@@ -152,10 +152,12 @@ The `draft` tool inherits the same safety controls as `send-email`:
 |---------|-----------|--------|
 | Dry-run preview | `create` | `dryRun: true` |
 | Mail-tips check | `create` | `checkRecipients: true` |
-| Recipient allowlist | `create`, `update`, `forward` | `OUTLOOK_ALLOWED_RECIPIENTS` env |
-| Rate limiting | `create`, `update` | `OUTLOOK_MAX_DRAFT_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION` |
+| Recipient allowlist | `create`, `update`, `forward`, `reply`, `reply-all`, `send` | `OUTLOOK_ALLOWED_RECIPIENTS` env |
+| Rate limiting | `create`, `update`, `reply`, `reply-all`, `forward` | `OUTLOOK_MAX_DRAFT_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION` |
 | Send rate limiting | `send` | Shared with `send-email`: `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION` |
 | Drafts-only guard | `update`, `send`, `delete` | Always on (non-drafts are refused) |
+
+With an allowlist set, `send` checks the draft's to, cc and bcc as they are at send time, so a recipient added later (including in Outlook) is caught before anything goes out. `reply` and `reply-all` check the recipients Graph fills in from the original message; if any isn't allowed, the new draft is deleted and the call is refused. Dry runs don't count towards the rate limit.
 
 ## Tips
 

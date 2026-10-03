@@ -40,11 +40,10 @@ function checkRateLimit(toolName, limit) {
 }
 
 /**
- * Check recipient allowlist. Returns null if OK, or an error response if blocked.
- * @param {Array<{emailAddress: {address: string}}>} recipients - Graph API recipient objects
- * @returns {object|null} - MCP error response if blocked, null if OK
+ * The configured recipient allowlist (OUTLOOK_ALLOWED_RECIPIENTS), lower-cased.
+ * @returns {string[]|null} - Exact addresses and bare domains, or null if none
  */
-function checkRecipientAllowlist(recipients) {
+function getRecipientAllowlist() {
   const allowlistRaw = process.env.OUTLOOK_ALLOWED_RECIPIENTS;
   if (!allowlistRaw) return null; // No allowlist configured — allow all
 
@@ -53,7 +52,18 @@ function checkRecipientAllowlist(recipients) {
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
 
-  if (allowed.length === 0) return null;
+  return allowed.length > 0 ? allowed : null;
+}
+
+/**
+ * Addresses not covered by the recipient allowlist.
+ * @param {Array<{emailAddress: {address: string}}>} recipients - Graph API recipient objects
+ * @returns {{blocked: string[], allowed: string[]}|null} - null when nothing is
+ *   blocked (or no allowlist is configured)
+ */
+function findBlockedRecipients(recipients) {
+  const allowed = getRecipientAllowlist();
+  if (!allowed) return null;
 
   const blocked = [];
   for (const r of recipients) {
@@ -66,13 +76,21 @@ function checkRecipientAllowlist(recipients) {
     if (!isAllowed) blocked.push(addr);
   }
 
-  if (blocked.length > 0) {
-    return toolError(
-      `Recipient not allowed: ${blocked.join(', ')}. Allowed recipients/domains: ${allowed.join(', ')}. Configure via OUTLOOK_ALLOWED_RECIPIENTS environment variable.`
-    );
-  }
+  return blocked.length > 0 ? { blocked, allowed } : null;
+}
 
-  return null;
+/**
+ * Check recipient allowlist. Returns null if OK, or an error response if blocked.
+ * @param {Array<{emailAddress: {address: string}}>} recipients - Graph API recipient objects
+ * @returns {object|null} - MCP error response if blocked, null if OK
+ */
+function checkRecipientAllowlist(recipients) {
+  const result = findBlockedRecipients(recipients);
+  if (!result) return null;
+
+  return toolError(
+    `Recipient not allowed: ${result.blocked.join(', ')}. Allowed recipients/domains: ${result.allowed.join(', ')}. Configure via OUTLOOK_ALLOWED_RECIPIENTS environment variable.`
+  );
 }
 
 /**
@@ -257,6 +275,8 @@ function dryRunUnsupported(toolName, action, previewAction) {
 module.exports = {
   checkRateLimit,
   checkRecipientAllowlist,
+  findBlockedRecipients,
+  getRecipientAllowlist,
   formatDryRunPreview,
   formatRuleDryRunPreview,
   DRY_RUN_LABEL,

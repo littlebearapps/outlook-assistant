@@ -79,7 +79,7 @@ Flag dates: a `dueDateTime`/`startDateTime` with `Z` or a ±hh:mm offset is kept
 | `reply-all` | Create reply-all draft from message | `id` |
 | `forward` | Create forward draft with new recipients | `id`, `to` |
 
-> **Draft safety**: `dryRun: true` previews without saving (create only). `checkRecipients: true` validates recipients via mail-tips before saving. The `send` action shares rate limits with `send-email`. Recipient allowlist applies to create, update, and forward. `update`, `send` and `delete` check the `id` first and refuse anything that is not an unsent draft, so a received or sent message is never edited, deleted or re-sent. `comment` and `body` are mutually exclusive on reply/forward.
+> **Draft safety**: `dryRun: true` previews without saving (create only). `checkRecipients: true` validates recipients via mail-tips before saving. The `send` action shares rate limits with `send-email`. Recipient allowlist applies to create, update, forward, reply and reply-all (a reply draft with a recipient outside it is deleted and refused), and send re-checks the draft's current to/cc/bcc. Reply, reply-all and forward count towards the draft rate limit. `update`, `send` and `delete` check the `id` first and refuse anything that is not an unsent draft, so a received or sent message is never edited, deleted or re-sent. `comment` and `body` are mutually exclusive on reply/forward.
 
 ### Export formats
 

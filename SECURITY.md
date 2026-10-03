@@ -179,7 +179,7 @@ These controls are not a substitute for careful oversight:
 - Annotations depend on the AI client respecting them — not all clients support MCP annotations, and a client set to auto-approve tools (or running in a mode that bypasses prompts) won't ask before sending or deleting
 - The safety hook runs only where the plugin is installed (Claude Code, GitHub Copilot, Cursor), and each of those clients can run a call without the hook's prompt in some modes (see the table above). Read-only mode, the allowlist, rate limits and mail-tips refusals are enforced by the server in every client
 - Rate limits reset when the MCP server restarts
-- The recipient allowlist applies to `send-email`, `draft` (create, update, forward) and `manage-rules` forward/redirect targets (a rule with a blocked target is refused whole) — it doesn't cover anything done outside Outlook Assistant
+- The recipient allowlist applies to `send-email`, `draft` (create, update, forward, reply, reply-all, and the draft's current recipients on send) and `manage-rules` forward/redirect targets (a rule with a blocked target is refused whole) — it doesn't cover anything done outside Outlook Assistant
 - Mail tips are Microsoft 365 only: on personal Outlook.com accounts `checkRecipients` returns no tips and can't refuse a send
 - AI models can still make mistakes in composing email content, selecting recipients, or interpreting instructions
 - No automated system can fully prevent prompt injection attacks or adversarial manipulation

@@ -112,10 +112,14 @@ describe('writeClaimedFile', () => {
       ).toThrow(error);
     });
 
+    // EEXIST comes from the exclusive open: the entry appeared after the
+    // name was claimed, so it isn't ours and must be left alone.
     test('never removes a file that was already there (EEXIST)', () => {
-      jest
-        .spyOn(fs, 'writeFileSync')
-        .mockImplementationOnce(failAfterCreating('EEXIST', 'planted'));
+      const realOpen = fs.openSync;
+      jest.spyOn(fs, 'openSync').mockImplementationOnce((file, ...rest) => {
+        realWrite(file, 'planted');
+        return realOpen(file, ...rest); // wx: throws EEXIST
+      });
 
       const written = writeClaimedFile(outputDir, 'report', 'md', null, 'x');
 

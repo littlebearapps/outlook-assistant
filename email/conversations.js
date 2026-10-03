@@ -16,6 +16,7 @@ const { resolveFolderPath } = require('./folder-utils');
 const { buildMailboxPrefix } = require('../utils/mailbox');
 const {
   writeClaimedFile,
+  ensureOutputDir,
   makeClaimedDir,
   confineOutputPath,
   OutputPathError,
@@ -492,7 +493,7 @@ async function handleExportConversation(args) {
 
     // Create output directory
     if (!fs.existsSync(resolvedDir)) {
-      fs.mkdirSync(resolvedDir, { recursive: true });
+      ensureOutputDir(resolvedDir);
     }
 
     // Generate filename base

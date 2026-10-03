@@ -3,7 +3,6 @@
  * Provides tools to list and download email attachments via Microsoft Graph API
  */
 const _https = require('https'); // Reserved for future use
-const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const _config = require('../config'); // Reserved for future use
@@ -12,6 +11,7 @@ const { ensureAuthenticated } = require('../auth');
 const { buildMailboxPrefix } = require('../utils/mailbox');
 const {
   writeClaimedFile,
+  ensureOutputDir,
   confineOutputPath,
   OutputPathError,
 } = require('../utils/safe-write');
@@ -185,7 +185,7 @@ async function handleDownloadAttachment(args) {
       // Auto-create the target directory.
       // The filename is sender-controlled (GHSA-755c-c45g-69rv): reduce it
       // to a safe basename and never overwrite or follow a symlink.
-      fs.mkdirSync(outputDir, { recursive: true });
+      ensureOutputDir(outputDir);
 
       // Decode base64 and save to file
       const buffer = Buffer.from(contentBytes, 'base64');

@@ -18,6 +18,10 @@
  * symlink, a hard-linked file or anything in a dotted path (writeExplicitFile).
  * A symlink as the last component of a caller path is not followed unless it
  * leads to a directory, so a link to a file is refused, not written through.
+ *
+ * Files are created with mode 0600 and directories the server creates with
+ * 0700, set explicitly so the umask can't widen or narrow them; existing
+ * directories keep their mode, and a replaced file keeps the mode it had.
  */
 const crypto = require('crypto');
 const fs = require('fs');
@@ -231,6 +235,66 @@ function hasDotSegment(resolved, base) {
 
 const MAX_ATTEMPTS = 1000;
 
+/** Mode for every file exports and downloads create: owner read/write. */
+const FILE_MODE = 0o600;
+/** Mode for every directory they create: owner only. */
+const DIR_MODE = 0o700;
+
+/**
+ * Set a mode regardless of the umask. Best effort: the mode given at create
+ * time (narrowed by the umask, never widened) stays if the filesystem
+ * refuses chmod.
+ * @param {() => void} chmod
+ */
+function forceMode(chmod) {
+  try {
+    chmod();
+  } catch {
+    // e.g. EPERM on a filesystem without POSIX modes
+  }
+}
+
+/**
+ * Create `filePath` exclusively (`wx`: fails on any existing entry,
+ * including a symlink), set its mode, and write `data`. If the write fails
+ * part-way, the file this call created is removed before rethrowing.
+ * @param {string} filePath
+ * @param {string|Buffer} data
+ * @param {string} [encoding]
+ * @param {number} [mode]
+ */
+function writeNewFile(filePath, data, encoding, mode = FILE_MODE) {
+  const fd = fs.openSync(filePath, 'wx', mode);
+  try {
+    forceMode(() => fs.fchmodSync(fd, mode));
+    fs.writeFileSync(fd, data, { encoding });
+  } catch (error) {
+    fs.closeSync(fd);
+    removePartialFile(filePath);
+    throw error;
+  }
+  fs.closeSync(fd);
+}
+
+/**
+ * Create `dir` and any missing parents with mode 0700. Directories that
+ * already exist keep their mode.
+ * @param {string} dir
+ */
+function ensureOutputDir(dir) {
+  const target = path.resolve(dir);
+  const first = fs.mkdirSync(target, { recursive: true, mode: DIR_MODE });
+  if (!first) return; // Nothing was created
+  const below = segmentsBelow(first, target) || [];
+  let current = first;
+  forceMode(() => fs.chmodSync(current, DIR_MODE));
+  for (const segment of below) {
+    current = path.join(current, segment);
+    const created = current;
+    forceMode(() => fs.chmodSync(created, DIR_MODE));
+  }
+}
+
 /**
  * Like fs.existsSync, but a dangling symlink counts as existing (existsSync
  * follows the link and reports false).
@@ -329,13 +393,10 @@ function writeClaimedFile(outputDir, base, extension, claimed, data, encoding) {
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const candidate = claimUniquePath(outputDir, base, extension, seen);
     try {
-      fs.writeFileSync(candidate, data, { encoding, flag: 'wx' });
+      writeNewFile(candidate, data, encoding);
       return candidate;
     } catch (error) {
-      if (error.code !== 'EEXIST') {
-        removePartialFile(candidate);
-        throw error;
-      }
+      if (error.code !== 'EEXIST') throw error;
     }
   }
   throw new Error(`Too many files named ${base} in ${outputDir}`);
@@ -355,7 +416,8 @@ function makeClaimedDir(outputDir, base) {
   for (let suffix = 0; suffix < MAX_ATTEMPTS; suffix++) {
     const candidate = candidatePath(root, base, '', suffix);
     try {
-      fs.mkdirSync(candidate);
+      fs.mkdirSync(candidate, { mode: DIR_MODE });
+      forceMode(() => fs.chmodSync(candidate, DIR_MODE));
       return candidate;
     } catch (error) {
       if (error.code !== 'EEXIST') throw error;
@@ -397,15 +459,12 @@ function writeExplicitFile(
   { overwrite = false, encoding, displayPath = filePath, base } = {}
 ) {
   const dir = path.dirname(filePath);
-  fs.mkdirSync(dir, { recursive: true });
+  ensureOutputDir(dir);
   try {
-    fs.writeFileSync(filePath, data, { encoding, flag: 'wx' });
+    writeNewFile(filePath, data, encoding);
     return { path: filePath, replaced: false };
   } catch (error) {
-    if (error.code !== 'EEXIST') {
-      removePartialFile(filePath);
-      throw error;
-    }
+    if (error.code !== 'EEXIST') throw error;
   }
 
   if (!overwrite) throw fileExistsError(displayPath);
@@ -432,7 +491,8 @@ function writeExplicitFile(
     `.${path.basename(filePath)}.${crypto.randomBytes(6).toString('hex')}.tmp`
   );
   try {
-    fs.writeFileSync(temp, data, { encoding, flag: 'wx' });
+    // The replacement keeps the mode the file had.
+    writeNewFile(temp, data, encoding, stat.mode & 0o777);
     fs.renameSync(temp, filePath);
   } catch (error) {
     removePartialFile(temp);
@@ -442,6 +502,9 @@ function writeExplicitFile(
 }
 
 module.exports = {
+  FILE_MODE,
+  DIR_MODE,
+  ensureOutputDir,
   writeClaimedFile,
   makeClaimedDir,
   writeExplicitFile,

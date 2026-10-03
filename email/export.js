@@ -22,6 +22,7 @@ const { quoteSearchPhrase } = require('../utils/odata-helpers');
 const { safeAttachmentFilename } = require('./attachments');
 const {
   writeClaimedFile,
+  ensureOutputDir,
   writeExplicitFile,
   confineOutputPath,
   confineOutputTarget,
@@ -175,7 +176,7 @@ async function handleExportEmail(args) {
         }
       ));
     } else {
-      fs.mkdirSync(targetDir, { recursive: true });
+      ensureOutputDir(targetDir);
       finalPath = writeClaimedFile(
         targetDir,
         defaultBase,
@@ -292,7 +293,7 @@ async function handleBatchExportEmails(args) {
   } catch (error) {
     return outputPathError(error);
   }
-  fs.mkdirSync(outputDir, { recursive: true });
+  ensureOutputDir(outputDir);
 
   try {
     const accessToken = await ensureAuthenticated();
@@ -354,7 +355,7 @@ async function handleBatchExportEmails(args) {
 
       const csvContent = formatEmailsAsCSV(emails);
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      fs.mkdirSync(outputDir, { recursive: true });
+      ensureOutputDir(outputDir);
       const csvPath = writeClaimedFile(
         outputDir,
         `batch_export_${timestamp}`,

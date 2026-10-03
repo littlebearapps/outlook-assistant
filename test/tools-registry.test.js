@@ -86,25 +86,12 @@ describe('description hygiene', () => {
     /\bideal for\b/i,
   ];
 
-  // These two descriptions are rewritten on the fix/v314-hardening branch
-  // (draft 1,023 and export 938 characters there). Once that lands, the
-  // second test below fails until this list is emptied.
-  const PENDING_REWRITE = ['draft', 'export'];
-
   test.each(TOOLS.map((t) => [t.name, t]))(
     '%s description fits 1,024 characters',
     (name, tool) => {
-      if (PENDING_REWRITE.includes(name)) return;
       expect(tool.description.length).toBeLessThanOrEqual(1024);
     }
   );
-
-  test('the pending-rewrite list holds only descriptions still too long', () => {
-    for (const name of PENDING_REWRITE) {
-      const tool = TOOLS.find((t) => t.name === name);
-      expect(tool.description.length).toBeGreaterThan(1024);
-    }
-  });
 
   test('no tool or parameter description steers between tools', () => {
     const steering = allDescriptions.filter(([, text]) =>

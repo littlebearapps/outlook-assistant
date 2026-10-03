@@ -376,7 +376,7 @@ const emailTools = [
         dryRun: {
           type: 'boolean',
           description:
-            'Preview draft without saving (action=create only, default: false)',
+            'Preview only (action=create): shows the draft without saving it. Other actions refuse dryRun and change nothing. Default false.',
         },
         checkRecipients: {
           type: 'boolean',

@@ -20,7 +20,9 @@ const { McpError, ErrorCode } = require('@modelcontextprotocol/sdk/types.js');
 const config = require('./config');
 const { coerceArgsAgainstSchema } = require('./utils/schema-coerce');
 const { readOnlyRefusal } = require('./utils/read-only');
-const { riskMeta } = require('./utils/risk-classes');
+const { riskMeta, supportsDryRun, TOOL_RISK } = require('./utils/risk-classes');
+const { DRY_RUN_LABEL } = require('./utils/safety');
+const { toolError } = require('./utils/tool-error');
 const { log, withCallContext, formatNoteValue } = require('./utils/logger');
 
 /**
@@ -56,17 +58,60 @@ function listTools(TOOLS) {
 }
 
 /**
+ * The refusal for `dryRun: true` on a call that doesn't honour it (#274), or
+ * null. Handlers for those actions ignore the flag and really write, so the
+ * call never reaches them.
+ * @param {string} toolName
+ * @param {object} args - validated arguments
+ */
+function dryRunRefusal(toolName, args) {
+  if (args.dryRun !== true || supportsDryRun(toolName, args.action)) {
+    return null;
+  }
+  const action = args.action ?? TOOL_RISK[toolName]?.defaultAction;
+  const call = action ? `${toolName} action=${action}` : toolName;
+  return toolError(
+    `dryRun is not supported for ${call}; nothing was changed.`,
+    {
+      nextStep:
+        'Describe the change to the user and ask for confirmation, then call it without dryRun.',
+    }
+  );
+}
+
+/**
+ * Mark a supported dry run's result as a preview: `_meta.dryRun` and the
+ * DRY_RUN_LABEL first line, for handlers that don't set them themselves
+ * (send-email, draft create, manage-rules create/update).
+ * @param {object} result
+ */
+function labelDryRun(result) {
+  if (!result || result.isError) return result;
+  const content = Array.isArray(result.content) ? [...result.content] : [];
+  const first = content[0];
+  if (first?.type === 'text' && !first.text.startsWith(DRY_RUN_LABEL)) {
+    content[0] = { ...first, text: `${DRY_RUN_LABEL}\n\n${first.text}` };
+  }
+  return { ...result, content, _meta: { ...result._meta, dryRun: true } };
+}
+
+/**
  * Run a tool's handler with validated arguments, unless read-only mode
- * refuses the call first (#271).
+ * (#271) or an unsupported dryRun (#274) refuses the call first. Read-only
+ * mode is checked first, so it refuses even a supported dry run of a
+ * non-read call.
  * @param {object} tool
  * @param {object} args
  */
-function runTool(tool, args) {
+async function runTool(tool, args) {
   if (config.READ_ONLY) {
     const refusal = readOnlyRefusal(tool.name, args);
     if (refusal) return refusal;
   }
-  return tool.handler(args);
+  const refusal = dryRunRefusal(tool.name, args);
+  if (refusal) return refusal;
+  const result = await tool.handler(args);
+  return args.dryRun === true ? labelDryRun(result) : result;
 }
 
 /**

@@ -108,7 +108,7 @@ plugins/outlook-assistant/
 `server.js` creates the SDK `Server` with `instructions` from `utils/server-instructions.js`; the SDK answers `initialize` and `ping` itself. Everything else goes to `request-handler.js`:
 
 - **`tools/list`**: each tool's public fields, plus `_meta` from `riskMeta()` (`anthropic/requiresUserInteraction` on `send-email` and `create-event`).
-- **`tools/call`**: look up the tool (unknown → JSON-RPC -32602) → coerce and validate arguments against `inputSchema` (`utils/schema-coerce.js`; failure → `isError`) → read-only gate when `OUTLOOK_READ_ONLY` is on (`utils/read-only.js`; refusal → `isError`, handler never runs) → handler → one stderr line (`tool`, `action` if in the enum, `outcome` = ok/isError/thrown/unknown-tool, `ms`, plus notes such as a Graph status). A throwing handler becomes an `isError` result.
+- **`tools/call`**: look up the tool (unknown → JSON-RPC -32602) → coerce and validate arguments against `inputSchema` (`utils/schema-coerce.js`; failure → `isError`) → read-only gate when `OUTLOOK_READ_ONLY` is on (`utils/read-only.js`; refusal → `isError`, handler never runs) → `dryRun: true` gate (refused unless `supportsDryRun`, `utils/risk-classes.js` `DRY_RUN_ACTIONS`; supported previews get `_meta.dryRun`) → handler → one stderr line (`tool`, `action` if in the enum, `outcome` = ok/isError/thrown/unknown-tool, `ms`, plus notes such as a Graph status). A throwing handler becomes an `isError` result.
 
 ## Tool Consolidation Map (v1 → v3)
 

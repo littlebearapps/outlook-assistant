@@ -56,7 +56,34 @@ function getRecipientAllowlist() {
 }
 
 /**
- * Addresses not covered by the recipient allowlist.
+ * Characters never found in a single plain address: separators that would
+ * let one string carry several addresses (`;` `,`), display-name and route
+ * syntax (`<` `>` `"` `` ` `` `(` `)` `[` `]` `\` `:`), and any whitespace,
+ * control or invisible format character.
+ */
+const NOT_PLAIN_ADDRESS = /[;,<>"`()[\]\\:\s\p{Cc}\p{Cf}\p{Z}]/u;
+
+/**
+ * Whether `address` is one plain email address: exactly one `@`, non-empty
+ * local and domain parts, and none of NOT_PLAIN_ADDRESS.
+ * @param {*} address
+ * @returns {boolean}
+ */
+function isPlainAddress(address) {
+  if (typeof address !== 'string') return false;
+  const at = address.indexOf('@');
+  return (
+    at > 0 &&
+    at === address.lastIndexOf('@') &&
+    at < address.length - 1 &&
+    !NOT_PLAIN_ADDRESS.test(address)
+  );
+}
+
+/**
+ * Addresses not covered by the recipient allowlist. With an allowlist set,
+ * anything that isn't a single plain address is blocked outright, so a
+ * string like `a@other.test;b@allowed.test` can't pass a domain match.
  * @param {Array<{emailAddress: {address: string}}>} recipients - Graph API recipient objects
  * @returns {{blocked: string[], allowed: string[]}|null} - null when nothing is
  *   blocked (or no allowlist is configured)
@@ -67,7 +94,14 @@ function findBlockedRecipients(recipients) {
 
   const blocked = [];
   for (const r of recipients) {
-    const addr = (r.emailAddress?.address || '').toLowerCase();
+    const raw = r?.emailAddress?.address;
+    if (!isPlainAddress(raw)) {
+      blocked.push(
+        `${JSON.stringify(raw ?? '')} (not a single plain email address)`
+      );
+      continue;
+    }
+    const addr = raw.toLowerCase();
     const isAllowed = allowed.some(
       (rule) =>
         addr === rule || // Exact match
@@ -277,6 +311,7 @@ module.exports = {
   checkRecipientAllowlist,
   findBlockedRecipients,
   getRecipientAllowlist,
+  isPlainAddress,
   formatDryRunPreview,
   formatRuleDryRunPreview,
   DRY_RUN_LABEL,

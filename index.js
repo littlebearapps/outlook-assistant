@@ -38,6 +38,8 @@ Key environment variables:
   OUTLOOK_AUTH_METHOD               device-code (default) | browser
   OUTLOOK_AUTH_AUDIENCE             common | consumers | organizations | <tenant-guid>
   OUTLOOK_SHARED_MAILBOX            Opt in to shared mailboxes: read | true (work/school only)
+  OUTLOOK_READ_ONLY                 Set to "true" to refuse every tool call that would change,
+                                    send or delete anything (reads and sign-in still work)
   OUTLOOK_ALLOWED_RECIPIENTS        Comma-separated recipient allowlist
   OUTLOOK_MAX_EMAILS_PER_SESSION    Default cap per session for every rate-limited tool
                                     (send-email, draft, manage-rules); 0 or unset = no cap

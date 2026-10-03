@@ -139,9 +139,10 @@ function parseReadOnly(raw) {
     .toLowerCase();
   if (['true', '1', 'yes', 'on'].includes(value)) return true;
   if (['', 'false', '0', 'no', 'off'].includes(value)) return false;
+  // Redacted and capped: the value is echoed only to spot a typo.
   console.warn(
-    `[outlook-assistant] OUTLOOK_READ_ONLY="${raw}" is not a recognised value. ` +
-      'Expected true/1/yes, or false/0/no to switch it off. Treating it as on: read-only mode is on.'
+    `[outlook-assistant] OUTLOOK_READ_ONLY="${redact(String(raw).slice(0, 40))}" is not a recognised value. ` +
+      'Expected true, 1, yes or on to switch it on, or false, 0, no or off (or unset) to switch it off. Treating it as on: read-only mode is on.'
   );
   return true;
 }

@@ -90,6 +90,7 @@ describe('CLI flags', () => {
         'OUTLOOK_MAX_<TOOL>_PER_SESSION',
         'OUTLOOK_MAX_SEND_EMAIL_PER_SESSION',
         'OUTLOOK_REQUEST_TIMEOUT_MS',
+        'OUTLOOK_READ_ONLY',
       ]) {
         expect(stdout).toContain(name);
       }

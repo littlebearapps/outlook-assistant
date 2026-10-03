@@ -40,6 +40,20 @@ describe('parseReadOnly', () => {
       expect.stringMatching(/OUTLOOK_READ_ONLY="ture".*read-only mode is on/)
     );
   });
+
+  test('the warning lists every accepted value', () => {
+    parseReadOnly('ture');
+    const [message] = console.warn.mock.calls[0];
+    expect(message).toContain('true, 1, yes or on');
+    expect(message).toContain('false, 0, no or off');
+  });
+
+  test('the warning redacts personal data in the value', () => {
+    parseReadOnly('jane.doe@example.com');
+    const [message] = console.warn.mock.calls[0];
+    expect(message).not.toContain('jane.doe@example.com');
+    expect(message).toContain('<redacted-email>');
+  });
 });
 
 describe('config.READ_ONLY', () => {

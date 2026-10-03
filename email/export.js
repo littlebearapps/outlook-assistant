@@ -263,8 +263,9 @@ async function handleBatchExportEmails(args) {
       return toolError('No emails to export. Provide emailIds or searchQuery.');
     }
 
-    // Limit batch size (per plan: max 100)
+    // Limit batch size (per plan: max 100), and say so in the result (#279)
     const maxBatch = 100;
+    const limitNote = batchLimitNote(idsToExport.length, emailIds, searchQuery);
     if (idsToExport.length > maxBatch) {
       idsToExport = idsToExport.slice(0, maxBatch);
       console.error(`Batch export limited to ${maxBatch} emails`);
@@ -313,6 +314,7 @@ async function handleBatchExportEmails(args) {
       resultText += `| Output File | \`${csvPath}\` |\n`;
       resultText += `| Format | CSV |\n`;
       resultText += `| Total Size | ${(totalBytes / 1024).toFixed(1)} KB |\n`;
+      resultText += limitNote;
 
       if (failed.length > 0) {
         resultText += `\n### Failed Exports\n\n`;
@@ -367,6 +369,7 @@ async function handleBatchExportEmails(args) {
       0
     );
     resultText += `| Total Size | ${(totalBytes / 1024).toFixed(1)} KB |\n`;
+    resultText += limitNote;
 
     // Requested id -> written path, so a caller can reconcile without
     // listing the directory. A batch that silently lost messages to
@@ -417,6 +420,27 @@ async function handleBatchExportEmails(args) {
 
     return toolError(`Batch export failed: ${error.message}`);
   }
+}
+
+/**
+ * Says when a batch export was cut short, and how to get the rest (#279).
+ * target=messages exports at most 100 messages per call, and a search stops
+ * at searchQuery.maxResults (default 25, max 100).
+ * @param {number} found - IDs given or matched before the cap
+ * @param {string[]} emailIds - IDs the caller passed (empty for a search)
+ * @param {object} searchQuery - The search used when emailIds is empty
+ * @returns {string} - Markdown note, or '' when nothing was left out
+ */
+function batchLimitNote(found, emailIds, searchQuery) {
+  if (emailIds.length > 0) {
+    if (found <= 100) return '';
+    return `\n> Exported the first 100 of ${found} requested messages (limit 100 per call). Export the remaining ${found - 100} IDs in another call.\n`;
+  }
+  const searchLimit = Math.min(searchQuery.maxResults || 25, 100);
+  if (found < searchLimit) return '';
+  const raise =
+    searchLimit < 100 ? 'raise `searchQuery.maxResults` (up to 100) or ' : '';
+  return `\n> The search stopped at ${searchLimit} messages, the \`searchQuery.maxResults\` limit (default 25, max 100 per call), so more may match. To get the rest, ${raise}export in date ranges with \`searchQuery.receivedAfter\`/\`receivedBefore\`.\n`;
 }
 
 /**

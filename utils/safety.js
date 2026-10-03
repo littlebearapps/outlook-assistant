@@ -219,9 +219,28 @@ function formatRuleDryRunPreview(rule) {
   return lines.join('\n');
 }
 
+/** First line of every dry-run preview, so it can't be read as a result (#274). */
+const DRY_RUN_LABEL = 'DRY RUN — nothing was changed.';
+
+/**
+ * A dry-run tool result: the labelled preview plus `_meta.dryRun`.
+ * @param {string|string[]} lines - What the call would do, line by line
+ * @param {object} [meta] - Extra `_meta` fields
+ * @returns {{content: Array<{type: 'text', text: string}>, _meta: object}}
+ */
+function dryRunResult(lines, meta = {}) {
+  const text = [DRY_RUN_LABEL, '', ...[].concat(lines)].join('\n');
+  return {
+    content: [{ type: 'text', text }],
+    _meta: { dryRun: true, ...meta },
+  };
+}
+
 module.exports = {
   checkRateLimit,
   checkRecipientAllowlist,
   formatDryRunPreview,
   formatRuleDryRunPreview,
+  DRY_RUN_LABEL,
+  dryRunResult,
 };

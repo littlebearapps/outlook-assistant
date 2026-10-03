@@ -68,6 +68,14 @@ params:
   id: "contact-id..."
 ```
 
+A deleted contact doesn't go to **Deleted Items**, and Microsoft Graph doesn't document a way to restore it (Outlook's **Recover deleted items** may work for a limited time, but don't rely on it), so treat it as permanent. Add `dryRun: true` to check which contact an ID belongs to first. Nothing is deleted; the preview reads:
+
+```
+DRY RUN — nothing was changed.
+
+Deletes contact 'John Smith' (john@example.com; Acme Corp).
+```
+
 ## Parameter Reference
 
 | Parameter | What it does | Used with |
@@ -82,6 +90,7 @@ params:
 | `notes` | Personal notes | `create`, `update` |
 | `query` | Search text | `search` |
 | `count` | Number of results | `list`, `search` |
+| `dryRun` | Preview which contact would be deleted, without deleting it | `delete` |
 
 ## Tips
 

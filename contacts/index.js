@@ -11,6 +11,7 @@ const { ensureAuthenticated } = require('../auth');
 const { quoteSearchPhrase } = require('../utils/odata-helpers');
 const { toolMetadata } = require('../utils/risk-classes');
 const { toolError, authRequiredError } = require('../utils/tool-error');
+const { dryRunResult } = require('../utils/safety');
 
 /**
  * Contact field presets for different use cases
@@ -481,6 +482,31 @@ async function handleUpdateContact(args) {
 }
 
 /**
+ * dryRun preview for delete (#274): which contact would be lost. Reads only.
+ */
+async function previewDeleteContact(accessToken, contactId) {
+  const contact = await callGraphAPI(
+    accessToken,
+    'GET',
+    `me/contacts/${contactId}`,
+    null,
+    { $select: 'displayName,emailAddresses,companyName' }
+  );
+  const details = [
+    ...(contact.emailAddresses || []).map((e) => e.address).filter(Boolean),
+    contact.companyName,
+  ].filter(Boolean);
+  const name = contact.displayName || '(no name)';
+  return dryRunResult(
+    [
+      `Deletes contact '${name}'${details.length > 0 ? ` (${details.join('; ')})` : ''}.`,
+      "It doesn't go to Deleted Items, and Graph doesn't document a way to restore it (Outlook's \"Recover deleted items\" may work for a limited time, but don't rely on it), so treat it as permanent.",
+    ],
+    { action: 'delete', contactId, displayName: contact.displayName }
+  );
+}
+
+/**
  * Delete contact handler
  */
 async function handleDeleteContact(args) {
@@ -492,6 +518,11 @@ async function handleDeleteContact(args) {
 
   try {
     const accessToken = await ensureAuthenticated();
+
+    // dryRun: say which contact would be lost; delete nothing.
+    if (args.dryRun) {
+      return await previewDeleteContact(accessToken, contactId);
+    }
 
     const endpoint = `me/contacts/${contactId}`;
     await callGraphAPI(accessToken, 'DELETE', endpoint);
@@ -600,7 +631,7 @@ const contactsTools = [
   {
     name: 'manage-contact',
     description:
-      "Full CRUD over the signed-in user's personal Outlook contacts (destructive: covers `delete` action). action=`list` (default) returns contacts with pagination via `skip`/`count` (default 50). action=`search` returns contacts matching `query` against name/email (default 25). action=`get` returns full contact detail by `id`. action=`create` adds a new contact and returns its `id`. action=`update` patches the given fields by `id` (only fields passed are changed). action=`delete` permanently removes the contact by `id`. Use `outputVerbosity` (minimal/standard/full) on list/search to control field count. Prefer `search-people` for cross-source relevance ranking (contacts + directory + recent comms) — this tool only searches your personal contact store.",
+      "Full CRUD over the signed-in user's personal Outlook contacts (destructive: covers `delete` action). action=`list` (default) returns contacts with pagination via `skip`/`count` (default 50). action=`search` returns contacts matching `query` against name/email (default 25). action=`get` returns full contact detail by `id`. action=`create` adds a new contact and returns its `id`. action=`update` patches the given fields by `id` (only fields passed are changed). action=`delete` removes the contact by `id`; it skips Deleted Items, so treat it as permanent and pass `dryRun: true` first to confirm which contact it is. Use `outputVerbosity` (minimal/standard/full) on list/search to control field count. Prefer `search-people` for cross-source relevance ranking (contacts + directory + recent comms) — this tool only searches your personal contact store.",
     ...toolMetadata('manage-contact', 'Contacts'),
     inputSchema: {
       type: 'object',
@@ -682,6 +713,11 @@ const contactsTools = [
         notes: {
           type: 'string',
           description: 'Personal notes (action=create/update)',
+        },
+        dryRun: {
+          type: 'boolean',
+          description:
+            'Preview only (action=delete): nothing is deleted. Shows which contact would be removed. Default false.',
         },
       },
       additionalProperties: false,

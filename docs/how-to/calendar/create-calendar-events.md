@@ -51,6 +51,22 @@ params:
     - { email: "boardroom@company.com", type: "resource" }
 ```
 
+### Preview the invitations first
+
+Invitations go out as soon as the event is saved. Pass `dryRun: true` to see who would be invited without creating anything:
+
+```
+tool: create-event
+params:
+  subject: "Team Review"
+  start: "2026-03-09T14:00:00"
+  end: "2026-03-09T15:00:00"
+  attendees: ["alice@company.com", "sam@partner.org"]
+  dryRun: true
+```
+
+The preview starts with `DRY RUN — nothing was changed.` and lists each attendee, counting and marking the **external** ones: addresses whose domain differs from your own (read from your signed-in account). If your own address can't be read, the external count is shown as unknown rather than guessed. Rooms and resources are listed separately.
+
 ## Add a Description
 
 > "Set up an offsite planning session with an agenda"
@@ -85,6 +101,7 @@ params:
 | `end` | End time (ISO 8601) | Yes |
 | `attendees` | Email addresses (required attendees) or `{email, type}` objects (`type`: `required`, `optional` or `resource`) | No |
 | `body` | Event description or agenda | No |
+| `dryRun` | Preview who would be invited (with an external count) without creating the event | No |
 
 ## Timezone Handling
 
@@ -101,7 +118,7 @@ Times are interpreted using the server's configured timezone (default: `Australi
 - The body field supports plain text — add agendas, links, or preparation notes
 - Check your calendar first with `list-events` to avoid double-booking, or use its `subject` filter to find the last occurrence of a meeting you're rescheduling
 - Omit the `Z` suffix on times unless you specifically mean UTC
-- `create-event` is marked destructive because attendees are sent invitations, so clients that honour MCP annotations ask before running it
+- `create-event` is marked destructive because attendees are sent invitations, so clients that honour MCP annotations ask before running it. Use `dryRun: true` to check the guest list first
 - For finding available rooms, see [Find Meeting Rooms](../advanced/find-meeting-rooms.md)
 
 ## Related

@@ -6,6 +6,7 @@ const { ensureAuthenticated } = require('../auth');
 const { DEFAULT_TIMEZONE } = require('../config');
 const { buildAttendees } = require('./attendees');
 const { toolError, authRequiredError } = require('../utils/tool-error');
+const { previewCreateEvent } = require('./preview');
 
 /**
  * Create event handler
@@ -13,7 +14,7 @@ const { toolError, authRequiredError } = require('../utils/tool-error');
  * @returns {object} - MCP response
  */
 async function handleCreateEvent(args) {
-  const { subject, start, end, attendees, body } = args;
+  const { subject, start, end, attendees, body, dryRun = false } = args;
 
   if (!subject || !start || !end) {
     return toolError(
@@ -34,27 +35,30 @@ async function handleCreateEvent(args) {
     }
   }
 
+  // Request body
+  const bodyContent = {
+    subject,
+    start: {
+      dateTime: start.dateTime || start,
+      timeZone: start.timeZone || DEFAULT_TIMEZONE,
+    },
+    end: {
+      dateTime: end.dateTime || end,
+      timeZone: end.timeZone || DEFAULT_TIMEZONE,
+    },
+    attendees: graphAttendees,
+    body: { contentType: 'HTML', content: body || '' },
+  };
+
   try {
+    // dryRun: say who would be invited; create nothing (#274).
+    if (dryRun) return await previewCreateEvent(bodyContent);
+
     // Get access token
     const accessToken = await ensureAuthenticated();
 
     // Build API endpoint
     const endpoint = `me/events`;
-
-    // Request body
-    const bodyContent = {
-      subject,
-      start: {
-        dateTime: start.dateTime || start,
-        timeZone: start.timeZone || DEFAULT_TIMEZONE,
-      },
-      end: {
-        dateTime: end.dateTime || end,
-        timeZone: end.timeZone || DEFAULT_TIMEZONE,
-      },
-      attendees: graphAttendees,
-      body: { contentType: 'HTML', content: body || '' },
-    };
 
     // Make API call
     const response = await callGraphAPI(

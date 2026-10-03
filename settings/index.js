@@ -8,6 +8,7 @@ const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { toolMetadata } = require('../utils/risk-classes');
 const { toolError, authRequiredError } = require('../utils/tool-error');
+const { dryRunResult } = require('../utils/safety');
 
 // Days of the week for working hours
 const DAYS_OF_WEEK = [
@@ -91,6 +92,88 @@ function formatAutomaticReplies(settings) {
   }
 
   return lines.join('\n');
+}
+
+/** Who gets the external reply, for each externalAudience value. */
+const EXTERNAL_AUDIENCE_LABELS = {
+  none: 'nobody',
+  contactsOnly: 'only senders in your contacts',
+  all: 'all external senders',
+};
+
+/** Longest stretch of a reply message quoted in a preview. */
+const REPLY_PREVIEW_CHARS = 100;
+
+/** "get a 25-character reply: "…"" (or no message) for a preview. */
+function describeReply(message, unchanged) {
+  const tag = unchanged ? ' (unchanged)' : '';
+  if (!message) return `— no reply message is set${tag}`;
+  const quoted =
+    message.length > REPLY_PREVIEW_CHARS
+      ? `${message.substring(0, REPLY_PREVIEW_CHARS)}…`
+      : message;
+  return `get a ${message.length}-character reply${tag}: "${quoted}"`;
+}
+
+/** "scheduled, from A to B (UTC)" */
+function describeSchedule(start, end) {
+  if (!start?.dateTime || !end?.dateTime) return 'scheduled';
+  return start.timeZone === end.timeZone
+    ? `scheduled, from ${start.dateTime} to ${end.dateTime} (${start.timeZone})`
+    : `scheduled, from ${start.dateTime} (${start.timeZone}) to ${end.dateTime} (${end.timeZone})`;
+}
+
+/**
+ * dryRun preview for set-auto-replies (#274): who would get an automatic
+ * reply, when, and how long each message is. Fields the call doesn't set
+ * keep their current values, so those are read first and marked unchanged.
+ * @param {object} changes - The automaticRepliesSetting the call would PATCH
+ * @param {object} current - The current automaticRepliesSetting
+ */
+function previewAutomaticReplies(changes, current) {
+  const effective = { ...current, ...changes };
+  const unchanged = (field) => !(field in changes);
+  const lines = [];
+
+  const status = effective.status;
+  const statusTag = unchanged('status') ? ' (unchanged)' : '';
+  if (status === 'disabled') {
+    lines.push(
+      `Status: off (disabled)${statusTag}. Nobody gets an automatic reply.`
+    );
+    return dryRunResult(lines, { settings: effective });
+  }
+  if (status === 'alwaysEnabled') {
+    lines.push(`Status: on now, with no end date (alwaysEnabled)${statusTag}.`);
+  } else {
+    lines.push(
+      `Status: ${describeSchedule(effective.scheduledStartDateTime, effective.scheduledEndDateTime)}${statusTag}.`
+    );
+  }
+
+  lines.push(
+    `Internal senders (your organisation): ${describeReply(effective.internalReplyMessage, unchanged('internalReplyMessage'))}`
+  );
+
+  const audience = effective.externalAudience;
+  const audienceTag = `externalAudience=${audience || 'unknown'}${unchanged('externalAudience') ? '; unchanged' : ''}`;
+  if (audience === 'none') {
+    lines.push(`External senders: nobody (${audienceTag}).`);
+  } else {
+    const who = EXTERNAL_AUDIENCE_LABELS[audience] || 'unknown audience';
+    lines.push(
+      `External senders: ${who} (${audienceTag}) ${describeReply(effective.externalReplyMessage, unchanged('externalReplyMessage'))}`
+    );
+  }
+
+  if (changes.status === 'alwaysEnabled') {
+    lines.push(
+      '',
+      'Note: Personal Outlook.com accounts only support scheduled replies, and Graph may leave them off. Pass `startDateTime` + `endDateTime` there instead.'
+    );
+  }
+
+  return dryRunResult(lines, { settings: effective });
 }
 
 /**
@@ -208,6 +291,7 @@ async function handleSetAutomaticReplies(args) {
     internalReplyMessage,
     externalReplyMessage,
     externalAudience,
+    dryRun = false,
   } = args;
 
   try {
@@ -276,6 +360,17 @@ async function handleSetAutomaticReplies(args) {
       return toolError(
         'No automatic-reply settings were provided. To change state, pass `enabled: true|false` or `startDateTime` + `endDateTime`. To update messages or audience, pass `internalReplyMessage`, `externalReplyMessage`, or `externalAudience`.'
       );
+    }
+
+    // dryRun: read the current setting to fill in what this call leaves
+    // alone, and say who would get a reply; change nothing.
+    if (dryRun) {
+      const current = await callGraphAPI(
+        accessToken,
+        'GET',
+        'me/mailboxSettings/automaticRepliesSetting'
+      );
+      return previewAutomaticReplies(settings, current || {});
     }
 
     // Apply settings
@@ -517,7 +612,7 @@ const settingsTools = [
   {
     name: 'mailbox-settings',
     description:
-      'Read or update mailbox-level settings (idempotent — safe to retry; sets are PATCH-style and merge with existing state). action=`get` (default) returns settings — use `section` to filter (`language`, `timeZone`, `workingHours`, `automaticRepliesSetting`, or `all`). action=`set-auto-replies` configures out-of-office: `enabled` true/false, optional `startDateTime`/`endDateTime` (ISO 8601) for scheduled mode, `internalReplyMessage` and (optionally) `externalReplyMessage`. action=`set-working-hours` updates the schedule: `startTime`/`endTime` (HH:MM) and `daysOfWeek` (array of `monday`..`sunday`). Returns the updated settings object on set actions.',
+      'Read or update mailbox-level settings (idempotent — safe to retry; sets are PATCH-style and merge with existing state). action=`get` (default) returns settings — use `section` to filter (`language`, `timeZone`, `workingHours`, `automaticRepliesSetting`, or `all`). action=`set-auto-replies` configures out-of-office: `enabled` true/false, optional `startDateTime`/`endDateTime` (ISO 8601) for scheduled mode, `internalReplyMessage` and (optionally) `externalReplyMessage` and `externalAudience` (none/contactsOnly/all); pass `dryRun: true` to preview who would get replies without changing anything. action=`set-working-hours` updates the schedule: `startTime`/`endTime` (HH:MM) and `daysOfWeek` (array of `monday`..`sunday`). Returns the updated settings object on set actions.',
     ...toolMetadata('mailbox-settings', 'Mailbox Settings'),
     inputSchema: {
       type: 'object',
@@ -570,6 +665,11 @@ const settingsTools = [
           type: 'string',
           enum: ['none', 'contactsOnly', 'all'],
           description: 'Who receives external reply (action=set-auto-replies)',
+        },
+        dryRun: {
+          type: 'boolean',
+          description:
+            'Preview only (action=set-auto-replies): nothing is changed. Shows who would get automatic replies, the schedule and each message length. Default false.',
         },
         // set-working-hours params
         startTime: {

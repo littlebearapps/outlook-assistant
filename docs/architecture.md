@@ -79,6 +79,7 @@ The server consolidated 55 original tools into 22 action-based tools to save ~11
 
 ## History
 
+- **v3.12.1**: `utils/graph-api.js` gains throttling retries, a per-attempt inactivity timeout and a 4-request concurrency gate; file writes consolidated in `utils/safe-write.js`; shared attendee builder `calendar/attendees.js`; `manage-rules` folder targets resolved via `folder/resolve.js`; unused `calendar/accept.js` removed.
 - **v3.12.0**: Opt-in shared-mailbox scoping (`sharedMailbox`, `OUTLOOK_SHARED_MAILBOX`) threaded through readers, organise actions and folder resolution via `utils/mailbox.js`; `list-events` filters.
 - **v3.9.0**: Nested folder addressing via `folder/resolve.js`.
 - **v3.3.0**: Renamed from `outlook-mcp` / `@littlebearapps/outlook-mcp` to `outlook-assistant` / `@littlebearapps/outlook-assistant`. Old npm package deprecated with redirect. Token files auto-migrate from `.outlook-mcp-tokens.json`.

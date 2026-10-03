@@ -52,7 +52,7 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 - **manage-event**: marked `destructiveHint: true` (covers `decline`/`cancel`/`delete`; `update` action added v3.8.0 is non-destructive in isolation but inherits the tool-level annotation — use `dryRun: true` to preview update payloads). `accept` is deliberately omitted — Microsoft Graph doesn't expose an `accept` verb in a way that works across personal/M365 reliably; use the Outlook UI to accept invitations.
 - **Shared mailboxes**: off unless `OUTLOOK_SHARED_MAILBOX` is set (`read` = read-only shared access); addresses must be printable-ASCII emails (`utils/mailbox.js`); sending from a shared mailbox is never supported (`Mail.Send.Shared` not requested)
 - **Path/ID hardening** (`utils/graph-api.js`): `.`/`..` segments in resource paths (incl. percent-encoded, `$batch`, relative delta tokens) are refused before any request; full URLs (deltaToken/nextLink) must be `https://graph.microsoft.com`, so the token never leaves Graph
-- **File writes** (`attachments` download, `export`): server-chosen names are sanitised, written with exclusive create (no overwrite, no symlink following) and confined to `outputDir` (default system tmpdir); only an explicit single-message `export` file path is written as given
+- **File writes** (`attachments` download, `export` incl. conversations; all via `utils/safe-write.js`): server-chosen names are sanitised, written with exclusive create (no overwrite, no symlink following, `-1`, `-2`, … suffixes) and confined to `outputDir` (default system tmpdir); a write that fails part-way removes the partial file; only an explicit single-message `export` file path is written as given
 - **list-events**: invalid `startAfter`/`startBefore`/`subject` return `isError` before any Graph call
 - 7 read-only tools auto-approved by Claude Code; 6 destructive tools (`manage-event`, `manage-contact`, `send-email`, `draft`, `folders`, `manage-rules`) prompt for confirmation
 
@@ -74,6 +74,7 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 | `calendar/list.js` | `list-events` filter/order building (`startAfter`/`startBefore`/`subject`) |
 | `email/mail-tips.js` | Pre-send recipient validation |
 | `utils/safety.js` | Rate limiter, allowlist, dry-run preview |
+| `utils/safe-write.js` | Shared exclusive-create, `outputDir`-confined file writer (attachments, export) |
 | `utils/field-presets.js` | Optimised field selections per operation |
 
 ## Configuration
@@ -83,7 +84,7 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 OUTLOOK_CLIENT_ID=your-client-id
 OUTLOOK_CLIENT_SECRET=your-secret-VALUE    # NOT the Secret ID!
 USE_TEST_MODE=false
-OUTLOOK_MAX_EMAILS_PER_SESSION=10          # Optional: rate limit sends
+OUTLOOK_MAX_EMAILS_PER_SESSION=10          # Optional: default per-session cap for send-email, draft, manage-rules (per tool: OUTLOOK_MAX_<TOOL>_PER_SESSION)
 OUTLOOK_ALLOWED_RECIPIENTS=example.com     # Optional: restrict recipients
 OUTLOOK_IMMUTABLE_IDS=true                 # Optional: IDs persist through folder moves
 OUTLOOK_AUTH_METHOD=device-code            # Optional: default auth method (device-code|browser)
@@ -164,7 +165,7 @@ Use `Edit` (not `Write`) to revise individual Q&A pairs — the `Write` guard is
 ## See Also
 
 - [`README.md`](README.md) - Full documentation, Azure setup, tool reference
-- [`ROADMAP.md`](ROADMAP.md) - Active milestones (v3.12.x tool description audit, v3.8.x carry-over, v3.13.0+) and recent releases
+- [`ROADMAP.md`](ROADMAP.md) - Active milestones (v3.12.x tool description audit, patch fix queue, v3.8.x carry-over, v3.13.0+) and recent releases
 - [`docs/architecture.md`](docs/architecture.md) - Module layout, file tree, tool-consolidation map, history
 - [`docs/troubleshooting.md`](docs/troubleshooting.md) - Common issues and fixes
 - [`docs/quickrefs/tools-reference.md`](docs/quickrefs/tools-reference.md) - Tools quick reference

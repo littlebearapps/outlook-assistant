@@ -28,10 +28,13 @@ organiser and `webLink`, which it never returned) and corrected the
 
 ## Fix queue — next patch releases
 
-Correctness bugs from the September 2026 Graph API audit and the v3.12.0
-release audit. They ship in patch releases as fixes accumulate, rather than one
-release per fix. The highest-impact ones come first.
+Correctness bugs from the September 2026 Graph API audit and the v3.12.0 and
+v3.12.1 release reviews. They ship in patch releases as fixes accumulate, rather
+than one release per fix. The highest-impact ones come first.
 
+- **#261** `search-emails` `query` sends `$orderby` with `$search`, which Graph rejects (`SearchWithOrderBy`), so the search falls back
+- **#262** delta sync labels continuation pages of an initial sync as incremental and counts them as Created/Updated
+- **#263** search-driven `export` wraps `from:`/`subject:` in one quoted phrase, so the field scopes are ignored
 - **#239** `list-events` misses upcoming occurrences of recurring meetings (move to `calendarView`)
 - **#245** `update-email` and `apply-category` claim `$batch` but run sequential PATCHes (v3.12.1 corrected the `update-email` description; the code is still sequential)
 - **#240** `find-meeting-rooms` fallback calls the beta-only `findRooms` on v1.0
@@ -40,6 +43,8 @@ release per fix. The highest-impact ones come first.
 - **#258** leftovers from the post-3.12.0 hardening: request `Place.Read.All`
   for room lookup (with #240), non-ASCII shared-mailbox addresses, and redacting
   mailbox addresses from logs
+- **#264** (performance) `eml`/`mbox` conversation export fetches MIME one
+  message at a time, up to 1000 sequential requests
 
 ## v3.8.x — Task Integration & Auth (carry-over)
 

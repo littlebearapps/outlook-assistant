@@ -34,9 +34,10 @@ FAQ_DIR="docs/faq"
 MIN_QUESTIONS=7
 
 block() {
-  # block <reason>
-  jq -n --arg reason "$1" '{decision: "block", reason: $reason}'
-  exit 1
+  # block <reason> — deny the tool call using the current PreToolUse
+  # output format (hookSpecificOutput.permissionDecision), exit 0.
+  jq -n --arg reason "$1" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $reason}}'
+  exit 0
 }
 
 case "$TOOL_NAME" in

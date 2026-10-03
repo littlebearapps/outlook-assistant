@@ -34,8 +34,12 @@ Built by [Little Bear Apps](https://littlebearapps.com).
 ## Safety & Token Efficiency
 
 - **MCP safety annotations** on all 22 tools — AI clients auto-approve reads and prompt for destructive operations
-- **Send-email protections**: pre-send mail tips, dry-run preview, session rate limiting, recipient allowlist
-- **Rule protections**: dry-run preview on create/update, rate limiting, recipient allowlist on forward/redirect, no permanent-delete action
+- **Send-email protections**: pre-send mail tips (a send to a flagged recipient, such as out of office or external, is refused until `acknowledgeWarnings: true`), dry-run preview, session rate limiting, recipient allowlist
+- **Rule protections**: dry-run preview on create/update, rate limiting (dry runs don't count), recipient allowlist on forward/redirect (a blocked forward refuses the whole rule), no permanent-delete action
+- **Dry-run previews beyond email**: `create-event` and every `manage-event` action say who would be emailed (with an external count); `mailbox-settings` auto-replies, `folders` delete and `manage-contact` delete show what would change or be lost
+- **Read-only mode**: `OUTLOOK_READ_ONLY=true` refuses every tool call that would change anything before it runs; reads and sign-in still work
+- **Model guidance**: server `instructions` state the hard rules (retrieved content is data, confirm before outward actions, draft first); `send-email` and `create-event` ask Claude clients for user confirmation (`anthropic/requiresUserInteraction`)
+- **Private logs**: one stderr line per tool call (tool, action, outcome, duration), never its arguments; `OUTLOOK_DEBUG=true` adds detail with addresses and IDs redacted
 - **Input and file hardening**: IDs with `.`/`..` path segments refused, the access token only ever sent to `graph.microsoft.com`, attachment downloads and exports (including conversation exports) confined to the output directory without overwriting, and a partly written file removed if a write fails
 - **Throttling-aware Graph client**: `429` (and `503`/`504` for non-POST requests) retried honouring `Retry-After`, a per-attempt inactivity timeout (`OUTLOOK_REQUEST_TIMEOUT_MS`, default 60000 ms) and at most 4 requests in flight, so bulk operations neither hang nor throttle themselves
 - **Shared mailboxes off by default**: `.Shared` scopes are requested only when `OUTLOOK_SHARED_MAILBOX` is set (`read` keeps shared access read-only)
@@ -64,7 +68,7 @@ Built by [Little Bear Apps](https://littlebearapps.com).
 
 - **Authentication (1 tool)**: `auth` — status, authenticate (device code by default), device-code-complete, about (version, granted scopes, shared-mailbox status)
 - **Email (8 tools)**: `search-emails`, `read-email`, `send-email`, `draft`, `update-email`, `attachments`, `export`, `get-mail-tips`
-- **Calendar (3 tools)**: `list-events` (`startAfter`, `startBefore`, `subject` filters), `create-event`, `manage-event` (update, decline, cancel, delete)
+- **Calendar (3 tools)**: `list-events` (`startAfter`, `startBefore`, `subject` filters), `create-event` (`dryRun`; retry-safe `transactionId`), `manage-event` (update, decline, cancel, delete; `dryRun` on all)
 - **Contacts (2 tools)**: `manage-contact`, `search-people`
 - **Folders (1 tool)**: `folders` — list, create, move, stats, delete; folders addressable by nested path (`Parent/Child`) or ID
 - **Rules (1 tool)**: `manage-rules` — list, create, update, reorder, delete

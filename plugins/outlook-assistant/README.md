@@ -29,8 +29,8 @@ In Claude Code you can also enter the client ID when you enable the plugin.
 
 **It can act on your behalf.** It can send email and meeting invitations, send or delete drafts, decline, cancel or delete meetings, set automatic replies, create or change inbox rules, and delete folders, contacts and categories. These tools are marked destructive, so clients that honour MCP safety annotations, such as Claude Code, ask before running them unless you've set the client to auto-approve them. The built-in safety controls are:
 
-- `dryRun` previews for sending, drafts, rules and event updates.
-- Pre-send recipient checks (out-of-office, full mailbox).
+- `dryRun` previews for sending, drafts, rules, new events, every meeting action (update, decline, cancel, delete), automatic replies, and folder and contact deletes.
+- Pre-send recipient checks (out-of-office, full mailbox, external recipients); when the check is on, a send to a flagged recipient is refused until the warnings are acknowledged.
 - A per-session limit on sends, drafts and rule changes (10 each by default in this plugin).
 - An optional recipient allowlist.
 - An optional read-only mode that refuses every change before it runs.
@@ -42,6 +42,7 @@ In Claude Code you can also enter the client ID when you enable the plugin.
 - The server talks only to Microsoft: `login.microsoftonline.com` for sign-in and `graph.microsoft.com` for your mail, calendar and contacts. There's no Little Bear Apps backend and no telemetry.
 - Your OAuth tokens are stored locally in `~/.outlook-assistant-tokens.json`. The client ID you enter is saved locally in `~/.outlook-assistant-config.json`.
 - Email content the tools return goes to the AI model you're using, under that client's own data policy.
+- By default the server's own log (stderr) has one line per tool call (tool, action, outcome, duration), never its arguments or email content. `OUTLOOK_DEBUG=true` adds detail for troubleshooting, with addresses and IDs redacted.
 - Attachments and exports are written only when you ask, and only to the folder you choose (your system temp folder by default).
 
 More detail is in the [security policy](https://github.com/littlebearapps/outlook-assistant/blob/main/SECURITY.md) and the [privacy policy](https://littlebearapps.com/privacy/).

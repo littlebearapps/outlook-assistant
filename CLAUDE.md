@@ -47,16 +47,19 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 ## Safety Controls
 
 - **MCP annotations** on all 22 tools: all four hints set explicitly and derived from the risk-class map (`utils/risk-classes.js`: `read`/`reversible`/`outward`/`destructive`/`persistent` per tool and action), plus a top-level `title`. `destructiveHint` = any outward, destructive or persistent action; `openWorldHint` = surfaces untrusted content (#92) or reaches other people; `idempotentHint` = read-only or the tool's `idempotent` flag. A test fails on any unclassified tool or action (#270, #277)
-- **Read-only mode** (`OUTLOOK_READ_ONLY`, #271): `request-handler.js` refuses every call whose risk class isn't `read` after validation and before the handler (`utils/read-only.js`), dry runs included; unclassified calls fail closed; only `auth` authenticate/device-code-complete are exempt (sign-in). Calls that leave `action` out (or null) are classified by the map's `defaultAction`; `test/dispatcher/read-classes-dont-write.test.js` proves no `read` call writes
-- **Server `instructions`** (`utils/server-instructions.js`, #271): hard rules in the first 512 characters, under 2,000 in total; `send-email` and `create-event` carry `_meta["anthropic/requiresUserInteraction"]` (risk-map flag, never on mixed read/write tools)
-- **get-mail-tips**: pre-send recipient validation (out-of-office, mailbox full, delivery restrictions)
-- **send-email**: `dryRun` param, `checkRecipients` param (mail tips), session rate limiting (`OUTLOOK_MAX_EMAILS_PER_SESSION`), recipient allowlist (`OUTLOOK_ALLOWED_RECIPIENTS`)
+- **Read-only mode** (`OUTLOOK_READ_ONLY`, plugin setting `read_only`, #271): `request-handler.js` refuses every call whose risk class isn't `read` after validation and before the handler (`utils/read-only.js`), dry runs included; unclassified calls fail closed; only `auth` authenticate/device-code-complete are exempt (sign-in). Calls that leave `action` out (or null) are classified by the map's `defaultAction`; `test/dispatcher/read-classes-dont-write.test.js` proves no `read` call writes
+- **Server `instructions`** (`utils/server-instructions.js`, #271): hard rules in the first 512 characters, under 2,000 in total; `send-email` and `create-event` carry `_meta["anthropic/requiresUserInteraction"]` (risk-map flag via `riskMeta`, never on mixed read/write tools)
+- **`dryRun` previews** (#274): `send-email`, `draft` create, `manage-rules` create/update, `create-event`, every `manage-event` action, `mailbox-settings` set-auto-replies, `folders` delete, `manage-contact` delete. The #274 previews start `DRY RUN — nothing was changed.` via `dryRunResult` (`utils/safety.js`); calendar ones (`calendar/preview.js`) may read but never write, and say who would be emailed with an external count
+- **get-mail-tips**: pre-send recipient validation (out-of-office, mailbox full, delivery restrictions); `_meta.issues` lists each flag per recipient
+- **send-email**: `dryRun`, `checkRecipients` (mail tips), session rate limiting (`OUTLOOK_MAX_EMAILS_PER_SESSION`), recipient allowlist (`OUTLOOK_ALLOWED_RECIPIENTS`). With `checkRecipients`, a failed check refuses the send, and a flagged recipient (out of office, mailbox full, delivery restricted, external, group with external members) refuses it until `acknowledgeWarnings: true` (#272); tips never go in the `sendMail` payload
 - **draft**: `dryRun` on create, `checkRecipients` (mail tips), recipient allowlist, rate limiting. Send action shares limit with `send-email`. `update`/`send`/`delete` look the ID up first and refuse anything that isn't an unsent draft (`assertIsDraft` in `email/draft.js`).
-- **manage-rules**: `dryRun` on create/update, rate limiting (`OUTLOOK_MAX_MANAGE_RULES_PER_SESSION`), recipient allowlist on forwardTo/redirectTo, no `permanentDelete` (too dangerous for AI). Supports 12 conditions, 9 actions, and exceptions.
-- **manage-event**: every action is `outward` (updates, declines, cancellations and organiser deletes notify attendees) — use `dryRun: true` to preview update payloads. `accept` is deliberately omitted — Microsoft Graph doesn't expose an `accept` verb in a way that works across personal/M365 reliably; use the Outlook UI to accept invitations.
+- **manage-rules**: `dryRun` on create/update, rate limiting (`OUTLOOK_MAX_MANAGE_RULES_PER_SESSION`), recipient allowlist on forwardTo/redirectTo, no `permanentDelete` (too dangerous for AI). An allowlist-blocked forward/redirect refuses the whole rule or update, dry runs included (`checkRuleRecipients`, #273). The limit counts real writes only: create/update (not dry runs), reorder, and delete once the rule is found (#273, #279). Supports 12 conditions, 9 actions, and exceptions.
+- **create-event**: each call sends a fresh Graph `transactionId`, so a 429 retry can't book the meeting twice (#280)
+- **manage-event**: every action is `outward` (updates, declines, cancellations and organiser deletes notify attendees). `accept` is deliberately omitted — Microsoft Graph doesn't expose an `accept` verb in a way that works across personal/M365 reliably; use the Outlook UI to accept invitations.
 - **Shared mailboxes**: off unless `OUTLOOK_SHARED_MAILBOX` is set (`read` = read-only shared access); addresses must be printable-ASCII emails (`utils/mailbox.js`); sending from a shared mailbox is never supported (`Mail.Send.Shared` not requested)
 - **Path/ID hardening** (`utils/graph-api.js`): `.`/`..` segments in resource paths (incl. percent-encoded, `$batch`, relative delta tokens) are refused before any request; full URLs (deltaToken/nextLink) must be `https://graph.microsoft.com`, so the token never leaves Graph
 - **File writes** (`attachments` download, `export` incl. conversations; all via `utils/safe-write.js`): server-chosen names are sanitised, written with exclusive create (no overwrite, no symlink following, `-1`, `-2`, … suffixes) and confined to `outputDir` (default system tmpdir); a write that fails part-way removes the partial file; only an explicit single-message `export` file path is written as given
+- **Logs** (`utils/logger.js`, #278): stderr only. By default one line per tool call (tool, action, outcome, ms; never arguments); `OUTLOOK_DEBUG` adds detail. `redact()` masks addresses, long IDs and credentials at every level. New logging goes through `log.info` (PII-free lines only) or `log.debug`, not `console.*`
 - **list-events**: invalid `startAfter`/`startBefore`/`subject` return `isError` before any Graph call
 - 7 read-only tools auto-approved by Claude Code; 10 destructive tools (`send-email`, `draft`, `create-event`, `manage-event`, `manage-rules`, `mailbox-settings`, `folders`, `manage-contact`, `manage-category`, `manage-focused-inbox`) prompt for confirmation
 
@@ -67,10 +70,11 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 | `index.js` | Entry point: CLI flags, startup warnings, connects `createServer()` to the stdio transport |
 | `tools.js` | Tool registry: every module's tools combined into `TOOLS` (tests import it) |
 | `server.js` | `createServer()`: SDK `Server` with `tools: {listChanged: false}` and the dispatcher |
-| `request-handler.js` | MCP request dispatcher: `tools/list`/`tools/call` with schema coercion. Protocol errors are thrown as JSON-RPC errors (-32601 unknown method, -32602 unknown tool, -32603 internal); tool failures return visible `isError` content |
+| `request-handler.js` | MCP request dispatcher: `tools/list` (adds `riskMeta` `_meta`) and `tools/call` (coerce → read-only gate → handler → one log line). Protocol errors are thrown as JSON-RPC errors (-32601 unknown method, -32602 unknown tool, -32603 internal); tool failures return visible `isError` content |
 | `utils/risk-classes.js` | Risk-class map per tool/action; derives every tool's annotations (`toolMetadata`) |
 | `utils/server-instructions.js` | Server `instructions` text (hard rules first); read-only note follows `config.READ_ONLY` |
 | `utils/read-only.js` | `OUTLOOK_READ_ONLY` gate: refusal for any non-`read` call (`auth` sign-in actions exempt) |
+| `utils/logger.js` | Stderr logger: `log.info`/`log.debug`, per-call notes, `redact()`, `isDebugEnabled()` (`OUTLOOK_DEBUG`) |
 | `utils/tool-error.js` | `toolError(message, { nextStep })` and `authRequiredError()`: every handler error returns `isError: true` |
 | `config.js` | API endpoint, auth settings, defaults |
 | `utils/schema-coerce.js` | MCP-boundary param coercion + validation (string→array/boolean/number, `additionalProperties: false`, required, enums) |
@@ -83,8 +87,9 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 | `utils/mailbox.js` | `buildMailboxPrefix` → `me` or `users/{mailbox}`; validates addresses and enforces the `OUTLOOK_SHARED_MAILBOX` opt-in |
 | `folder/resolve.js` | Path-aware folder resolver (ID, well-known alias, `Parent/Child` path, bare name), mailbox-aware |
 | `calendar/list.js` | `list-events` filter/order building (`startAfter`/`startBefore`/`subject`) |
+| `calendar/preview.js` | `dryRun` previews for `create-event` and `manage-event` cancel/decline/delete (attendees, external count) |
 | `email/mail-tips.js` | Pre-send recipient validation |
-| `utils/safety.js` | Rate limiter, allowlist, dry-run preview |
+| `utils/safety.js` | Rate limiter, allowlist, dry-run previews (`dryRunResult`) |
 | `utils/safe-write.js` | Shared exclusive-create, `outputDir`-confined file writer (attachments, export) |
 | `utils/field-presets.js` | Optimised field selections per operation |
 
@@ -97,7 +102,7 @@ OUTLOOK_CLIENT_SECRET=your-secret-VALUE    # Browser flow only; NOT the Secret I
 USE_TEST_MODE=false
 OUTLOOK_MAX_EMAILS_PER_SESSION=10          # Optional: default per-session cap for send-email, draft, manage-rules (per tool: OUTLOOK_MAX_<TOOL>_PER_SESSION)
 OUTLOOK_ALLOWED_RECIPIENTS=example.com     # Optional: restrict recipients
-OUTLOOK_READ_ONLY=true                     # Optional: refuse every non-read tool call (true|1|yes; unrecognised = on)
+OUTLOOK_READ_ONLY=true                     # Optional: refuse every non-read tool call (true|1|yes|on; unrecognised = on)
 OUTLOOK_IMMUTABLE_IDS=true                 # Optional: IDs persist through folder moves
 OUTLOOK_AUTH_METHOD=device-code            # Optional: default auth method (device-code|browser)
 OUTLOOK_AUTH_AUDIENCE=common               # Optional: common|consumers|organizations|<tenant-guid> (v3.8.0; fixes AADSTS9002331 for personal-only Azure apps)
@@ -126,8 +131,9 @@ OUTLOOK_DEBUG=true                         # Optional: detailed stderr logs (uti
 2. Export from module `index.js`
 3. Add the module's tools to `TOOLS` in `tools.js`
 4. Classify the tool and each action in `utils/risk-classes.js`, and spread `...toolMetadata(name, title)` into the definition (never hand-write hints)
-5. Add test in `test/[module]/`
-6. Keep the plugin in step: see [`.claude/rules/plugin-and-skill-maintenance.md`](.claude/rules/plugin-and-skill-maintenance.md) (risk class, skill reference, hook map)
+5. Description ≤ 1,024 characters, stating facts and boundaries without steering between tools (`test/tools-registry.test.js` enforces both)
+6. Add test in `test/[module]/`
+7. Keep the plugin in step: see [`.claude/rules/plugin-and-skill-maintenance.md`](.claude/rules/plugin-and-skill-maintenance.md) (risk class, skill reference, hook map)
 
 ## Common Issues
 
@@ -136,7 +142,7 @@ Common errors (auth, device code, search, timezones) and fixes live in [`docs/tr
 ## Testing
 
 ```bash
-npm test                    # Jest unit tests (71 suites / 1866 tests with the unreleased v3.14.0 work)
+npm test                    # Jest unit tests (87 suites / 2305 tests at v3.14.0-dev)
 npm run lint                # ESLint (0 errors expected)
 npm run format:check        # Prettier (CI runs this)
 node scripts/e2e-stdio.js <tool> '<argsJson>'  # Fresh stdio server: initialize + one tools/call
@@ -149,7 +155,7 @@ Mock data defined in `utils/mock-data.js`. Shared-mailbox suites switch the opt-
 
 - OData filters use proper URI encoding via `utils/odata-helpers.js`
 - Field presets in `utils/field-presets.js` optimise token usage
-- Response verbosity: `minimal`, `standard`, `full` (controls output detail)
+- Response verbosity: `minimal`, `standard`, `full` (controls output detail); a body at `full` is capped at 40,000 characters (`DEFAULT_LIMITS.maxFullBodyChars`), and the note points to `export` for the rest
 - Delta sync uses `@odata.deltaLink` for incremental updates
 - Batch API: `callGraphAPIBatch()` sends up to 20 requests via `$batch` endpoint
 - Immutable IDs: opt-in via `OUTLOOK_IMMUTABLE_IDS=true` — IDs persist through folder moves

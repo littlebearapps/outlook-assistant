@@ -8,6 +8,8 @@ For shipped work, see [`CHANGELOG.md`](CHANGELOG.md).
 
 This release gates the Claude directory and Cursor Marketplace submissions. The awesome-copilot listing (github/awesome-copilot#4455) will be moved to this tag. It has three layers: the server enforces, client hooks prompt, and the skill teaches. Every change must work across Claude Code and Desktop, GitHub Copilot (VS Code and CLI), Cursor, Codex/ChatGPT, Gemini CLI and local models.
 
+**Status:** the server-safety and protocol items are built and in review, unreleased: #270, #275–#277 and #281 (PR #294), then #271–#274 and #278–#280. The plugin items (#282–#284) come next.
+
 **Server safety**
 - **#270** A risk-class map (`read` / `reversible` / `outward` / `destructive` / `persistent`) that annotations, hooks, the skill and read-only mode are all derived from. New tools must be classified on purpose.
 - **#271** MCP server `instructions`; Claude Code `requiresUserInteraction` on `send-email` and `create-event`; an `OUTLOOK_READ_ONLY` mode.
@@ -37,7 +39,7 @@ This release gates the Claude directory and Cursor Marketplace submissions. The 
 - **#288** Input validation gaps (nested `oneOf`, formats, ranges, per-action required parameters).
 - **#289** Consistent parameter naming, with alias deprecation.
 - **#290** Supply-chain hardening (image digests, SBOM, OpenSSF Scorecard).
-- **#93** / **#243** Tool description audit: each description at most 1,024 characters (VS Code truncates there), and contradictions with actual behaviour fixed.
+- **#93** / **#243** Tool description audit: each description at most 1,024 characters (VS Code truncates there; a test enforces this since #279), and contradictions with actual behaviour fixed.
 
 ## v4.0.0 — MCP 2026-07-28 & server-side confirmation (breaking)
 

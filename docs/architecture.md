@@ -8,8 +8,8 @@ This document describes the module layout, file organisation, and historical too
 index.js              # Main entry - CLI flags (--version/--help), startup warnings, stdio transport
 tools.js              # Tool registry: combines all module tools into TOOLS
 server.js             # createServer(): SDK Server, tools capability, dispatcher
-request-handler.js    # MCP dispatcher: tools/list / tools/call, schema coercion; JSON-RPC errors vs isError results
-config.js             # Centralised config (API endpoint, scopes, OUTLOOK_SHARED_MAILBOX mode, defaults, timezone)
+request-handler.js    # MCP dispatcher: tools/list / tools/call (flow below); JSON-RPC errors vs isError results
+config.js             # Centralised config (API endpoint, scopes, OUTLOOK_SHARED_MAILBOX mode, OUTLOOK_READ_ONLY, defaults, timezone)
 outlook-auth-server.js # OAuth server for the browser flow (port 3333)
 
 auth/                 # 1 tool: auth (action: status|authenticate|device-code-complete|about)
@@ -33,6 +33,7 @@ email/                # 8 tools: search-emails, read-email, send-email, draft, u
 
 calendar/             # 3 tools: list-events, create-event, manage-event
   ├── attendees.js        # Shared attendee builder: email strings or {email, type}; update keeps existing types
+  ├── preview.js          # dryRun previews for create-event and cancel/decline/delete: who would be emailed, external count
   └── list.js             # list-events: startAfter/startBefore/subject filters, UTC + local times
 folder/               # 1 tool: folders (action: list|create|move|stats|delete)
   └── resolve.js          # Path-aware, mailbox-aware folder resolver (ID, alias, Parent/Child path, name)
@@ -52,14 +53,24 @@ utils/
   ├── schema-coerce.js    # MCP-boundary param coercion and validation
   ├── odata-helpers.js    # OData filter building and escaping
   ├── datetime.js         # ISO 8601 parsing, Graph dateTimeTimeZone envelopes, IANA-zone conversion (no server-local time)
-  ├── risk-classes.js     # Risk class per tool/action (read/reversible/outward/destructive/persistent); derives annotations
+  ├── risk-classes.js     # Risk class per tool/action (read/reversible/outward/destructive/persistent); derives annotations, defaultAction, requiresUserInteraction _meta
+  ├── read-only.js        # OUTLOOK_READ_ONLY gate: refuses any call not classed read (auth sign-in exempt)
+  ├── server-instructions.js # initialize `instructions`: hard rules first, read-only note
+  ├── logger.js           # Stderr logger: one line per tool call, OUTLOOK_DEBUG detail, redact()
   ├── tool-error.js       # toolError()/authRequiredError(): every handler error returns isError
-  ├── safety.js           # Rate limiting, recipient allowlist, dry-run preview
+  ├── safety.js           # Rate limiting, recipient allowlist, dry-run previews (dryRunResult)
   ├── safe-write.js       # Exclusive, outputDir-confined file writes with -1, -2, … collision suffixes
   ├── field-presets.js    # Field selections for token efficiency
   ├── response-formatter.js # Verbosity levels (minimal/standard/full)
   └── mock-data.js        # Test-mode data
 ```
+
+## Request Flow
+
+`server.js` creates the SDK `Server` with `instructions` from `utils/server-instructions.js`; the SDK answers `initialize` and `ping` itself. Everything else goes to `request-handler.js`:
+
+- **`tools/list`**: each tool's public fields, plus `_meta` from `riskMeta()` (`anthropic/requiresUserInteraction` on `send-email` and `create-event`).
+- **`tools/call`**: look up the tool (unknown → JSON-RPC -32602) → coerce and validate arguments against `inputSchema` (`utils/schema-coerce.js`; failure → `isError`) → read-only gate when `OUTLOOK_READ_ONLY` is on (`utils/read-only.js`; refusal → `isError`, handler never runs) → handler → one stderr line (`tool`, `action` if in the enum, `outcome` = ok/isError/thrown/unknown-tool, `ms`, plus notes such as a Graph status). A throwing handler becomes an `isError` result.
 
 ## Tool Consolidation Map (v1 → v3)
 
@@ -84,7 +95,7 @@ The server consolidated 55 original tools into 22 action-based tools to save ~11
 
 ## History
 
-- **v3.14.0 (unreleased)**: `utils/risk-classes.js` drives every tool's annotations and top-level `title`; the tool list moves to `tools.js` and server construction to `server.js`; protocol errors are real JSON-RPC errors; handler errors go through `utils/tool-error.js`.
+- **v3.14.0 (unreleased)**: `utils/risk-classes.js` drives every tool's annotations and top-level `title`; the tool list moves to `tools.js` and server construction to `server.js`; protocol errors are real JSON-RPC errors; handler errors go through `utils/tool-error.js`. Then server `instructions` (`utils/server-instructions.js`), the `OUTLOOK_READ_ONLY` gate (`utils/read-only.js`), the stderr logger (`utils/logger.js`) and calendar `dryRun` previews (`calendar/preview.js`).
 - **v3.13.0**: `plugins/outlook-assistant/` plugin bundle (Claude Code manifest + Agent Plugins 1.0 `plugin.json`/`mcp.json`), kept in version step by `scripts/sync-version.js`; `auth/client-config.js` resolves the client ID (env → saved `~/.outlook-assistant-config.json`) lazily for config, token storage and the auth tool.
 - **v3.12.1**: `utils/graph-api.js` gains throttling retries, a per-attempt inactivity timeout and a 4-request concurrency gate; file writes consolidated in `utils/safe-write.js`; shared attendee builder `calendar/attendees.js`; `manage-rules` folder targets resolved via `folder/resolve.js`; unused `calendar/accept.js` removed.
 - **v3.12.0**: Opt-in shared-mailbox scoping (`sharedMailbox`, `OUTLOOK_SHARED_MAILBOX`) threaded through readers, organise actions and folder resolution via `utils/mailbox.js`; `list-events` filters.

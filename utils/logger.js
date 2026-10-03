@@ -48,9 +48,10 @@ const SECRET_KEY_RE = new RegExp(
 const QUERY_CODE_RE = /([?&]code=)[^&\s"']+/gi;
 const BEARER_RE = /\bBearer\s+[^\s"',]+/gi;
 const JWT_RE = /\beyJ[\w-]{5,}\.[\w-]{5,}\.[\w-]*/g;
-// Local part deliberately excludes `/` so `users/<addr>/…` keeps its path.
+// Local part deliberately excludes `/` and quotes, so `users/<addr>/…` keeps
+// its path and a quoted address keeps its quotes.
 const EMAIL_RE =
-  /[A-Za-z0-9.!#$%&'*+=?^_`{|}~-]+(?:@|%40)[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
+  /[A-Za-z0-9.!#$%&*+=?^_{|}~-]+(?:@|%40)[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
 // Graph IDs, GUIDs, trace IDs, hashes: 32+ URL-safe chars mixing letters and
 // digits. Plain kebab-case words have no digits, so they are left alone.
 const OPAQUE_RE = /[A-Za-z0-9=_-]{32,}/g;

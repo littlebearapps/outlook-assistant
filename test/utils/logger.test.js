@@ -27,6 +27,12 @@ describe('redact', () => {
     );
   });
 
+  test('keeps the quotes around a quoted address', () => {
+    expect(redact("address eq 'jane@example.com'")).toBe(
+      "address eq '<redacted-email>'"
+    );
+  });
+
   test('masks Message-IDs (they contain an @)', () => {
     const out = redact('Message-ID: <CAF=abc123XYZ@mail.gmail.com>');
     expect(out).not.toMatch(/mail\.gmail\.com|abc123XYZ/);

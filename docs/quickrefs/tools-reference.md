@@ -19,7 +19,7 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 |------|-------------|--------|----------------|
 | `search-emails` | Search, list, delta sync, conversations | read-only | `query`, `from`, `to`, `folder` (name or nested path), `searchAllFolders`, `searchExpression`, `deltaMode`, `conversationId`, `groupByConversation`, `internetMessageId`, `sharedMailbox` (alias `email`), `maxResults` (delta page size) |
 | `read-email` | Read content or forensic headers | read-only | `id`, `headersMode`, `groupByType`, `importantOnly`, `sharedMailbox` (alias `email`) |
-| `send-email` | Send email with safety controls | **destructive** | `to`, `subject`, `body`, `dryRun`, `checkRecipients`, `cc`, `bcc`, `importance` |
+| `send-email` | Send email with safety controls | **destructive** | `to`, `subject`, `body`, `dryRun`, `checkRecipients`, `acknowledgeWarnings`, `cc`, `bcc`, `importance` |
 | `draft` | Create, update, send, delete, reply, forward drafts | **destructive** | `action` (required), `id`, `to`, `subject`, `body`, `comment`, `dryRun`, `checkRecipients` |
 | `get-mail-tips` | Pre-send recipient validation | read-only | `recipients`, `tipTypes` |
 | `update-email` | Mark read/unread, flag/unflag/complete | idempotent | `action` (required), `id`, `ids`, `dueDateTime`, `startDateTime`, `sharedMailbox` (alias `email`) |
@@ -162,7 +162,8 @@ All four hints are set explicitly on every tool, and derived from the risk-class
 
 | Control | Config | Default |
 |---------|--------|---------|
-| Pre-send mail tips | `checkRecipients: true` param | Disabled |
+| Pre-send mail tips | `checkRecipients: true` param. Out-of-office, mailbox full, delivery restricted or external recipients refuse the send | Disabled |
+| Send despite mail-tip warnings | `acknowledgeWarnings: true` param (with `checkRecipients`) | `false` |
 | Dry-run preview | `dryRun: true` param | Disabled |
 | Session rate limit | `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION` (shared with `draft action=send`) | Unlimited (0) |
 | Recipient allowlist | `OUTLOOK_ALLOWED_RECIPIENTS` env | Allow all |

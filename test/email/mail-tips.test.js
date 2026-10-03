@@ -279,3 +279,129 @@ describe('mail-tips', () => {
     });
   });
 });
+
+// Graph's mailTips resource uses `mailboxFull`, `deliveryRestricted` and
+// `isModerated`. send-email's refusal (#272) relies on these being flagged,
+// so the formatter must recognise the real field names, and report each
+// issue as structured data rather than only as text.
+describe('mail-tips issues (#272)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    ensureAuthenticated.mockResolvedValue('test_token');
+  });
+
+  it('flags the Graph field names for full mailbox, restriction and moderation', () => {
+    const { formatted, warningCount, issues } = formatMailTips([
+      { emailAddress: { address: 'full@example.com' }, mailboxFull: true },
+      {
+        emailAddress: { address: 'locked@example.com' },
+        deliveryRestricted: true,
+      },
+      { emailAddress: { address: 'mod@example.com' }, isModerated: true },
+    ]);
+
+    expect(warningCount).toBe(3);
+    expect(formatted).toContain('Mailbox Full');
+    expect(formatted).toContain('Delivery Restricted');
+    expect(formatted).toContain('Moderated');
+    expect(issues).toEqual([
+      { address: 'full@example.com', type: 'mailboxFull' },
+      { address: 'locked@example.com', type: 'deliveryRestricted' },
+      { address: 'mod@example.com', type: 'moderated' },
+    ]);
+  });
+
+  it('does not flag false or notModerated values', () => {
+    const { warningCount, issues } = formatMailTips([
+      {
+        emailAddress: { address: 'ok@example.com' },
+        mailboxFull: false,
+        deliveryRestricted: false,
+        isModerated: false,
+        moderationStatus: 'notModerated',
+        recipientScope: 'internal',
+        automaticReplies: { message: '' },
+      },
+    ]);
+
+    expect(warningCount).toBe(0);
+    expect(issues).toEqual([]);
+  });
+
+  it('reports out-of-office, custom tips and every external scope as issues', () => {
+    const { issues } = formatMailTips([
+      {
+        emailAddress: { address: 'ooo@example.com' },
+        automaticReplies: { message: 'Away' },
+      },
+      {
+        emailAddress: { address: 'tip@example.com' },
+        customMailTip: 'Monitored',
+      },
+      { emailAddress: { address: 'a@other.com' }, recipientScope: 'external' },
+      {
+        emailAddress: { address: 'b@partner.com' },
+        recipientScope: 'externalPartner',
+      },
+      {
+        emailAddress: { address: 'c@other.com' },
+        recipientScope: 'externalNonPartner',
+      },
+    ]);
+
+    expect(issues).toEqual([
+      { address: 'ooo@example.com', type: 'outOfOffice' },
+      { address: 'tip@example.com', type: 'customTip' },
+      { address: 'a@other.com', type: 'external' },
+      { address: 'b@partner.com', type: 'external' },
+      { address: 'c@other.com', type: 'external' },
+    ]);
+  });
+
+  it('reports a group with external members as an external issue', () => {
+    const { issues, formatted } = formatMailTips([
+      {
+        emailAddress: { address: 'team@example.com' },
+        totalMemberCount: 20,
+        externalMemberCount: 3,
+      },
+    ]);
+
+    expect(issues).toEqual([
+      { address: 'team@example.com', type: 'externalMembers' },
+    ]);
+    expect(formatted).toContain('3 external');
+  });
+
+  it('returns the issues in _meta from handleGetMailTips', async () => {
+    callGraphAPI.mockResolvedValue({
+      value: [
+        { emailAddress: { address: 'full@example.com' }, mailboxFull: true },
+      ],
+    });
+
+    const result = await handleGetMailTips({
+      recipients: ['full@example.com'],
+    });
+
+    expect(result._meta.issues).toEqual([
+      { address: 'full@example.com', type: 'mailboxFull' },
+    ]);
+  });
+
+  it('returns an empty issues list when Graph returns no tips', async () => {
+    callGraphAPI.mockResolvedValue({ value: [] });
+
+    const result = await handleGetMailTips({
+      recipients: ['someone@outlook.com'],
+    });
+
+    expect(result._meta).toEqual(
+      expect.objectContaining({
+        recipientCount: 0,
+        warningCount: 0,
+        issues: [],
+      })
+    );
+  });
+});

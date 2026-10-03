@@ -259,7 +259,7 @@ const emailTools = [
   {
     name: 'send-email',
     description:
-      'Compose and send an email immediately (destructive: sends external comms). Returns a confirmation with the saved-message id. Safety controls: `dryRun: true` returns the composed message for review without sending; `checkRecipients: true` runs `get-mail-tips` first to flag out-of-office / mailbox-full / delivery-restricted / external recipients; combine both for a full pre-send review. Subject to session rate limits (`OUTLOOK_MAX_EMAILS_PER_SESSION` env) and recipient allowlist (`OUTLOOK_ALLOWED_RECIPIENTS` env) when configured — calls outside the allowlist fail before any Graph request. For multi-step compose/review workflows prefer `draft` (action=`create` → `update` → `send`) since drafts can be inspected in Outlook before sending. Comma-separated recipient strings or arrays both accepted.',
+      'Compose and send an email immediately (destructive: sends external comms). Returns a confirmation. Safety controls: `dryRun: true` returns the composed message for review without sending; `checkRecipients: true` runs `get-mail-tips` first and returns its warnings. If the tips show an out-of-office reply, a full mailbox, a delivery restriction or external recipients, the send is refused until repeated with `acknowledgeWarnings: true`. Personal Outlook.com accounts return no tips, and no warnings is not proof of delivery. Subject to session rate limits (`OUTLOOK_MAX_EMAILS_PER_SESSION` env) and recipient allowlist (`OUTLOOK_ALLOWED_RECIPIENTS` env) when configured — calls outside the allowlist fail before any Graph request. For multi-step compose/review workflows prefer `draft` (action=`create` → `update` → `send`) since drafts can be inspected in Outlook before sending. Comma-separated recipient strings or arrays both accepted.',
     ...toolMetadata('send-email', 'Send Email'),
     inputSchema: {
       type: 'object',
@@ -301,7 +301,13 @@ const emailTools = [
         checkRecipients: {
           type: 'boolean',
           description:
-            'Check recipients for out-of-office, mailbox full, delivery restrictions before sending (default: false). Combine with dryRun=true for pre-send review.',
+            'Check recipients with mail tips before sending (default: false). Out-of-office, mailbox full, delivery restrictions or external recipients refuse the send unless acknowledgeWarnings=true. Combine with dryRun=true for pre-send review.',
+        },
+        acknowledgeWarnings: {
+          type: 'boolean',
+          default: false,
+          description:
+            'Send even though checkRecipients flagged an out-of-office reply, a full mailbox, a delivery restriction or external recipients (default: false). Without it those warnings refuse the send. Pass only after the user has seen the warnings. No effect without checkRecipients.',
         },
       },
       additionalProperties: false,

@@ -4,6 +4,7 @@ const {
   handleMoveEmails,
   handleGetFolderStats,
   handleDeleteFolder,
+  folderTools,
 } = require('../../folder');
 const { callGraphAPI } = require('../../utils/graph-api');
 const { ensureAuthenticated } = require('../../auth');
@@ -583,5 +584,135 @@ describe('handleDeleteFolder', () => {
     const result = await handleDeleteFolder({ folderName: 'Ghost' });
 
     expect(result.content[0].text).toContain('not found');
+  });
+});
+
+// #274: folders delete dryRun counts what would be lost (items and
+// subfolders, all the way down) and deletes nothing.
+describe('handleDeleteFolder dryRun', () => {
+  const OLD = {
+    id: 'old-id',
+    displayName: 'Old',
+    path: 'Archive/Old',
+    wellKnownName: null,
+    parentId: 'archive-id',
+  };
+
+  const writeCalls = () =>
+    callGraphAPI.mock.calls.filter(([, method]) => method !== 'GET');
+
+  const folder = (id, totalItemCount, childFolderCount = 0, unread = 0) => ({
+    id,
+    displayName: id,
+    totalItemCount,
+    unreadItemCount: unread,
+    childFolderCount,
+  });
+
+  beforeEach(() => {
+    resolveFolder.mockResolvedValue(OLD);
+  });
+
+  it('names the folder and counts items and subfolders that would be lost', async () => {
+    callGraphAPI.mockResolvedValue(folder('old-id', 42, 2, 5));
+    const children = {
+      'old-id': [folder('c1', 10, 1), folder('c2', 7)],
+      c1: [folder('g1', 3)],
+    };
+    listChildFolders.mockImplementation((_token, parentId) =>
+      Promise.resolve(children[parentId] || [])
+    );
+
+    const result = await handleDeleteFolder({
+      folderName: 'Archive/Old',
+      dryRun: true,
+    });
+
+    expect(writeCalls()).toEqual([]);
+    expect(callGraphAPI).toHaveBeenCalledWith(
+      mockAccessToken,
+      'GET',
+      'me/mailFolders/old-id',
+      null,
+      expect.objectContaining({
+        $select: expect.stringContaining('totalItemCount'),
+      })
+    );
+    const text = result.content[0].text;
+    expect(text).toMatch(/^DRY RUN — nothing was changed\./);
+    expect(text).toContain(
+      "Deletes folder 'Archive/Old' and everything in it: 42 items (5 unread), plus 3 subfolders holding 20 more items."
+    );
+    expect(text).toContain("doesn't go to Deleted Items");
+    expect(result._meta).toMatchObject({
+      dryRun: true,
+      folderId: 'old-id',
+      items: 42,
+      subfolders: 3,
+      subfolderItems: 20,
+    });
+  });
+
+  it('says when the folder is empty', async () => {
+    callGraphAPI.mockResolvedValue(folder('old-id', 0, 0));
+
+    const result = await handleDeleteFolder({
+      folderId: 'old-id',
+      dryRun: true,
+    });
+
+    expect(listChildFolders).not.toHaveBeenCalled();
+    expect(result.content[0].text).toContain(
+      "Deletes folder 'Archive/Old'. It's empty: no items or subfolders."
+    );
+  });
+
+  it('reports "at least" when the subfolder walk hits its cap', async () => {
+    callGraphAPI.mockResolvedValue(folder('old-id', 1, 150));
+    listChildFolders.mockImplementation((_token, parentId) =>
+      Promise.resolve(
+        parentId === 'old-id'
+          ? Array.from({ length: 150 }, (_, i) => folder(`c${i}`, 1, 1))
+          : [folder(`${parentId}-child`, 1)]
+      )
+    );
+
+    const result = await handleDeleteFolder({
+      folderId: 'old-id',
+      dryRun: true,
+    });
+
+    expect(writeCalls()).toEqual([]);
+    expect(result.content[0].text).toMatch(/plus at least \d+ subfolders/);
+    expect(result._meta.partial).toBe(true);
+  });
+
+  it('still refuses a protected folder on a dry run', async () => {
+    const result = await handleDeleteFolder({
+      folderName: 'Inbox',
+      dryRun: true,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(callGraphAPI).not.toHaveBeenCalled();
+  });
+
+  it('without dryRun still deletes', async () => {
+    callGraphAPI.mockResolvedValue({});
+
+    await handleDeleteFolder({ folderName: 'Archive/Old' });
+
+    expect(writeCalls()).toEqual([
+      [mockAccessToken, 'DELETE', 'me/mailFolders/old-id'],
+    ]);
+  });
+
+  it('schema exposes a boolean dryRun and the description fits 1,024 characters', () => {
+    const tool = folderTools.find((t) => t.name === 'folders');
+    expect(tool.inputSchema.properties.dryRun.type).toBe('boolean');
+    expect(tool.inputSchema.properties.dryRun.description).toMatch(
+      /^Preview only/
+    );
+    expect(tool.description.length).toBeLessThanOrEqual(1024);
   });
 });

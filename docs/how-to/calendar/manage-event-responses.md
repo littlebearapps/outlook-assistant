@@ -94,6 +94,28 @@ Delete removes the event from your calendar. It isn't always silent: if you orga
 
 Microsoft Graph doesn't document a guaranteed recovery path for a deleted event, so don't count on getting it back.
 
+## Preview Before You Decline, Cancel or Delete
+
+Add `dryRun: true` to any action to see what it would do without changing or sending anything:
+
+```
+tool: manage-event
+params:
+  action: "cancel"
+  eventId: "AAMkAGR..."
+  comment: "Rescheduling to later this week."
+  dryRun: true
+```
+
+The preview reads the event (nothing is written) and starts with `DRY RUN — nothing was changed.` It says exactly who would be emailed:
+
+- **cancel**: "Cancels 'Team sync' on 3 Apr 2026, 9:00 am GMT+11:00 and emails a cancellation to 6 attendees (2 external)", followed by your message and the attendee list
+- **decline**: the organiser who would get your response (and whether they're external), or that nobody is told when `sendResponse: false`
+- **delete**: whether attendees get a cancellation (only for a meeting you organised that has attendees and isn't already cancelled), or that nobody is emailed
+- **update**: the PATCH body that would be sent
+
+"External" means an address whose domain differs from your own signed-in address. The preview also warns when Graph would refuse the action, for example cancelling a meeting you didn't organise.
+
 ## Update vs Decline vs Cancel vs Delete
 
 | Action | Who can do it | Notifies others? | Use when |
@@ -112,9 +134,9 @@ Microsoft Graph doesn't document a guaranteed recovery path for a deleted event,
 | `comment` | Message sent with decline/cancel | No (decline/cancel only) |
 | `sendResponse` | `false` declines without notifying the organiser (default `true`) | No (decline only) |
 | `subject`, `start`, `end`, `attendees`, `body`, `location`, `isOnlineMeeting`, `sensitivity`, `showAs`, `importance`, `categories`, `reminderMinutesBeforeStart` | Event fields to change | No (update only — pass only what changes) |
-| `dryRun` | Preview update without applying | No (update only) |
+| `dryRun` | Preview any action without changing or sending anything: who would be emailed (decline/cancel/delete) or the PATCH body (update) | No |
 
-> **Note**: `manage-event` is marked as destructive at the tool level (because `decline`, `cancel`, and `delete` are destructive, and changes can notify attendees). Clients that honour MCP annotations ask for confirmation before any action — including `update`. Use `dryRun: true` on `update` to preview the change first.
+> **Note**: `manage-event` is marked as destructive at the tool level (because `decline`, `cancel`, and `delete` are destructive, and changes can notify attendees). Clients that honour MCP annotations ask for confirmation before any action — including `update`. Use `dryRun: true` to preview any action first.
 
 ## Tips
 

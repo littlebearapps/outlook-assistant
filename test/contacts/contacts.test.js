@@ -6,6 +6,7 @@ const {
   handleUpdateContact,
   handleDeleteContact,
   handleSearchPeople,
+  contactsTools,
 } = require('../../contacts');
 const { callGraphAPI } = require('../../utils/graph-api');
 const { ensureAuthenticated } = require('../../auth');
@@ -476,5 +477,68 @@ describe('handleSearchPeople', () => {
       const [, , , , params] = callGraphAPI.mock.calls[0];
       expect(params.$search).toBe('"jane"');
     });
+  });
+});
+
+// #274: manage-contact delete dryRun names the contact and deletes nothing.
+describe('handleDeleteContact dryRun', () => {
+  const writeCalls = () =>
+    callGraphAPI.mock.calls.filter(([, method]) => method !== 'GET');
+
+  it('names the contact that would be deleted, without deleting it', async () => {
+    callGraphAPI.mockResolvedValue(mockContact);
+
+    const result = await handleDeleteContact({ id: 'contact-1', dryRun: true });
+
+    expect(writeCalls()).toEqual([]);
+    expect(callGraphAPI).toHaveBeenCalledWith(
+      mockAccessToken,
+      'GET',
+      'me/contacts/contact-1',
+      null,
+      expect.objectContaining({
+        $select: expect.stringContaining('displayName'),
+      })
+    );
+    const text = result.content[0].text;
+    expect(text).toMatch(/^DRY RUN — nothing was changed\./);
+    expect(text).toContain(
+      "Deletes contact 'John Smith' (john@example.com; Acme Corp)."
+    );
+    expect(text).toContain("doesn't go to Deleted Items");
+    expect(result._meta).toMatchObject({
+      dryRun: true,
+      contactId: 'contact-1',
+    });
+  });
+
+  it('a failed read is a visible error and still deletes nothing', async () => {
+    callGraphAPI.mockRejectedValue(
+      new Error('API call failed with status 404: not found')
+    );
+
+    const result = await handleDeleteContact({ id: 'missing', dryRun: true });
+
+    expect(result.isError).toBe(true);
+    expect(writeCalls()).toEqual([]);
+  });
+
+  it('the tool passes dryRun through and describes it', async () => {
+    callGraphAPI.mockResolvedValue({ displayName: 'No Email' });
+    const tool = contactsTools.find((t) => t.name === 'manage-contact');
+    expect(tool.inputSchema.properties.dryRun.type).toBe('boolean');
+    expect(tool.inputSchema.properties.dryRun.description).toMatch(
+      /^Preview only/
+    );
+    expect(tool.description).not.toMatch(/permanently removes/);
+
+    const result = await tool.handler({
+      action: 'delete',
+      id: 'contact-2',
+      dryRun: true,
+    });
+
+    expect(writeCalls()).toEqual([]);
+    expect(result.content[0].text).toContain("Deletes contact 'No Email'.");
   });
 });

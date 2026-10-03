@@ -32,6 +32,7 @@ const { ensureAuthenticated } = require('../auth');
 const { DEFAULT_TIMEZONE } = require('../config');
 const { normaliseAttendees, buildAttendees } = require('./attendees');
 const { toolError, authRequiredError } = require('../utils/tool-error');
+const { dryRunResult } = require('../utils/safety');
 
 const SENSITIVITY_VALUES = new Set([
   'normal',
@@ -197,28 +198,18 @@ async function handleUpdateEvent(args) {
 
     // dryRun: show the caller what would be sent without changing anything.
     if (dryRun) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: [
-              `**Dry run** — would PATCH \`me/events/${eventId}\` with:`,
-              '',
-              '```json',
-              JSON.stringify(patch, null, 2),
-              '```',
-              '',
-              `Fields that would change: ${Object.keys(patch).join(', ')}`,
-            ].join('\n'),
-          },
+      return dryRunResult(
+        [
+          `Would PATCH \`me/events/${eventId}\` with:`,
+          '',
+          '```json',
+          JSON.stringify(patch, null, 2),
+          '```',
+          '',
+          `Fields that would change: ${Object.keys(patch).join(', ')}`,
         ],
-        _meta: {
-          eventId,
-          dryRun: true,
-          patch,
-          fieldsChanged: Object.keys(patch),
-        },
-      };
+        { eventId, patch, fieldsChanged: Object.keys(patch) }
+      );
     }
 
     accessToken = accessToken || (await ensureAuthenticated());

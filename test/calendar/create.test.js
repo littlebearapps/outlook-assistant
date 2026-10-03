@@ -217,4 +217,48 @@ describe('handleCreateEvent', () => {
       'Error creating event: Graph API Error'
     );
   });
+  // #280: Graph deduplicates event POSTs that share a transactionId, so a
+  // retried create can't book (and invite people to) the meeting twice.
+  describe('transactionId (#280)', () => {
+    const UUID =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+    const args = {
+      subject: 'Test Event',
+      start: '2024-03-10T10:00:00',
+      end: '2024-03-10T11:00:00',
+    };
+
+    test('sends a UUID transactionId with the POST', async () => {
+      ensureAuthenticated.mockResolvedValue('dummy_access_token');
+      callGraphAPI.mockResolvedValue({ id: 'test_event_id' });
+
+      await handleCreateEvent(args);
+
+      const [, method, endpoint, body] = callGraphAPI.mock.calls[0];
+      expect(method).toBe('POST');
+      expect(endpoint).toBe('me/events');
+      expect(body.transactionId).toMatch(UUID);
+    });
+
+    test('uses a new transactionId for every call', async () => {
+      ensureAuthenticated.mockResolvedValue('dummy_access_token');
+      callGraphAPI.mockResolvedValue({ id: 'test_event_id' });
+
+      await handleCreateEvent(args);
+      await handleCreateEvent(args);
+
+      const ids = callGraphAPI.mock.calls.map(
+        ([, , , body]) => body.transactionId
+      );
+      expect(ids).toHaveLength(2);
+      expect(ids[0]).not.toBe(ids[1]);
+    });
+
+    test('a dry run makes no POST and carries no transactionId', async () => {
+      const result = await handleCreateEvent({ ...args, dryRun: true });
+
+      expect(callGraphAPI).not.toHaveBeenCalled();
+      expect(result._meta.event.transactionId).toBeUndefined();
+    });
+  });
 });

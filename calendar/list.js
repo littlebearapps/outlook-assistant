@@ -324,6 +324,7 @@ async function handleListEvents(args) {
 // and tests). Helpers are attached for unit testing without changing callers.
 handleListEvents.toUtcIso = toUtcIso;
 handleListEvents.formatLocal = formatLocal;
+handleListEvents.toUtcIso = toUtcIso;
 
 module.exports = handleListEvents;
 module.exports.buildListEventsFilter = buildListEventsFilter;

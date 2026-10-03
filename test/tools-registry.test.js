@@ -24,3 +24,28 @@ describe('tool registry', () => {
     }
   });
 });
+
+// #274: every action that emails people or deletes data has a dryRun
+// preview, described key fact first. Tools that gained one stay within the
+// 1,024-character description limit VS Code truncates at.
+describe.each([
+  'create-event',
+  'manage-event',
+  'mailbox-settings',
+  'folders',
+  'manage-contact',
+])('%s dryRun', (name) => {
+  const tool = TOOLS.find((t) => t.name === name);
+
+  test('is an optional boolean described as a preview', () => {
+    const { dryRun } = tool.inputSchema.properties;
+    expect(dryRun.type).toBe('boolean');
+    expect(dryRun.description).toMatch(/^Preview only/);
+    expect(tool.inputSchema.required || []).not.toContain('dryRun');
+  });
+
+  test('the tool description mentions dryRun and fits 1,024 characters', () => {
+    expect(tool.description).toMatch(/dryRun: true/);
+    expect(tool.description.length).toBeLessThanOrEqual(1024);
+  });
+});

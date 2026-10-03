@@ -263,7 +263,7 @@ describe('handleUpdateEvent', () => {
 
     expect(callGraphAPI).toHaveBeenCalledTimes(1);
     expect(callGraphAPI.mock.calls[0][1]).toBe('GET');
-    expect(result.content[0].text).toMatch(/Dry run/);
+    expect(result.content[0].text).toMatch(/^DRY RUN — nothing was changed\./);
     expect(result.content[0].text).toMatch(/"type": "optional"/);
     expect(result.content[0].text).toMatch(/"type": "resource"/);
     expect(result._meta.patch.attendees).toEqual([
@@ -527,7 +527,7 @@ describe('handleUpdateEvent', () => {
     });
 
     expect(callGraphAPI).not.toHaveBeenCalled();
-    expect(result.content[0].text).toMatch(/Dry run/);
+    expect(result.content[0].text).toMatch(/^DRY RUN — nothing was changed\./);
     expect(result.content[0].text).toMatch(/Preview/);
     expect(result.content[0].text).toMatch(/high/);
     expect(result._meta.dryRun).toBe(true);

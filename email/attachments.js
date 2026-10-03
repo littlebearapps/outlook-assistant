@@ -11,6 +11,7 @@ const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { buildMailboxPrefix } = require('../utils/mailbox');
 const { writeClaimedFile } = require('../utils/safe-write');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 const MAX_FILENAME_LENGTH = 200;
 
@@ -52,14 +53,7 @@ async function handleListAttachments(args) {
   const prefix = buildMailboxPrefix(args.sharedMailbox || args.email || null);
 
   if (!messageId) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Error: messageId is required',
-        },
-      ],
-    };
+    return toolError('Error: messageId is required');
   }
 
   try {
@@ -113,24 +107,10 @@ async function handleListAttachments(args) {
       error.message === 'Authentication required' ||
       error.message === 'UNAUTHORIZED'
     ) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'authenticate' tool first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error listing attachments: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error listing attachments: ${error.message}`);
   }
 }
 
@@ -152,14 +132,7 @@ async function handleDownloadAttachment(args) {
   const prefix = buildMailboxPrefix(args.sharedMailbox || args.email || null);
 
   if (!messageId || !attachmentId) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Error: Both messageId and attachmentId are required',
-        },
-      ],
-    };
+    return toolError('Error: Both messageId and attachmentId are required');
   }
 
   try {
@@ -178,14 +151,7 @@ async function handleDownloadAttachment(args) {
     );
 
     if (!metadata) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: 'Error: Attachment not found',
-          },
-        ],
-      };
+      return toolError('Error: Attachment not found');
     }
 
     const filename = metadata.name || 'attachment';
@@ -196,14 +162,7 @@ async function handleDownloadAttachment(args) {
       const contentBytes = metadata.contentBytes;
 
       if (!contentBytes) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: 'Error: No content found in attachment',
-            },
-          ],
-        };
+        return toolError('Error: No content found in attachment');
       }
 
       // Determine save location. F-19: default to os.tmpdir() instead
@@ -239,14 +198,9 @@ async function handleDownloadAttachment(args) {
       };
     } else if (metadata['@odata.type'] === '#microsoft.graph.itemAttachment') {
       // Item attachments (embedded emails, calendar items) need different handling
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `This is an embedded item attachment (${metadata.name}). Item attachments cannot be downloaded as files directly. They contain embedded Outlook items like emails or calendar events.`,
-          },
-        ],
-      };
+      return toolError(
+        `This is an embedded item attachment (${metadata.name}). Item attachments cannot be downloaded as files directly. They contain embedded Outlook items like emails or calendar events.`
+      );
     } else if (
       metadata['@odata.type'] === '#microsoft.graph.referenceAttachment'
     ) {
@@ -260,38 +214,17 @@ async function handleDownloadAttachment(args) {
         ],
       };
     } else {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Unknown attachment type: ${metadata['@odata.type']}`,
-          },
-        ],
-      };
+      return toolError(`Unknown attachment type: ${metadata['@odata.type']}`);
     }
   } catch (error) {
     if (
       error.message === 'Authentication required' ||
       error.message === 'UNAUTHORIZED'
     ) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'authenticate' tool first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error downloading attachment: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error downloading attachment: ${error.message}`);
   }
 }
 
@@ -307,14 +240,7 @@ async function handleGetAttachmentContent(args) {
   const prefix = buildMailboxPrefix(args.sharedMailbox || args.email || null);
 
   if (!messageId || !attachmentId) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Error: Both messageId and attachmentId are required',
-        },
-      ],
-    };
+    return toolError('Error: Both messageId and attachmentId are required');
   }
 
   try {
@@ -326,14 +252,7 @@ async function handleGetAttachmentContent(args) {
     const response = await callGraphAPI(accessToken, 'GET', endpoint, null, {});
 
     if (!response) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: 'Error: Attachment not found',
-          },
-        ],
-      };
+      return toolError('Error: Attachment not found');
     }
 
     const filename = response.name || 'attachment';
@@ -390,24 +309,10 @@ async function handleGetAttachmentContent(args) {
       error.message === 'Authentication required' ||
       error.message === 'UNAUTHORIZED'
     ) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'authenticate' tool first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error getting attachment content: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error getting attachment content: ${error.message}`);
   }
 }
 

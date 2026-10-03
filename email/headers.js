@@ -7,6 +7,7 @@
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { buildMailboxPrefix } = require('../utils/mailbox');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 /**
  * Important headers to highlight (in order of relevance)
@@ -164,14 +165,7 @@ async function handleGetEmailHeaders(args) {
   const prefix = buildMailboxPrefix(args.sharedMailbox || args.email || null);
 
   if (!emailId) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Email ID is required.',
-        },
-      ],
-    };
+    return toolError('Email ID is required.');
   }
 
   try {
@@ -206,14 +200,7 @@ async function handleGetEmailHeaders(args) {
       );
 
       if (!email) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Email with ID ${emailId} not found.`,
-            },
-          ],
-        };
+        return toolError(`Email with ID ${emailId} not found.`);
       }
 
       const headers = email.internetMessageHeaders || [];
@@ -299,45 +286,19 @@ async function handleGetEmailHeaders(args) {
       console.error(`Error getting email headers: ${error.message}`);
 
       if (error.message.includes("doesn't belong to the targeted mailbox")) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `The email ID seems invalid or doesn't belong to your mailbox.`,
-            },
-          ],
-        };
+        return toolError(
+          `The email ID seems invalid or doesn't belong to your mailbox.`
+        );
       }
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Failed to get email headers: ${error.message}`,
-          },
-        ],
-      };
+      return toolError(`Failed to get email headers: ${error.message}`);
     }
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'authenticate' tool first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error accessing email: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error accessing email: ${error.message}`);
   }
 }
 

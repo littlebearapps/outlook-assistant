@@ -12,6 +12,7 @@ const {
 } = require('../utils/response-formatter');
 const { getEmailFields } = require('../utils/field-presets');
 const { buildMailboxPrefix } = require('../utils/mailbox');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 /**
  * Get field preset based on verbosity and options
@@ -51,14 +52,7 @@ async function handleReadEmail(args) {
   const prefix = buildMailboxPrefix(args.sharedMailbox || args.email || null);
 
   if (!emailId) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Email ID is required.',
-        },
-      ],
-    };
+    return toolError('Email ID is required.');
   }
 
   try {
@@ -85,14 +79,7 @@ async function handleReadEmail(args) {
       );
 
       if (!email) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Email with ID ${emailId} not found.`,
-            },
-          ],
-        };
+        return toolError(`Email with ID ${emailId} not found.`);
       }
 
       // Format using shared formatter (returns Markdown)
@@ -120,45 +107,19 @@ async function handleReadEmail(args) {
 
       // Improved error handling with more specific messages
       if (error.message.includes("doesn't belong to the targeted mailbox")) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `The email ID seems invalid or doesn't belong to your mailbox. Please try with a different email ID.`,
-            },
-          ],
-        };
+        return toolError(
+          `The email ID seems invalid or doesn't belong to your mailbox. Please try with a different email ID.`
+        );
       } else {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Failed to read email: ${error.message}`,
-            },
-          ],
-        };
+        return toolError(`Failed to read email: ${error.message}`);
       }
     }
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'authenticate' tool first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error accessing email: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error accessing email: ${error.message}`);
   }
 }
 

@@ -6,6 +6,7 @@
  */
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 /**
  * All available mail tip types from Microsoft Graph API
@@ -136,14 +137,7 @@ async function handleGetMailTips(args) {
   const { recipients, tipTypes } = args;
 
   if (!recipients || recipients.length === 0) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'At least one recipient email address is required.',
-        },
-      ],
-    };
+    return toolError('At least one recipient email address is required.');
   }
 
   // Normalise recipients to a clean array of email strings
@@ -171,14 +165,7 @@ async function handleGetMailTips(args) {
   recipientList = recipientList.filter((e) => e.length > 0);
 
   if (recipientList.length === 0) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'At least one valid recipient email address is required.',
-        },
-      ],
-    };
+    return toolError('At least one valid recipient email address is required.');
   }
 
   try {
@@ -248,20 +235,9 @@ async function handleGetMailTips(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        { type: 'text', text: `Error getting mail tips: ${error.message}` },
-      ],
-    };
+    return toolError(`Error getting mail tips: ${error.message}`);
   }
 }
 

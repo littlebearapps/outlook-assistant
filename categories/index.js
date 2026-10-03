@@ -7,6 +7,7 @@ const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { buildMailboxPrefix } = require('../utils/mailbox');
 const { toolMetadata } = require('../utils/risk-classes');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 // Category color presets (Outlook uses these names)
 const CATEGORY_COLORS = [
@@ -138,23 +139,9 @@ async function handleListCategories(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error listing categories: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error listing categories: ${error.message}`);
   }
 }
 
@@ -165,30 +152,18 @@ async function handleCreateCategory(args) {
   const { displayName, color } = args;
 
   if (!displayName) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Category name (displayName) is required.',
-        },
-      ],
-    };
+    return toolError('Category name (displayName) is required.');
   }
 
   // Validate color if provided
   if (color && !CATEGORY_COLORS.includes(color)) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Invalid color. Valid options: ${CATEGORY_COLORS.join(', ')}\n\nColor names: ${Object.entries(
-            COLOR_NAMES
-          )
-            .map(([k, v]) => `${k}=${v}`)
-            .join(', ')}`,
-        },
-      ],
-    };
+    return toolError(
+      `Invalid color. Valid options: ${CATEGORY_COLORS.join(', ')}\n\nColor names: ${Object.entries(
+        COLOR_NAMES
+      )
+        .map(([k, v]) => `${k}=${v}`)
+        .join(', ')}`
+    );
   }
 
   try {
@@ -221,35 +196,14 @@ async function handleCreateCategory(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
     if (error.message.includes('already exists')) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `A category named "${displayName}" already exists.`,
-          },
-        ],
-      };
+      return toolError(`A category named "${displayName}" already exists.`);
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error creating category: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error creating category: ${error.message}`);
   }
 }
 
@@ -262,37 +216,20 @@ async function handleUpdateCategory(args) {
   const { displayName, color } = args;
 
   if (!id) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Category ID is required. Use manage-category with action=list to find category IDs.',
-        },
-      ],
-    };
+    return toolError(
+      'Category ID is required. Use manage-category with action=list to find category IDs.'
+    );
   }
 
   if (!displayName && !color) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'At least one of displayName or color must be provided.',
-        },
-      ],
-    };
+    return toolError('At least one of displayName or color must be provided.');
   }
 
   // Validate color if provided
   if (color && !CATEGORY_COLORS.includes(color)) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Invalid color. Valid options: ${CATEGORY_COLORS.join(', ')}`,
-        },
-      ],
-    };
+    return toolError(
+      `Invalid color. Valid options: ${CATEGORY_COLORS.join(', ')}`
+    );
   }
 
   try {
@@ -344,23 +281,9 @@ async function handleUpdateCategory(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error updating category: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error updating category: ${error.message}`);
   }
 }
 
@@ -372,14 +295,9 @@ async function handleDeleteCategory(args) {
   const id = args.id || args.categoryId;
 
   if (!id) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Category ID is required. Use manage-category with action=list to find category IDs.',
-        },
-      ],
-    };
+    return toolError(
+      'Category ID is required. Use manage-category with action=list to find category IDs.'
+    );
   }
 
   try {
@@ -401,35 +319,16 @@ async function handleDeleteCategory(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
     if (error.message.includes('not found') || error.message.includes('404')) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Category not found. Use manage-category with action=list to see available categories.`,
-          },
-        ],
-      };
+      return toolError(
+        `Category not found. Use manage-category with action=list to see available categories.`
+      );
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error deleting category: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error deleting category: ${error.message}`);
   }
 }
 
@@ -444,39 +343,22 @@ async function handleApplyCategory(args) {
   const ids = messageIds || (messageId ? [messageId] : []);
 
   if (ids.length === 0) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Message ID (messageId) or IDs (messageIds) required.',
-        },
-      ],
-    };
+    return toolError('Message ID (messageId) or IDs (messageIds) required.');
   }
 
   const applyAction = action || 'set'; // 'set', 'add', 'remove'
 
   if (!categories || !Array.isArray(categories)) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Categories array is required. Provide category display names.',
-        },
-      ],
-    };
+    return toolError(
+      'Categories array is required. Provide category display names.'
+    );
   }
 
   // Empty array is only valid for action=set (clears all categories)
   if (categories.length === 0 && applyAction !== 'set') {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Categories array cannot be empty for add/remove. Use action=set with an empty array to clear all categories.',
-        },
-      ],
-    };
+    return toolError(
+      'Categories array cannot be empty for add/remove. Use action=set with an empty array to clear all categories.'
+    );
   }
 
   try {
@@ -563,23 +445,9 @@ async function handleApplyCategory(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error applying categories: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error applying categories: ${error.message}`);
   }
 }
 
@@ -665,23 +533,9 @@ async function handleGetFocusedInboxOverrides(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error getting Focused Inbox overrides: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error getting Focused Inbox overrides: ${error.message}`);
   }
 }
 
@@ -694,26 +548,12 @@ async function handleSetFocusedInboxOverride(args) {
   const overrideAction = args.action;
 
   if (!emailAddress) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Email address is required.',
-        },
-      ],
-    };
+    return toolError('Email address is required.');
   }
 
   const classification = classifyAs || 'focused';
   if (!['focused', 'other'].includes(classification)) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: "classifyAs must be 'focused' or 'other'.",
-        },
-      ],
-    };
+    return toolError("classifyAs must be 'focused' or 'other'.");
   }
 
   try {
@@ -735,14 +575,7 @@ async function handleSetFocusedInboxOverride(args) {
     // Handle delete action
     if (overrideAction === 'delete') {
       if (!existing) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `No override found for ${emailAddress}.`,
-            },
-          ],
-        };
+        return toolError(`No override found for ${emailAddress}.`);
       }
 
       await callGraphAPI(
@@ -807,23 +640,9 @@ async function handleSetFocusedInboxOverride(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error setting Focused Inbox override: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error setting Focused Inbox override: ${error.message}`);
   }
 }
 
@@ -888,14 +707,9 @@ const categoriesTools = [
         case 'list':
           return handleListCategories(args);
         default:
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Unknown action '${action}'. Valid actions: list, create, update, delete.`,
-              },
-            ],
-          };
+          return toolError(
+            `Unknown action '${action}'. Valid actions: list, create, update, delete.`
+          );
       }
     },
   },
@@ -990,14 +804,9 @@ const categoriesTools = [
         case 'list':
           return handleGetFocusedInboxOverrides(args);
         default:
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Unknown action '${action}'. Valid actions: list, set, delete.`,
-              },
-            ],
-          };
+          return toolError(
+            `Unknown action '${action}'. Valid actions: list, set, delete.`
+          );
       }
     },
   },

@@ -7,6 +7,7 @@ const handleMoveEmails = require('./move');
 const handleGetFolderStats = require('./stats');
 const handleDeleteFolder = require('./delete');
 const { toolMetadata } = require('../utils/risk-classes');
+const { toolError } = require('../utils/tool-error');
 
 // Consolidated folder tool definition
 const folderTools = [
@@ -116,14 +117,9 @@ const folderTools = [
         case 'list':
           return handleListFolders(args);
         default:
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Unknown action '${action}'. Valid actions: list, create, move, stats, delete.`,
-              },
-            ],
-          };
+          return toolError(
+            `Unknown action '${action}'. Valid actions: list, create, move, stats, delete.`
+          );
       }
     },
   },

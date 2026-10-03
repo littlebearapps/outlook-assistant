@@ -9,6 +9,7 @@ const {
   buildODataFilter,
 } = require('../utils/odata-helpers');
 const { parseIsoInstant } = require('../utils/datetime');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 const MAX_SUBJECT_LENGTH = 255;
 
@@ -312,24 +313,10 @@ async function handleListEvents(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'authenticate' tool first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error listing events: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error listing events: ${error.message}`);
   }
 }
 

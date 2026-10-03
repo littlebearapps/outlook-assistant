@@ -10,6 +10,7 @@ const { formatEmailList, VERBOSITY } = require('../utils/response-formatter');
 const { getEmailFields } = require('../utils/field-presets');
 const { buildMailboxPrefix } = require('../utils/mailbox');
 const { resolveFolder, looksLikeFolderId } = require('../folder/resolve');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 /**
  * Extract the mailbox segment (`me` or `users/{address}`) from a delta/
@@ -116,16 +117,10 @@ async function handleListEmailsDelta(args) {
       // different mailbox rather than silently syncing the wrong one.
       const tokenMailbox = mailboxFromToken(deltaToken);
       if (tokenMailbox && mailboxesConflict(tokenMailbox, prefix)) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text:
-                `Delta token mailbox mismatch: the token belongs to \`${tokenMailbox}\` but this call targets \`${prefix}\`.\n\n` +
-                'A delta token is bound to the mailbox and folder it was issued for. Use the token from that same mailbox/folder, or omit `deltaToken` to start a fresh initial sync here.',
-            },
-          ],
-        };
+        return toolError(
+          `Delta token mailbox mismatch: the token belongs to \`${tokenMailbox}\` but this call targets \`${prefix}\`.\n\n` +
+            'A delta token is bound to the mailbox and folder it was issued for. Use the token from that same mailbox/folder, or omit `deltaToken` to start a fresh initial sync here.'
+        );
       }
       endpoint = deltaToken;
     } else {
@@ -295,14 +290,7 @@ async function handleListEmailsDelta(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'authenticate' tool first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
     // Handle expired delta token
@@ -310,24 +298,12 @@ async function handleListEmailsDelta(args) {
       error.message.includes('410') ||
       error.message.includes('resyncRequired')
     ) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `## Delta Token Expired\n\nThe provided delta token has expired. Please start a new initial sync by calling without a deltaToken.\n\n**Error:** ${error.message}`,
-          },
-        ],
-      };
+      return toolError(
+        `## Delta Token Expired\n\nThe provided delta token has expired. Please start a new initial sync by calling without a deltaToken.\n\n**Error:** ${error.message}`
+      );
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Delta sync failed: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Delta sync failed: ${error.message}`);
   }
 }
 

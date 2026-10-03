@@ -8,6 +8,7 @@ const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { checkRateLimit } = require('../utils/safety');
 const { toolMetadata } = require('../utils/risk-classes');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 /**
  * Delete rule handler
@@ -22,14 +23,7 @@ async function handleDeleteRule(args) {
   if (rateLimitError) return rateLimitError;
 
   if (!ruleName && !ruleId) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Either ruleName or ruleId is required.',
-        },
-      ],
-    };
+    return toolError('Either ruleName or ruleId is required.');
   }
 
   try {
@@ -43,14 +37,7 @@ async function handleDeleteRule(args) {
       const rules = await getInboxRules(accessToken);
       const rule = rules.find((r) => r.displayName === ruleName);
       if (!rule) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Rule with name "${ruleName}" not found.`,
-            },
-          ],
-        };
+        return toolError(`Rule with name "${ruleName}" not found.`);
       }
       resolvedId = rule.id;
       displayName = ruleName;
@@ -72,23 +59,9 @@ async function handleDeleteRule(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error deleting rule: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error deleting rule: ${error.message}`);
   }
 }
 
@@ -101,25 +74,15 @@ async function handleEditRuleSequence(args) {
   const { ruleName, sequence } = args;
 
   if (!ruleName) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Rule name is required. Please specify the exact name of an existing rule.',
-        },
-      ],
-    };
+    return toolError(
+      'Rule name is required. Please specify the exact name of an existing rule.'
+    );
   }
 
   if (!sequence || isNaN(sequence) || sequence < 1) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'A positive sequence number is required. Lower numbers run first (higher priority).',
-        },
-      ],
-    };
+    return toolError(
+      'A positive sequence number is required. Lower numbers run first (higher priority).'
+    );
   }
 
   try {
@@ -128,14 +91,7 @@ async function handleEditRuleSequence(args) {
 
     const rule = rules.find((r) => r.displayName === ruleName);
     if (!rule) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Rule with name "${ruleName}" not found.`,
-          },
-        ],
-      };
+      return toolError(`Rule with name "${ruleName}" not found.`);
     }
 
     await callGraphAPI(
@@ -155,24 +111,10 @@ async function handleEditRuleSequence(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error updating rule sequence: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error updating rule sequence: ${error.message}`);
   }
 }
 
@@ -400,14 +342,9 @@ const rulesTools = [
         case 'list':
           return handleListRules(args);
         default:
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Unknown action '${action}'. Valid actions: list, create, update, reorder, delete.`,
-              },
-            ],
-          };
+          return toolError(
+            `Unknown action '${action}'. Valid actions: list, create, update, reorder, delete.`
+          );
       }
     },
   },

@@ -28,6 +28,7 @@ const handleDraft = require('./draft');
 // Import flag handlers from advanced module
 const { handleSetMessageFlag, handleClearMessageFlag } = require('../advanced');
 const { toolMetadata } = require('../utils/risk-classes');
+const { toolError } = require('../utils/tool-error');
 
 // Consolidated email tool definitions (17 → 6)
 const emailTools = [
@@ -463,14 +464,9 @@ const emailTools = [
             sharedMailbox,
           });
         default:
-          return {
-            content: [
-              {
-                type: 'text',
-                text: "Invalid action. Use 'mark-read', 'mark-unread', 'flag', 'unflag', or 'complete'.",
-              },
-            ],
-          };
+          return toolError(
+            "Invalid action. Use 'mark-read', 'mark-unread', 'flag', 'unflag', or 'complete'."
+          );
       }
     },
   },
@@ -528,14 +524,9 @@ const emailTools = [
         case 'list':
           return handleListAttachments(args);
         default:
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Unknown action '${action}'. Valid actions: list, view, download.`,
-              },
-            ],
-          };
+          return toolError(
+            `Unknown action '${action}'. Valid actions: list, view, download.`
+          );
       }
     },
   },
@@ -650,14 +641,9 @@ const emailTools = [
         case 'message':
           return handleExportEmail(args);
         default:
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Unknown export target '${target}'. Valid targets: message, messages, conversation, mime.`,
-              },
-            ],
-          };
+          return toolError(
+            `Unknown export target '${target}'. Valid targets: message, messages, conversation, mime.`
+          );
       }
     },
   },

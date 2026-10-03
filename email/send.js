@@ -10,6 +10,7 @@ const {
   formatDryRunPreview,
 } = require('../utils/safety');
 const { handleGetMailTips } = require('./mail-tips');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 /**
  * Send email handler
@@ -31,36 +32,15 @@ async function handleSendEmail(args) {
 
   // Validate required parameters
   if (!to) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Recipient (to) is required.',
-        },
-      ],
-    };
+    return toolError('Recipient (to) is required.');
   }
 
   if (!subject) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Subject is required.',
-        },
-      ],
-    };
+    return toolError('Subject is required.');
   }
 
   if (!body) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Body content is required.',
-        },
-      ],
-    };
+    return toolError('Body content is required.');
   }
 
   try {
@@ -178,24 +158,10 @@ async function handleSendEmail(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error sending email: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error sending email: ${error.message}`);
   }
 }
 

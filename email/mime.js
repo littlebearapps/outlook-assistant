@@ -7,6 +7,7 @@
 const { callGraphAPIRaw } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { buildMailboxPrefix } = require('../utils/mailbox');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 /**
  * Parse MIME headers from raw content
@@ -98,14 +99,7 @@ async function handleGetMimeContent(args) {
   const prefix = buildMailboxPrefix(args.sharedMailbox || args.email || null);
 
   if (!emailId) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Email ID is required.',
-        },
-      ],
-    };
+    return toolError('Email ID is required.');
   }
 
   try {
@@ -117,14 +111,9 @@ async function handleGetMimeContent(args) {
       const mimeContent = await callGraphAPIRaw(accessToken, emailId, prefix);
 
       if (!mimeContent) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Failed to retrieve MIME content for email ${emailId}.`,
-            },
-          ],
-        };
+        return toolError(
+          `Failed to retrieve MIME content for email ${emailId}.`
+        );
       }
 
       const stats = getMimeStats(mimeContent);
@@ -174,6 +163,7 @@ async function handleGetMimeContent(args) {
             truncated: true,
             maxSizeExceeded: true,
           },
+          isError: true,
         };
       }
 
@@ -241,45 +231,19 @@ async function handleGetMimeContent(args) {
       console.error(`Error getting MIME content: ${error.message}`);
 
       if (error.message.includes("doesn't belong to the targeted mailbox")) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `The email ID seems invalid or doesn't belong to your mailbox.`,
-            },
-          ],
-        };
+        return toolError(
+          `The email ID seems invalid or doesn't belong to your mailbox.`
+        );
       }
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Failed to get MIME content: ${error.message}`,
-          },
-        ],
-      };
+      return toolError(`Failed to get MIME content: ${error.message}`);
     }
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'authenticate' tool first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error accessing email: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error accessing email: ${error.message}`);
   }
 }
 

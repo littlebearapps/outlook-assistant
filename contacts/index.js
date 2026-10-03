@@ -10,6 +10,7 @@ const {
 const { ensureAuthenticated } = require('../auth');
 const { quoteSearchPhrase } = require('../utils/odata-helpers');
 const { toolMetadata } = require('../utils/risk-classes');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 /**
  * Contact field presets for different use cases
@@ -196,20 +197,9 @@ async function handleListContacts(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        { type: 'text', text: `Error listing contacts: ${error.message}` },
-      ],
-    };
+    return toolError(`Error listing contacts: ${error.message}`);
   }
 }
 
@@ -222,7 +212,7 @@ async function handleSearchContacts(args) {
   const verbosity = args.outputVerbosity || 'standard';
 
   if (!query) {
-    return { content: [{ type: 'text', text: 'Search query is required.' }] };
+    return toolError('Search query is required.');
   }
 
   try {
@@ -296,20 +286,9 @@ async function handleSearchContacts(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        { type: 'text', text: `Error searching contacts: ${error.message}` },
-      ],
-    };
+    return toolError(`Error searching contacts: ${error.message}`);
   }
 }
 
@@ -320,7 +299,7 @@ async function handleGetContact(args) {
   const contactId = args.id;
 
   if (!contactId) {
-    return { content: [{ type: 'text', text: 'Contact ID is required.' }] };
+    return toolError('Contact ID is required.');
   }
 
   try {
@@ -347,20 +326,9 @@ async function handleGetContact(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        { type: 'text', text: `Error getting contact: ${error.message}` },
-      ],
-    };
+    return toolError(`Error getting contact: ${error.message}`);
   }
 }
 
@@ -388,14 +356,9 @@ async function handleCreateContact(args) {
     (Array.isArray(emails) && emails[0]);
 
   if (!resolvedDisplayName && !email && !(emails && emails.length > 0)) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'At least displayName, firstName/lastName, email, or emails is required.',
-        },
-      ],
-    };
+    return toolError(
+      'At least displayName, firstName/lastName, email, or emails is required.'
+    );
   }
 
   try {
@@ -454,20 +417,9 @@ async function handleCreateContact(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        { type: 'text', text: `Error creating contact: ${error.message}` },
-      ],
-    };
+    return toolError(`Error creating contact: ${error.message}`);
   }
 }
 
@@ -479,7 +431,7 @@ async function handleUpdateContact(args) {
     args;
 
   if (!id) {
-    return { content: [{ type: 'text', text: 'Contact ID is required.' }] };
+    return toolError('Contact ID is required.');
   }
 
   try {
@@ -522,20 +474,9 @@ async function handleUpdateContact(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        { type: 'text', text: `Error updating contact: ${error.message}` },
-      ],
-    };
+    return toolError(`Error updating contact: ${error.message}`);
   }
 }
 
@@ -546,7 +487,7 @@ async function handleDeleteContact(args) {
   const contactId = args.id;
 
   if (!contactId) {
-    return { content: [{ type: 'text', text: 'Contact ID is required.' }] };
+    return toolError('Contact ID is required.');
   }
 
   try {
@@ -566,20 +507,9 @@ async function handleDeleteContact(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        { type: 'text', text: `Error deleting contact: ${error.message}` },
-      ],
-    };
+    return toolError(`Error deleting contact: ${error.message}`);
   }
 }
 
@@ -591,7 +521,7 @@ async function handleSearchPeople(args) {
   const count = Math.min(args.count || 25, 50);
 
   if (!query) {
-    return { content: [{ type: 'text', text: 'Search query is required.' }] };
+    return toolError('Search query is required.');
   }
 
   try {
@@ -659,20 +589,9 @@ async function handleSearchPeople(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        { type: 'text', text: `Error searching people: ${error.message}` },
-      ],
-    };
+    return toolError(`Error searching people: ${error.message}`);
   }
 }
 
@@ -784,14 +703,9 @@ const contactsTools = [
         case 'list':
           return handleListContacts(args);
         default:
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Unknown action '${action}'. Valid actions: list, search, get, create, update, delete.`,
-              },
-            ],
-          };
+          return toolError(
+            `Unknown action '${action}'. Valid actions: list, search, get, create, update, delete.`
+          );
       }
     },
   },

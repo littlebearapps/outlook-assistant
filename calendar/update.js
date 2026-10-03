@@ -31,6 +31,7 @@ const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { DEFAULT_TIMEZONE } = require('../config');
 const { normaliseAttendees, buildAttendees } = require('./attendees');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 const SENSITIVITY_VALUES = new Set([
   'normal',
@@ -72,14 +73,7 @@ async function handleUpdateEvent(args) {
   } = args;
 
   if (!eventId) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Event ID is required to update an event.',
-        },
-      ],
-    };
+    return toolError('Event ID is required to update an event.');
   }
 
   // Build the patch body from only the fields the caller actually provided.
@@ -136,42 +130,27 @@ async function handleUpdateEvent(args) {
 
   if (sensitivity !== undefined) {
     if (!SENSITIVITY_VALUES.has(sensitivity)) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Invalid sensitivity: '${sensitivity}'. Must be one of: ${[...SENSITIVITY_VALUES].join(', ')}.`,
-          },
-        ],
-      };
+      return toolError(
+        `Invalid sensitivity: '${sensitivity}'. Must be one of: ${[...SENSITIVITY_VALUES].join(', ')}.`
+      );
     }
     patch.sensitivity = sensitivity;
   }
 
   if (showAs !== undefined) {
     if (!SHOW_AS_VALUES.has(showAs)) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Invalid showAs: '${showAs}'. Must be one of: ${[...SHOW_AS_VALUES].join(', ')}.`,
-          },
-        ],
-      };
+      return toolError(
+        `Invalid showAs: '${showAs}'. Must be one of: ${[...SHOW_AS_VALUES].join(', ')}.`
+      );
     }
     patch.showAs = showAs;
   }
 
   if (importance !== undefined) {
     if (!IMPORTANCE_VALUES.has(importance)) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Invalid importance: '${importance}'. Must be one of: ${[...IMPORTANCE_VALUES].join(', ')}.`,
-          },
-        ],
-      };
+      return toolError(
+        `Invalid importance: '${importance}'. Must be one of: ${[...IMPORTANCE_VALUES].join(', ')}.`
+      );
     }
     patch.importance = importance;
   }
@@ -184,27 +163,17 @@ async function handleUpdateEvent(args) {
   if (reminderMinutesBeforeStart !== undefined) {
     const reminder = Number(reminderMinutesBeforeStart);
     if (!Number.isFinite(reminder) || reminder < 0) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Invalid reminderMinutesBeforeStart: '${reminderMinutesBeforeStart}'. Must be a non-negative number.`,
-          },
-        ],
-      };
+      return toolError(
+        `Invalid reminderMinutesBeforeStart: '${reminderMinutesBeforeStart}'. Must be a non-negative number.`
+      );
     }
     patch.reminderMinutesBeforeStart = reminder;
   }
 
   if (Object.keys(patch).length === 0) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'No fields to update — provide at least one updatable field (subject, start, end, attendees, body, location, isOnlineMeeting, sensitivity, showAs, importance, categories, reminderMinutesBeforeStart).',
-        },
-      ],
-    };
+    return toolError(
+      'No fields to update — provide at least one updatable field (subject, start, end, attendees, body, location, isOnlineMeeting, sensitivity, showAs, importance, categories, reminderMinutesBeforeStart).'
+    );
   }
 
   try {
@@ -295,24 +264,10 @@ async function handleUpdateEvent(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'authenticate' tool first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error updating event: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error updating event: ${error.message}`);
   }
 }
 

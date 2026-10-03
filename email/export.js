@@ -21,6 +21,7 @@ const { buildMailboxPrefix } = require('../utils/mailbox');
 const { quoteSearchPhrase } = require('../utils/odata-helpers');
 const { safeAttachmentFilename } = require('./attachments');
 const { writeClaimedFile } = require('../utils/safe-write');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 // Export format constants
 const EXPORT_FORMATS = {
@@ -53,14 +54,7 @@ async function handleExportEmail(args) {
   const prefix = buildMailboxPrefix(args.sharedMailbox || args.email || null);
 
   if (!emailId) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Email ID is required.',
-        },
-      ],
-    };
+    return toolError('Email ID is required.');
   }
 
   try {
@@ -77,14 +71,7 @@ async function handleExportEmail(args) {
     );
 
     if (!email) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Email with ID ${emailId} not found.`,
-          },
-        ],
-      };
+      return toolError(`Email with ID ${emailId} not found.`);
     }
 
     // Generate filename based on email metadata. The time matters: a
@@ -130,23 +117,13 @@ async function handleExportEmail(args) {
     } else if (format === 'mbox' || format === 'html') {
       // F-26: clarify that mbox/html are conversation-only formats so
       // callers don't infer the format itself is unsupported.
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Format '${format}' is only supported for target=conversation. For target=message use one of: ${Object.values(EXPORT_FORMATS).join(', ')}.`,
-          },
-        ],
-      };
+      return toolError(
+        `Format '${format}' is only supported for target=conversation. For target=message use one of: ${Object.values(EXPORT_FORMATS).join(', ')}.`
+      );
     } else {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Unknown format: ${format}. Supported for target=message: ${Object.values(EXPORT_FORMATS).join(', ')}.`,
-          },
-        ],
-      };
+      return toolError(
+        `Unknown format: ${format}. Supported for target=message: ${Object.values(EXPORT_FORMATS).join(', ')}.`
+      );
     }
 
     // Save main file. Auto-create the directory so callers don't have to
@@ -214,24 +191,10 @@ async function handleExportEmail(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'authenticate' tool first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Export failed: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Export failed: ${error.message}`);
   }
 }
 
@@ -263,14 +226,7 @@ async function handleBatchExportEmails(args) {
   const prefix = buildMailboxPrefix(mailbox);
 
   if (!outputDir) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Output directory is required.',
-        },
-      ],
-    };
+    return toolError('Output directory is required.');
   }
 
   // Ensure output directory exists
@@ -293,14 +249,7 @@ async function handleBatchExportEmails(args) {
     }
 
     if (idsToExport.length === 0) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: 'No emails to export. Provide emailIds or searchQuery.',
-          },
-        ],
-      };
+      return toolError('No emails to export. Provide emailIds or searchQuery.');
     }
 
     // Limit batch size (per plan: max 100)
@@ -452,24 +401,10 @@ async function handleBatchExportEmails(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'authenticate' tool first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Batch export failed: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Batch export failed: ${error.message}`);
   }
 }
 

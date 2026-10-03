@@ -3,6 +3,7 @@
  */
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 /**
  * Decline event handler
@@ -13,14 +14,7 @@ async function handleDeclineEvent(args) {
   const { eventId, comment, sendResponse } = args;
 
   if (!eventId) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Event ID is required to decline an event.',
-        },
-      ],
-    };
+    return toolError('Event ID is required to decline an event.');
   }
 
   try {
@@ -53,24 +47,10 @@ async function handleDeclineEvent(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'authenticate' tool first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error declining event: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error declining event: ${error.message}`);
   }
 }
 

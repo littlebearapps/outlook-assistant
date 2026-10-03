@@ -9,6 +9,7 @@ const { ensureAuthenticated } = require('../auth');
 const { resolveFolder } = require('./resolve');
 const { buildMailboxPrefix } = require('../utils/mailbox');
 const config = require('../config');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 const { VERBOSITY, DEFAULT_LIMITS } = config;
 
@@ -36,9 +37,7 @@ async function handleGetFolderStats(args) {
         mailbox: sharedMailbox,
       });
     } catch (resolveError) {
-      return {
-        content: [{ type: 'text', text: resolveError.message }],
-      };
+      return toolError(resolveError.message);
     }
     const folderId = resolved.id;
 
@@ -75,24 +74,10 @@ async function handleGetFolderStats(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'authenticate' tool first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error getting folder stats: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error getting folder stats: ${error.message}`);
   }
 }
 

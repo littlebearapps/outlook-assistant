@@ -9,6 +9,7 @@ const handleDeleteEvent = require('./delete');
 const handleUpdateEvent = require('./update');
 const { ATTENDEE_TYPES } = require('./attendees');
 const { toolMetadata } = require('../utils/risk-classes');
+const { toolError } = require('../utils/tool-error');
 
 // One attendee: an email string, or {email, type} (#249). schema-coerce
 // doesn't validate inside array items, so calendar/attendees.js re-checks.
@@ -238,14 +239,9 @@ const calendarTools = [
         normalised.eventId = normalised.id;
       }
       if (!normalised.eventId) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: 'Required parameter `eventId` (or alias `id`) is missing.',
-            },
-          ],
-        };
+        return toolError(
+          'Required parameter `eventId` (or alias `id`) is missing.'
+        );
       }
       args = normalised;
       switch (args.action) {
@@ -258,14 +254,9 @@ const calendarTools = [
         case 'delete':
           return handleDeleteEvent(args);
         default:
-          return {
-            content: [
-              {
-                type: 'text',
-                text: "Invalid action. Use 'update', 'decline', 'cancel', or 'delete'.",
-              },
-            ],
-          };
+          return toolError(
+            "Invalid action. Use 'update', 'decline', 'cancel', or 'delete'."
+          );
       }
     },
   },

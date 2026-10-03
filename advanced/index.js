@@ -27,6 +27,7 @@ const {
   zonedWallTimeToUtcMs,
 } = require('../utils/datetime');
 const { toolMetadata } = require('../utils/risk-classes');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 /**
  * Format an email for display (simplified)
@@ -79,14 +80,9 @@ async function handleAccessSharedMailbox(args) {
   const sharedMailbox = args.sharedMailbox || args.email;
 
   if (!sharedMailbox) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: "Shared mailbox email address is required (e.g., 'shared@company.com').",
-        },
-      ],
-    };
+    return toolError(
+      "Shared mailbox email address is required (e.g., 'shared@company.com')."
+    );
   }
 
   // Validate up front, through the same helper every other tool uses. The
@@ -97,17 +93,12 @@ async function handleAccessSharedMailbox(args) {
   try {
     mailboxPrefix = validateMailboxPrefix(sharedMailbox);
   } catch (error) {
-    return { content: [{ type: 'text', text: error.message }] };
+    return toolError(error.message);
   }
   if (mailboxPrefix === 'me') {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'access-shared-mailbox reads another mailbox — pass its email address. To read your own mailbox, use `search-emails`.',
-        },
-      ],
-    };
+    return toolError(
+      'access-shared-mailbox reads another mailbox — pass its email address. To read your own mailbox, use `search-emails`.'
+    );
   }
 
   // listFolders mode: enumerate the shared mailbox's folder tree so callers
@@ -116,9 +107,7 @@ async function handleAccessSharedMailbox(args) {
 
   if (listFolders) {
     if (!sharedEnabled) {
-      return {
-        content: [{ type: 'text', text: SHARED_MAILBOX_DISABLED_MESSAGE }],
-      };
+      return toolError(SHARED_MAILBOX_DISABLED_MESSAGE);
     }
     return handleListSharedMailboxFolders(sharedMailbox, args);
   }
@@ -152,18 +141,12 @@ async function handleAccessSharedMailbox(args) {
         if (!/not found|ambiguous/i.test(resolveError.message)) {
           throw resolveError;
         }
-        return {
-          content: [
-            {
-              type: 'text',
-              text:
-                `${resolveError.message}\n\n` +
-                `Searched in ${sharedMailbox}. List its folders first to get exact names/IDs:\n` +
-                '- `access-shared-mailbox` with `listFolders: true`, or\n' +
-                `- \`folders\` tool with \`action: list\`, \`sharedMailbox: "${sharedMailbox}"\``,
-            },
-          ],
-        };
+        return toolError(
+          `${resolveError.message}\n\n` +
+            `Searched in ${sharedMailbox}. List its folders first to get exact names/IDs:\n` +
+            '- `access-shared-mailbox` with `listFolders: true`, or\n' +
+            `- \`folders\` tool with \`action: list\`, \`sharedMailbox: "${sharedMailbox}"\``
+        );
       }
     }
 
@@ -245,49 +228,25 @@ async function handleAccessSharedMailbox(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
     if (
       error.message.includes('Access is denied') ||
       error.message.includes('403')
     ) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Access denied to shared mailbox "${sharedMailbox}".\n\n**Possible causes:**\n- You don't have access to this shared mailbox\n- The Mail.Read.Shared permission is not granted\n- The shared mailbox address is incorrect${sharedEnabled ? '' : ENABLE_SHARED_HINT}`,
-          },
-        ],
-      };
+      return toolError(
+        `Access denied to shared mailbox "${sharedMailbox}".\n\n**Possible causes:**\n- You don't have access to this shared mailbox\n- The Mail.Read.Shared permission is not granted\n- The shared mailbox address is incorrect${sharedEnabled ? '' : ENABLE_SHARED_HINT}`
+      );
     }
 
     if (error.message.includes('not found') || error.message.includes('404')) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Shared mailbox "${sharedMailbox}" not found. Please verify the email address.`,
-          },
-        ],
-      };
+      return toolError(
+        `Shared mailbox "${sharedMailbox}" not found. Please verify the email address.`
+      );
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error accessing shared mailbox: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error accessing shared mailbox: ${error.message}`);
   }
 }
 
@@ -380,38 +339,19 @@ async function handleListSharedMailboxFolders(sharedMailbox, args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
     if (
       error.message.includes('Access is denied') ||
       error.message.includes('403')
     ) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Access denied to shared mailbox "${sharedMailbox}".\n\n**Possible causes:**\n- You don't have delegate access to this shared mailbox\n- The Mail.Read.Shared permission is not granted\n- The shared mailbox address is incorrect`,
-          },
-        ],
-      };
+      return toolError(
+        `Access denied to shared mailbox "${sharedMailbox}".\n\n**Possible causes:**\n- You don't have delegate access to this shared mailbox\n- The Mail.Read.Shared permission is not granted\n- The shared mailbox address is incorrect`
+      );
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error listing shared mailbox folders: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error listing shared mailbox folders: ${error.message}`);
   }
 }
 
@@ -475,14 +415,7 @@ async function handleSetMessageFlag(args) {
   const ids = messageIds || (messageId ? [messageId] : []);
 
   if (ids.length === 0) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Message ID (messageId) or IDs (messageIds) required.',
-        },
-      ],
-    };
+    return toolError('Message ID (messageId) or IDs (messageIds) required.');
   }
 
   // Build flag object. Zoned values (Z/offset) are sent as the same instant in
@@ -569,23 +502,9 @@ async function handleSetMessageFlag(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error setting message flag: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error setting message flag: ${error.message}`);
   }
 }
 
@@ -600,14 +519,7 @@ async function handleClearMessageFlag(args) {
   const ids = messageIds || (messageId ? [messageId] : []);
 
   if (ids.length === 0) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Message ID (messageId) or IDs (messageIds) required.',
-        },
-      ],
-    };
+    return toolError('Message ID (messageId) or IDs (messageIds) required.');
   }
 
   try {
@@ -672,23 +584,9 @@ async function handleClearMessageFlag(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error clearing message flag: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error clearing message flag: ${error.message}`);
   }
 }
 
@@ -736,14 +634,9 @@ async function handleFindMeetingRooms(args) {
         const explanation = isLikelyPersonal
           ? 'Meeting room search is M365-only. Personal Outlook.com accounts cannot use this feature — there are no rooms to find. Connect a Microsoft 365 work/school account to enable.'
           : 'This feature requires:\n- Places.Read.All permission\n- Meeting rooms configured in your organization';
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Unable to find meeting rooms.\n\n**Note**: ${explanation}\n\nError: ${errMsg}`,
-            },
-          ],
-        };
+        return toolError(
+          `Unable to find meeting rooms.\n\n**Note**: ${explanation}\n\nError: ${errMsg}`
+        );
       }
     }
 
@@ -844,23 +737,9 @@ async function handleFindMeetingRooms(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error finding meeting rooms: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error finding meeting rooms: ${error.message}`);
   }
 }
 

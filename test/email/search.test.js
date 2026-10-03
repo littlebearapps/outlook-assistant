@@ -1630,9 +1630,17 @@ describe('handleSearchEmails — narrowing correctness follow-ups', () => {
       mockEmail({ id: 'n3', subject: 'Parking', from }),
     ];
 
+    // The page claims more beyond it (#279), but narrowing dropped rows, so
+    // neither the total nor the paging hint may survive.
     callGraphAPIPaginated
       .mockResolvedValueOnce({ value: [] })
-      .mockResolvedValueOnce({ value: page, '@odata.count': 3 });
+      .mockResolvedValueOnce({
+        value: page,
+        '@odata.count': 3,
+        hasMore: true,
+        '@odata.nextLink':
+          'https://graph.microsoft.com/v1.0/me/messages?$skip=3',
+      });
 
     const result = await handleSearchEmails({
       from: 'alice@corp.com',

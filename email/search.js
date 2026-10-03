@@ -1005,6 +1005,7 @@ function narrowResponse(response, matched) {
   if (dropped) {
     delete response['@odata.count'];
     delete response['@odata.nextLink'];
+    delete response.hasMore;
   }
 }
 
@@ -1418,7 +1419,7 @@ function formatSearchResults(response, folder, verbosity, searchAllFolders) {
   const meta = {
     returned: (response.value || []).length,
     totalAvailable: response['@odata.count'] || null,
-    hasMore: Boolean(response['@odata.nextLink']),
+    hasMore: Boolean(response.hasMore || response['@odata.nextLink']),
     verbosity: verbosity,
   };
 

@@ -425,7 +425,78 @@ describe('callGraphAPIPaginated', () => {
     );
 
     expect(result.value).toHaveLength(2);
+    // Items were dropped, so 2 is not a total (#279).
+    expect(result['@odata.count']).toBeUndefined();
+    expect(result.hasMore).toBe(true);
+  });
+
+  it('reports more available when it stops at maxCount on a nextLink (#279)', async () => {
+    const next = 'https://graph.microsoft.com/v1.0/me/messages?$skip=2';
+    mockHttpsRequest(200, {
+      value: [{ id: '1' }, { id: '2' }],
+      '@odata.nextLink': next,
+    });
+
+    const result = await callGraphAPIPaginated(
+      'token',
+      'GET',
+      'me/messages',
+      {},
+      2
+    );
+
+    expect(result.value).toHaveLength(2);
+    expect(result.hasMore).toBe(true);
+    // The page ended exactly at maxCount, so the link continues it exactly.
+    expect(result['@odata.nextLink']).toBe(next);
+    expect(result['@odata.count']).toBeUndefined();
+    expect(https.request).toHaveBeenCalledTimes(1);
+  });
+
+  it('drops the nextLink when items were trimmed, as it would skip them', async () => {
+    mockHttpsRequest(200, {
+      value: [{ id: '1' }, { id: '2' }, { id: '3' }],
+      '@odata.nextLink': 'https://graph.microsoft.com/v1.0/me/messages?$skip=3',
+    });
+
+    const result = await callGraphAPIPaginated(
+      'token',
+      'GET',
+      'me/messages',
+      {},
+      2
+    );
+
+    expect(result.hasMore).toBe(true);
+    expect(result['@odata.nextLink']).toBeUndefined();
+  });
+
+  it('reports no more when everything fitted', async () => {
+    mockHttpsRequest(200, { value: [{ id: '1' }, { id: '2' }] });
+
+    const result = await callGraphAPIPaginated(
+      'token',
+      'GET',
+      'me/messages',
+      {},
+      2
+    );
+
+    expect(result.hasMore).toBe(false);
     expect(result['@odata.count']).toBe(2);
+    expect(result['@odata.nextLink']).toBeUndefined();
+  });
+
+  it('stops, marked as more available, when Graph repeats a nextLink', async () => {
+    const loop = 'https://graph.microsoft.com/v1.0/me/messages?$skip=1';
+    mockHttpsRequest(200, { value: [{ id: '1' }], '@odata.nextLink': loop });
+
+    const result = await callGraphAPIPaginated('token', 'GET', 'me/messages');
+
+    // First page, then the repeated link once; never a third request.
+    expect(https.request).toHaveBeenCalledTimes(2);
+    expect(result.hasMore).toBe(true);
+    expect(result['@odata.count']).toBeUndefined();
   });
 
   it('should return all items when maxCount is 0', async () => {

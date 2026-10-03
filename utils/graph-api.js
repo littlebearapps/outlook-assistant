@@ -454,12 +454,18 @@ async function callGraphAPI(
 
 /**
  * Calls Graph API with pagination support to retrieve all results up to maxCount
+ *
+ * Reports truncation (#279): `hasMore` is true when it stopped with more
+ * available (at maxCount with items trimmed or a further page, or because
+ * Graph repeated a nextLink). `@odata.count` is set only when every item was
+ * returned, so a page size is never presented as a total. `@odata.nextLink`
+ * is kept only when it continues exactly after the returned items.
  * @param {string} accessToken - The access token for authentication
  * @param {string} method - HTTP method (GET only for pagination)
  * @param {string} path - API endpoint path
  * @param {object} queryParams - Initial query parameters
  * @param {number} maxCount - Maximum number of items to retrieve (0 = all)
- * @returns {Promise<object>} - Combined API response with all items
+ * @returns {Promise<{value: Array<object>, hasMore: boolean, '@odata.count'?: number, '@odata.nextLink'?: string}>}
  * @throws {Error} If method is not 'GET'
  * @throws {Error} If any page request fails for any other reason
  */
@@ -475,13 +481,14 @@ async function callGraphAPIPaginated(
   }
 
   const allItems = [];
-  let nextLink;
+  const seenLinks = new Set();
   let currentUrl = path;
   let currentParams = { ...queryParams };
+  let nextLink;
+  let hasMore = false;
 
   try {
-    do {
-      // Make API call
+    for (;;) {
       const response = await callGraphAPI(
         accessToken,
         method,
@@ -490,32 +497,36 @@ async function callGraphAPIPaginated(
         currentParams
       );
 
-      // Add items from this page
       if (response.value && Array.isArray(response.value)) {
         allItems.push(...response.value);
       }
-
-      // Check if we've reached the desired count
-      if (maxCount > 0 && allItems.length >= maxCount) {
-        break;
-      }
-
-      // Get next page URL
       nextLink = response['@odata.nextLink'];
 
-      if (nextLink) {
-        // Pass the full nextLink URL directly to callGraphAPI
-        currentUrl = nextLink;
-        currentParams = {}; // nextLink already contains all params
+      // Stop at the desired count; more remain if items were trimmed or
+      // there is another page.
+      if (maxCount > 0 && allItems.length >= maxCount) {
+        hasMore = allItems.length > maxCount || Boolean(nextLink);
+        if (allItems.length > maxCount) nextLink = undefined;
+        break;
       }
-    } while (nextLink);
+      if (!nextLink) break;
+      // A repeated link would loop forever; stop and say there is more.
+      if (seenLinks.has(nextLink)) {
+        hasMore = true;
+        nextLink = undefined;
+        break;
+      }
+      seenLinks.add(nextLink);
+      currentUrl = nextLink; // the full nextLink URL carries every param
+      currentParams = {};
+    }
 
-    // Trim to exact count if needed
     const finalItems = maxCount > 0 ? allItems.slice(0, maxCount) : allItems;
-
     return {
       value: finalItems,
-      '@odata.count': finalItems.length,
+      hasMore,
+      ...(!hasMore && { '@odata.count': finalItems.length }),
+      ...(hasMore && nextLink && { '@odata.nextLink': nextLink }),
     };
   } catch (error) {
     log.debug('Error during pagination:', error);

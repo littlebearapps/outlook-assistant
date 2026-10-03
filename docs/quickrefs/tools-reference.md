@@ -210,7 +210,7 @@ These are the names you pass in `tipTypes`. Graph's response uses some different
 |---------|--------|---------|
 | Dry-run preview | `dryRun: true` param (create only) | Disabled |
 | Pre-save mail tips | `checkRecipients: true` param (create only; the tips are returned with the saved draft and never stop it) | Disabled |
-| Session rate limit (create/update) | `OUTLOOK_MAX_DRAFT_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION` | Unlimited (0) |
+| Session rate limit (create/update/reply/reply-all/forward) | `OUTLOOK_MAX_DRAFT_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION` | Unlimited (0) |
 | Session rate limit (send) | Counts towards the `send-email` limit (`OUTLOOK_MAX_SEND_EMAIL_PER_SESSION`, else `OUTLOOK_MAX_EMAILS_PER_SESSION`) | Unlimited (0) |
 | Recipient allowlist | `OUTLOOK_ALLOWED_RECIPIENTS` env | Allow all |
 | Drafts-only guard (update/send/delete) | Always on | Non-drafts refused |

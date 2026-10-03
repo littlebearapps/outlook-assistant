@@ -131,7 +131,7 @@ Set a per-session send limit to prevent runaway sends:
 OUTLOOK_MAX_EMAILS_PER_SESSION=10
 ```
 
-Add this to your MCP server environment variables. Once the limit is reached, further sends are refused with a "Rate limit reached" error until the server restarts. Sending a draft (`draft action=send`) counts towards the same limit. The value is also the default cap for `draft` create/update, `manage-rules` and `create-event`, each counted separately (dry runs don't count); set `OUTLOOK_MAX_<TOOL>_PER_SESSION` (for example `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION`) to override one tool.
+Add this to your MCP server environment variables. Once the limit is reached, further sends are refused with a "Rate limit reached" error until the server restarts. Sending a draft (`draft action=send`) counts towards the same limit. The value is also the default cap for `draft` create/update/reply/reply-all/forward, `manage-rules` and `create-event`, each counted separately (dry runs don't count); set `OUTLOOK_MAX_<TOOL>_PER_SESSION` (for example `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION`) to override one tool.
 
 ### Recipient Allowlist
 

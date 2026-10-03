@@ -125,6 +125,10 @@ Your AI assistant calls the `auth` tool with `action: authenticate, clientId: <y
 
 Optional settings such as `OUTLOOK_AUTH_AUDIENCE`, `OUTLOOK_DEFAULT_TIMEZONE`, the send safety belts and `OUTLOOK_SHARED_MAILBOX` go in the same `env` block — see the [README's environment variables table](../../../README.md#environment-variables).
 
+### Trying It Out Safely
+
+For your first sessions, consider adding `"OUTLOOK_READ_ONLY": "true"` to the `env` block. Your assistant can then search and read mail, calendar and contacts, but every call that would change something (sending, drafting, moving, flagging, deleting, rules, settings, saving attachments or exports) is refused before it runs, and nothing is changed. Signing in still works. `auth action=about` shows whether read-only mode is on. Remove the setting and restart the server when you're ready to let it act for you.
+
 ## Authenticate for the First Time
 
 ### Device Code Flow (Recommended)

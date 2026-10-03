@@ -109,6 +109,16 @@ Options: `normal` (default), `high`, `low`.
 
 On the server side, `send-email` offers `dryRun` previews and enforces the session rate limit and the recipient allowlist below, whatever your client does.
 
+### Read-Only Mode
+
+To rule out sending altogether, set:
+
+```
+OUTLOOK_READ_ONLY=true
+```
+
+The server then refuses every call that would change something, including `send-email`, every `draft` action and `dryRun` previews, before anything reaches Microsoft. Reads still work. Remove it and restart the server to send again.
+
 ### Rate Limiting
 
 Set a per-session send limit to prevent runaway sends:

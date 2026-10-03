@@ -33,6 +33,7 @@ In Claude Code you can also enter the client ID when you enable the plugin.
 - Pre-send recipient checks (out-of-office, full mailbox).
 - A per-session limit on sends, drafts and rule changes (10 each by default in this plugin).
 - An optional recipient allowlist.
+- An optional read-only mode that refuses every change before it runs.
 - MCP safety annotations on every tool.
 - Sending from shared mailboxes is never supported.
 
@@ -53,6 +54,7 @@ More detail is in the [security policy](https://github.com/littlebearapps/outloo
 | Sign-in audience | `OUTLOOK_AUTH_AUDIENCE` | `common` |
 | Send limit per session | `OUTLOOK_MAX_EMAILS_PER_SESSION` | `10` |
 | Allowed recipients | `OUTLOOK_ALLOWED_RECIPIENTS` | none (all allowed) |
+| Read-only mode | `OUTLOOK_READ_ONLY` | `false` |
 
 Claude Code shows these as plugin settings. Other environment variables, such as `OUTLOOK_SHARED_MAILBOX` and `OUTLOOK_IMMUTABLE_IDS`, are in the [main README](https://github.com/littlebearapps/outlook-assistant#configuration). Use a manual MCP configuration if you need them.
 

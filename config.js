@@ -124,6 +124,26 @@ const BASE_SCOPES = [
   // 'Place.Read.All',     // find-meeting-rooms tool
 ];
 
+/**
+ * Parse OUTLOOK_READ_ONLY. On: true/1/yes/on; off: unset, empty,
+ * false/0/no/off (any case). Anything else fails closed (read-only on, with
+ * a warning), because whoever set the variable meant to restrict the server.
+ * @param {string|undefined} raw
+ * @returns {boolean}
+ */
+function parseReadOnly(raw) {
+  const value = String(raw ?? '')
+    .trim()
+    .toLowerCase();
+  if (['true', '1', 'yes', 'on'].includes(value)) return true;
+  if (['', 'false', '0', 'no', 'off'].includes(value)) return false;
+  console.warn(
+    `[outlook-assistant] OUTLOOK_READ_ONLY="${raw}" is not a recognised value. ` +
+      'Expected true/1/yes, or false/0/no to switch it off. Treating it as on: read-only mode is on.'
+  );
+  return true;
+}
+
 const DEFAULT_REQUEST_TIMEOUT_MS = 60000;
 
 /**
@@ -154,6 +174,11 @@ module.exports = {
 
   // Test mode setting
   USE_TEST_MODE: process.env.USE_TEST_MODE === 'true',
+
+  // Read-only mode (OUTLOOK_READ_ONLY, #271): every tool call that isn't
+  // classified `read` in utils/risk-classes.js is refused before it runs.
+  READ_ONLY: parseReadOnly(process.env.OUTLOOK_READ_ONLY),
+  parseReadOnly,
 
   // OAuth scope sets (exported so tests + the fallback logic can reference them)
   BASE_SCOPES,

@@ -17,7 +17,10 @@
  *   as EMPTY OUTPUT (#213).
  */
 const { McpError, ErrorCode } = require('@modelcontextprotocol/sdk/types.js');
+const config = require('./config');
 const { coerceArgsAgainstSchema } = require('./utils/schema-coerce');
+const { readOnlyRefusal } = require('./utils/read-only');
+const { riskMeta } = require('./utils/risk-classes');
 
 /**
  * A visible tool-error result.
@@ -35,14 +38,34 @@ function toolErrorResult(text) {
 function listTools(TOOLS) {
   console.error(`TOOLS COUNT: ${TOOLS.length}`);
   return {
-    tools: TOOLS.map((tool) => ({
-      name: tool.name,
-      ...(tool.title && { title: tool.title }),
-      description: tool.description,
-      inputSchema: tool.inputSchema,
-      ...(tool.annotations && { annotations: tool.annotations }),
-    })),
+    tools: TOOLS.map((tool) => {
+      // Client-specific flags derived from the risk map (#271), e.g.
+      // Claude's anthropic/requiresUserInteraction. Others ignore them.
+      const meta = riskMeta(tool.name);
+      return {
+        name: tool.name,
+        ...(tool.title && { title: tool.title }),
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+        ...(tool.annotations && { annotations: tool.annotations }),
+        ...(meta && { _meta: meta }),
+      };
+    }),
   };
+}
+
+/**
+ * Run a tool's handler with validated arguments, unless read-only mode
+ * refuses the call first (#271).
+ * @param {object} tool
+ * @param {object} args
+ */
+function runTool(tool, args) {
+  if (config.READ_ONLY) {
+    const refusal = readOnlyRefusal(tool.name, args);
+    if (refusal) return refusal;
+  }
+  return tool.handler(args);
 }
 
 /**
@@ -71,9 +94,9 @@ async function callTool(TOOLS, params) {
           `Invalid arguments for tool '${name}':\n${coerced.error}`
         );
       }
-      return await tool.handler(coerced.args);
+      return await runTool(tool, coerced.args);
     }
-    return await tool.handler(args);
+    return await runTool(tool, args);
   } catch (error) {
     console.error(`Error in tools/call:`, error);
     return toolErrorResult(`Error processing tool call: ${error.message}`);

@@ -47,6 +47,12 @@
       "title": "Allowed recipients",
       "description": "Optional comma-separated domains or addresses that email can be sent to. Leave blank to allow all recipients.",
       "default": ""
+    },
+    "read_only": {
+      "type": "string",
+      "title": "Read-only mode",
+      "description": "Set to true to refuse every change (sending, drafts, moves, deletes, rules, settings) and allow only reads and sign-in. false allows changes.",
+      "default": "false"
     }
   },
   "mcpServers": {
@@ -57,7 +63,8 @@
         "OUTLOOK_CLIENT_ID": "${user_config.client_id}",
         "OUTLOOK_AUTH_AUDIENCE": "${user_config.auth_audience}",
         "OUTLOOK_MAX_EMAILS_PER_SESSION": "${user_config.max_emails_per_session}",
-        "OUTLOOK_ALLOWED_RECIPIENTS": "${user_config.allowed_recipients}"
+        "OUTLOOK_ALLOWED_RECIPIENTS": "${user_config.allowed_recipients}",
+        "OUTLOOK_READ_ONLY": "${user_config.read_only}"
       }
     }
   }

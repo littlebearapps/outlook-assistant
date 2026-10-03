@@ -26,17 +26,26 @@ const MAIL_TIP_TYPES = [
 
 /**
  * Format mail tips into readable markdown
+ *
+ * Graph's mailTips resource reports `mailboxFull`, `deliveryRestricted` and
+ * `isModerated` as booleans. The older `mailboxFullStatus`,
+ * `deliveryRestriction` and `moderationStatus` shapes are still recognised.
  * @param {Array} mailTips - Array of mail tip objects from Graph API
- * @returns {string} - Formatted markdown output
+ * @returns {{formatted: string, warningCount: number, issues: Array<{address: string, type: string}>}}
+ *   `issues` lists each flagged condition per recipient, with `type` one of
+ *   outOfOffice, mailboxFull, customTip, deliveryRestricted, moderated,
+ *   external or externalMembers
  */
 function formatMailTips(mailTips) {
   const lines = [];
+  const issues = [];
   let warningCount = 0;
 
   for (const tip of mailTips) {
     const email = tip.emailAddress?.address || 'Unknown';
     const tipLines = [];
     const warnings = [];
+    const flag = (type) => issues.push({ address: email, type });
 
     // Out-of-office / automatic replies
     if (
@@ -44,6 +53,7 @@ function formatMailTips(mailTips) {
       tip.automaticReplies.message.trim() !== ''
     ) {
       warnings.push('Out of Office');
+      flag('outOfOffice');
       const reply = tip.automaticReplies;
       tipLines.push(
         `  **Out of Office**: ${reply.message.replace(/\n/g, ' ').substring(0, 200)}`
@@ -58,8 +68,9 @@ function formatMailTips(mailTips) {
     }
 
     // Mailbox full
-    if (tip.mailboxFullStatus) {
+    if (tip.mailboxFull === true || tip.mailboxFullStatus === true) {
       warnings.push('Mailbox Full');
+      flag('mailboxFull');
       tipLines.push(
         `  **Mailbox Full**: Recipient's mailbox is full — delivery may fail`
       );
@@ -68,30 +79,37 @@ function formatMailTips(mailTips) {
     // Custom mail tip (admin-configured)
     if (tip.customMailTip) {
       warnings.push('Custom Tip');
+      flag('customTip');
       tipLines.push(`  **Notice**: ${tip.customMailTip}`);
     }
 
     // Delivery restriction
-    if (tip.deliveryRestriction) {
-      const restriction = tip.deliveryRestriction;
-      if (restriction.isDeliveryRestricted) {
-        warnings.push('Delivery Restricted');
-        tipLines.push(
-          `  **Delivery Restricted**: ${restriction.message || 'Cannot deliver to this recipient'}`
-        );
-      }
+    if (
+      tip.deliveryRestricted === true ||
+      tip.deliveryRestriction?.isDeliveryRestricted
+    ) {
+      warnings.push('Delivery Restricted');
+      flag('deliveryRestricted');
+      tipLines.push(
+        `  **Delivery Restricted**: ${tip.deliveryRestriction?.message || 'Cannot deliver to this recipient'}`
+      );
     }
 
     // Moderation status
-    if (tip.moderationStatus && tip.moderationStatus !== 'notModerated') {
+    if (
+      tip.isModerated === true ||
+      (tip.moderationStatus && tip.moderationStatus !== 'notModerated')
+    ) {
       warnings.push('Moderated');
+      flag('moderated');
       tipLines.push(
         `  **Moderated**: Messages to this recipient require approval`
       );
     }
 
-    // Recipient scope (external)
-    if (tip.recipientScope === 'external') {
+    // Recipient scope: external, externalPartner or externalNonPartner
+    if (/^external/i.test(tip.recipientScope || '')) {
+      flag('external');
       tipLines.push(`  **External**: Recipient is outside your organisation`);
     }
 
@@ -102,6 +120,7 @@ function formatMailTips(mailTips) {
     }
 
     // Group member counts
+    if (tip.externalMemberCount > 0) flag('externalMembers');
     if (tip.totalMemberCount > 0) {
       tipLines.push(
         `  *Group members*: ${tip.totalMemberCount} total (${tip.externalMemberCount || 0} external)`
@@ -125,7 +144,7 @@ function formatMailTips(mailTips) {
     lines.push('');
   }
 
-  return { formatted: lines.join('\n'), warningCount };
+  return { formatted: lines.join('\n'), warningCount, issues };
 }
 
 /**
@@ -193,10 +212,16 @@ async function handleGetMailTips(args) {
             text: 'No mail tips returned. Mail Tips is M365-only — personal Outlook.com accounts return empty responses, so recipient validation is unavailable on this account.',
           },
         ],
+        _meta: {
+          recipientCount: 0,
+          warningCount: 0,
+          allEmpty: true,
+          issues: [],
+        },
       };
     }
 
-    const { formatted, warningCount } = formatMailTips(mailTips);
+    const { formatted, warningCount, issues } = formatMailTips(mailTips);
 
     // F-23: Detect a "fully empty" tips response — every recipient
     // returned with no actionable fields. Personal Outlook.com
@@ -231,6 +256,7 @@ async function handleGetMailTips(args) {
         recipientCount: mailTips.length,
         warningCount,
         allEmpty,
+        issues,
       },
     };
   } catch (error) {

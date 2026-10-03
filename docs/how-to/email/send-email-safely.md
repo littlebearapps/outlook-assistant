@@ -34,6 +34,8 @@ params:
   checkRecipients: true
 ```
 
+Without `dryRun`, `checkRecipients: true` refuses to send when the tips show an out-of-office reply, a full mailbox, a delivery restriction or an external recipient. The error lists what was flagged; nothing is sent. Once you've seen the warnings, repeat the call with `acknowledgeWarnings: true` to send anyway. Personal Outlook.com accounts return no tips, and no warnings is not proof the email will be delivered. See [When send-email Refuses to Send](check-recipients-before-sending.md#when-send-email-refuses-to-send).
+
 ## Preview Before Sending (Dry Run)
 
 Always preview first to check the email looks right:

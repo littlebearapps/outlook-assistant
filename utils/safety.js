@@ -236,6 +236,24 @@ function dryRunResult(lines, meta = {}) {
   };
 }
 
+/**
+ * The refusal for `dryRun: true` on an action with no preview (#274). Nothing
+ * runs, and the caller is told which action does preview.
+ * @param {string} toolName
+ * @param {string} action - the action that was asked for
+ * @param {string} previewAction - the tool's previewing action
+ * @returns {{content: Array<{type: 'text', text: string}>, isError: true}}
+ */
+function dryRunUnsupported(toolName, action, previewAction) {
+  return toolError(
+    `dryRun is only available for ${toolName} action=${previewAction}, not action=${action}; nothing was changed.`,
+    {
+      nextStep:
+        'Describe the change to the user, then call it without dryRun once they confirm.',
+    }
+  );
+}
+
 module.exports = {
   checkRateLimit,
   checkRecipientAllowlist,
@@ -243,4 +261,5 @@ module.exports = {
   formatRuleDryRunPreview,
   DRY_RUN_LABEL,
   dryRunResult,
+  dryRunUnsupported,
 };

@@ -8,7 +8,7 @@ const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { toolMetadata } = require('../utils/risk-classes');
 const { toolError, authRequiredError } = require('../utils/tool-error');
-const { dryRunResult } = require('../utils/safety');
+const { dryRunResult, dryRunUnsupported } = require('../utils/safety');
 
 // Days of the week for working hours
 const DAYS_OF_WEEK = [
@@ -669,7 +669,7 @@ const settingsTools = [
         dryRun: {
           type: 'boolean',
           description:
-            'Preview only (action=set-auto-replies): nothing is changed. Shows who would get automatic replies, the schedule and each message length. Default false.',
+            'Preview only (action=set-auto-replies): nothing is changed. Shows who would get automatic replies, the schedule and each message length. Other actions refuse dryRun and change nothing. Default false.',
         },
         // set-working-hours params
         startTime: {
@@ -702,6 +702,13 @@ const settingsTools = [
     },
     handler: async (args) => {
       const action = args.action || 'get';
+      if (args.dryRun && action !== 'set-auto-replies') {
+        return dryRunUnsupported(
+          'mailbox-settings',
+          action,
+          'set-auto-replies'
+        );
+      }
       switch (action) {
         case 'set-auto-replies':
           return handleSetAutomaticReplies(args);

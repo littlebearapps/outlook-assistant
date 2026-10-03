@@ -8,6 +8,7 @@ const handleGetFolderStats = require('./stats');
 const handleDeleteFolder = require('./delete');
 const { toolMetadata } = require('../utils/risk-classes');
 const { toolError } = require('../utils/tool-error');
+const { dryRunUnsupported } = require('../utils/safety');
 
 // Consolidated folder tool definition
 const folderTools = [
@@ -102,7 +103,7 @@ const folderTools = [
         dryRun: {
           type: 'boolean',
           description:
-            'Preview only (action=delete): nothing is deleted. Shows the folder and how many items and subfolders would be lost. Default false.',
+            'Preview only (action=delete): nothing is deleted. Shows the folder and how many items and subfolders would be lost. Other actions refuse dryRun and change nothing. Default false.',
         },
       },
       additionalProperties: false,
@@ -110,6 +111,9 @@ const folderTools = [
     },
     handler: async (args) => {
       const action = args.action || 'list';
+      if (args.dryRun && action !== 'delete') {
+        return dryRunUnsupported('folders', action, 'delete');
+      }
       switch (action) {
         case 'create':
           return handleCreateFolder(args);

@@ -11,7 +11,7 @@ const { ensureAuthenticated } = require('../auth');
 const { quoteSearchPhrase } = require('../utils/odata-helpers');
 const { toolMetadata } = require('../utils/risk-classes');
 const { toolError, authRequiredError } = require('../utils/tool-error');
-const { dryRunResult } = require('../utils/safety');
+const { dryRunResult, dryRunUnsupported } = require('../utils/safety');
 const { log } = require('../utils/logger');
 
 /**
@@ -718,7 +718,7 @@ const contactsTools = [
         dryRun: {
           type: 'boolean',
           description:
-            'Preview only (action=delete): nothing is deleted. Shows which contact would be removed. Default false.',
+            'Preview only (action=delete): nothing is deleted. Shows which contact would be removed. Other actions refuse dryRun and change nothing. Default false.',
         },
       },
       additionalProperties: false,
@@ -726,6 +726,9 @@ const contactsTools = [
     },
     handler: async (args) => {
       const action = args.action || 'list';
+      if (args.dryRun && action !== 'delete') {
+        return dryRunUnsupported('manage-contact', action, 'delete');
+      }
       switch (action) {
         case 'search':
           return handleSearchContacts(args);

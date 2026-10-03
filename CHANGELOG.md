@@ -41,6 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `folders` `delete`: the folder's items and unread items, plus its
     subfolders and the items they hold.
   - `manage-contact` `delete`: which contact would be removed.
+  - The other `folders`, `manage-contact` and `mailbox-settings` actions
+    refuse `dryRun: true` with an error and change nothing.
 - **`OUTLOOK_DEBUG=true` for detailed logs** (#278). See the logging change
   below.
 

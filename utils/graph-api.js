@@ -4,6 +4,7 @@
 const https = require('https');
 const config = require('../config');
 const mockData = require('./mock-data');
+const { log, graphPathShape } = require('./logger');
 
 /**
  * Guard for caller-supplied full URLs (nextLink/deltaLink continuations).
@@ -270,7 +271,7 @@ function sleep(ms) {
  *   final response (2xx, or the last non-retried error status)
  * @throws {Error} The network error of the final attempt
  */
-async function requestWithRetry(request) {
+async function sendWithRetry(request) {
   const method = String(request.method).toUpperCase();
   const timeoutMs = request.timeoutMs || config.REQUEST_TIMEOUT_MS;
   let networkRetryUsed = false;
@@ -316,12 +317,43 @@ async function requestWithRetry(request) {
       }
     }
 
-    console.error(
+    log.increment('graphRetries');
+    log.debug(
       `[GRAPH-API] ${method} ${networkError ? networkError.code : response.status}; ` +
         `retry ${retry + 1}/${MAX_RETRIES} in ${delayMs} ms`
     );
     totalSleepMs += delayMs;
     await sleep(delayMs);
+  }
+}
+
+/**
+ * sendWithRetry, noting a final failure on the current tool call's log line
+ * as status (or network error code), method and a PII-free path shape (#278).
+ * @param {object} request - See sendWithRetry
+ * @returns {Promise<{status: number, headers: object, text: string}>}
+ */
+async function requestWithRetry(request) {
+  const method = String(request.method).toUpperCase();
+  try {
+    const response = await sendWithRetry(request);
+    if (response.status >= 400) {
+      log.note(
+        'graph',
+        `${response.status} ${method} ${graphPathShape(request.url)}`
+      );
+      log.debug(
+        `[GRAPH-API] ${method} ${request.url} failed with ${response.status}: ${response.text}`
+      );
+    }
+    return response;
+  } catch (error) {
+    log.note(
+      'graph',
+      `${error.code || 'network-error'} ${method} ${graphPathShape(request.url)}`
+    );
+    log.debug(`[GRAPH-API] ${method} ${request.url} failed:`, error);
+    throw error;
   }
 }
 
@@ -357,7 +389,7 @@ async function callGraphAPI(
   try {
     finalUrl = buildGraphUrl(path, queryParams);
   } catch (error) {
-    console.error('Error calling Graph API:', error);
+    log.debug('Error calling Graph API:', error);
     throw error;
   }
 
@@ -486,7 +518,7 @@ async function callGraphAPIPaginated(
       '@odata.count': finalItems.length,
     };
   } catch (error) {
-    console.error('Error during pagination:', error);
+    log.debug('Error during pagination:', error);
     throw error;
   }
 }

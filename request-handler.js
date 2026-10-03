@@ -17,7 +17,9 @@
  *   as EMPTY OUTPUT (#213).
  */
 const { McpError, ErrorCode } = require('@modelcontextprotocol/sdk/types.js');
+const config = require('./config');
 const { coerceArgsAgainstSchema } = require('./utils/schema-coerce');
+const { readOnlyRefusal } = require('./utils/read-only');
 const { riskMeta } = require('./utils/risk-classes');
 
 /**
@@ -53,6 +55,20 @@ function listTools(TOOLS) {
 }
 
 /**
+ * Run a tool's handler with validated arguments, unless read-only mode
+ * refuses the call first (#271).
+ * @param {object} tool
+ * @param {object} args
+ */
+function runTool(tool, args) {
+  if (config.READ_ONLY) {
+    const refusal = readOnlyRefusal(tool.name, args);
+    if (refusal) return refusal;
+  }
+  return tool.handler(args);
+}
+
+/**
  * tools/call: validate arguments, then run the tool's handler.
  * @param {Array<object>} TOOLS
  * @param {object} [params]
@@ -78,9 +94,9 @@ async function callTool(TOOLS, params) {
           `Invalid arguments for tool '${name}':\n${coerced.error}`
         );
       }
-      return await tool.handler(coerced.args);
+      return await runTool(tool, coerced.args);
     }
-    return await tool.handler(args);
+    return await runTool(tool, args);
   } catch (error) {
     console.error(`Error in tools/call:`, error);
     return toolErrorResult(`Error processing tool call: ${error.message}`);

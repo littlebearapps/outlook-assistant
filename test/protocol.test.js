@@ -116,6 +116,50 @@ describe('initialize', () => {
   });
 });
 
+// #271: the instructions and the dispatcher gate read the same config value,
+// so the text can never claim read-only mode while writes still run (or the
+// reverse).
+describe('instructions match the read-only gate', () => {
+  const sendArgs = { to: 'a@example.com', subject: 'Hi', body: 'Hello' };
+  let original;
+  let tokenSpy;
+
+  beforeEach(() => {
+    original = config.READ_ONLY;
+    const { tokenStorage } = require('../auth');
+    tokenSpy = jest
+      .spyOn(tokenStorage, 'getValidAccessToken')
+      .mockResolvedValue(null);
+  });
+
+  afterEach(() => {
+    config.READ_ONLY = original;
+    tokenSpy.mockRestore();
+  });
+
+  test.each([true, false])('READ_ONLY=%p', async (readOnly) => {
+    config.READ_ONLY = readOnly;
+    await client.close();
+    await connect();
+    const init = await initialize();
+    const res = await rpc('tools/call', {
+      name: 'send-email',
+      arguments: sendArgs,
+    });
+    const claimsReadOnly = /Read-only mode is on/.test(
+      init.result.instructions
+    );
+    const refusedByGate = /read-only mode \(OUTLOOK_READ_ONLY\)/.test(
+      res.result.content[0].text
+    );
+    expect(res.result.isError).toBe(true);
+    expect({ claimsReadOnly, refusedByGate }).toEqual({
+      claimsReadOnly: readOnly,
+      refusedByGate: readOnly,
+    });
+  });
+});
+
 describe('tools/list _meta (#271)', () => {
   beforeEach(async () => {
     await initialize();

@@ -244,6 +244,7 @@ async function handleAbout() {
     `| Test Mode | ${testMode} |`,
     `| Rate Limit | ${rateLimit} |`,
     `| Recipient Allowlist | ${allowlist} |`,
+    `| Read-only mode | ${config.READ_ONLY ? 'On (OUTLOOK_READ_ONLY): only read tools and actions run' : 'Off (set OUTLOOK_READ_ONLY=true and restart to refuse every change)'} |`,
     `| Scopes | ${scopes.length} configured |`,
     `| Shared mailboxes | ${describeSharedMailboxStatus(granted)} |`,
     ``,

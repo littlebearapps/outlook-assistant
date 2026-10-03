@@ -119,6 +119,7 @@ Times are interpreted using the server's configured timezone (default: `Australi
 - Check your calendar first with `list-events` to avoid double-booking, or use its `subject` filter to find the last occurrence of a meeting you're rescheduling
 - Omit the `Z` suffix on times unless you specifically mean UTC
 - `create-event` is marked destructive because attendees are sent invitations, so clients that honour MCP annotations ask before running it. Use `dryRun: true` to check the guest list first
+- Each `create-event` call sends Microsoft Graph a unique `transactionId`, so if a throttled request is retried, Graph recognises the repeat and doesn't create (or send invitations for) a second copy. A separate, repeated `create-event` call is a new event, so check `list-events` before retrying one that seemed to fail
 - For finding available rooms, see [Find Meeting Rooms](../advanced/find-meeting-rooms.md)
 
 ## Related

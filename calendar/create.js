@@ -1,6 +1,7 @@
 /**
  * Create event functionality
  */
+const { randomUUID } = require('crypto');
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { DEFAULT_TIMEZONE } = require('../config');
@@ -60,13 +61,13 @@ async function handleCreateEvent(args) {
     // Build API endpoint
     const endpoint = `me/events`;
 
-    // Make API call
-    const response = await callGraphAPI(
-      accessToken,
-      'POST',
-      endpoint,
-      bodyContent
-    );
+    // A fresh transactionId per call (#280): Graph treats POSTs that share
+    // one as the same event, so a 429 retry in utils/graph-api.js (which
+    // re-sends this exact body) can't book the meeting twice.
+    const response = await callGraphAPI(accessToken, 'POST', endpoint, {
+      ...bodyContent,
+      transactionId: randomUUID(),
+    });
 
     const output = [`Event '${subject}' has been successfully created.`];
     if (response.id) {

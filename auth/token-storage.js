@@ -4,6 +4,7 @@ const path = require('path');
 const https = require('https');
 const querystring = require('querystring');
 const { describeAuthError } = require('./auth-errors');
+const { resolveClientId } = require('./client-config');
 
 /**
  * Decide which scopes a refresh request should use. Prefer the scopes that were
@@ -42,7 +43,9 @@ class TokenStorage {
         process.env.HOME || process.env.USERPROFILE,
         '.outlook-assistant-tokens.json'
       ),
-      clientId: process.env.OUTLOOK_CLIENT_ID || process.env.MS_CLIENT_ID,
+      // No default clientId: when none is passed, getClientId() resolves it on
+      // every use (env → saved ~/.outlook-assistant-config.json), so an ID
+      // saved at runtime via the auth tool takes effect without a restart.
       clientSecret:
         process.env.OUTLOOK_CLIENT_SECRET || process.env.MS_CLIENT_SECRET,
       redirectUri:
@@ -80,13 +83,22 @@ class TokenStorage {
       }
     }
 
-    if (!this.config.clientId) {
+    if (!this.getClientId()) {
       console.warn(
         'TokenStorage: OUTLOOK_CLIENT_ID is not configured. Token operations will fail.'
       );
     }
     // client_secret is only required for browser flow (confidential client).
     // Device code flow (public client) does not use client_secret.
+  }
+
+  /**
+   * Client ID for token requests: an explicitly configured value wins,
+   * otherwise it is resolved now (OUTLOOK_CLIENT_ID → MS_CLIENT_ID → saved).
+   * @returns {string}
+   */
+  getClientId() {
+    return this.config.clientId || resolveClientId();
   }
 
   async _loadTokensFromFile() {
@@ -149,12 +161,12 @@ class TokenStorage {
     await this.getTokens(); // Ensure tokens are loaded
 
     if (!this.tokens || !this.tokens.access_token) {
-      console.log('No access token available.');
+      console.error('No access token available.');
       return null;
     }
 
     if (this.isTokenExpired()) {
-      console.log(
+      console.error(
         'Access token expired or nearing expiration. Attempting refresh.'
       );
       if (this.tokens.refresh_token) {
@@ -193,7 +205,7 @@ class TokenStorage {
 
     // Prevent multiple concurrent refresh attempts
     if (this._refreshPromise) {
-      console.log('Refresh already in progress, returning existing promise.');
+      console.error('Refresh already in progress, returning existing promise.');
       return this._refreshPromise.then((tokens) => tokens.access_token);
     }
 
@@ -201,12 +213,12 @@ class TokenStorage {
     // in refresh requests for tokens obtained via device code.
     // Browser flow (confidential client) requires client_secret.
     const isDeviceCode = this.tokens.auth_method === 'device-code';
-    console.log(
+    console.error(
       `Attempting to refresh access token (auth_method: ${this.tokens.auth_method || 'browser'})...`
     );
 
     const refreshParams = {
-      client_id: this.config.clientId,
+      client_id: this.getClientId(),
       grant_type: 'refresh_token',
       refresh_token: this.tokens.refresh_token,
       // Use the GRANTED scopes, not the full configured set. After a base-only
@@ -247,7 +259,9 @@ class TokenStorage {
                   Date.now() + responseBody.expires_in * 1000;
                 try {
                   await this._saveTokensToFile();
-                  console.log('Access token refreshed and saved successfully.');
+                  console.error(
+                    'Access token refreshed and saved successfully.'
+                  );
                   resolve(this.tokens);
                 } catch (saveError) {
                   console.error('Failed to save refreshed tokens:', saveError);
@@ -298,15 +312,16 @@ class TokenStorage {
   }
 
   async exchangeCodeForTokens(authCode) {
-    if (!this.config.clientId || !this.config.clientSecret) {
+    const clientId = this.getClientId();
+    if (!clientId || !this.config.clientSecret) {
       throw new Error(
         'Client ID or Client Secret is not configured. Cannot exchange code for tokens.'
       );
     }
-    console.log('Exchanging authorization code for tokens...');
+    console.error('Exchanging authorization code for tokens...');
     const requestedScopes = this.config.scopes;
     const postData = querystring.stringify({
-      client_id: this.config.clientId,
+      client_id: clientId,
       client_secret: this.config.clientSecret,
       grant_type: 'authorization_code',
       code: authCode,
@@ -351,7 +366,7 @@ class TokenStorage {
                 };
                 try {
                   await this._saveTokensToFile();
-                  console.log('Tokens exchanged and saved successfully.');
+                  console.error('Tokens exchanged and saved successfully.');
                   resolve(this.tokens);
                 } catch (saveError) {
                   console.error('Failed to save exchanged tokens:', saveError);
@@ -408,10 +423,10 @@ class TokenStorage {
     this.tokens = null;
     try {
       await fs.unlink(this.config.tokenStorePath);
-      console.log('Token file deleted successfully.');
+      console.error('Token file deleted successfully.');
     } catch (error) {
       if (error.code === 'ENOENT') {
-        console.log('Token file not found, nothing to delete.');
+        console.error('Token file not found, nothing to delete.');
       } else {
         console.error('Error deleting token file:', error);
       }

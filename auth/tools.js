@@ -7,6 +7,13 @@ const fs = require('fs');
 const path = require('path');
 const tokenManager = require('./token-manager');
 const {
+  CONFIG_FILE_NAME,
+  isValidClientId,
+  saveClientId,
+  getEnvClientId,
+  getClientIdSource,
+} = require('./client-config');
+const {
   initiateDeviceCodeFlow,
   pollForToken,
   isScopeConsentError,
@@ -18,6 +25,112 @@ const DEVICE_CODE_STATE_PATH = path.join(
   process.env.HOME || process.env.USERPROFILE,
   '.outlook-assistant-pending-auth.json'
 );
+
+const SETUP_GUIDE_URL =
+  'https://github.com/littlebearapps/outlook-assistant/blob/main/docs/how-to/getting-started/connect-outlook-to-claude.md';
+const SAVED_CONFIG_DISPLAY_PATH = `~/${CONFIG_FILE_NAME}`;
+
+/**
+ * Error shown when no client ID resolves (no env var, nothing saved). Written
+ * for the AI client: it tells it what to ask the user and which call to make.
+ * @returns {object} - MCP response ({ content, isError: true })
+ */
+function buildMissingClientIdResponse() {
+  return {
+    content: [
+      {
+        type: 'text',
+        text: [
+          'Error: OUTLOOK_CLIENT_ID is not configured, so sign-in cannot start.',
+          '',
+          '1. Ask the user for the **Application (client) ID** of their Azure app registration (Azure portal → App registrations → their app → Overview). It is a GUID such as `00000000-0000-0000-0000-000000000000`.',
+          `2. Call \`auth action=authenticate clientId=<id>\`. The ID is saved to \`${SAVED_CONFIG_DISPLAY_PATH}\` (it is not a secret) and device-code sign-in starts.`,
+          '',
+          'The client secret is not needed for device-code sign-in (the default); only the browser flow uses it.',
+          `No app registration yet? Follow the setup guide: ${SETUP_GUIDE_URL}`,
+          'Alternatively, set OUTLOOK_CLIENT_ID in the MCP server environment and restart it.',
+        ].join('\n'),
+      },
+    ],
+    isError: true,
+  };
+}
+
+/**
+ * Validate and save a client ID supplied via `auth action=authenticate`.
+ * @param {unknown} clientId
+ * @returns {{error: object}|{saved: string}} - An MCP error response, or the saved ID
+ */
+function applyClientIdArg(clientId) {
+  if (!isValidClientId(clientId)) {
+    return {
+      error: {
+        content: [
+          {
+            type: 'text',
+            text: [
+              'Error: `clientId` is not a valid Azure Application (client) ID.',
+              '',
+              'It must be the GUID shown as **Application (client) ID** on the app registration Overview page in the Azure portal, e.g. `00000000-0000-0000-0000-000000000000`. Do not use the Directory (tenant) ID, the Object ID or a client secret.',
+              `Setup guide: ${SETUP_GUIDE_URL}`,
+            ].join('\n'),
+          },
+        ],
+        isError: true,
+      },
+    };
+  }
+
+  const env = getEnvClientId();
+  if (env && env.value.trim().toLowerCase() !== clientId.trim().toLowerCase()) {
+    return {
+      error: {
+        content: [
+          {
+            type: 'text',
+            text: [
+              `Error: the ${env.name} environment variable is set to a different client ID, and it takes precedence over a saved one, so the \`clientId\` you supplied would be ignored.`,
+              '',
+              `To use the new ID, change or remove ${env.name} in the MCP server configuration, restart the server, then call \`auth action=authenticate\` again. Nothing was saved.`,
+            ].join('\n'),
+          },
+        ],
+        isError: true,
+      },
+    };
+  }
+
+  try {
+    return { saved: saveClientId(clientId) };
+  } catch (error) {
+    return {
+      error: {
+        content: [
+          {
+            type: 'text',
+            text: `Error: could not save the client ID to ${SAVED_CONFIG_DISPLAY_PATH}: ${error.message}`,
+          },
+        ],
+        isError: true,
+      },
+    };
+  }
+}
+
+/**
+ * Client ID row for `auth about`. The ID itself is never shown.
+ * @returns {string}
+ */
+function describeClientIdStatus() {
+  const source = getClientIdSource();
+  if (source === 'env') {
+    return `Configured (environment: ${getEnvClientId().name})`;
+  }
+  if (source === 'saved') {
+    return `Configured (saved in ${SAVED_CONFIG_DISPLAY_PATH})`;
+  }
+  return 'Not set (run `auth action=authenticate clientId=<Application (client) ID>`)';
+}
 
 // Dynamic tool count — set by index.js after TOOLS array is built
 let _toolCount = 0;
@@ -122,6 +235,7 @@ async function handleAbout() {
     `| Setting | Value |`,
     `|---------|-------|`,
     `| Mailbox | ${identity} |`,
+    `| Client ID | ${describeClientIdStatus()} |`,
     `| Tools | ${_toolCount} across 9 modules |`,
     `| Modules | auth, email, calendar, folder, rules, contacts, categories, settings, advanced |`,
     `| Timezone | ${config.DEFAULT_TIMEZONE} |`,
@@ -185,19 +299,54 @@ async function handleAuthenticate(args) {
     };
   }
 
+  // Optional runtime client ID (for clients that can't set env vars, e.g.
+  // plugin marketplaces): validate, refuse if an env var would override it,
+  // save, then carry on with the normal flow.
+  // null / blank counts as not supplied: some clients send empty optionals.
+  let savedPrefix;
+  const suppliedClientId = args?.clientId;
+  if (
+    suppliedClientId !== undefined &&
+    suppliedClientId !== null &&
+    String(suppliedClientId).trim() !== ''
+  ) {
+    const result = applyClientIdArg(suppliedClientId);
+    if (result.error) {
+      return result.error;
+    }
+    savedPrefix = `Saved your Azure Application (client) ID to \`${SAVED_CONFIG_DISPLAY_PATH}\`.`;
+  }
+
   const method = args?.method || config.AUTH_CONFIG.defaultAuthMethod;
 
   if (method === 'device-code') {
-    return handleDeviceCodeAuth();
+    return handleDeviceCodeAuth(savedPrefix);
   }
 
   // Browser redirect flow (existing behaviour)
-  const authUrl = `${config.AUTH_CONFIG.authServerUrl}/auth?client_id=${config.AUTH_CONFIG.clientId}`;
+  const clientId = config.AUTH_CONFIG.clientId;
+  if (!clientId) {
+    return buildMissingClientIdResponse();
+  }
+  const authUrl = `${config.AUTH_CONFIG.authServerUrl}/auth?client_id=${encodeURIComponent(clientId)}`;
+  const lines = [];
+  if (savedPrefix) {
+    lines.push(savedPrefix, '');
+  }
+  lines.push(
+    `Authentication required. Please visit the following URL to authenticate with Microsoft: ${authUrl}\n\nAfter authentication, you will be redirected back to this application.\n\nNote: The auth server must be running on port 3333. If working remotely, consider using method=device-code instead.`
+  );
+  if (getClientIdSource() !== 'env') {
+    lines.push(
+      '',
+      'The browser flow also needs the client secret: the auth server (`npm run auth-server`) reads OUTLOOK_CLIENT_ID and OUTLOOK_CLIENT_SECRET from its own environment and does not use a saved client ID. Device-code sign-in (the default) needs only the client ID.'
+    );
+  }
   return {
     content: [
       {
         type: 'text',
-        text: `Authentication required. Please visit the following URL to authenticate with Microsoft: ${authUrl}\n\nAfter authentication, you will be redirected back to this application.\n\nNote: The auth server must be running on port 3333. If working remotely, consider using method=device-code instead.`,
+        text: lines.join('\n'),
       },
     ],
   };
@@ -254,26 +403,20 @@ function loadDeviceCodeState() {
  * Device code flow step 1 — request a code for the user to enter.
  * Returns the code + URL immediately. Call device-code-complete to finish.
  * State is persisted to disk so it survives MCP server restarts.
+ * @param {string} [prefix] - Optional leading line (e.g. "client ID saved")
  * @returns {object} - MCP response
  */
-async function handleDeviceCodeAuth() {
+async function handleDeviceCodeAuth(prefix) {
   const clientId = config.AUTH_CONFIG.clientId;
   if (!clientId) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Error: OUTLOOK_CLIENT_ID is not configured.',
-        },
-      ],
-    };
+    return buildMissingClientIdResponse();
   }
 
   console.error('[AUTH] Starting device code flow...');
   // Attempt the configured scope set (base, plus `.Shared` when
   // OUTLOOK_SHARED_MAILBOX opts in). If the account can't consent to
   // `.Shared`, handleDeviceCodeComplete re-issues with base scopes.
-  return initiateDeviceCode(config.AUTH_CONFIG.scopes, 'full');
+  return initiateDeviceCode(config.AUTH_CONFIG.scopes, 'full', prefix);
 }
 
 /**
@@ -318,13 +461,15 @@ async function initiateDeviceCode(scopes, scopesUsed, prefix) {
     return buildDeviceCodeErrorResponse(error);
   }
 
-  // Store in memory and persist to disk
+  // Store in memory and persist to disk. The client ID is recorded because
+  // the device code is bound to it: completion must poll with the same one.
   pendingDeviceCode = {
     deviceCode: response.deviceCode,
     interval: response.interval,
     expiresIn: response.expiresIn,
     expiresAt: Date.now() + response.expiresIn * 1000,
     scopesUsed,
+    clientId,
   };
   saveDeviceCodeState(pendingDeviceCode);
 
@@ -430,7 +575,14 @@ async function handleDeviceCodeComplete() {
     };
   }
 
-  const clientId = config.AUTH_CONFIG.clientId;
+  // Poll with the client ID the code was issued to (older state files don't
+  // record it, so fall back to the current one).
+  const clientId = pendingDeviceCode.clientId || config.AUTH_CONFIG.clientId;
+  if (!clientId) {
+    pendingDeviceCode = null;
+    saveDeviceCodeState(null);
+    return buildMissingClientIdResponse();
+  }
   // Capture which scope set this pending flow attempted, before any mutation.
   const scopesUsed = pendingDeviceCode.scopesUsed || 'full';
   // The scopes we attempted — used as the granted_scopes fallback when the
@@ -455,7 +607,7 @@ async function handleDeviceCodeComplete() {
     // Save tokens using TokenStorage — mark as device-code auth
     const TokenStorage = require('./token-storage');
     const tokenStorage = new TokenStorage({
-      clientId: config.AUTH_CONFIG.clientId,
+      clientId,
       clientSecret: config.AUTH_CONFIG.clientSecret,
       tokenStorePath: config.AUTH_CONFIG.tokenStorePath,
       scopes: config.AUTH_CONFIG.scopes,
@@ -593,8 +745,12 @@ async function handleCheckAuthStatus() {
 
   if (!accessToken) {
     console.error('[CHECK-AUTH-STATUS] No valid access token');
+    const text =
+      getClientIdSource() === 'none'
+        ? `Not authenticated. No Azure Application (client) ID is configured yet: ask the user for the Application (client) ID of their Azure app registration, then call \`auth action=authenticate clientId=<id>\`. Setup guide: ${SETUP_GUIDE_URL}`
+        : 'Not authenticated';
     return {
-      content: [{ type: 'text', text: 'Not authenticated' }],
+      content: [{ type: 'text', text }],
     };
   }
 
@@ -622,7 +778,7 @@ const authTools = [
   {
     name: 'auth',
     description:
-      'Manage authentication with the Microsoft Graph API. action=`status` (default) returns the current auth state and auto-refreshes the access token if it\'s expired but the refresh token is still valid (~90-day window) — call this first to check before other tools. action=`authenticate` starts the OAuth flow: with `method: "device-code"` (default, works headlessly) it returns a code + URL for the user to visit; with `method: "browser"` it opens the local auth server on :3333 (run `npm run auth-server` first). Pass `force: true` to re-authenticate over an existing valid session. action=`device-code-complete` finishes device-code auth after the user enters the code in their browser — call this once authentication shows as successful in the browser. action=`about` returns server version, configured audience, scope list, and other diagnostic info. Tokens persist to `~/.outlook-assistant-tokens.json` and survive server restarts.',
+      'Manage authentication with the Microsoft Graph API. action=`status` (default) returns the current auth state and auto-refreshes the access token if it\'s expired but the refresh token is still valid (~90-day window) — call this first to check before other tools. action=`authenticate` starts the OAuth flow: with `method: "device-code"` (default, works headlessly) it returns a code + URL for the user to visit; with `method: "browser"` it opens the local auth server on :3333 (run `npm run auth-server` first). Pass `force: true` to re-authenticate over an existing valid session. If sign-in reports that OUTLOOK_CLIENT_ID is not configured, ask the user for their Azure Application (client) ID and pass it as `clientId`. action=`device-code-complete` finishes device-code auth after the user enters the code in their browser — call this once authentication shows as successful in the browser. action=`about` returns server version, configured audience, scope list, and other diagnostic info. Tokens persist to `~/.outlook-assistant-tokens.json` and survive server restarts.',
     annotations: {
       title: 'Authentication',
       readOnlyHint: false,
@@ -647,6 +803,11 @@ const authTools = [
           type: 'boolean',
           description:
             'Force re-authentication even if already authenticated (action=authenticate only)',
+        },
+        clientId: {
+          type: 'string',
+          description:
+            "Optional, action=authenticate only. The user's Azure Application (client) ID (a GUID from the app registration's Overview page). Saved to `~/.outlook-assistant-config.json` and used from then on; it is not a secret. The OUTLOOK_CLIENT_ID environment variable takes precedence when set.",
         },
       },
       additionalProperties: false,

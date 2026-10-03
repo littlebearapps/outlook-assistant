@@ -6,9 +6,11 @@ const TokenStorage = require('./token-storage');
 const config = require('../config');
 const { authTools, setToolCount } = require('./tools');
 
-// Singleton TokenStorage instance with auto-refresh support
+// Singleton TokenStorage instance with auto-refresh support. No clientId is
+// passed: TokenStorage resolves it on each use (env → saved config file), so
+// an ID saved at runtime via `auth action=authenticate clientId=…` applies
+// without a restart.
 const tokenStorage = new TokenStorage({
-  clientId: config.AUTH_CONFIG.clientId,
   clientSecret: config.AUTH_CONFIG.clientSecret,
   tokenStorePath: config.AUTH_CONFIG.tokenStorePath,
   scopes: config.AUTH_CONFIG.scopes,

@@ -580,7 +580,7 @@ USE_TEST_MODE=true npm start
 | [Getting Started](docs/how-to/getting-started/connect-outlook-to-claude.md) | Install, configure, and authenticate — start here |
 | [Azure Setup Guide](docs/guides/azure-setup.md) | Azure account creation, app registration, permissions, and secrets |
 | [How-To Guides](docs/how-to/index.md) | 29 practical guides for email, calendar, contacts, and settings |
-| [Roadmap](ROADMAP.md) | Active milestones (v3.12.x, v3.8.x, v3.13.0+) and recent releases |
+| [Roadmap](ROADMAP.md) | Active milestones (v3.14.0, v3.15.0, v4.0.0, v3.8.x, v3.16.0+) and recent releases |
 | [Troubleshooting](docs/troubleshooting.md) | Known errors and fixes, including auth, search, export and shared mailboxes |
 | [FAQ](docs/faq/faq.md) | Install, accounts, permissions, tokens, updates, uninstall |
 | [Tools Reference](docs/quickrefs/tools-reference.md) | All 22 tools with parameters |

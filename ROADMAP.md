@@ -4,27 +4,46 @@ Active milestones for the Outlook Assistant MCP server. Items may shift or be cu
 
 For shipped work, see [`CHANGELOG.md`](CHANGELOG.md).
 
-## v3.12.x — Tool description audit
+## v3.14.0 — Safety skill, hooks & MCP hardening (next)
 
-The last item from the old `v3.7.5 — Fixes & Polish` slate. Everything else in
-that milestone shipped in v3.11.0 (see "Recently shipped"); this one is held
-back deliberately because it touches all 22 tool definitions plus the `llms.txt`
-tool categories and the description column of
-[`docs/quickrefs/tools-reference.md`](docs/quickrefs/tools-reference.md), and is
-not worth half-doing inside a polish release.
+This release gates the Claude directory and Cursor Marketplace submissions. The awesome-copilot listing (github/awesome-copilot#4455) will be moved to this tag. It has three layers: the server enforces, client hooks prompt, and the skill teaches. Every change must work across Claude Code and Desktop, GitHub Copilot (VS Code and CLI), Cursor, Codex/ChatGPT, Gemini CLI and local models.
 
-- **#93** docs: audit and improve all tool descriptions
+**Server safety**
+- **#270** A risk-class map (`read` / `reversible` / `outward` / `destructive` / `persistent`) that annotations, hooks, the skill and read-only mode are all derived from. New tools must be classified on purpose.
+- **#271** MCP server `instructions`; Claude Code `requiresUserInteraction` on `send-email` and `create-event`; an `OUTLOOK_READ_ONLY` mode.
+- **#272** Mail-tips warnings are surfaced instead of being sent inside the payload. Sends to external or out-of-office recipients need acknowledgement.
+- **#273** A rule whose forward or redirect is blocked is refused, not downgraded; rate-limit fixes.
+- **#274** `dryRun` previews for invites, cancel/decline/delete, auto-replies, and folder and contact deletes.
+- **#280** `create-event` uses a Graph `transactionId`, so retries can't duplicate meetings.
+- **#278** Less personal data in logs; verbose logging behind `OUTLOOK_DEBUG`.
 
-The `search-emails` and `searchExpression` descriptions were rewritten in
-v3.10.0 and revised again in v3.11.1 (the `query` versus `searchExpression`
-divergence and the `to` scan cap) — use them as the reference style. v3.12.1
-already fixed the known `list-events` drift (it no longer advertises attendees,
-organiser and `webLink`, which it never returned) and corrected the
-`manage-event` delete, `folders` delete and `update-email` batch wording.
+**MCP protocol and tool quality**
+- **#275** Every tool error sets `isError`. The stale "authenticate" tool references are fixed.
+- **#276** Real JSON-RPC errors for unknown methods (needed for MCP 2026-07-28 clients); a correct `capabilities` shape; dead code removed.
+- **#277** All four annotation hints set explicitly and accurately on every tool, plus a top-level `title`.
+- **#279** Misleading result hints fixed; description hygiene.
+- **#281** `server.json` metadata, an optional client ID, `smithery.yaml`, and a JSON Schema 2020-12 CI check.
 
-> Renumbered from v3.11.1 (taken by the search/export correctness release),
-> v3.11.2 (the security release) and v3.11.3 (overtaken by the v3.12.0 feature
-> release). #93 is documentation-only and was not worth blocking any of them.
+**Plugin**
+- **#282** The `using-outlook-assistant` skill: hard rules first, then a reference file per surface (email, calendar, rules and settings, contacts and folders, search and efficient use, personal vs M365, shared mailboxes, prompt injection, privacy).
+- **#283** A Claude Code hook: PreToolUse `ask` with plain-English reasons, a PostToolUse note that retrieved content is untrusted, and a `confirm_level` setting. A Copilot hook spike. The Cursor hook is deferred.
+- **#284** Prompt-injection evals (with and without the skill) and a cross-client verification matrix.
+
+## v3.15.0 — Structured outputs & paging
+
+- **#285** `outputSchema` + `structuredContent` on all tools. Each half (structured data and text) must stand alone, because clients surface them differently.
+- **#286** Real cursor pagination for `search-emails`, `list-events` and `access-shared-mailbox`.
+- **#287** Progress notifications and cancellation for long exports and scans.
+- **#288** Input validation gaps (nested `oneOf`, formats, ranges, per-action required parameters).
+- **#289** Consistent parameter naming, with alias deprecation.
+- **#290** Supply-chain hardening (image digests, SBOM, OpenSSF Scorecard).
+- **#93** / **#243** Tool description audit: each description at most 1,024 characters (VS Code truncates there), and contradictions with actual behaviour fixed.
+
+## v4.0.0 — MCP 2026-07-28 & server-side confirmation (breaking)
+
+- **#291** Migrate to MCP TypeScript SDK v2 / protocol 2026-07-28 (`server/discover`, stateless requests), with URL-mode elicitation for device-code sign-in.
+- **#269** Server-side confirmation for sends and destructive actions (two-phase confirm or MCP elicitation), enforced in every client.
+- **#292** Split mixed read/write tools, and trim the tool count.
 
 ## Fix queue — next patch releases
 
@@ -39,10 +58,9 @@ than one release per fix. The highest-impact ones come first.
 - **#245** `update-email` and `apply-category` claim `$batch` but run sequential PATCHes (v3.12.1 corrected the `update-email` description; the code is still sequential)
 - **#240** `find-meeting-rooms` fallback calls the beta-only `findRooms` on v1.0
 - **#250** `manage-contact` folder param is unusable
-- **#243** tool descriptions contradict implemented behaviour (pairs with #93)
 - **#258** leftovers from the post-3.12.0 hardening: request `Place.Read.All`
-  for room lookup (with #240), non-ASCII shared-mailbox addresses, and redacting
-  mailbox addresses from logs
+  for room lookup (with #240) and non-ASCII shared-mailbox addresses (log
+  redaction moves to #278 in v3.14.0)
 - **#264** (performance) `eml`/`mbox` conversation export fetches MIME one
   message at a time, up to 1000 sequential requests
 
@@ -70,11 +88,11 @@ v3.8.0 shipped the `manage-event update` action (#124) and two community-contrib
 
 - **#90** Add MCP prompts for common email workflows
 
-## v3.13.0+ — New Graph APIs & Platform Maturity
+## v3.16.0+ — New Graph APIs & Platform Maturity
 
-Larger surface-area additions and platform hardening. v3.12.0 used the feature
-slot for shared-mailbox support and `list-events` filters (see "Recently
-shipped"), so these carry forward to the next one.
+Larger surface-area additions and platform hardening. v3.14.0 and v3.15.0 are
+taken by the safety and MCP-quality work above, so these carry forward
+(renamed from "v3.13.0+").
 
 - **#147** Publisher-verified shared multi-tenant app (one-click setup for read-only scopes)
 - **#133** MCP OAuth 2.1 / PKCE auth flow

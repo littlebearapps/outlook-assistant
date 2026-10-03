@@ -117,6 +117,7 @@ OUTLOOK_REQUEST_TIMEOUT_MS=60000           # Optional: per-attempt Graph inactiv
 3. Add to `TOOLS` array in main `index.js`
 4. Include `annotations` object on tool definition
 5. Add test in `test/[module]/`
+6. Keep the plugin in step: see [`.claude/rules/plugin-and-skill-maintenance.md`](.claude/rules/plugin-and-skill-maintenance.md) (risk class, skill reference, hook map)
 
 ## Common Issues
 
@@ -168,7 +169,7 @@ Use `Edit` (not `Write`) to revise individual Q&A pairs — the `Write` guard is
 ## See Also
 
 - [`README.md`](README.md) - Full documentation, Azure setup, tool reference
-- [`ROADMAP.md`](ROADMAP.md) - Active milestones (v3.12.x tool description audit, patch fix queue, v3.8.x carry-over, v3.13.0+) and recent releases
+- [`ROADMAP.md`](ROADMAP.md) - Active milestones (v3.14.0 safety skill/hooks/MCP hardening, v3.15.0 structured outputs/paging, v4.0.0 MCP 2026-07-28, patch fix queue, v3.8.x carry-over, v3.16.0+) and recent releases
 - [`docs/architecture.md`](docs/architecture.md) - Module layout, file tree, tool-consolidation map, history
 - [`docs/troubleshooting.md`](docs/troubleshooting.md) - Common issues and fixes
 - [`docs/quickrefs/tools-reference.md`](docs/quickrefs/tools-reference.md) - Tools quick reference

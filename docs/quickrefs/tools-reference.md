@@ -24,11 +24,11 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 | `get-mail-tips` | Pre-send recipient validation | read-only | `recipients`, `tipTypes` |
 | `update-email` | Mark read/unread, flag/unflag/complete | idempotent | `action` (required), `id`, `ids`, `dueDateTime`, `startDateTime`, `sharedMailbox` (alias `email`) |
 | `attachments` | List, view, or download attachments | moderate write | `action` (`list`/`view`/`download`), `messageId`, `attachmentId`, `outputDir` (download; default system tmpdir), `sharedMailbox` (alias `email`) |
-| `export` | Export emails to various formats | moderate write | `target` (`message`/`messages`/`conversation`/`mime`), `id`, `emailIds`, `searchQuery`/`query`, `conversationId`, `format`, `outputDir` (or `savePath` for a single message), `sharedMailbox` (alias `email`) |
+| `export` | Export emails to various formats | **destructive** | `target` (`message`/`messages`/`conversation`/`mime`), `id`, `emailIds`, `searchQuery`/`query`, `conversationId`, `format`, `outputDir` (or `savePath` for a single message), `overwrite` (replace an existing `savePath` file; default false), `sharedMailbox` (alias `email`) |
 
 > **`sharedMailbox` is opt-in (work/school only).** Set `OUTLOOK_SHARED_MAILBOX=read` (read: `Mail.Read.Shared`) or `=true` (read and organise: adds `Mail.ReadWrite.Shared`), restart, then run `auth action=authenticate force=true`. While it's unset, `sharedMailbox` calls are refused with these steps, and `access-shared-mailbox` reads only well-known folder names or folder IDs, as before (`listFolders` and custom/nested names need the setting).
 >
-> **Downloads and exports stay in the output directory.** Server-chosen filenames are sanitised, written with exclusive create (an existing file or symlink is never overwritten or followed; a clash gets a numbered suffix) and confined to `outputDir`. IDs containing `.` or `..` path segments are refused before any Graph request.
+> **Downloads and exports stay in allowed folders.** Every output path must resolve to somewhere inside the system temp directory (the default), `~/Downloads`, `~/Documents` or `OUTLOOK_EXPORT_DIR`, with no dot-prefixed name below them; anything else is refused. Server-chosen filenames are sanitised, written with exclusive create (an existing file or symlink is never overwritten or followed; a clash gets a numbered suffix) and confined to `outputDir`. An explicit `savePath` file is never replaced unless `overwrite: true` is passed, and never if it is a symlink, a dotfile or inside a dot-directory. IDs containing `.` or `..` path segments are refused before any Graph request.
 >
 > **`sharedMailbox` is read/organise only.** `send-email` and `draft` (create/update/send/delete, reply, reply-all, forward) deliberately take no `sharedMailbox` parameter — they always act on the signed-in user's own mailbox, and `Mail.Send.Shared` is not requested.
 
@@ -153,8 +153,8 @@ All four hints are set explicitly on every tool, and derived from the risk-class
 | Category | Tools | Client Behaviour |
 |----------|-------|------------------|
 | **Read-only** (7) | `search-emails`, `read-email`, `list-events`, `search-people`, `access-shared-mailbox`, `find-meeting-rooms`, `get-mail-tips` | May be auto-approved by clients that support annotations |
-| **Destructive** (10) | `send-email`, `draft`, `create-event`, `manage-event`, `manage-rules`, `mailbox-settings`, `folders`, `manage-contact`, `manage-category`, `manage-focused-inbox` | Clients that honour the hint prompt for confirmation |
-| **Other writes** (5) | `auth`, `update-email`, `apply-category`, `attachments`, `export` | Your client's normal approval settings |
+| **Destructive** (11) | `send-email`, `draft`, `create-event`, `manage-event`, `manage-rules`, `mailbox-settings`, `folders`, `manage-contact`, `manage-category`, `manage-focused-inbox`, `export` (can replace a local file with `overwrite: true`) | Clients that honour the hint prompt for confirmation |
+| **Other writes** (4) | `auth`, `update-email`, `apply-category`, `attachments` | Your client's normal approval settings |
 
 `idempotentHint: true` (repeating the call has no further effect) is set on every read-only tool and on `update-email`, `apply-category` and `mailbox-settings`.
 

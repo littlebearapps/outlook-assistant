@@ -10,6 +10,8 @@ Save individual emails, batches, or entire conversation threads to disk in vario
 
 Without `outputDir` (or `savePath` for a single message), files go to your system's temp directory.
 
+Exports can only be written inside your system's temp directory, `~/Downloads`, `~/Documents`, or a folder you name in `OUTLOOK_EXPORT_DIR` (see [Where exports can be written](#where-exports-can-be-written)).
+
 ## Export a Single Email
 
 > "Export that email as markdown"
@@ -162,7 +164,8 @@ Not every target takes every format. `mbox` and `html` are for `conversation` ex
 | `id` | Email ID | `message`, `mime` |
 | `format` | Output format (see table above) | `message`, `messages`, `conversation` |
 | `savePath` | File path or directory for a single export | `message` |
-| `outputDir` | Directory for the export (also accepted for `message`) | `message`, `messages`, `conversation` |
+| `overwrite` | Replace an existing file at `savePath` (default: false) | `message` |
+| `outputDir` | Directory for the export (also accepted for `message`, where it is always treated as a directory) | `message`, `messages`, `conversation` |
 | `emailIds` | Array of email IDs | `messages` |
 | `searchQuery` | Search criteria for batch export (`folder`, `from`, `subject`, `receivedAfter`, `receivedBefore`, `maxResults`) | `messages` |
 | `query` | Shortcut for `searchQuery: { subject: … }` | `messages` |
@@ -198,7 +201,27 @@ Two guarantees now hold:
 
 Attachment files are named the same way and carry the same guarantee.
 
-- **Files stay in the output directory.** Every name the exporter chooses is built from sanitised parts and written with exclusive create, so it can't escape `outputDir`, overwrite an existing file or follow a planted symlink (v3.12.0). If you pass an explicit file path as `savePath` for a single message, that exact path is used and overwritten if it exists.
+- **Files stay in the output directory.** Every name the exporter chooses is built from sanitised parts and written with exclusive create, so it can't escape `outputDir`, overwrite an existing file or follow a planted symlink (v3.12.0).
+- **An explicit file path is never replaced unless you ask.** If you pass a file path as `savePath` for a single message, that exact path is used for a new file. If a file is already there, the export is refused and the file is left alone; pass `overwrite: true` to replace it. Even with `overwrite: true`, a symlink, a file with other hard links, a dotfile or a file inside a dot-directory is never replaced.
+
+## Where exports can be written
+
+Every export path (`savePath`, `outputDir`, and the `attachments` tool's `outputDir`) must be inside one of:
+
+- your system's temp directory (the default)
+- `~/Downloads`
+- `~/Documents`
+- the folder named in `OUTLOOK_EXPORT_DIR`, if you set it
+
+The path is resolved first, so `..` and symlinked folders count as wherever they really lead. Nothing is written to a dotfile or into a dot-directory (a name starting with `.`) below those folders. Anything else is refused with an error that lists the allowed folders.
+
+To export somewhere else, set `OUTLOOK_EXPORT_DIR` to an absolute path (a leading `~` is expanded) in your MCP client's `env` block for the server, then restart the server:
+
+```json
+"env": {
+  "OUTLOOK_EXPORT_DIR": "/Users/you/Mail Archive"
+}
+```
 
 ## Tips
 

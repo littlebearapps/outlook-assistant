@@ -68,11 +68,11 @@ Every tool includes MCP annotations, with all four hints set explicitly, that in
 
 ### Destructive Tools (clients that honour annotations prompt)
 
-`send-email`, `draft`, `create-event`, `manage-event`, `manage-rules` and `mailbox-settings` (all destructive + openWorld: they reach other people), plus `folders`, `manage-contact`, `manage-category` and `manage-focused-inbox` (destructive: they can delete)
+`send-email`, `draft`, `create-event`, `manage-event`, `manage-rules` and `mailbox-settings` (all destructive + openWorld: they reach other people), plus `folders`, `manage-contact`, `manage-category` and `manage-focused-inbox` (destructive: they can delete) and `export` (destructive: with `overwrite: true` it can replace a local file)
 
 ### Other Tools
 
-The remaining tools (`auth`, `update-email`, `apply-category`, `attachments`, `export`) write but aren't destructive. Whether they prompt depends on the user's client permission settings.
+The remaining tools (`auth`, `update-email`, `apply-category`, `attachments`) write but aren't destructive. Whether they prompt depends on the user's client permission settings.
 
 ### Always-Confirm Tools in Claude
 

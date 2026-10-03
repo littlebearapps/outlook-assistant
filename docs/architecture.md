@@ -25,7 +25,7 @@ email/                # 8 tools: search-emails, read-email, send-email, draft, u
   ├── mail-tips.js        # Pre-send recipient validation (out-of-office, mailbox full, etc.)
   ├── folder-utils.js     # Folder name → ID resolution (delegates to folder/resolve.js)
   ├── attachments.js      # List, download, view attachments
-  ├── export.js           # Message, batch, conversation and MIME export (writes confined to outputDir)
+  ├── export.js           # Message, batch, conversation and MIME export (writes confined to allowed folders; savePath replaced only with overwrite)
   ├── delta.js            # Delta sync
   ├── headers.js          # Email header retrieval
   ├── mime.js             # Raw MIME/EML content
@@ -59,7 +59,7 @@ utils/
   ├── logger.js           # Stderr logger: one line per tool call, OUTLOOK_DEBUG detail, redact()
   ├── tool-error.js       # toolError()/authRequiredError(): every handler error returns isError
   ├── safety.js           # Rate limiting, recipient allowlist, dry-run previews (dryRunResult)
-  ├── safe-write.js       # Exclusive, outputDir-confined file writes with -1, -2, … collision suffixes
+  ├── safe-write.js       # Output-path confinement (temp, ~/Downloads, ~/Documents, OUTLOOK_EXPORT_DIR) and exclusive file writes with -1, -2, … suffixes
   ├── field-presets.js    # Field selections for token efficiency
   ├── response-formatter.js # Verbosity levels (minimal/standard/full)
   └── mock-data.js        # Test-mode data (includes three prompt-injection emails for the evals)

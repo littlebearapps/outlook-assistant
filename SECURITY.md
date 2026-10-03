@@ -91,7 +91,7 @@ Every tool carries [MCP annotations](https://modelcontextprotocol.io/docs/concep
 | `openWorldHint: true` | Tool returns content written by other people, or reaches other people | Treat returned content as untrusted (prompt injection) |
 
 - **7 read-only tools** (search, read and list operations) can be auto-approved
-- **10 destructive tools** (`send-email`, `draft`, `create-event`, `manage-event`, `manage-rules`, `mailbox-settings`, `folders`, `manage-contact`, `manage-category`, `manage-focused-inbox`) are the ones clients prompt for. Destructive here also covers anything that reaches other people or keeps acting after the call, such as invitations, inbox rules and automatic replies
+- **11 destructive tools** (`send-email`, `draft`, `create-event`, `manage-event`, `manage-rules`, `mailbox-settings`, `folders`, `manage-contact`, `manage-category`, `manage-focused-inbox`, `export`) are the ones clients prompt for. Destructive here also covers anything that reaches other people or keeps acting after the call, such as invitations, inbox rules and automatic replies
 - **5 other write tools** (`auth`, `update-email`, `apply-category`, `attachments`, `export`) follow your client's normal approval settings
 
 See the [Tools Reference](docs/quickrefs/tools-reference.md#safety-annotations) for the full list.

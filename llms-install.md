@@ -86,6 +86,7 @@ Add these to the same `env` block if needed:
 | `OUTLOOK_READ_ONLY` | `true` refuses every tool call that would change something (sending, drafts, moves, deletes, rules, settings, file writes), dry runs included; reads and sign-in still work |
 | `OUTLOOK_SHARED_MAILBOX` | Opt-in shared-mailbox support, work/school accounts only: `read` or `true` (read and organise). Also add `Mail.Read.Shared` (and `Mail.ReadWrite.Shared` for `true`) in Azure, restart, then run `auth` with `action=authenticate` and `force=true` |
 | `OUTLOOK_SEARCH_SCAN_LIMIT` | Messages scanned by the local search fallback on personal accounts (default 500, max 5000) |
+| `OUTLOOK_EXPORT_DIR` | Extra folder `export` and attachment downloads may write to (besides the temp directory, `~/Downloads` and `~/Documents`) |
 | `OUTLOOK_REQUEST_TIMEOUT_MS` | Per-attempt Graph inactivity timeout in milliseconds (default 60000); not an overall deadline |
 | `OUTLOOK_DEBUG` | `true` for detailed stderr logs while troubleshooting (addresses and IDs redacted). Off by default: one line per tool call, no arguments |
 

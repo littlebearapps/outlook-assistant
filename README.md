@@ -155,7 +155,7 @@ See [Supported Clients and Their Limits](docs/how-to/getting-started/supported-c
 > }
 > ```
 
-**Input and file hardening** — IDs containing `.` or `..` path segments are refused before any request is made, continuation links (`deltaToken`) must point at `graph.microsoft.com`, and attachment downloads and exports write sanitised filenames inside the output directory without overwriting existing files or following symlinks.
+**Input and file hardening** — IDs containing `.` or `..` path segments are refused before any request is made, continuation links (`deltaToken`) must point at `graph.microsoft.com`, and attachment downloads and exports write only inside the system temp directory, `~/Downloads`, `~/Documents` or `OUTLOOK_EXPORT_DIR` (never to dot-prefixed names), using sanitised filenames without overwriting existing files or following symlinks. An explicit `export` file path is replaced only when you pass `overwrite: true`.
 
 **Draft protections** — The `draft` tool shares `send-email` safety controls: dry-run preview, recipient allowlist, mail-tips validation, and rate limiting. The `send` action shares the `send-email` rate limit counter, preventing circumvention via the draft-then-send pathway. `update`, `send` and `delete` refuse any ID that is not an unsent draft, so a received or sent message is never edited, deleted or re-sent.
 
@@ -441,6 +441,7 @@ USE_TEST_MODE=false
 | `OUTLOOK_REQUEST_TIMEOUT_MS` | Inactivity timeout for each Graph request attempt, in milliseconds: an attempt that receives no data for this long is abandoned with a timeout error. It isn't an overall deadline, so a slow response that keeps arriving isn't cut off. Throttled (`429`) and busy (`503`/`504`) responses are retried automatically, honouring `Retry-After`. | `60000` |
 | `OUTLOOK_READ_ONLY` | Read-only mode: `true` (or `1`/`yes`/`on`) refuses every tool call or action that isn't a read, including dry runs, exports and attachment downloads, before it runs. Signing in still works. An unrecognised value also turns it on, with a warning. Restart the server after changing it. | off |
 | `OUTLOOK_DEBUG` | Detailed stderr logs: `true` (or `1`/`yes`/`on`) adds search strategies, subjects, folder names and Graph error bodies, with email addresses and long IDs redacted. Off, each tool call logs one line (tool, action, outcome, duration) and never its arguments. Tokens, device codes and secrets are never logged. See [Server Logs and Debug Logging](docs/troubleshooting.md#server-logs-and-debug-logging). | off |
+| `OUTLOOK_EXPORT_DIR` | Extra folder that `export` and `attachments` downloads may write into. Without it, files can only go to the system temp directory, `~/Downloads` or `~/Documents`; other paths are refused. Absolute path (a leading `~` is expanded). | unset |
 
 `OUTLOOK_CONFIRM_LEVEL` (`outward`, `all-writes` or `off`; default `outward`) isn't a server setting: the plugin's safety hook reads it, in clients with no plugin settings (GitHub Copilot, VS Code, Cursor). Set it in the environment the client starts from, not in the server's `env` block. In Claude Code, use the plugin's **Confirmation level** setting instead. See [Supported Clients and Their Limits](docs/how-to/getting-started/supported-clients.md).
 

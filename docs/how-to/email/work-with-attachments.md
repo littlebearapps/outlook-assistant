@@ -48,6 +48,8 @@ params:
 
 The directory is created if it doesn't exist. Leave out `outputDir` and the file goes to your system's temp directory. The response tells you the exact path it was saved to.
 
+`outputDir` must be inside your system's temp directory, `~/Downloads`, `~/Documents` or the folder named in `OUTLOOK_EXPORT_DIR`, with no dot-prefixed folder below them; `..` and symlinked folders count as wherever they really lead. Anything else is refused before the attachment is fetched. See [Where exports can be written](export-emails.md#where-exports-can-be-written) to allow another folder.
+
 The filename comes from the sender, so it's reduced to a safe name before saving: path components such as `../` are stripped and the file always lands inside `outputDir`. An existing file is never overwritten and a symlink is never followed; a name that's already taken gets a numbered suffix (`invoice-1.pdf`).
 
 ## Download All Attachments
@@ -65,7 +67,7 @@ The attachments will be listed, then downloaded sequentially.
 | `messageId` | The email containing the attachment | Yes |
 | `action` | `list`, `view`, or `download` | No (default: `list`) |
 | `attachmentId` | Specific attachment ID | Yes for `view`/`download` |
-| `outputDir` | Directory to save to (`download`), created if missing. `savePath` is a deprecated alias | No (default: system temp directory) |
+| `outputDir` | Directory to save to (`download`), created if missing; must be inside the temp directory, `~/Downloads`, `~/Documents` or `OUTLOOK_EXPORT_DIR`. `savePath` is a deprecated alias | No (default: system temp directory) |
 | `sharedMailbox` | Shared mailbox the message belongs to (alias `email`) | Only for shared-mailbox messages |
 
 ## Tips

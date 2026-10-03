@@ -27,8 +27,10 @@ The response includes the subject, sender, recipients, date, and body content.
 | Level | What you get |
 |-------|-------------|
 | `minimal` | Subject, sender, date — no body |
-| `standard` | Subject, sender, date, body content (default) |
-| `full` | Everything — full body, all recipients, internet headers |
+| `standard` | Subject, sender, date, body up to 2,000 characters (default) |
+| `full` | Everything — IDs, all recipients, body up to 40,000 characters |
+
+A cut body ends with a note naming the call that gets the rest: `read-email` with `outputVerbosity: full`, or for a body over 40,000 characters, `export` with `target: "message"`, which writes the whole message to a file.
 
 ```
 tool: read-email

@@ -45,7 +45,8 @@ const TOOL_RISK = {
   },
 
   // Calendar
-  'list-events': { default: 'read' },
+  // Event subjects and previews come from external organisers.
+  'list-events': { default: 'read', untrustedContent: true },
   // Saving an event with attendees sends them invitations.
   'create-event': { default: 'outward' },
   'manage-event': {
@@ -94,7 +95,8 @@ const TOOL_RISK = {
   },
   // Writes local files.
   export: { default: 'reversible', untrustedContent: true },
-  'get-mail-tips': { default: 'read' },
+  // Echoes recipients' out-of-office messages.
+  'get-mail-tips': { default: 'read', untrustedContent: true },
 
   // Folders
   folders: {

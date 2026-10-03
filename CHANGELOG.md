@@ -32,7 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     open-world (invitations and automatic replies reach other people).
     `manage-event` and `manage-rules` are now open-world.
     `manage-category` and `manage-focused-inbox` are now destructive, because
-    they can delete. Clients that prompt on destructive tools will now prompt
+    they can delete. `list-events` and `get-mail-tips` are now open-world,
+    because event text and out-of-office replies are written by other people. Clients that prompt on destructive tools will now prompt
     for these too.
 
 ### Changed

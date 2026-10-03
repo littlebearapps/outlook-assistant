@@ -156,7 +156,7 @@ All four hints are set explicitly on every tool, and derived from the risk-class
 
 `idempotentHint: true` (safe to retry) is set on every read-only tool and on `update-email`, `apply-category` and `mailbox-settings`.
 
-> **`openWorldHint: true`** is set on tools that return content authored by external/untrusted parties (`search-emails`, `read-email`, `search-people`, `access-shared-mailbox`, `attachments`, `export`, `draft`) or that reach other people (`send-email`, `draft`, `create-event`, `manage-event`, `manage-rules`, `mailbox-settings`), signalling MCP clients to apply appropriate caution (e.g. prompt-injection defences).
+> **`openWorldHint: true`** is set on tools that return content authored by external/untrusted parties (`search-emails`, `read-email`, `list-events`, `get-mail-tips`, `search-people`, `access-shared-mailbox`, `attachments`, `export`, `draft`) or that reach other people (`send-email`, `draft`, `create-event`, `manage-event`, `manage-rules`, `mailbox-settings`), signalling MCP clients to apply appropriate caution (e.g. prompt-injection defences).
 
 ## send-email Safety Controls
 

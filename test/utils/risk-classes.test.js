@@ -76,8 +76,8 @@ describe('riskAnnotations', () => {
   });
 
   test('a read tool is read-only, non-destructive and idempotent', () => {
-    expect(riskAnnotations('list-events', 'List')).toEqual({
-      title: 'List',
+    expect(riskAnnotations('find-meeting-rooms', 'Rooms')).toEqual({
+      title: 'Rooms',
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
@@ -87,6 +87,14 @@ describe('riskAnnotations', () => {
 
   test('a tool that surfaces untrusted content is open-world', () => {
     expect(riskAnnotations('read-email', 'Read').openWorldHint).toBe(true);
+  });
+
+  test('calendar and mail-tip text from other people is untrusted', () => {
+    // Event subjects/previews come from external organisers; mail tips echo
+    // recipients' out-of-office messages.
+    for (const name of ['list-events', 'get-mail-tips']) {
+      expect(riskAnnotations(name, name).openWorldHint).toBe(true);
+    }
   });
 
   test('outward and persistent actions are destructive and open-world', () => {

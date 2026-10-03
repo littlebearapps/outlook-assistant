@@ -246,6 +246,17 @@ async function handleBatchExportEmails(args) {
         mailbox
       );
       idsToExport = searchResults.map((e) => e.id);
+      // An empty match is a result, not an error.
+      if (idsToExport.length === 0) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: 'No emails matched the search query; nothing was exported.',
+            },
+          ],
+        };
+      }
     }
 
     if (idsToExport.length === 0) {

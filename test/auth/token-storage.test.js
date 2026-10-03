@@ -89,6 +89,7 @@ describe('TokenStorage', () => {
     });
 
     it('should return null and log error for other read errors', async () => {
+      delete process.env.OUTLOOK_DEBUG;
       const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
       fs.readFile.mockRejectedValue(new Error('Read error'));
       const loaded = await tokenStorage._loadTokensFromFile();

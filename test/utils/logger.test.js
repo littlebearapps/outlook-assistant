@@ -109,12 +109,25 @@ describe('isDebugEnabled', () => {
   test.each(['true', '1', 'yes', 'on', 'TRUE', ' On '])('%p is on', (v) => {
     expect(isDebugEnabled(v)).toBe(true);
   });
-  test.each([undefined, '', 'false', '0', 'no', 'off', 'verbose'])(
+  test.each([null, '', 'false', '0', 'no', 'off', 'verbose'])(
     '%p is off',
     (v) => {
       expect(isDebugEnabled(v)).toBe(false);
     }
   );
+
+  test('reads OUTLOOK_DEBUG when called without an argument', () => {
+    const saved = process.env.OUTLOOK_DEBUG;
+    try {
+      delete process.env.OUTLOOK_DEBUG;
+      expect(isDebugEnabled()).toBe(false);
+      process.env.OUTLOOK_DEBUG = 'yes';
+      expect(isDebugEnabled()).toBe(true);
+    } finally {
+      if (saved === undefined) delete process.env.OUTLOOK_DEBUG;
+      else process.env.OUTLOOK_DEBUG = saved;
+    }
+  });
 });
 
 describe('graphPathShape', () => {

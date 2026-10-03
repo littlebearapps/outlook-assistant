@@ -35,8 +35,16 @@ Key environment variables:
   OUTLOOK_CLIENT_SECRET             Client secret VALUE (not the Secret ID)
   OUTLOOK_AUTH_METHOD               device-code (default) | browser
   OUTLOOK_AUTH_AUDIENCE             common | consumers | organizations | <tenant-guid>
-  OUTLOOK_MAX_EMAILS_PER_SESSION    Cap on sends per session
+  OUTLOOK_SHARED_MAILBOX            Opt in to shared mailboxes: read | true (work/school only)
   OUTLOOK_ALLOWED_RECIPIENTS        Comma-separated recipient allowlist
+  OUTLOOK_MAX_EMAILS_PER_SESSION    Default cap per session for every rate-limited tool
+                                    (send-email, draft, manage-rules); 0 or unset = no cap
+  OUTLOOK_MAX_<TOOL>_PER_SESSION    Per-tool cap overriding the default, tool name in upper
+                                    case with _ for -, e.g. OUTLOOK_MAX_SEND_EMAIL_PER_SESSION
+  OUTLOOK_DEFAULT_TIMEZONE          IANA timezone for event times (default Australia/Melbourne)
+  OUTLOOK_IMMUTABLE_IDS             Set to "true" for message IDs that survive folder moves
+  OUTLOOK_SEARCH_SCAN_LIMIT         Local search fallback window (default 500, max 5000)
+  OUTLOOK_REQUEST_TIMEOUT_MS        Graph request inactivity timeout (default 60000)
   USE_TEST_MODE                     Set to "true" to run against mock data
 
 Documentation: https://github.com/littlebearapps/outlook-assistant`;

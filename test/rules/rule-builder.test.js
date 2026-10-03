@@ -9,10 +9,14 @@ const {
   VALID_IMPORTANCE,
   VALID_SENSITIVITY,
 } = require('../../rules/rule-builder');
-const { getFolderIdByName } = require('../../email/folder-utils');
+const { resolveFolder } = require('../../folder/resolve');
 const { checkRecipientAllowlist } = require('../../utils/safety');
 
-jest.mock('../../email/folder-utils');
+// Keep the real looksLikeFolderId; only the Graph-backed resolver is mocked.
+jest.mock('../../folder/resolve', () => ({
+  ...jest.requireActual('../../folder/resolve'),
+  resolveFolder: jest.fn(),
+}));
 jest.mock('../../utils/safety', () => ({
   ...jest.requireActual('../../utils/safety'),
   checkRecipientAllowlist: jest.fn(),
@@ -214,38 +218,207 @@ describe('buildActions', () => {
     checkRecipientAllowlist.mockReturnValue(null);
   });
 
-  it('should resolve moveToFolder by name', async () => {
-    getFolderIdByName.mockResolvedValue('folder-id-123');
+  const FOLDER_ID =
+    'AQMkADAwATM0MDAAMS1iNTcwLWIyYTUtMDACLTAwCgAuAAADSgVHq9fNbkWcZeTl5AAAAA==';
+
+  it('should resolve a nested moveToFolder path via the shared resolver (#248)', async () => {
+    resolveFolder.mockResolvedValue({
+      id: 'nested-id',
+      displayName: 'Delete',
+      parentId: 'triage-id',
+      path: 'Triage/Delete',
+    });
 
     const { actions, warnings } = await buildActions(
-      { moveToFolder: 'Archive' },
+      { moveToFolder: 'Triage/Delete' },
       mockToken
     );
 
-    expect(actions.moveToFolder).toBe('folder-id-123');
-    expect(getFolderIdByName).toHaveBeenCalledWith(mockToken, 'Archive');
+    expect(resolveFolder).toHaveBeenCalledWith(mockToken, {
+      name: 'Triage/Delete',
+    });
+    expect(actions.moveToFolder).toBe('nested-id');
     expect(warnings.filter((w) => w.includes('not found'))).toHaveLength(0);
   });
 
-  it('should warn when moveToFolder not found', async () => {
-    getFolderIdByName.mockResolvedValue(null);
-
-    const { warnings } = await buildActions(
-      { moveToFolder: 'NonExistent' },
-      mockToken
-    );
-
-    expect(warnings.some((w) => w.includes('not found'))).toBe(true);
-  });
-
-  it('should resolve copyToFolder by name', async () => {
-    getFolderIdByName.mockResolvedValue('copy-folder-id');
+  it('should resolve a well-known alias such as archive', async () => {
+    resolveFolder.mockResolvedValue({
+      id: 'archive-id',
+      displayName: 'Archive',
+      parentId: null,
+      path: 'Archive',
+    });
 
     const { actions } = await buildActions(
-      { copyToFolder: 'Projects' },
+      { moveToFolder: 'archive' },
       mockToken
     );
 
+    expect(resolveFolder).toHaveBeenCalledWith(mockToken, { name: 'archive' });
+    expect(actions.moveToFolder).toBe('archive-id');
+  });
+
+  it('should pass a raw folder ID to the resolver as an id', async () => {
+    resolveFolder.mockResolvedValue({
+      id: FOLDER_ID,
+      displayName: 'Projects',
+      parentId: null,
+      path: 'Projects',
+    });
+
+    const { actions } = await buildActions(
+      { moveToFolder: FOLDER_ID },
+      mockToken
+    );
+
+    expect(resolveFolder).toHaveBeenCalledWith(mockToken, { id: FOLDER_ID });
+    expect(actions.moveToFolder).toBe(FOLDER_ID);
+  });
+
+  it('should pass a name containing an apostrophe through unchanged', async () => {
+    resolveFolder.mockResolvedValue({
+      id: 'apostrophe-id',
+      displayName: "Nathan's Bills",
+      parentId: null,
+      path: "Nathan's Bills",
+    });
+
+    const { actions } = await buildActions(
+      { moveToFolder: "Nathan's Bills" },
+      mockToken
+    );
+
+    expect(resolveFolder).toHaveBeenCalledWith(mockToken, {
+      name: "Nathan's Bills",
+    });
+    expect(actions.moveToFolder).toBe('apostrophe-id');
+  });
+
+  it('should warn and add no action when moveToFolder is not found', async () => {
+    resolveFolder.mockRejectedValue(
+      new Error('Folder "Triage/Nope" not found. Use `folders` action=list…')
+    );
+
+    const { actions, warnings } = await buildActions(
+      { moveToFolder: 'Triage/Nope' },
+      mockToken
+    );
+
+    expect(actions.moveToFolder).toBeUndefined();
+    expect(warnings).toEqual([
+      expect.stringContaining('Target folder "Triage/Nope" not found'),
+    ]);
+  });
+
+  it('should treat an unknown folder ID (Graph 404) as not found', async () => {
+    resolveFolder.mockRejectedValue(
+      new Error('API call failed with status 404: {"error":{}}')
+    );
+
+    const { actions, warnings } = await buildActions(
+      { copyToFolder: FOLDER_ID },
+      mockToken
+    );
+
+    expect(actions.copyToFolder).toBeUndefined();
+    expect(warnings).toEqual([
+      expect.stringContaining(`Copy-to folder "${FOLDER_ID}" not found`),
+    ]);
+  });
+
+  it('should report an invalid folder path as not found, with the reason', async () => {
+    resolveFolder.mockRejectedValue(
+      new Error('Invalid folder path "Triage//Delete": empty path segment.')
+    );
+
+    const { actions, warnings } = await buildActions(
+      { moveToFolder: 'Triage//Delete' },
+      mockToken
+    );
+
+    expect(actions.moveToFolder).toBeUndefined();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('Target folder "Triage//Delete" not found');
+    expect(warnings[0]).toContain('empty path segment');
+    expect(warnings[0]).toContain('`folders` action=list');
+  });
+
+  it("should report a Graph 400 as not found, with Graph's message", async () => {
+    resolveFolder.mockRejectedValue(
+      new Error(
+        'API call failed with status 400: {"error":{"code":"ErrorInvalidIdMalformed"}}'
+      )
+    );
+
+    const { actions, warnings } = await buildActions(
+      { copyToFolder: FOLDER_ID },
+      mockToken
+    );
+
+    expect(actions.copyToFolder).toBeUndefined();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(`Copy-to folder "${FOLDER_ID}" not found`);
+    expect(warnings[0]).toContain('ErrorInvalidIdMalformed');
+  });
+
+  it("should keep the resolver's not-found guidance without repeating it", async () => {
+    resolveFolder.mockRejectedValue(
+      new Error(
+        'Folder "Nope" not found. Use `folders` action=list to see folders (with IDs and full paths), pass a folder path like "Parent/Child", or a folderId.'
+      )
+    );
+
+    const { warnings } = await buildActions(
+      { moveToFolder: 'Nope' },
+      mockToken
+    );
+
+    expect(warnings[0]).toContain('Target folder "Nope" not found');
+    expect(warnings[0].match(/action=list/g)).toHaveLength(1);
+  });
+
+  it('should warn with the candidates when the folder name is ambiguous', async () => {
+    resolveFolder.mockRejectedValue(
+      new Error(
+        'Folder "Delete" is ambiguous — 2 folders match:\n  - Triage/Delete  (folderId: a)\n  - Old/Delete  (folderId: b)'
+      )
+    );
+
+    const { actions, warnings } = await buildActions(
+      { moveToFolder: 'Delete' },
+      mockToken
+    );
+
+    expect(actions.moveToFolder).toBeUndefined();
+    // "not found" keeps create/update treating it as fatal when it is the only action.
+    expect(warnings[0]).toContain('Target folder "Delete" not found');
+    expect(warnings[0]).toContain('Triage/Delete');
+  });
+
+  it('should rethrow errors that are not folder-resolution failures', async () => {
+    resolveFolder.mockRejectedValue(new Error('UNAUTHORIZED'));
+
+    await expect(
+      buildActions({ moveToFolder: 'Archive' }, mockToken)
+    ).rejects.toThrow('UNAUTHORIZED');
+  });
+
+  it('should resolve a nested copyToFolder path', async () => {
+    resolveFolder.mockResolvedValue({
+      id: 'copy-folder-id',
+      displayName: 'Backup',
+      parentId: 'p',
+      path: 'Projects/Backup',
+    });
+
+    const { actions } = await buildActions(
+      { copyToFolder: 'Projects/Backup' },
+      mockToken
+    );
+
+    expect(resolveFolder).toHaveBeenCalledWith(mockToken, {
+      name: 'Projects/Backup',
+    });
     expect(actions.copyToFolder).toBe('copy-folder-id');
   });
 

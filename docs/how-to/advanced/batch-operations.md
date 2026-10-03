@@ -8,7 +8,7 @@ tags: [outlook-assistant, advanced, how-to]
 
 Process multiple emails in a single operation — flag them, move them, export them, or apply categories in bulk.
 
-> **v3.5.0**: The server now includes a `callGraphAPIBatch()` infrastructure that sends up to 20 Graph API requests in a single `$batch` call. The batch operations below use the tool-level batch parameters; the underlying `$batch` API may be used internally for improved performance in future versions.
+> **v3.5.0**: The server now includes a `callGraphAPIBatch()` infrastructure that sends up to 20 Graph API requests in a single `$batch` call. The batch operations below use the tool-level batch parameters; the underlying `$batch` API may be used internally for improved performance in future versions. Today, batch flag/unflag/complete updates the messages one at a time (one request each), so a large batch takes proportionally longer.
 
 ## Batch Flag Emails
 
@@ -19,8 +19,12 @@ tool: update-email
 params:
   action: "flag"
   ids: ["AAMkAGR1...", "AAMkAGR2...", "AAMkAGR3..."]
-  dueDateTime: "2026-03-15T09:00:00Z"
+  dueDateTime: "2026-03-15T09:00:00"
 ```
+
+A due date-time without a zone is read in your configured timezone
+(`OUTLOOK_DEFAULT_TIMEZONE`); add `Z` or an offset such as `+11:00` to pin an
+exact instant. See [Flag Emails for Follow-Up](../email/flag-emails-for-follow-up.md#set-a-due-date).
 
 Batch unflag:
 

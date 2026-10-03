@@ -17,12 +17,12 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
-| `search-emails` | Search, list, delta sync, conversations | read-only | `query`, `from`, `to`, `folder` (name or nested path), `searchAllFolders`, `searchExpression`, `deltaMode`, `conversationId`, `groupByConversation`, `internetMessageId`, `sharedMailbox` (alias `email`) |
+| `search-emails` | Search, list, delta sync, conversations | read-only | `query`, `from`, `to`, `folder` (name or nested path), `searchAllFolders`, `searchExpression`, `deltaMode`, `conversationId`, `groupByConversation`, `internetMessageId`, `sharedMailbox` (alias `email`), `maxResults` (delta page size) |
 | `read-email` | Read content or forensic headers | read-only | `id`, `headersMode`, `groupByType`, `importantOnly`, `sharedMailbox` (alias `email`) |
 | `send-email` | Send email with safety controls | **destructive** | `to`, `subject`, `body`, `dryRun`, `checkRecipients`, `cc`, `bcc`, `importance` |
 | `draft` | Create, update, send, delete, reply, forward drafts | **destructive** | `action` (required), `id`, `to`, `subject`, `body`, `comment`, `dryRun`, `checkRecipients` |
 | `get-mail-tips` | Pre-send recipient validation | read-only | `recipients`, `tipTypes` |
-| `update-email` | Mark read/unread, flag/unflag/complete | idempotent | `action` (required), `id`, `ids`, `dueDateTime`, `sharedMailbox` (alias `email`) |
+| `update-email` | Mark read/unread, flag/unflag/complete | idempotent | `action` (required), `id`, `ids`, `dueDateTime`, `startDateTime`, `sharedMailbox` (alias `email`) |
 | `attachments` | List, view, or download attachments | moderate write | `action` (`list`/`view`/`download`), `messageId`, `attachmentId`, `outputDir` (download; default system tmpdir), `sharedMailbox` (alias `email`) |
 | `export` | Export emails to various formats | moderate write | `target` (`message`/`messages`/`conversation`/`mime`), `id`, `emailIds`, `searchQuery`/`query`, `conversationId`, `format`, `outputDir` (or `savePath` for a single message), `sharedMailbox` (alias `email`) |
 
@@ -40,7 +40,7 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 | Search | `query`, `from`, `to`, etc. | Full search with OData filters; `searchExpression` for a raw Graph `$search` expression; `searchAllFolders: true` for cross-folder |
 | Delta | `deltaMode: true` | Incremental sync, returns `deltaToken` |
 | Conversation list | `groupByConversation: true` | Groups by thread |
-| Conversation get | `conversationId` | All messages in a thread |
+| Conversation get | `conversationId` | Messages in a thread, oldest first (up to 100; `export target=conversation` takes up to 1000) |
 | Message-ID lookup | `internetMessageId` | Find by RFC Message-ID header |
 
 > **Personal accounts**: The `query` and raw `searchExpression` (formerly `kqlQuery`, kept as a deprecated alias) parameters use Microsoft's `$search` API, which has limited support on personal Outlook.com accounts. Unscoped expressions work; field-scoped ones (e.g. `from:someone@example.com`, `subject:"…"`) return nothing from `$search` there, so since v3.10.0 they are translated into the closest equivalent OData filters and retried, reported as strategy `raw-kql-translated` (#217) — note a `subject:` term becomes a substring match, so the translation is close rather than identical. Expressions that cannot be translated exactly — free text, `AND`/`OR`, unknown prefixes — still terminate rather than silently falling back to an unfiltered search. `query` handles the same limitation with progressive fallback (OData filters, boolean filters, recent listing). Structured filters (`from`, `subject`, `to`, `receivedAfter`, `hasAttachments`, `unreadOnly`) remain the most direct route. Cross-folder search (`searchAllFolders: true`) returns a superset of inbox-only results.
@@ -51,7 +51,7 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 
 > **Search metadata**: every `search-emails` response carries `_meta.searchMetadata`. `finalStrategy` names the rung that answered (`combined-search`, `single-term-*`, `client-side-*`, `boolean-filters-only`, `raw-kql-translated`, `recent-emails`); `filterApplied` says whether every supplied filter was honoured; `droppedFilters` lists any that were not — it should always be empty, and a non-empty value means the result set is broader than the query (#229). `candidatesScanned` (with `scanLimit` and `truncated`) discloses how many messages a client-side fallback examined, so a bounded scan never reads as a whole-mailbox answer; `kqlTranslatedTo` records the rewrite when a field-scoped `searchExpression` was translated. An empty search additionally reports in its guidance text how many messages any local narrowing pass looked at.
 
-> **Delta sync** is designed for inbox monitoring workflows. The first call returns current emails and a `deltaToken`; subsequent calls with that token return only new, modified, and deleted messages. See [Monitor Inbox with Delta Sync](../how-to/ai-agents/monitor-inbox-with-delta-sync.md).
+> **Delta sync** is designed for inbox monitoring workflows. The first call returns current emails and a `deltaToken`; subsequent calls with that token return only new, modified, and deleted messages. `maxResults` (1–200, default 100) sets the page size, sent as `Prefer: odata.maxpagesize` on every request; when a page returns a continuation token (`_meta.tokenType: "continuation"`), keep passing it back with the same `maxResults` until a delta token arrives. See [Monitor Inbox with Delta Sync](../how-to/ai-agents/monitor-inbox-with-delta-sync.md).
 
 ### update-email actions
 
@@ -63,19 +63,21 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 | `unflag` | Clear flag | `id` or `ids` (batch) |
 | `complete` | Mark flag as complete | `id` or `ids` (batch) |
 
+Flag dates: a `dueDateTime`/`startDateTime` with `Z` or a ±hh:mm offset is kept as that exact instant (sent to Graph in UTC); one without a zone is read in the configured timezone (`OUTLOOK_DEFAULT_TIMEZONE`, default Australia/Melbourne). Date-only or unparseable values are refused before any change. With only `dueDateTime`, the start defaults to 09:00 on the due date in the configured timezone, or the due time if earlier. The reply shows each date in UTC and in the configured timezone.
+
 ### draft actions
 
 | Action | Description | Required Params |
 |--------|-------------|-----------------|
 | `create` | Save new draft to Drafts folder | — (all optional) |
-| `update` | Edit existing draft | `id` |
-| `send` | Send an existing draft | `id` |
-| `delete` | Remove a draft | `id` |
+| `update` | Edit an existing draft (refuses non-drafts) | `id` |
+| `send` | Send an existing draft (refuses non-drafts) | `id` |
+| `delete` | Delete a draft to Recoverable Items (restorable for a limited time, depending on your account), skipping Deleted Items (refuses non-drafts) | `id` |
 | `reply` | Create reply draft from message | `id` |
 | `reply-all` | Create reply-all draft from message | `id` |
 | `forward` | Create forward draft with new recipients | `id`, `to` |
 
-> **Draft safety**: `dryRun: true` previews without saving (create only). `checkRecipients: true` validates recipients via mail-tips before saving. The `send` action shares rate limits with `send-email`. Recipient allowlist applies to create, update, and forward. `comment` and `body` are mutually exclusive on reply/forward.
+> **Draft safety**: `dryRun: true` previews without saving (create only). `checkRecipients: true` validates recipients via mail-tips before saving. The `send` action shares rate limits with `send-email`. Recipient allowlist applies to create, update, and forward. `update`, `send` and `delete` check the `id` first and refuse anything that is not an unsent draft, so a received or sent message is never edited, deleted or re-sent. `comment` and `body` are mutually exclusive on reply/forward.
 
 ### Export formats
 
@@ -94,9 +96,9 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
-| `list-events` | List events: upcoming by default, or past/current/by name with filters (times as canonical UTC ISO-8601 + labelled local) | read-only | `count` (default 10, max 50), `startAfter`/`startBefore` (ISO 8601 with `Z` or ±hh:mm, normalised to UTC), `subject` (case-insensitive contains, ≤ 255 chars). Supplying any filter replaces the default `start ≥ now` bound and filters are AND-ed; backward-looking searches (`startBefore` alone, or `subject` alone) return newest first. Invalid values return a tool error before any Graph call |
-| `create-event` | Create new event | moderate write | `subject`, `start`, `end`, `attendees`, `body`. Times use configured timezone (default: Australia/Melbourne; override with `OUTLOOK_DEFAULT_TIMEZONE` env var) — omit `Z` suffix for local time |
-| `manage-event` | Update, decline, cancel, or delete | **destructive** | `action` (`update`/`decline`/`cancel`/`delete`), `eventId` (or alias `id`), `comment` (decline/cancel), `subject`/`start`/`end`/`attendees`/`body`/`location`/`isOnlineMeeting`/`sensitivity`/`showAs`/`importance`/`categories`/`reminderMinutesBeforeStart` (update only — only the fields you pass are changed), `dryRun` (preview the PATCH without applying it) |
+| `list-events` | List events: upcoming by default, or past/current/by name with filters (times as canonical UTC ISO-8601 + labelled local) | read-only | `count` (default 10, max 100), `startAfter`/`startBefore` (ISO 8601 with `Z` or ±hh:mm, normalised to UTC), `subject` (case-insensitive contains, ≤ 255 chars). Supplying any filter replaces the default `start ≥ now` bound and filters are AND-ed; backward-looking searches (`startBefore` alone, or `subject` alone) return newest first. Invalid values return a tool error before any Graph call |
+| `create-event` | Create new event | moderate write | `subject`, `start`, `end`, `attendees` (email strings are required attendees; `{email, type}` objects set `type` to `required`/`optional`/`resource`), `body`. Times use configured timezone (default: Australia/Melbourne; override with `OUTLOOK_DEFAULT_TIMEZONE` env var) — omit `Z` suffix for local time |
+| `manage-event` | Update, decline, cancel, or delete (delete removes the event and Graph doesn't document a guaranteed recovery path; deleting a meeting you organised that has attendees emails them a cancellation; use `cancel` with a `comment` to control the message) | **destructive** | `action` (`update`/`decline`/`cancel`/`delete`), `eventId` (or alias `id`), `comment` (decline/cancel; omitted if not given), `sendResponse` (decline only; `false` declines without notifying the organiser), `subject`/`start`/`end`/`attendees`/`body`/`location`/`isOnlineMeeting`/`sensitivity`/`showAs`/`importance`/`categories`/`reminderMinutesBeforeStart` (update only — only the fields you pass are changed; `attendees` is a full replacement list of email strings or `{email, type}` objects, and an entry without a type keeps the type that address already has, new addresses being required), `dryRun` (preview the PATCH without applying it; with untyped attendees it reads the event first so the preview shows the resolved types) |
 
 ## Folder (1 tool)
 
@@ -108,7 +110,7 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 
 | Tool | Actions | Safety | Key Parameters |
 |------|---------|--------|----------------|
-| `manage-rules` | `list` (default), `create`, `update`, `reorder`, `delete` | **destructive** | `name` (or alias `displayName`), `fromAddresses`, `containsSubject`, `bodyContains`, `hasAttachments`, `moveToFolder`, `forwardTo`, `assignCategories`, `dryRun`, `except*`, `ruleName`, `ruleId`, `sequence` |
+| `manage-rules` | `list` (default), `create`, `update`, `reorder`, `delete` | **destructive** | `name` (or alias `displayName`), `fromAddresses`, `containsSubject`, `bodyContains`, `hasAttachments`, `moveToFolder`/`copyToFolder` (name, nested path like `Triage/Delete`, or ID), `forwardTo`, `assignCategories`, `dryRun`, `except*`, `ruleName`, `ruleId`, `sequence` |
 
 ## Contacts (2 tools)
 
@@ -194,6 +196,7 @@ Check recipients before sending — detects out-of-office, mailbox full, deliver
 | Session rate limit (create/update) | `OUTLOOK_MAX_DRAFT_PER_SESSION` env | Unlimited (0) |
 | Session rate limit (send) | `OUTLOOK_MAX_EMAILS_PER_SESSION` env (shared with `send-email`) | Unlimited (0) |
 | Recipient allowlist | `OUTLOOK_ALLOWED_RECIPIENTS` env | Allow all |
+| Drafts-only guard (update/send/delete) | Always on | Non-drafts refused |
 
 ## Common Patterns
 
@@ -247,8 +250,9 @@ list-events(subject: "standup", count: 5)
 // Set out-of-office
 mailbox-settings(action: "set-auto-replies", enabled: true, internalReplyMessage: "I'm away...")
 
-// Flag email for follow-up
+// Flag email for follow-up (Z/offset = exact instant; no zone = configured timezone)
 update-email(action: "flag", id: "...", dueDateTime: "2026-03-01T09:00:00Z")
+update-email(action: "flag", id: "...", dueDateTime: "2026-03-01T17:00:00")
 
 // Access shared mailbox (needs OUTLOOK_SHARED_MAILBOX for listFolders / custom names)
 access-shared-mailbox(sharedMailbox: "team@company.com", folder: "inbox")
@@ -266,8 +270,11 @@ folders(action: "list", sharedMailbox: "team@company.com", includeChildren: true
 search-emails(sharedMailbox: "team@company.com", folder: "Archiv", query: "invoice")
 
 // Delta sync (initial — returns emails + deltaToken)
-search-emails(deltaMode: true)
+search-emails(deltaMode: true, maxResults: 50)
+
+// Delta sync paging (continuation token from the previous page, same page size)
+search-emails(deltaMode: true, deltaToken: "continuation-token...", maxResults: 50)
 
 // Delta sync (incremental — returns only changes)
-search-emails(deltaMode: true, deltaToken: "previous-token...")
+search-emails(deltaMode: true, deltaToken: "previous-token...", maxResults: 50)
 ```

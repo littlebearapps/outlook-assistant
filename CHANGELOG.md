@@ -7,6 +7,168 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.1] - 2026-10-03
+
+### Fixed
+
+- **Graph requests now survive throttling and can no longer hang** (#244).
+  Every Graph call (including MIME export) retries `429` responses and, for
+  GET/PUT/PATCH/DELETE, `503`/`504` — up to 3 retries, honouring
+  `Retry-After` or backing off with jitter (1 s doubling, capped at 30 s); a
+  `Retry-After` over 60 seconds fails straight away with Graph's message. GET
+  requests also retry once after a timeout or dropped connection. POST requests
+  (send, reply, move, `$batch`) are never re-sent after a timeout or network
+  error; they are retried only on `429`, and only for waits of 10 s or less
+  each (20 s in total), to stay well inside a typical MCP client timeout. An
+  attempt that receives no data for
+  `OUTLOOK_REQUEST_TIMEOUT_MS` (default 60000 ms; an inactivity timeout, not an
+  overall deadline) is now abandoned instead of waiting forever, and at most 4
+  requests are in flight at once, so bulk operations no longer trigger
+  throttling themselves.
+- **`$filter` was stripped from the caller's query parameters** after the first
+  request (#244), so a caller reusing the object (such as the multi-step search
+  fallbacks) silently lost its filter. The query object is no longer modified.
+- **Delta sync `maxResults` capped the whole sync instead of sizing a page**
+  (#254). It was sent as `$top`, which on `messages/delta` ends the sync after
+  that many messages (`maxResults: 5` returned 5 of 38 messages plus a final
+  delta token, so the rest were never synced). The page size is now sent as
+  `Prefer: odata.maxpagesize` on the initial request and on every continuation
+  request, so a large folder pages through completely. `maxResults` is clamped
+  to a whole number from 1 to 200 (default 100); previously `0` became 100 and
+  negative or fractional values reached Graph.
+- **`manage-rules` could not target nested folders** (#248). `moveToFolder` and
+  `copyToFolder` only matched top-level folder names, so a path such as
+  `Triage/Delete` was always reported as "not found", and a name containing an
+  apostrophe broke the lookup and was misreported as "not found" too. They now
+  use the same resolver as the `folders` tool: a folder ID, well-known name
+  (`archive`, `sent`…), nested path, or bare name (searched through subfolders).
+  An ambiguous name lists the matching folders instead of picking one, a
+  not-found warning now includes the resolver's reason (such as an empty path
+  segment or Graph's 400 message), and an authentication or network failure is
+  reported as such rather than as a missing folder.
+- **`draft` update/send/delete acted on any message, not just drafts** (#246).
+  Given the ID of a received or sent message, `update` edited it, `delete`
+  deleted it and `send` tried to send it. These actions now look the ID up
+  first and refuse anything that is not an unsent draft (nothing is changed,
+  and a refusal doesn't use up a rate-limit slot); an ID that no longer exists
+  reports "Draft not found". The tool description also said `delete` was
+  permanent: the draft skips Deleted Items and goes to Recoverable Items, where
+  Outlook's "Recover deleted items" can restore it for a limited time,
+  depending on your account.
+- **`update-email` flag dates ignored `Z` and offsets** (#247). The trailing
+  `Z` was stripped and the time read in the default timezone, and offsets such
+  as `+10:00` were passed through, so `09:00Z` became 09:00 Melbourne (10 or 11
+  hours early). `dueDateTime`/`startDateTime` with `Z` or an offset are now sent
+  as that exact instant in UTC; values without a zone are still read in
+  `OUTLOOK_DEFAULT_TIMEZONE`. Date-only and unparseable values are refused
+  before anything changes. The default start (09:00 on the due date in the
+  default timezone) can no longer fall after the due time, and the reply shows
+  each date in UTC and the default timezone instead of the server's local time.
+- **`manage-event` decline and cancel sent "via API" text on your behalf**
+  (#242). Without a `comment`, a decline told the organiser "Declined via API"
+  and a cancellation told every attendee "Cancelled via API". The comment is
+  now sent only when you give one. `decline` also accepts `sendResponse`
+  (boolean, default `true`): pass `false` to decline without notifying the
+  organiser.
+- **`manage-event` update turned optional attendees and rooms into required
+  attendees** (#249). Updating `attendees` sent every address as `required`,
+  and because the list is replaced as a whole, a booked room became a required
+  human attendee. An address given as a plain string now keeps the type it
+  already has on the event (new addresses are required); the event's current
+  attendees are read first, also on `dryRun`, so the preview shows the types
+  that would be sent. Passing `[]` still clears the list without reading it.
+- **Search text containing `"` or `\` broke the request** (#251). `search-people`
+  queries, `search-emails` `query` text, a bare single-token `searchExpression`
+  and `export` `searchQuery` values are wrapped in a quoted Graph `$search`
+  phrase, and an unescaped `"` ended the phrase early, so a name such as
+  `Sam "the man" Lee` could fail with a 400 or match the wrong text. Double
+  quotes and backslashes inside these phrases are now backslash-escaped, as
+  Graph requires. A `searchExpression` you write yourself is still sent exactly
+  as given, so escape any quotes inside your own phrases.
+- **Conversation export could overwrite files and follow symlinks** (#258).
+  `export target=conversation` wrote with a plain overwrite, so a second export
+  of a thread replaced the first, and a planted symlink at the target name was
+  followed out of `outputDir`. It now writes exclusively like message export
+  and attachment download (one shared implementation): an existing file or
+  symlink is never touched and the new file gets a `-1`, `-2`, … suffix. `eml`
+  exports go into a new directory the export creates (`…_conversation-1/` on a
+  second run), never an existing or symlinked one. A write that fails part-way
+  (for example, a full disk) now removes the partly written file instead of
+  leaving a truncated file under that name.
+- **Conversation read and export failed on personal accounts.**
+  `search-emails conversationId` and `export target=conversation` combined the
+  `conversationId` filter with `$orderby`, which Graph rejects on Outlook.com
+  accounts (`400 InefficientFilter`), and then wrongly reported that
+  conversations aren't supported on personal Microsoft accounts. The query no
+  longer sorts on the server: the thread is fetched page by page and sorted
+  by received date locally, oldest first (newest first with
+  `order: "reverse"`). `search-emails conversationId` returns up to 100
+  messages and `export target=conversation` up to 1000 (previously only the
+  first 100); a longer thread gets a "Conversation truncated at N messages"
+  note and `_meta.truncated: true` instead of being cut short silently. Any
+  other Graph error is now shown as-is instead of that message. A `'` in
+  `conversationId` is now escaped, so the ID can't widen the filter beyond the
+  one thread.
+- **`list-events` documented the wrong `count` limit and missing fields**
+  (#258). The description said max 50 but up to 100 events are returned; it
+  also promised attendees, organiser and webLink, which the output never
+  included. `count` below 1 or fractional is now clamped to a whole number of
+  at least 1 instead of reaching Graph (`0` previously became 10); a missing
+  or `null` `count` means the default of 10.
+- **FAQ read-only advice was wrong** (#258). Removing write permissions from the
+  Azure app registration doesn't make the server read-only: sign-in requests
+  the full scope set on both auth paths and that list doesn't cap consent. The
+  FAQ now points to client approval prompts, the safety controls and
+  `OUTLOOK_SHARED_MAILBOX=read`.
+- **Running the test suite could cancel a real sign-in** (#257).
+  `test/auth/auth-tools.test.js` wrote and deleted the real
+  `~/.outlook-assistant-pending-auth.json`, so `npm test` during a device-code
+  sign-in removed the pending flow. The suite now points `HOME` at a temporary
+  directory, so it never touches your own files.
+- **Three tool descriptions misdescribed what happens.** `manage-event` said
+  `delete` "permanently" removes the event and the how-to called it silent:
+  it now says only that the event is removed (Graph doesn't document a
+  guaranteed recovery path), and that deleting a meeting you organised that
+  has attendees emails them a cancellation (use `cancel` with a `comment` to
+  control that message). `update-email` said batch
+  flag/unflag/complete used Graph `$batch`; the messages are updated one at a
+  time. `folders` said a deleted folder goes to Deleted Items on Outlook.com;
+  it doesn't, and Graph doesn't document whether it can be restored (some
+  accounts may offer Outlook's "Recover deleted items" for a limited time),
+  so move out anything you might need before deleting a folder.
+
+### Changed
+
+- **`--help` lists the optional environment variables** (#258):
+  `OUTLOOK_SHARED_MAILBOX`, `OUTLOOK_SEARCH_SCAN_LIMIT`,
+  `OUTLOOK_DEFAULT_TIMEZONE`, `OUTLOOK_IMMUTABLE_IDS`,
+  `OUTLOOK_REQUEST_TIMEOUT_MS` and the per-tool `OUTLOOK_MAX_<TOOL>_PER_SESSION`
+  caps (e.g. `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION`).
+- **Export filename collisions now use `-1`, `-2`, …** (#258), matching
+  attachment download, instead of `_2`, `_3`, …. The confinement error now
+  reads `Refusing to write file outside outputDir` (was `… export file …`).
+- **`create-event` and `manage-event` accept typed attendees** (#249). Each
+  `attendees` entry can be an email address or `{email, type}` with `type`
+  `required`, `optional` or `resource` (a room or equipment); an explicit type
+  always wins. Plain strings still mean required attendees on `create-event`.
+  An unknown type or field is refused before anything changes, as a tool
+  error (`isError`).
+- **Date-only flag dates are now refused** (#247). `update-email` `flag`
+  `dueDateTime`/`startDateTime` must be a full date-time (for example
+  `2026-10-09T17:00:00`, optionally with `Z` or an offset); a date-only value
+  such as `2026-10-09`, previously accepted, is refused before anything
+  changes.
+
+### Removed
+
+- Unused internal helper `callGraphAPIWithAuth` (#244).
+- Internal top-level-only folder helpers `getFolderIdByName` and `getAllFolders`
+  (#248), superseded by the shared folder resolver.
+- Unused `calendar/accept.js` handler (#242); `manage-event` has no `accept`
+  action.
+- Internal write helpers `writeUniqueFile` (`email/attachments.js`) and the
+  private copies in `email/export.js` (#258), replaced by `utils/safe-write.js`.
+
 ## [3.12.0] - 2026-10-02
 
 Two community contributions: opt-in shared-mailbox read and organise support

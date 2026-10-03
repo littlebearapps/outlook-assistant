@@ -48,7 +48,7 @@ const emailTools = [
         deltaMode: {
           type: 'boolean',
           description:
-            'Enable delta sync mode. Returns only changes since last sync. Use deltaToken for subsequent calls. Honors `sharedMailbox`/`email` (and custom `folder` paths) to sync within a shared/delegated mailbox.',
+            'Enable delta sync mode. Returns only changes since last sync. Use deltaToken for subsequent calls; an initial sync larger than `maxResults` arrives over several pages, each returning a continuation token to pass back until a delta token is returned. Honors `sharedMailbox`/`email` (and custom `folder` paths) to sync within a shared/delegated mailbox.',
         },
         internetMessageId: {
           type: 'string',
@@ -58,7 +58,7 @@ const emailTools = [
         conversationId: {
           type: 'string',
           description:
-            'Get all messages in a conversation thread by conversationId. Honors `sharedMailbox`/`email` to thread within a shared/delegated mailbox.',
+            'Get the messages in a conversation thread by conversationId, oldest first (up to 100; a longer thread is marked truncated — use `export target=conversation` for up to 1000). Honors `sharedMailbox`/`email` to thread within a shared/delegated mailbox.',
         },
         groupByConversation: {
           type: 'boolean',
@@ -74,7 +74,7 @@ const emailTools = [
         searchExpression: {
           type: 'string',
           description:
-            'Raw Microsoft Graph `$search` expression for advanced server-side search, e.g. `subject:"invoice"`, `from:github.com`, or `foo OR bar`. Quote your own phrases; a single bare token is auto-quoted. Pair with `searchAllFolders: true` for cross-folder search. Bypasses other search params. NOTE: personal Outlook.com accounts reject field-scoped `$search` outright; since v3.10.0 recognised `from:`/`to:`/`subject:` expressions are translated into the closest equivalent OData filters and retried automatically (a `subject:` term becomes a substring match, so it is close but not identical) (reported as strategy `raw-kql-translated`). Expressions that cannot be translated exactly — free text, `AND`/`OR`, unknown prefixes — are not retried, so use `query` for those there. RELEVANCE, NOT RECENCY: an untranslated expression is answered by Graph `$search` over the whole message including the body, ranked by relevance and not sorted by date, so top hits can look unrelated to a caller expecting a subject match. `query` is the more predictable choice for a term you expect in a subject line; `searchExpression` is the one that reaches body text.',
+            'Raw Microsoft Graph `$search` expression for advanced server-side search, e.g. `subject:"invoice"`, `from:github.com`, or `foo OR bar`. Quote your own phrases, escaping any `"` or `\\` inside them with a backslash; a single bare token is auto-quoted and escaped for you. Pair with `searchAllFolders: true` for cross-folder search. Bypasses other search params. NOTE: personal Outlook.com accounts reject field-scoped `$search` outright; since v3.10.0 recognised `from:`/`to:`/`subject:` expressions are translated into the closest equivalent OData filters and retried automatically (a `subject:` term becomes a substring match, so it is close but not identical) (reported as strategy `raw-kql-translated`). Expressions that cannot be translated exactly — free text, `AND`/`OR`, unknown prefixes — are not retried, so use `query` for those there. RELEVANCE, NOT RECENCY: an untranslated expression is answered by Graph `$search` over the whole message including the body, ranked by relevance and not sorted by date, so top hits can look unrelated to a caller expecting a subject match. `query` is the more predictable choice for a term you expect in a subject line; `searchExpression` is the one that reaches body text.',
         },
         kqlQuery: {
           type: 'string',
@@ -147,7 +147,7 @@ const emailTools = [
         maxResults: {
           type: 'number',
           description:
-            'Max results per page for delta sync (default: 100, max: 200)',
+            'Delta sync page size (deltaMode only): 1-200, default 100, sent to Graph as the `Prefer: odata.maxpagesize` header. It sizes each page, not the whole sync: while a page returns a continuation token, keep calling with that token until a delta token is returned, and pass the same `maxResults` on every page (an omitted value means 100).',
         },
         // Conversation params
         includeHeaders: {
@@ -327,7 +327,7 @@ const emailTools = [
   {
     name: 'draft',
     description:
-      'Full draft lifecycle for review-before-send workflows (destructive: covers `send` and `delete`). action=`create` saves a new draft in the Drafts folder and returns its id (use `dryRun: true` to preview without saving; `checkRecipients: true` runs mail-tips first). action=`update` patches an existing draft by `id` (only fields passed are changed). action=`send` dispatches an existing draft — shares the rate limit with `send-email`. action=`delete` removes a draft permanently. action=`reply`/`reply-all` creates a reply draft from a message `id` (use `comment` to prepend text — mutually exclusive with `body`). action=`forward` creates a forward draft (requires `id` and `to`). Recipient allowlist applies to create/update/forward. Returns the draft object on create/update/reply/forward; status confirmation on send/delete.',
+      'Full draft lifecycle for review-before-send workflows (destructive: covers `send` and `delete`). action=`create` saves a new draft in the Drafts folder and returns its id (use `dryRun: true` to preview without saving; `checkRecipients: true` runs mail-tips first). action=`update` patches an existing draft by `id` (only fields passed are changed). action=`send` dispatches an existing draft — shares the rate limit with `send-email`. action=`delete` deletes a draft: it skips Deleted Items and goes to Recoverable Items (restorable for a limited time, depending on your account, via "Recover deleted items" in Outlook). update/send/delete refuse any `id` that is not an unsent draft (received or sent messages are never changed). action=`reply`/`reply-all` creates a reply draft from a message `id` (use `comment` to prepend text — mutually exclusive with `body`). action=`forward` creates a forward draft (requires `id` and `to`). Recipient allowlist applies to create/update/forward. Returns the draft object on create/update/reply/forward; status confirmation on send/delete.',
     annotations: {
       title: 'Draft Operations',
       readOnlyHint: false,
@@ -354,7 +354,7 @@ const emailTools = [
         id: {
           type: 'string',
           description:
-            'Draft or message ID. Required for update/send/delete/reply/reply-all/forward.',
+            'Draft or message ID. Required for update/send/delete/reply/reply-all/forward. update/send/delete need a draft ID; reply/reply-all/forward take any message ID.',
         },
         to: {
           type: 'string',
@@ -406,7 +406,7 @@ const emailTools = [
   {
     name: 'update-email',
     description:
-      'Update message state without modifying content (idempotent — safe to retry). action=`mark-read`/`mark-unread` toggles the `isRead` flag on a single message by `id`. action=`flag` sets a follow-up flag with optional `dueDateTime`/`startDateTime` (ISO 8601). action=`unflag` clears the flag. action=`complete` marks the flag as done. Flag/unflag/complete accept either `id` (single) or `ids` (batch array) — batch operations use Graph `$batch` for efficiency. Pass `sharedMailbox` (or alias `email`) to update messages in a shared/delegated mailbox instead of the signed-in account (requires Mail.ReadWrite.Shared + delegate access). Returns status confirmation per message.',
+      'Update message state without modifying content (idempotent — safe to retry). action=`mark-read`/`mark-unread` toggles the `isRead` flag on a single message by `id`. action=`flag` sets a follow-up flag with optional `dueDateTime`/`startDateTime` (ISO 8601 with a time: a value with `Z` or a ±hh:mm offset is kept as that exact instant; a value without one is read in the configured default timezone (OUTLOOK_DEFAULT_TIMEZONE); date-only or unparseable values are refused before any change). With only `dueDateTime`, the start defaults to 09:00 on the due date in the default timezone, or to the due time if that is earlier. action=`unflag` clears the flag. action=`complete` marks the flag as done. Flag/unflag/complete accept either `id` (single) or `ids` (batch array) — messages in a batch are updated one at a time (one PATCH each, not Graph `$batch`). Pass `sharedMailbox` (or alias `email`) to update messages in a shared/delegated mailbox instead of the signed-in account (requires Mail.ReadWrite.Shared + delegate access). Returns status confirmation per message.',
     annotations: {
       title: 'Update Email',
       readOnlyHint: false,
@@ -436,11 +436,13 @@ const emailTools = [
         // Flag params
         dueDateTime: {
           type: 'string',
-          description: 'Due date/time for follow-up, ISO 8601 (action=flag)',
+          description:
+            'Due date/time for follow-up (action=flag). ISO 8601 with a time: "2026-03-01T09:00:00Z" or "2026-03-01T09:00:00+10:00" is that exact instant; "2026-03-01T09:00:00" (no zone) is read in the default timezone (OUTLOOK_DEFAULT_TIMEZONE).',
         },
         startDateTime: {
           type: 'string',
-          description: 'Start date/time for follow-up, ISO 8601 (action=flag)',
+          description:
+            'Start date/time for follow-up (action=flag), same format as dueDateTime. Defaults to 09:00 on the due date in the default timezone (capped at the due time) when only dueDateTime is given.',
         },
         sharedMailbox: {
           type: 'string',
@@ -575,7 +577,7 @@ const emailTools = [
   {
     name: 'export',
     description:
-      'Export emails to file formats for archival, forensics, or programmatic processing. target=`message` (default) exports a single email by `id` to `savePath` — accepts `mime`/`eml`/`markdown`/`json`/`csv`. target=`messages` batch-exports either an explicit `emailIds` array or messages matching `searchQuery` (or `query` shortcut) into `outputDir` — accepts `markdown`/`json`/`csv`. target=`conversation` exports a full thread by `conversationId` into `outputDir` (chronological by default; pass `order: "reverse"` for newest-first) — accepts `eml`/`mbox`/`markdown`/`json`/`html`/`csv`. target=`mime` returns raw RFC-822 MIME bytes for `id` (use `headersOnly` for just headers, `base64` for encoded transport, `maxSize` to cap at default 1MB). All targets accept `sharedMailbox` (alias `email`) to export from a shared/delegated mailbox instead of the signed-in account — pass it whenever the id(s)/conversationId/searchQuery come from a shared mailbox, or exports fail with 404 ErrorInvalidMailboxItemId. `includeAttachments` defaults to true for single-message exports and false for batch. Format support varies by target — see the format param enum.',
+      'Export emails to file formats for archival, forensics, or programmatic processing. target=`message` (default) exports a single email by `id` to `savePath` — accepts `mime`/`eml`/`markdown`/`json`/`csv`. target=`messages` batch-exports either an explicit `emailIds` array or messages matching `searchQuery` (or `query` shortcut) into `outputDir` — accepts `markdown`/`json`/`csv`. target=`conversation` exports a full thread (up to 1000 messages) by `conversationId` into `outputDir` (chronological by default; pass `order: "reverse"` for newest-first) — accepts `eml`/`mbox`/`markdown`/`json`/`html`/`csv`. target=`mime` returns raw RFC-822 MIME bytes for `id` (use `headersOnly` for just headers, `base64` for encoded transport, `maxSize` to cap at default 1MB). All targets accept `sharedMailbox` (alias `email`) to export from a shared/delegated mailbox instead of the signed-in account — pass it whenever the id(s)/conversationId/searchQuery come from a shared mailbox, or exports fail with 404 ErrorInvalidMailboxItemId. `includeAttachments` defaults to true for single-message exports and false for batch. Format support varies by target — see the format param enum.',
     annotations: {
       title: 'Export Emails',
       readOnlyHint: false,

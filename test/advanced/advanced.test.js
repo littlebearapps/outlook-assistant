@@ -451,7 +451,7 @@ describe('handleSetMessageFlag', () => {
     });
   });
 
-  it('should strip trailing Z from dueDateTime', async () => {
+  it('should send a Z dueDateTime as the same instant in UTC (#247)', async () => {
     callGraphAPI.mockResolvedValue({});
 
     await handleSetMessageFlag({
@@ -460,8 +460,184 @@ describe('handleSetMessageFlag', () => {
     });
 
     const patchBody = callGraphAPI.mock.calls[0][3];
-    expect(patchBody.flag.dueDateTime.dateTime).toBe('2024-01-20T17:00:00');
-    expect(patchBody.flag.dueDateTime.timeZone).toBe('Australia/Melbourne');
+    expect(patchBody.flag.dueDateTime).toEqual({
+      dateTime: '2024-01-20T17:00:00',
+      timeZone: 'UTC',
+    });
+  });
+
+  describe('zoned and naive date handling (#247)', () => {
+    const flagOf = () => callGraphAPI.mock.calls[0][3].flag;
+
+    beforeEach(() => {
+      callGraphAPI.mockResolvedValue({});
+    });
+
+    it('keeps a Z due instant in UTC', async () => {
+      await handleSetMessageFlag({
+        messageId: 'msg-1',
+        dueDateTime: '2026-03-01T09:00:00Z',
+      });
+      expect(flagOf().dueDateTime).toEqual({
+        dateTime: '2026-03-01T09:00:00',
+        timeZone: 'UTC',
+      });
+    });
+
+    it('accepts a lowercase z', async () => {
+      await handleSetMessageFlag({
+        messageId: 'msg-1',
+        dueDateTime: '2026-03-01T09:00:00z',
+      });
+      expect(flagOf().dueDateTime).toEqual({
+        dateTime: '2026-03-01T09:00:00',
+        timeZone: 'UTC',
+      });
+    });
+
+    it('converts a +10:00 offset to UTC', async () => {
+      await handleSetMessageFlag({
+        messageId: 'msg-1',
+        dueDateTime: '2026-03-01T09:00:00+10:00',
+      });
+      expect(flagOf().dueDateTime).toEqual({
+        dateTime: '2026-02-28T23:00:00',
+        timeZone: 'UTC',
+      });
+    });
+
+    it('converts a negative offset to UTC', async () => {
+      await handleSetMessageFlag({
+        messageId: 'msg-1',
+        dueDateTime: '2026-03-01T20:30:00-05:00',
+      });
+      expect(flagOf().dueDateTime).toEqual({
+        dateTime: '2026-03-02T01:30:00',
+        timeZone: 'UTC',
+      });
+    });
+
+    it('leaves a naive due unchanged in the default timezone', async () => {
+      await handleSetMessageFlag({
+        messageId: 'msg-1',
+        dueDateTime: '2026-03-01T09:00:00',
+      });
+      expect(flagOf().dueDateTime).toEqual({
+        dateTime: '2026-03-01T09:00:00',
+        timeZone: 'Australia/Melbourne',
+      });
+    });
+
+    it('caps the derived start at a naive due earlier than 09:00', async () => {
+      await handleSetMessageFlag({
+        messageId: 'msg-1',
+        dueDateTime: '2026-03-01T08:00:00',
+      });
+      expect(flagOf().startDateTime).toEqual({
+        dateTime: '2026-03-01T08:00:00',
+        timeZone: 'Australia/Melbourne',
+      });
+    });
+
+    it('derives the start at 09:00 on the due date in the default timezone for a zoned due', async () => {
+      // 01:00Z on 1 March 2026 is 12:00 in Melbourne (AEDT, +11:00), so the
+      // derived start is 09:00 Melbourne = 2026-02-28T22:00Z, before the due.
+      await handleSetMessageFlag({
+        messageId: 'msg-1',
+        dueDateTime: '2026-03-01T01:00:00Z',
+      });
+      expect(flagOf().dueDateTime).toEqual({
+        dateTime: '2026-03-01T01:00:00',
+        timeZone: 'UTC',
+      });
+      expect(flagOf().startDateTime).toEqual({
+        dateTime: '2026-03-01T09:00:00',
+        timeZone: 'Australia/Melbourne',
+      });
+    });
+
+    it('caps the derived start at a zoned due earlier than 09:00 local', async () => {
+      // 20:00Z on 28 Feb 2026 is 07:00 on 1 March in Melbourne.
+      await handleSetMessageFlag({
+        messageId: 'msg-1',
+        dueDateTime: '2026-02-28T20:00:00Z',
+      });
+      expect(flagOf().startDateTime).toEqual({
+        dateTime: '2026-02-28T20:00:00',
+        timeZone: 'UTC',
+      });
+    });
+
+    it('sends a start-only Z value in UTC', async () => {
+      await handleSetMessageFlag({
+        messageId: 'msg-1',
+        startDateTime: '2026-03-01T09:00:00Z',
+      });
+      expect(flagOf().startDateTime).toEqual({
+        dateTime: '2026-03-01T09:00:00',
+        timeZone: 'UTC',
+      });
+      expect(flagOf().dueDateTime).toBeUndefined();
+    });
+
+    it('converts an explicit zoned start alongside a zoned due', async () => {
+      await handleSetMessageFlag({
+        messageId: 'msg-1',
+        startDateTime: '2026-03-01T08:00:00+10:00',
+        dueDateTime: '2026-03-02T17:00:00+10:00',
+      });
+      expect(flagOf().startDateTime).toEqual({
+        dateTime: '2026-02-28T22:00:00',
+        timeZone: 'UTC',
+      });
+      expect(flagOf().dueDateTime).toEqual({
+        dateTime: '2026-03-02T07:00:00',
+        timeZone: 'UTC',
+      });
+    });
+
+    it.each([
+      ['dueDateTime', 'next friday'],
+      ['dueDateTime', '2026-02-30T09:00:00Z'],
+      ['dueDateTime', '2026-03-01T25:00:00'],
+      ['dueDateTime', '2026-03-01'],
+      ['dueDateTime', '2026-03-01T09:00:00+1000'],
+      ['startDateTime', 'garbage'],
+    ])('refuses %s=%j before any Graph call', async (param, value) => {
+      const args = { messageId: 'msg-1', dueDateTime: '2026-03-01T09:00:00Z' };
+      args[param] = value;
+
+      const result = await handleSetMessageFlag(args);
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain(`Invalid ${param}`);
+      expect(callGraphAPI).not.toHaveBeenCalled();
+    });
+
+    it('reports a Z due in UTC and in the default timezone', async () => {
+      const result = await handleSetMessageFlag({
+        messageId: 'msg-1',
+        dueDateTime: '2026-03-01T09:00:00Z',
+      });
+      const text = result.content[0].text;
+      expect(text).toContain(
+        '**Due**: 2026-03-01 09:00 UTC (2026-03-01 20:00 Australia/Melbourne)'
+      );
+      expect(text).toContain(
+        '**Start**: 2026-02-28 22:00 UTC (2026-03-01 09:00 Australia/Melbourne)'
+      );
+    });
+
+    it('reports a naive due in UTC and in the default timezone', async () => {
+      // Melbourne is on AEST (+10:00) until 4 October 2026.
+      const result = await handleSetMessageFlag({
+        messageId: 'msg-1',
+        dueDateTime: '2026-10-01T09:00:00',
+      });
+      expect(result.content[0].text).toContain(
+        '**Due**: 2026-09-30 23:00 UTC (2026-10-01 09:00 Australia/Melbourne)'
+      );
+    });
   });
 
   it('should use explicit startDateTime when both dates provided', async () => {

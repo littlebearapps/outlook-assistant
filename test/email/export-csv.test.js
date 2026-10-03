@@ -234,3 +234,37 @@ describe('handleBatchExportEmails with CSV format', () => {
     expect(files).toHaveLength(1);
   });
 });
+
+// ──────────────────────────────────────────────────
+// handleBatchExportEmails — searchQuery $search escaping (#251)
+// ──────────────────────────────────────────────────
+describe('handleBatchExportEmails searchQuery $search escaping (#251)', () => {
+  function searchParam() {
+    const call = callGraphAPI.mock.calls.find(([, , , , p]) => p && p.$search);
+    return call && call[4].$search;
+  }
+
+  it('backslash-escapes quotes and backslashes inside the search phrase', async () => {
+    callGraphAPI.mockResolvedValue({ value: [] });
+
+    await handleBatchExportEmails({
+      searchQuery: { subject: 'say "hi" a\\b' },
+      format: 'csv',
+      outputDir: tmpDir,
+    });
+
+    expect(searchParam()).toBe('"subject:say \\"hi\\" a\\\\b"');
+  });
+
+  it('leaves a plain search phrase unchanged', async () => {
+    callGraphAPI.mockResolvedValue({ value: [] });
+
+    await handleBatchExportEmails({
+      searchQuery: { from: 'alice@example.com', subject: 'Invoice' },
+      format: 'csv',
+      outputDir: tmpDir,
+    });
+
+    expect(searchParam()).toBe('"from:alice@example.com subject:Invoice"');
+  });
+});

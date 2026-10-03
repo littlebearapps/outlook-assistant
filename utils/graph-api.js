@@ -87,13 +87,254 @@ function assertSafeResourcePath(resourcePath) {
 }
 
 /**
+ * Build the request URL for a Graph resource path (or validate a full
+ * continuation URL). Pure: never mutates `queryParams`, so retries and
+ * callers that reuse the object always see the original `$filter`.
+ * Host and dot-segment guards run here, once, before any attempt.
+ * @param {string} path - Relative resource path, or a full nextLink/deltaLink URL
+ * @param {object} [queryParams] - Query parameters (`$filter` gets OData-safe encoding)
+ * @returns {string} Absolute URL
+ * @throws {Error} If the full URL is not Graph, or the path has dot segments
+ */
+function buildGraphUrl(path, queryParams = {}) {
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    // Path is already a full URL (from pagination nextLink / deltaLink)
+    assertGraphUrl(path);
+    return path;
+  }
+
+  // Refuse dot segments before encoding: encodeURIComponent leaves `..`
+  // intact, and the URL parser would then resolve it to a different resource.
+  assertSafeResourcePath(path);
+  const encodedPath = path
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
+
+  // $filter is encoded separately to ensure proper OData URI encoding
+  const { $filter: filter, ...rest } = queryParams || {};
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(rest)) {
+    params.append(key, value);
+  }
+  let queryString = params.toString();
+  if (filter) {
+    const encodedFilter = `$filter=${encodeURIComponent(filter)}`;
+    queryString = queryString
+      ? `${queryString}&${encodedFilter}`
+      : encodedFilter;
+  }
+
+  return `${config.GRAPH_API_ENDPOINT}${encodedPath}${queryString ? `?${queryString}` : ''}`;
+}
+
+// --- Concurrency gate -------------------------------------------------------
+// Graph throttles per app+mailbox; bulk tools fan out many calls at once.
+// At most MAX_CONCURRENT_REQUESTS sends are in flight; the rest queue FIFO.
+const MAX_CONCURRENT_REQUESTS = 4;
+let inFlightRequests = 0;
+const slotWaiters = [];
+
+function acquireSlot() {
+  if (inFlightRequests < MAX_CONCURRENT_REQUESTS) {
+    inFlightRequests += 1;
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    slotWaiters.push(resolve);
+  });
+}
+
+function releaseSlot() {
+  const next = slotWaiters.shift();
+  if (next) {
+    next(); // hand the slot straight to the next waiter
+  } else {
+    inFlightRequests -= 1;
+  }
+}
+
+/**
+ * Perform a single HTTPS request (no retries). The body is read as UTF-8.
+ * @param {object} options
+ * @param {string} options.url
+ * @param {string} options.method
+ * @param {object} options.headers
+ * @param {string|null} [options.body] - Serialised request body
+ * @param {number} options.timeoutMs - Socket idle timeout
+ * @returns {Promise<{status: number, headers: object, text: string}>}
+ * @throws {Error} Network errors (with `.code`); timeouts have code `ETIMEDOUT`
+ */
+function sendOnce({ url, method, headers, body = null, timeoutMs }) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const fail = (error) => {
+      if (!settled) {
+        settled = true;
+        reject(error);
+      }
+    };
+
+    const req = https.request(
+      url,
+      { method, headers, timeout: timeoutMs },
+      (res) => {
+        const chunks = [];
+        res.on('data', (chunk) => {
+          chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+        });
+        res.on('error', fail);
+        res.on('end', () => {
+          if (settled) return;
+          settled = true;
+          resolve({
+            status: res.statusCode,
+            headers: res.headers || {},
+            text: Buffer.concat(chunks).toString('utf8'),
+          });
+        });
+      }
+    );
+
+    req.on('timeout', () => {
+      const error = new Error(`Request timed out after ${timeoutMs} ms`);
+      error.code = 'ETIMEDOUT';
+      fail(error);
+      if (typeof req.destroy === 'function') {
+        req.destroy(error);
+      }
+    });
+    req.on('error', fail);
+
+    if (body !== null && body !== undefined) {
+      req.write(body);
+    }
+    req.end();
+  });
+}
+
+const RETRYABLE_STATUSES = new Set([429, 503, 504]);
+const RETRY_STATUS_METHODS = new Set(['GET', 'PUT', 'DELETE', 'PATCH']);
+const RETRYABLE_NETWORK_CODES = new Set(['ETIMEDOUT', 'ECONNRESET']);
+const MAX_RETRIES = 3;
+const BACKOFF_BASE_MS = 1000;
+const BACKOFF_CAP_MS = 30000;
+const MAX_RETRY_AFTER_SECONDS = 60;
+// POST (sendMail, /send, …) must finish well inside an MCP client's ~60 s
+// request timeout: if the client gives up while we sleep and the send later
+// succeeds, the model may send again. So a POST only waits out a short 429.
+const POST_MAX_RETRY_DELAY_MS = 10000;
+const POST_MAX_TOTAL_SLEEP_MS = 20000;
+
+/**
+ * Can this response be retried for this method? POST (sendMail, /send,
+ * createReply, move, $batch) is retried only on 429 — the request was
+ * refused, so it cannot have taken effect. 503/504 may have been applied.
+ */
+function isRetryableStatus(method, status) {
+  if (!RETRYABLE_STATUSES.has(status)) return false;
+  return status === 429 || RETRY_STATUS_METHODS.has(method);
+}
+
+/** Retry-After in seconds, or null when absent/unparseable. */
+function parseRetryAfterSeconds(headers) {
+  const raw = headers['retry-after'];
+  if (raw === undefined || raw === null || String(raw).trim() === '') {
+    return null;
+  }
+  const seconds = Number(raw);
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds : null;
+}
+
+/** Exponential backoff with full jitter for retry number `retry` (0-based). */
+function backoffDelayMs(retry) {
+  const ceiling = Math.min(BACKOFF_CAP_MS, BACKOFF_BASE_MS * 2 ** retry);
+  return Math.floor(Math.random() * ceiling);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+/**
+ * Send a request through the concurrency gate, retrying throttled and
+ * transient failures: 429 (all methods) and 503/504 (GET/PUT/DELETE/PATCH)
+ * up to MAX_RETRIES times, honouring Retry-After; GET also retries once on
+ * ETIMEDOUT/ECONNRESET. A POST waits out a 429 only if that delay is
+ * ≤ 10 s and its total sleep stays ≤ 20 s. The slot is released before any
+ * backoff sleep.
+ * @param {object} request - See sendOnce (timeoutMs defaults to config)
+ * @returns {Promise<{status: number, headers: object, text: string}>} The
+ *   final response (2xx, or the last non-retried error status)
+ * @throws {Error} The network error of the final attempt
+ */
+async function requestWithRetry(request) {
+  const method = String(request.method).toUpperCase();
+  const timeoutMs = request.timeoutMs || config.REQUEST_TIMEOUT_MS;
+  let networkRetryUsed = false;
+  let totalSleepMs = 0;
+
+  for (let retry = 0; ; retry++) {
+    await acquireSlot();
+    let response;
+    let networkError;
+    try {
+      response = await sendOnce({ ...request, timeoutMs });
+    } catch (error) {
+      networkError = error;
+    } finally {
+      releaseSlot();
+    }
+
+    let delayMs;
+    if (networkError) {
+      const retryable =
+        method === 'GET' &&
+        !networkRetryUsed &&
+        retry < MAX_RETRIES &&
+        RETRYABLE_NETWORK_CODES.has(networkError.code);
+      if (!retryable) throw networkError;
+      networkRetryUsed = true;
+      delayMs = backoffDelayMs(retry);
+    } else {
+      if (retry >= MAX_RETRIES || !isRetryableStatus(method, response.status)) {
+        return response;
+      }
+      const retryAfter = parseRetryAfterSeconds(response.headers);
+      if (retryAfter !== null && retryAfter > MAX_RETRY_AFTER_SECONDS) {
+        return response; // fail fast rather than block for minutes
+      }
+      delayMs = retryAfter !== null ? retryAfter * 1000 : backoffDelayMs(retry);
+      if (
+        method === 'POST' &&
+        (delayMs > POST_MAX_RETRY_DELAY_MS ||
+          totalSleepMs + delayMs > POST_MAX_TOTAL_SLEEP_MS)
+      ) {
+        return response; // surface the 429 rather than outlast the client
+      }
+    }
+
+    console.error(
+      `[GRAPH-API] ${method} ${networkError ? networkError.code : response.status}; ` +
+        `retry ${retry + 1}/${MAX_RETRIES} in ${delayMs} ms`
+    );
+    totalSleepMs += delayMs;
+    await sleep(delayMs);
+  }
+}
+
+/**
  * Makes a request to the Microsoft Graph API
  * In test mode (USE_TEST_MODE=true), routes to mock data instead of the real API.
+ * Throttled/transient responses are retried (see requestWithRetry); each
+ * attempt times out after OUTLOOK_REQUEST_TIMEOUT_MS.
  * @param {string} accessToken - The access token for authentication
  * @param {string} method - HTTP method (GET, POST, etc.)
  * @param {string} path - API endpoint path
  * @param {object} data - Data to send for POST/PUT requests
- * @param {object} queryParams - Query parameters
+ * @param {object} queryParams - Query parameters (never mutated)
  * @param {object} extraHeaders - Additional headers (e.g. Prefer for immutable IDs)
  * @returns {Promise<object>} - The API response
  * @throws {Error} 'UNAUTHORIZED' if the server returns HTTP 401 (token expired or invalid)
@@ -112,135 +353,71 @@ async function callGraphAPI(
     return mockData.simulateGraphAPIResponse(method, path, data, queryParams);
   }
 
+  let finalUrl;
   try {
-    // Check if path already contains the full URL (from nextLink)
-    let finalUrl;
-    if (path.startsWith('http://') || path.startsWith('https://')) {
-      // Path is already a full URL (from pagination nextLink)
-      assertGraphUrl(path);
-      finalUrl = path;
-    } else {
-      // Build URL from path and queryParams. Refuse dot segments before
-      // encoding: encodeURIComponent leaves `..` intact, and the URL parser
-      // would then resolve it to a different resource.
-      assertSafeResourcePath(path);
-      // Encode path segments properly
-      const encodedPath = path
-        .split('/')
-        .map((segment) => encodeURIComponent(segment))
-        .join('/');
-
-      // Build query string from parameters with special handling for OData filters
-      let queryString = '';
-      if (Object.keys(queryParams).length > 0) {
-        // Handle $filter parameter specially to ensure proper URI encoding
-        const filter = queryParams.$filter;
-        if (filter) {
-          delete queryParams.$filter; // Remove from regular params
-        }
-
-        // Build query string with proper encoding for regular params
-        const params = new URLSearchParams();
-        for (const [key, value] of Object.entries(queryParams)) {
-          params.append(key, value);
-        }
-
-        queryString = params.toString();
-
-        // Add filter parameter separately with proper encoding
-        if (filter) {
-          if (queryString) {
-            queryString += `&$filter=${encodeURIComponent(filter)}`;
-          } else {
-            queryString = `$filter=${encodeURIComponent(filter)}`;
-          }
-        }
-
-        if (queryString) {
-          queryString = `?${queryString}`;
-        }
-      }
-
-      finalUrl = `${config.GRAPH_API_ENDPOINT}${encodedPath}${queryString}`;
-    }
-
-    return new Promise((resolve, reject) => {
-      const headers = {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      };
-
-      // Add immutable IDs header when enabled globally
-      if (config.USE_IMMUTABLE_IDS) {
-        headers.Prefer = 'IdType="ImmutableId"';
-      }
-
-      // Merge any extra headers (caller overrides take precedence). `Prefer`
-      // is multi-valued in HTTP (comma-separated); combine both values rather
-      // than letting a caller Prefer (e.g. outlook.timezone) clobber the global
-      // immutable-IDs Prefer, or vice versa.
-      const combinedPrefer =
-        headers.Prefer && extraHeaders.Prefer
-          ? `${headers.Prefer}, ${extraHeaders.Prefer}`
-          : null;
-      Object.assign(headers, extraHeaders);
-      if (combinedPrefer) {
-        headers.Prefer = combinedPrefer;
-      }
-
-      const options = {
-        method: method,
-        headers,
-      };
-
-      const req = https.request(finalUrl, options, (res) => {
-        let responseData = '';
-
-        res.on('data', (chunk) => {
-          responseData += chunk;
-        });
-
-        res.on('end', () => {
-          if (res.statusCode >= 200 && res.statusCode < 300) {
-            try {
-              responseData = responseData ? responseData : '{}';
-              const jsonResponse = JSON.parse(responseData);
-              resolve(jsonResponse);
-            } catch (error) {
-              reject(new Error(`Error parsing API response: ${error.message}`));
-            }
-          } else if (res.statusCode === 401) {
-            // Token expired or invalid
-            reject(new Error('UNAUTHORIZED'));
-          } else {
-            // Truncate response to avoid leaking sensitive data in error messages
-            const safeResponse = responseData.substring(0, 200);
-            reject(
-              new Error(
-                `API call failed with status ${res.statusCode}: ${safeResponse}`
-              )
-            );
-          }
-        });
-      });
-
-      req.on('error', (error) => {
-        reject(new Error(`Network error during API call: ${error.message}`));
-      });
-
-      if (
-        data &&
-        (method === 'POST' || method === 'PATCH' || method === 'PUT')
-      ) {
-        req.write(JSON.stringify(data));
-      }
-
-      req.end();
-    });
+    finalUrl = buildGraphUrl(path, queryParams);
   } catch (error) {
     console.error('Error calling Graph API:', error);
     throw error;
   }
+
+  const headers = {
+    Authorization: `Bearer ${accessToken}`,
+    'Content-Type': 'application/json',
+  };
+
+  // Add immutable IDs header when enabled globally
+  if (config.USE_IMMUTABLE_IDS) {
+    headers.Prefer = 'IdType="ImmutableId"';
+  }
+
+  // Merge any extra headers (caller overrides take precedence). `Prefer`
+  // is multi-valued in HTTP (comma-separated); combine both values rather
+  // than letting a caller Prefer (e.g. outlook.timezone) clobber the global
+  // immutable-IDs Prefer, or vice versa.
+  const combinedPrefer =
+    headers.Prefer && extraHeaders.Prefer
+      ? `${headers.Prefer}, ${extraHeaders.Prefer}`
+      : null;
+  Object.assign(headers, extraHeaders);
+  if (combinedPrefer) {
+    headers.Prefer = combinedPrefer;
+  }
+
+  const body =
+    data && (method === 'POST' || method === 'PATCH' || method === 'PUT')
+      ? JSON.stringify(data)
+      : null;
+
+  let response;
+  try {
+    response = await requestWithRetry({ url: finalUrl, method, headers, body });
+  } catch (error) {
+    const wrapped = new Error(
+      `Network error during API call: ${error.message}`,
+      { cause: error }
+    );
+    wrapped.code = error.code;
+    throw wrapped;
+  }
+
+  if (response.status >= 200 && response.status < 300) {
+    try {
+      return JSON.parse(response.text || '{}');
+    } catch (error) {
+      throw new Error(`Error parsing API response: ${error.message}`, {
+        cause: error,
+      });
+    }
+  }
+  if (response.status === 401) {
+    // Token expired or invalid
+    throw new Error('UNAUTHORIZED');
+  }
+  // Truncate response to avoid leaking sensitive data in error messages
+  throw new Error(
+    `API call failed with status ${response.status}: ${response.text.substring(0, 200)}`
+  );
 }
 
 /**
@@ -399,110 +576,40 @@ async function callGraphAPIRaw(accessToken, emailId, mailboxPrefix = 'me') {
     );
   }
 
-  return new Promise((resolve, reject) => {
-    const encodedPrefix = mailboxPrefix
-      .split('/')
-      .map((segment) => encodeURIComponent(segment))
-      .join('/');
-    const path = `${encodedPrefix}/messages/${encodeURIComponent(emailId)}/$value`;
-    const finalUrl = `${config.GRAPH_API_ENDPOINT}${path}`;
+  const encodedPrefix = mailboxPrefix
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
+  const path = `${encodedPrefix}/messages/${encodeURIComponent(emailId)}/$value`;
 
-    const options = {
+  let response;
+  try {
+    response = await requestWithRetry({
+      url: `${config.GRAPH_API_ENDPOINT}${path}`,
       method: 'GET',
       headers: {
         Authorization: `Bearer ${accessToken}`,
         Accept: 'message/rfc822', // Request MIME format
       },
-    };
-
-    const req = https.request(finalUrl, options, (res) => {
-      let responseData = '';
-
-      // Collect data as UTF-8 string
-      res.setEncoding('utf8');
-
-      res.on('data', (chunk) => {
-        responseData += chunk;
-      });
-
-      res.on('end', () => {
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          resolve(responseData);
-        } else if (res.statusCode === 401) {
-          reject(new Error('UNAUTHORIZED'));
-        } else {
-          reject(
-            new Error(
-              `MIME export failed with status ${res.statusCode}: ${responseData.substring(0, 200)}`
-            )
-          );
-        }
-      });
     });
-
-    req.on('error', (error) => {
-      reject(new Error(`Network error during MIME export: ${error.message}`));
-    });
-
-    req.end();
-  });
-}
-
-/**
- * Calls Graph API with automatic auth and 401 retry.
- * Gets token via ensureAuthenticated(), and if a 401 occurs,
- * refreshes the token and retries once.
- * @param {string} method - HTTP method
- * @param {string} path - API endpoint path
- * @param {object} data - Request body
- * @param {object} queryParams - Query parameters
- * @param {object} extraHeaders - Additional headers
- * @returns {Promise<object>} - API response
- */
-async function callGraphAPIWithAuth(
-  method,
-  path,
-  data = null,
-  queryParams = {},
-  extraHeaders = {}
-) {
-  // Lazy require to avoid circular dependency
-  const { ensureAuthenticated, tokenStorage } = require('../auth');
-
-  const accessToken = await ensureAuthenticated();
-  try {
-    return await callGraphAPI(
-      accessToken,
-      method,
-      path,
-      data,
-      queryParams,
-      extraHeaders
-    );
   } catch (error) {
-    if (error.message === 'UNAUTHORIZED' && tokenStorage) {
-      console.error('[GRAPH-API] 401 received, attempting token refresh...');
-      try {
-        const newToken = await tokenStorage.refreshAccessToken();
-        if (newToken) {
-          return await callGraphAPI(
-            newToken,
-            method,
-            path,
-            data,
-            queryParams,
-            extraHeaders
-          );
-        }
-      } catch (refreshError) {
-        console.error(
-          '[GRAPH-API] Token refresh failed:',
-          refreshError.message
-        );
-      }
-    }
-    throw error;
+    const wrapped = new Error(
+      `Network error during MIME export: ${error.message}`,
+      { cause: error }
+    );
+    wrapped.code = error.code;
+    throw wrapped;
   }
+
+  if (response.status >= 200 && response.status < 300) {
+    return response.text;
+  }
+  if (response.status === 401) {
+    throw new Error('UNAUTHORIZED');
+  }
+  throw new Error(
+    `MIME export failed with status ${response.status}: ${response.text.substring(0, 200)}`
+  );
 }
 
 module.exports = {
@@ -511,5 +618,4 @@ module.exports = {
   callGraphAPIPaginated,
   callGraphAPIBatch,
   callGraphAPIRaw,
-  callGraphAPIWithAuth,
 };

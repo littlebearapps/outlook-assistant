@@ -37,6 +37,20 @@ params:
 
 Attendees receive a calendar invitation by email.
 
+A plain email address adds a required attendee. To add an optional attendee or book a room, pass an object with a `type` of `required`, `optional` or `resource`:
+
+```
+tool: create-event
+params:
+  subject: "Team Review"
+  start: "2026-03-09T14:00:00"
+  end: "2026-03-09T15:00:00"
+  attendees:
+    - "alice@company.com"
+    - { email: "bob@company.com", type: "optional" }
+    - { email: "boardroom@company.com", type: "resource" }
+```
+
 ## Add a Description
 
 > "Set up an offsite planning session with an agenda"
@@ -69,7 +83,7 @@ params:
 | `subject` | Event title | Yes |
 | `start` | Start time (ISO 8601) | Yes |
 | `end` | End time (ISO 8601) | Yes |
-| `attendees` | List of email addresses | No |
+| `attendees` | Email addresses (required attendees) or `{email, type}` objects (`type`: `required`, `optional` or `resource`) | No |
 | `body` | Event description or agenda | No |
 
 ## Timezone Handling

@@ -63,19 +63,39 @@ function mailboxesConflict(tokenMailbox, prefix) {
   return isAddress(token) && isAddress(target);
 }
 
+const DEFAULT_PAGE_SIZE = 100;
+const MAX_PAGE_SIZE = 200;
+
+/**
+ * Turn the caller's `maxResults` into a delta page size: an integer from 1 to
+ * 200. Missing or non-numeric values give the default (100); fractions are
+ * floored; zero and negatives become 1; anything over 200 becomes 200.
+ * @param {*} value - Raw `maxResults` argument
+ * @returns {number} - Page size to request
+ */
+function clampPageSize(value) {
+  const n =
+    typeof value === 'string' && value.trim() !== '' ? Number(value) : value;
+  if (typeof n !== 'number' || !Number.isFinite(n)) {
+    return DEFAULT_PAGE_SIZE;
+  }
+  return Math.min(Math.max(Math.floor(n), 1), MAX_PAGE_SIZE);
+}
+
 /**
  * List emails delta handler - incremental sync
  * @param {object} args - Tool arguments
  * @param {string} [args.folder] - Folder to sync (default: inbox)
  * @param {string} [args.deltaToken] - Token from previous delta call (omit for initial sync)
- * @param {number} [args.maxResults] - Max results per page (default: 100)
+ * @param {number} [args.maxResults] - Page size, 1-200 (default: 100). Sent as
+ *   `Prefer: odata.maxpagesize` on every page; `$top` would cap the whole sync.
  * @param {string} [args.outputVerbosity] - Output detail level
  * @returns {object} - MCP response with emails, deltaToken, and change summary
  */
 async function handleListEmailsDelta(args) {
   const folder = args.folder || 'inbox';
   const deltaToken = args.deltaToken;
-  const maxResults = Math.min(args.maxResults || 100, 200);
+  const maxResults = clampPageSize(args.maxResults);
   const verbosity = args.outputVerbosity || 'standard';
   // Optional: scope the delta sync to a shared/delegated mailbox rather than
   // the signed-in account. Accepts a custom/localized folder name or path.
@@ -123,19 +143,19 @@ async function handleListEmailsDelta(args) {
           : { name: folder, mailbox: sharedMailbox }
       );
       endpoint = `${prefix}/mailFolders/${resolved.id}/messages/delta`;
-      queryParams = {
-        $select: getEmailFields('delta'),
-        $top: maxResults.toString(),
-      };
+      // No `$top`: on messages/delta it caps the whole sync, not the page.
+      queryParams = { $select: getEmailFields('delta') };
     }
 
-    // Fetch delta results
+    // Fetch delta results. Graph honours the page size only on requests that
+    // carry the Prefer header, so continuation calls must send it too.
     const response = await callGraphAPI(
       accessToken,
       'GET',
       endpoint,
       null,
-      deltaToken ? {} : queryParams
+      queryParams,
+      { Prefer: `odata.maxpagesize=${maxResults}` }
     );
 
     // Process results
@@ -237,7 +257,7 @@ async function handleListEmailsDelta(args) {
       // Pagination info
       if (hasMoreChanges) {
         resultText += `\n### More Pages Available\n`;
-        resultText += `This page returned a continuation token. Call \`search-emails deltaMode=true deltaToken=<token>\` again to fetch the next page. The real delta token only emits once paging completes.\n`;
+        resultText += `This page returned a continuation token. Call \`search-emails deltaMode=true deltaToken=<token>\` again to fetch the next page, and pass the same \`maxResults\` on every page to keep the page size. The real delta token only emits once paging completes.\n`;
       }
 
       // Token (delta or continuation)

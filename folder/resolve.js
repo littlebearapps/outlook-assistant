@@ -1,9 +1,10 @@
 /**
  * Shared, path-aware, ambiguity-aware mail-folder resolver. (#216)
  *
- * Replaces the two top-level-only resolvers (`getFolderIdByName` in
+ * Replaced the top-level-only resolvers (`getFolderIdByName` in
  * email/folder-utils.js and `resolveFolderName` in folder/stats.js) that could
- * not address nested folders. Accepts, in priority order:
+ * not address nested folders (manage-rules folder actions use it since #248).
+ * Accepts, in priority order:
  *   1. an explicit folder ID (never guessed from a name),
  *   2. a well-known alias (inbox, archive, sent, ...),
  *   3. a folder PATH like "Triage/Delete" or "Inbox/Clients/Acme"

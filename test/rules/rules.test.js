@@ -4,11 +4,14 @@ const handleUpdateRule = require('../../rules/update');
 const { handleEditRuleSequence, handleDeleteRule } = require('../../rules');
 const { callGraphAPI } = require('../../utils/graph-api');
 const { ensureAuthenticated } = require('../../auth');
-const { getFolderIdByName } = require('../../email/folder-utils');
+const { resolveFolder } = require('../../folder/resolve');
 
 jest.mock('../../utils/graph-api');
 jest.mock('../../auth');
-jest.mock('../../email/folder-utils');
+jest.mock('../../folder/resolve', () => ({
+  ...jest.requireActual('../../folder/resolve'),
+  resolveFolder: jest.fn(),
+}));
 
 const mockAccessToken = 'test_token';
 
@@ -163,7 +166,7 @@ describe('handleListRules', () => {
 describe('handleCreateRule', () => {
   it('should create a rule with from condition and move action', async () => {
     callGraphAPI.mockResolvedValueOnce({ value: mockRules });
-    getFolderIdByName.mockResolvedValue('target-folder-id');
+    resolveFolder.mockResolvedValue({ id: 'target-folder-id' });
     callGraphAPI.mockResolvedValueOnce({ id: 'new-rule-id' });
 
     const result = await handleCreateRule({
@@ -369,7 +372,9 @@ describe('handleCreateRule', () => {
 
   it('should handle target folder not found', async () => {
     callGraphAPI.mockResolvedValueOnce({ value: [] });
-    getFolderIdByName.mockResolvedValue(null);
+    resolveFolder.mockRejectedValue(
+      new Error('Folder "NonExistent" not found.')
+    );
 
     const result = await handleCreateRule({
       name: 'Move Rule',
@@ -378,6 +383,45 @@ describe('handleCreateRule', () => {
     });
 
     expect(result.content[0].text).toContain('not found');
+  });
+
+  it('should move to a nested folder path (#248)', async () => {
+    callGraphAPI.mockResolvedValueOnce({ value: [] });
+    resolveFolder.mockResolvedValue({ id: 'nested-folder-id' });
+    callGraphAPI.mockResolvedValueOnce({ id: 'new-rule-id' });
+
+    await handleCreateRule({
+      name: 'Nested Move',
+      fromAddresses: 'user@example.com',
+      moveToFolder: 'Triage/Delete',
+    });
+
+    expect(resolveFolder).toHaveBeenCalledWith(mockAccessToken, {
+      name: 'Triage/Delete',
+    });
+    const postCall = callGraphAPI.mock.calls[1];
+    expect(postCall[3].actions.moveToFolder).toBe('nested-folder-id');
+  });
+
+  it('should not create a rule when the only folder is ambiguous', async () => {
+    resolveFolder.mockRejectedValue(
+      new Error('Folder "Delete" is ambiguous — 2 folders match:')
+    );
+
+    const result = await handleCreateRule({
+      name: 'Ambiguous Move',
+      fromAddresses: 'user@example.com',
+      moveToFolder: 'Delete',
+    });
+
+    expect(result.content[0].text).toContain('not found');
+    expect(result.content[0].text).toContain('ambiguous');
+    expect(callGraphAPI).not.toHaveBeenCalledWith(
+      mockAccessToken,
+      'POST',
+      expect.anything(),
+      expect.anything()
+    );
   });
 
   it('should handle auth error', async () => {
@@ -472,7 +516,7 @@ describe('handleUpdateRule', () => {
   });
 
   it('should update actions', async () => {
-    getFolderIdByName.mockResolvedValue('new-folder-id');
+    resolveFolder.mockResolvedValue({ id: 'new-folder-id' });
     callGraphAPI.mockResolvedValueOnce({ value: mockRules });
     callGraphAPI.mockResolvedValueOnce({});
 

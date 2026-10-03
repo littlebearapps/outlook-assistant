@@ -123,6 +123,29 @@ const BASE_SCOPES = [
   // 'Place.Read.All',     // find-meeting-rooms tool
 ];
 
+const DEFAULT_REQUEST_TIMEOUT_MS = 60000;
+
+/**
+ * Parse OUTLOOK_REQUEST_TIMEOUT_MS: per-attempt Graph inactivity timeout
+ * (ms with no data received). Unset or invalid → 60000 (invalid values warn).
+ * @param {string|undefined} raw
+ * @returns {number}
+ */
+function parseRequestTimeoutMs(raw) {
+  if (raw === undefined || String(raw).trim() === '') {
+    return DEFAULT_REQUEST_TIMEOUT_MS;
+  }
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value <= 0) {
+    console.warn(
+      `[outlook-assistant] OUTLOOK_REQUEST_TIMEOUT_MS="${raw}" is not a positive integer. ` +
+        `Using the default of ${DEFAULT_REQUEST_TIMEOUT_MS} ms.`
+    );
+    return DEFAULT_REQUEST_TIMEOUT_MS;
+  }
+  return value;
+}
+
 module.exports = {
   // Server information
   SERVER_NAME: 'outlook-assistant',
@@ -195,6 +218,13 @@ module.exports = {
 
   // Immutable IDs (opt-in: IDs persist through folder moves)
   USE_IMMUTABLE_IDS: process.env.OUTLOOK_IMMUTABLE_IDS === 'true',
+
+  // Per-attempt Graph inactivity timeout: an attempt that receives no data
+  // for this many ms is abandoned (not an overall deadline). Throttled and
+  // transient responses are retried by utils/graph-api.js.
+  REQUEST_TIMEOUT_MS: parseRequestTimeoutMs(
+    process.env.OUTLOOK_REQUEST_TIMEOUT_MS
+  ),
 
   // Timezone — IANA zone (e.g. "Australia/Melbourne", "Europe/London",
   // "America/New_York"). Override per-deployment via OUTLOOK_DEFAULT_TIMEZONE.

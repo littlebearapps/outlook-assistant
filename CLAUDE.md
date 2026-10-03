@@ -1,6 +1,6 @@
 # CLAUDE.md - Outlook Assistant
 
-MCP server for Microsoft Outlook via Graph API (v3.12.0). 22 tools across 9 modules. Runtime Node ≥ 18.18; dev tooling (lint-staged hook, `npm run inspect`) needs Node ≥ 22.22.1.
+MCP server for Microsoft Outlook via Graph API (v3.12.1). 22 tools across 9 modules. Runtime Node ≥ 18.18; dev tooling (lint-staged hook, `npm run inspect`) needs Node ≥ 22.22.1.
 
 ## Commands
 
@@ -47,7 +47,7 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 - **MCP annotations** on all 22 tools (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`). `openWorldHint: true` on tools that surface or send external content (`search-emails`, `read-email`, `search-people`, `access-shared-mailbox`, `attachments`, `export`, `send-email`, `draft`) (#92)
 - **get-mail-tips**: pre-send recipient validation (out-of-office, mailbox full, delivery restrictions)
 - **send-email**: `dryRun` param, `checkRecipients` param (mail tips), session rate limiting (`OUTLOOK_MAX_EMAILS_PER_SESSION`), recipient allowlist (`OUTLOOK_ALLOWED_RECIPIENTS`)
-- **draft**: `dryRun` on create, `checkRecipients` (mail tips), recipient allowlist, rate limiting. Send action shares limit with `send-email`.
+- **draft**: `dryRun` on create, `checkRecipients` (mail tips), recipient allowlist, rate limiting. Send action shares limit with `send-email`. `update`/`send`/`delete` look the ID up first and refuse anything that isn't an unsent draft (`assertIsDraft` in `email/draft.js`).
 - **manage-rules**: `dryRun` on create/update, rate limiting (`OUTLOOK_MAX_MANAGE_RULES_PER_SESSION`), recipient allowlist on forwardTo/redirectTo, no `permanentDelete` (too dangerous for AI). Supports 12 conditions, 9 actions, and exceptions.
 - **manage-event**: marked `destructiveHint: true` (covers `decline`/`cancel`/`delete`; `update` action added v3.8.0 is non-destructive in isolation but inherits the tool-level annotation — use `dryRun: true` to preview update payloads). `accept` is deliberately omitted — Microsoft Graph doesn't expose an `accept` verb in a way that works across personal/M365 reliably; use the Outlook UI to accept invitations.
 - **Shared mailboxes**: off unless `OUTLOOK_SHARED_MAILBOX` is set (`read` = read-only shared access); addresses must be printable-ASCII emails (`utils/mailbox.js`); sending from a shared mailbox is never supported (`Mail.Send.Shared` not requested)
@@ -68,7 +68,7 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 | `auth/device-code.js` | Device code flow for headless/remote authentication |
 | `auth/auth-errors.js` | AADSTS error → remediation hint table (shared by token-storage and the device-code path) |
 | `auth/tools.js` | Auth tool handlers; persists device code state to `~/.outlook-assistant-pending-auth.json`; `about` diagnostics (granted scopes, shared-mailbox status) |
-| `utils/graph-api.js` | All Graph API calls go through here (includes $batch); dot-segment and Graph-host guards |
+| `utils/graph-api.js` | All Graph API calls go through here (includes $batch); dot-segment and Graph-host guards; retries 429 (POST only for waits ≤ 10 s, ≤ 20 s total) and 503/504 (not POST) honouring `Retry-After`, per-attempt inactivity timeout, max 4 requests in flight |
 | `utils/mailbox.js` | `buildMailboxPrefix` → `me` or `users/{mailbox}`; validates addresses and enforces the `OUTLOOK_SHARED_MAILBOX` opt-in |
 | `folder/resolve.js` | Path-aware folder resolver (ID, well-known alias, `Parent/Child` path, bare name), mailbox-aware |
 | `calendar/list.js` | `list-events` filter/order building (`startAfter`/`startBefore`/`subject`) |
@@ -91,6 +91,7 @@ OUTLOOK_AUTH_AUDIENCE=common               # Optional: common|consumers|organiza
 OUTLOOK_DEFAULT_TIMEZONE=Australia/Melbourne  # Optional: overrides hardcoded default (v3.8.0)
 OUTLOOK_SHARED_MAILBOX=read                # Optional, opt-in: read|true (work/school only; re-auth with force=true after enabling)
 OUTLOOK_SEARCH_SCAN_LIMIT=500              # Optional: client-side search fallback window (max 5000)
+OUTLOOK_REQUEST_TIMEOUT_MS=60000           # Optional: per-attempt Graph inactivity timeout (ms with no data; not an overall deadline)
 ```
 
 > The server reads `OUTLOOK_CLIENT_ID`/`OUTLOOK_CLIENT_SECRET` from `config.js`.
@@ -120,7 +121,7 @@ Common errors (auth, device code, search, timezones) and fixes live in [`docs/tr
 ## Testing
 
 ```bash
-npm test                    # Jest unit tests (50 suites / 1251 tests at v3.12.0)
+npm test                    # Jest unit tests (58 suites / 1472 tests at v3.12.1)
 npm run lint                # ESLint (0 errors expected)
 npm run format:check        # Prettier (CI runs this)
 ./test-modular-server.sh    # MCP Inspector interactive
@@ -128,7 +129,7 @@ npm run format:check        # Prettier (CI runs this)
 USE_TEST_MODE=true npm start # Mock data mode
 ```
 
-Mock data defined in `utils/mock-data.js`. `test/auth/auth-tools.test.js` writes and deletes `~/.outlook-assistant-pending-auth.json`, so run Jest with `HOME` pointed at a temp dir if you have a real pending flow. Shared-mailbox suites switch the opt-in on via `test/helpers/shared-mailbox.js`.
+Mock data defined in `utils/mock-data.js`. Shared-mailbox suites switch the opt-in on via `test/helpers/shared-mailbox.js`.
 
 ## Graph API Notes
 

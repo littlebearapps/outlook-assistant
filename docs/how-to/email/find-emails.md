@@ -207,7 +207,7 @@ params:
   deltaMode: true
 ```
 
-On the first call, this returns current emails and a `deltaToken`. Pass that token on subsequent calls to get only changes:
+On the first call, this returns current emails and a `deltaToken`. A large folder arrives over several pages (`maxResults` per page, 1–200, default 100): while a page returns a continuation token, pass it back with the same `maxResults` until a delta token is returned. Pass that delta token on subsequent calls to get only changes:
 
 ```
 tool: search-emails

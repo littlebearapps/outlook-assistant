@@ -315,3 +315,35 @@ describe('listEventsOrderBy', () => {
     );
   });
 });
+
+describe('handleListEvents — count (#258)', () => {
+  test.each([
+    [undefined, 10],
+    [75, 75],
+    [100, 100],
+    [500, 100],
+    [0, 1],
+    [-5, 1],
+    [2.7, 2],
+    [null, 10],
+  ])('count %p sends $top %p', async (count, expected) => {
+    await handleListEvents(count === undefined ? {} : { count });
+
+    expect(queryParamsOf(callGraphAPI.mock.calls[0]).$top).toBe(expected);
+  });
+});
+
+describe('list-events tool definition (#258)', () => {
+  const { calendarTools } = require('../../calendar');
+  const tool = calendarTools.find((t) => t.name === 'list-events');
+
+  test('documents the real maximum of 100', () => {
+    expect(tool.description).toContain('max 100');
+    expect(tool.inputSchema.properties.count.description).toContain('max: 100');
+    expect(tool.description).not.toContain('max 50');
+  });
+
+  test('does not promise fields the output never includes', () => {
+    expect(tool.description).not.toMatch(/attendees|organiser|webLink/);
+  });
+});

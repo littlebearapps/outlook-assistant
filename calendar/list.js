@@ -8,13 +8,8 @@ const {
   escapeODataString,
   buildODataFilter,
 } = require('../utils/odata-helpers');
+const { parseIsoInstant } = require('../utils/datetime');
 
-// An ISO 8601 instant with an explicit zone: `Z` or a ±hh:mm offset. A
-// zone-less value would be read in the server's local timezone by Date.parse,
-// so results would differ between machines; date-only values are rejected for
-// the same reason.
-const ISO_INSTANT =
-  /^(\d{4})-(\d{2})-(\d{2})T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})$/;
 const MAX_SUBJECT_LENGTH = 255;
 
 /**
@@ -31,18 +26,8 @@ class ListEventsArgumentError extends Error {}
  * does not enforce JSON Schema `format`, so we enforce here at runtime.
  */
 function toUtcIsoDateTime(value, paramName) {
-  const s = typeof value === 'string' ? value.trim() : '';
-  const m = ISO_INSTANT.exec(s);
-  const parsed = m ? Date.parse(s) : NaN;
-  const valid =
-    m &&
-    !Number.isNaN(parsed) &&
-    Number(m[1]) >= 1900 &&
-    // Reject dates Date.parse would roll over, e.g. 2026-02-30 -> 2 March.
-    new Date(
-      Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
-    ).getUTCDate() === Number(m[3]);
-  if (!valid) {
+  const parsed = parseIsoInstant(value);
+  if (Number.isNaN(parsed)) {
     throw new ListEventsArgumentError(
       `Invalid ${paramName}: expected an ISO 8601 datetime with "Z" or a ±hh:mm offset, e.g. "2026-01-01T00:00:00Z" (got ${JSON.stringify(String(value).slice(0, 40))}).`
     );
@@ -224,7 +209,13 @@ function formatLocal(utcIso, tz) {
  * @returns {object} - MCP response
  */
 async function handleListEvents(args) {
-  const count = Math.min(args.count || 10, config.MAX_RESULT_COUNT);
+  // Whole number in 1..MAX_RESULT_COUNT: Graph rejects $top below 1 or
+  // fractional, and the schema promises the cap.
+  const requested = args.count == null ? 10 : Math.floor(args.count);
+  const count = Math.min(
+    Math.max(Number.isFinite(requested) ? requested : 10, 1),
+    config.MAX_RESULT_COUNT
+  );
 
   // Validate arguments before authenticating, so a bad argument is reported
   // as such (and never reaches the network).

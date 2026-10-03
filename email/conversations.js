@@ -14,6 +14,8 @@ const { ensureAuthenticated } = require('../auth');
 const { getEmailFields } = require('../utils/field-presets');
 const { resolveFolderPath } = require('./folder-utils');
 const { buildMailboxPrefix } = require('../utils/mailbox');
+const { writeClaimedFile, makeClaimedDir } = require('../utils/safe-write');
+const { escapeODataString } = require('../utils/odata-helpers');
 const {
   formatEmailContent,
   formatEmailsAsCSV,
@@ -250,6 +252,102 @@ async function handleListConversations(args) {
   }
 }
 
+// Upper bounds on the messages one conversation read/export will load. The
+// inline read returns every message in the tool result, so it stops sooner.
+const GET_CONVERSATION_MESSAGE_LIMIT = 100;
+const EXPORT_CONVERSATION_MESSAGE_LIMIT = 1000;
+
+/**
+ * Fetch the messages in a conversation, oldest first (or newest first).
+ *
+ * Graph rejects `$filter=conversationId eq '…'` combined with `$orderby` on
+ * personal Microsoft accounts (400 InefficientFilter), so the query carries no
+ * `$orderby`: the pages are fetched and the messages are sorted here. Paging
+ * stops at the caller's `limit` or if Graph repeats a nextLink; either
+ * way the result is marked truncated. (Not callGraphAPIPaginated: it can't
+ * report truncation or catch a repeated nextLink.)
+ * @param {string} accessToken - Access token
+ * @param {string} prefix - Mailbox prefix (`me` or `users/{mailbox}`)
+ * @param {string} conversationId - Conversation ID
+ * @param {string} selectFields - `$select` fields
+ * @param {object} options
+ * @param {number} options.limit - Most messages to load
+ * @param {boolean} [options.newestFirst=false] - Sort newest first instead
+ * @returns {Promise<{messages: Array<object>, truncated: boolean}>}
+ */
+async function fetchConversationMessages(
+  accessToken,
+  prefix,
+  conversationId,
+  selectFields,
+  { limit, newestFirst = false }
+) {
+  let messages = [];
+  let truncated = false;
+  const seenLinks = new Set();
+  let url = `${prefix}/messages`;
+  let queryParams = {
+    $select: selectFields,
+    $filter: `conversationId eq '${escapeODataString(String(conversationId))}'`,
+    $top: Math.min(100, limit),
+  };
+
+  while (url) {
+    const response = await callGraphAPI(
+      accessToken,
+      'GET',
+      url,
+      null,
+      queryParams
+    );
+    messages.push(...(response.value || []));
+    const nextLink = response['@odata.nextLink'];
+    if (messages.length > limit) {
+      messages = messages.slice(0, limit);
+      truncated = true;
+      break;
+    }
+    if (nextLink && (messages.length >= limit || seenLinks.has(nextLink))) {
+      truncated = true;
+      break;
+    }
+    if (nextLink) seenLinks.add(nextLink);
+    url = nextLink;
+    queryParams = {}; // the nextLink already carries every parameter
+  }
+
+  return { messages: sortByReceivedDate(messages, newestFirst), truncated };
+}
+
+/**
+ * Note added to output when a conversation hit a fetch limit.
+ * @param {number} count - Messages loaded
+ * @returns {string}
+ */
+function truncationNote(count) {
+  return `**Note**: Conversation truncated at ${count} messages.`;
+}
+
+/**
+ * Sort messages by receivedDateTime (stable; messages without a valid date
+ * go last in either direction).
+ * @param {Array<object>} messages - Messages to sort
+ * @param {boolean} newestFirst - Sort newest first instead of oldest first
+ * @returns {Array<object>} - New sorted array
+ */
+function sortByReceivedDate(messages, newestFirst) {
+  const time = (msg) => {
+    const t = Date.parse(msg.receivedDateTime);
+    return Number.isNaN(t) ? null : t;
+  };
+  return [...messages].sort((a, b) => {
+    const ta = time(a);
+    const tb = time(b);
+    if (ta === null || tb === null) return (ta === null) - (tb === null);
+    return newestFirst ? tb - ta : ta - tb;
+  });
+}
+
 /**
  * Get conversation handler - retrieves all messages in a thread
  * @param {object} args - Tool arguments
@@ -279,41 +377,13 @@ async function handleGetConversation(args) {
     const selectFields = getEmailFields(fieldPreset);
 
     // Search all folders for messages with this conversation ID
-    const endpoint = `${prefix}/messages`;
-    const queryParams = {
-      $select: selectFields,
-      $filter: `conversationId eq '${conversationId}'`,
-      $orderby: 'receivedDateTime asc',
-      $top: 100,
-    };
-
-    let response;
-    try {
-      response = await callGraphAPI(
-        accessToken,
-        'GET',
-        endpoint,
-        null,
-        queryParams
-      );
-    } catch (apiError) {
-      if (
-        apiError.message.includes('ErrorInvalidUrlQueryFilter') ||
-        apiError.message.includes('InefficientFilter') ||
-        apiError.message.includes('filter')
-      ) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Conversation retrieval by conversationId is not supported on personal Microsoft accounts. Use read-email with individual message IDs instead.`,
-            },
-          ],
-        };
-      }
-      throw apiError;
-    }
-    const messages = response.value || [];
+    const { messages, truncated } = await fetchConversationMessages(
+      accessToken,
+      prefix,
+      conversationId,
+      selectFields,
+      { limit: GET_CONVERSATION_MESSAGE_LIMIT }
+    );
 
     if (messages.length === 0) {
       return {
@@ -332,6 +402,7 @@ async function handleGetConversation(args) {
     output.push(`**Subject**: ${messages[0].subject || '(no subject)'}`);
     output.push(`**Messages**: ${messages.length}`);
     output.push(`**Conversation ID**: \`${conversationId}\`\n`);
+    if (truncated) output.push(`${truncationNote(messages.length)}\n`);
     output.push('---\n');
 
     messages.forEach((msg, index) => {
@@ -351,6 +422,7 @@ async function handleGetConversation(args) {
         conversationId,
         messageCount: messages.length,
         subject: messages[0]?.subject,
+        truncated,
       },
     };
   } catch (error) {
@@ -416,42 +488,16 @@ async function handleExportConversation(args) {
     const accessToken = await ensureAuthenticated();
 
     // Get all messages in conversation
-    const selectFields = getEmailFields('export');
-    const endpoint = `${prefix}/messages`;
-    const queryParams = {
-      $select: selectFields,
-      $filter: `conversationId eq '${conversationId}'`,
-      $orderby: `receivedDateTime ${order === 'reverse' ? 'desc' : 'asc'}`,
-      $top: 100,
-    };
-
-    let response;
-    try {
-      response = await callGraphAPI(
-        accessToken,
-        'GET',
-        endpoint,
-        null,
-        queryParams
-      );
-    } catch (apiError) {
-      if (
-        apiError.message.includes('ErrorInvalidUrlQueryFilter') ||
-        apiError.message.includes('InefficientFilter') ||
-        apiError.message.includes('filter')
-      ) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Conversation export is not supported on personal Microsoft accounts. Use export with target=message and individual message IDs instead.`,
-            },
-          ],
-        };
+    const { messages, truncated } = await fetchConversationMessages(
+      accessToken,
+      prefix,
+      conversationId,
+      getEmailFields('export'),
+      {
+        limit: EXPORT_CONVERSATION_MESSAGE_LIMIT,
+        newestFirst: order === 'reverse',
       }
-      throw apiError;
-    }
-    const messages = response.value || [];
+    );
 
     if (messages.length === 0) {
       return {
@@ -475,16 +521,19 @@ async function handleExportConversation(args) {
     const date = formatDateForFilename(messages[0].receivedDateTime);
     const filenameBase = `${date}_${subject}_conversation`;
 
+    // Every file is written exclusively (never overwrites, never follows a
+    // symlink); a name already taken gets a -1, -2, … suffix.
+    const writeExport = (dir, base, extension, content) =>
+      writeClaimedFile(dir, base, extension, null, content, 'utf8');
+
     const exportedFiles = [];
     const exportStats = { messages: messages.length, attachments: 0, bytes: 0 };
 
     switch (format) {
       case 'eml': {
-        // Export each message as individual .eml file
-        const emlDir = path.join(resolvedDir, filenameBase);
-        if (!fs.existsSync(emlDir)) {
-          fs.mkdirSync(emlDir, { recursive: true });
-        }
+        // Export each message as individual .eml file, into a directory this
+        // export creates (never an existing one, which could be a symlink).
+        const emlDir = makeClaimedDir(resolvedDir, filenameBase);
 
         for (let i = 0; i < messages.length; i++) {
           const msg = messages[i];
@@ -494,11 +543,12 @@ async function handleExportConversation(args) {
             prefix
           );
           const msgDate = formatDateForFilename(msg.receivedDateTime);
-          const emlPath = path.join(
+          const emlPath = writeExport(
             emlDir,
-            `${i + 1}_${msgDate}_${sanitizeForFilename(msg.from?.emailAddress?.name || 'unknown', 20)}.eml`
+            `${i + 1}_${msgDate}_${sanitizeForFilename(msg.from?.emailAddress?.name || 'unknown', 20)}`,
+            'eml',
+            mimeContent
           );
-          fs.writeFileSync(emlPath, mimeContent, 'utf8');
           exportStats.bytes += Buffer.byteLength(mimeContent, 'utf8');
           exportedFiles.push(emlPath);
         }
@@ -507,7 +557,6 @@ async function handleExportConversation(args) {
 
       case 'mbox': {
         // Export all messages to single MBOX file
-        const mboxPath = path.join(resolvedDir, `${filenameBase}.mbox`);
         let mboxContent = '';
 
         for (const msg of messages) {
@@ -526,7 +575,12 @@ async function handleExportConversation(args) {
           mboxContent += '\n\n';
         }
 
-        fs.writeFileSync(mboxPath, mboxContent, 'utf8');
+        const mboxPath = writeExport(
+          resolvedDir,
+          filenameBase,
+          'mbox',
+          mboxContent
+        );
         exportStats.bytes = Buffer.byteLength(mboxContent, 'utf8');
         exportedFiles.push(mboxPath);
         break;
@@ -534,7 +588,6 @@ async function handleExportConversation(args) {
 
       case 'markdown': {
         // Export as threaded Markdown document
-        const mdPath = path.join(resolvedDir, `${filenameBase}.md`);
         const mdContent = [];
 
         mdContent.push(
@@ -581,7 +634,7 @@ async function handleExportConversation(args) {
         }
 
         const content = mdContent.join('\n');
-        fs.writeFileSync(mdPath, content, 'utf8');
+        const mdPath = writeExport(resolvedDir, filenameBase, 'md', content);
         exportStats.bytes = Buffer.byteLength(content, 'utf8');
         exportedFiles.push(mdPath);
         break;
@@ -589,7 +642,6 @@ async function handleExportConversation(args) {
 
       case 'json': {
         // Export as JSON
-        const jsonPath = path.join(resolvedDir, `${filenameBase}.json`);
         const jsonContent = JSON.stringify(
           {
             conversationId,
@@ -602,7 +654,12 @@ async function handleExportConversation(args) {
           2
         );
 
-        fs.writeFileSync(jsonPath, jsonContent, 'utf8');
+        const jsonPath = writeExport(
+          resolvedDir,
+          filenameBase,
+          'json',
+          jsonContent
+        );
         exportStats.bytes = Buffer.byteLength(jsonContent, 'utf8');
         exportedFiles.push(jsonPath);
         break;
@@ -610,7 +667,6 @@ async function handleExportConversation(args) {
 
       case 'html': {
         // Export as HTML document
-        const htmlPath = path.join(resolvedDir, `${filenameBase}.html`);
         const htmlContent = [];
 
         htmlContent.push('<!DOCTYPE html>');
@@ -667,7 +723,12 @@ async function handleExportConversation(args) {
 
         htmlContent.push('</body></html>');
         const content = htmlContent.join('\n');
-        fs.writeFileSync(htmlPath, content, 'utf8');
+        const htmlPath = writeExport(
+          resolvedDir,
+          filenameBase,
+          'html',
+          content
+        );
         exportStats.bytes = Buffer.byteLength(content, 'utf8');
         exportedFiles.push(htmlPath);
         break;
@@ -675,9 +736,13 @@ async function handleExportConversation(args) {
 
       case 'csv': {
         // Export as CSV
-        const csvPath = path.join(resolvedDir, `${filenameBase}.csv`);
         const csvContent = formatEmailsAsCSV(messages);
-        fs.writeFileSync(csvPath, csvContent, 'utf8');
+        const csvPath = writeExport(
+          resolvedDir,
+          filenameBase,
+          'csv',
+          csvContent
+        );
         exportStats.bytes = Buffer.byteLength(csvContent, 'utf8');
         exportedFiles.push(csvPath);
         break;
@@ -699,6 +764,7 @@ async function handleExportConversation(args) {
     output.push(`**Subject**: ${messages[0].subject || '(no subject)'}`);
     output.push(`**Format**: ${format.toUpperCase()}`);
     output.push(`**Messages**: ${exportStats.messages}`);
+    if (truncated) output.push(truncationNote(exportStats.messages));
     output.push(`**Total Size**: ${sizeFormatted}`);
     output.push(`**Output Directory**: ${resolvedDir}\n`);
     output.push('## Exported Files\n');
@@ -717,6 +783,7 @@ async function handleExportConversation(args) {
         messageCount: exportStats.messages,
         bytes: exportStats.bytes,
         files: exportedFiles,
+        truncated,
       },
     };
   } catch (error) {

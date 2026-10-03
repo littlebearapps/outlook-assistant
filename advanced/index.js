@@ -20,6 +20,12 @@ const {
 } = require('../utils/mailbox');
 const { resolveFolder } = require('../folder/resolve');
 const { getAllFoldersHierarchy } = require('../folder/list');
+const {
+  InvalidDateTimeError,
+  toGraphDateTimeTimeZone,
+  zonedParts,
+  zonedWallTimeToUtcMs,
+} = require('../utils/datetime');
 
 /**
  * Format an email for display (simplified)
@@ -409,6 +415,49 @@ async function handleListSharedMailboxFolders(sharedMailbox, args) {
 }
 
 /**
+ * Default follow-up start for a flag with only a due date: 09:00 in
+ * DEFAULT_TIMEZONE on the due's local date, or the due itself when the due is
+ * earlier than that (a start after the due would be nonsense).
+ */
+function deriveFlagStart(due) {
+  let wall;
+  if (due.timeZone === DEFAULT_TIMEZONE) {
+    wall = due.dateTime;
+  } else {
+    const parts = zonedParts(Date.parse(`${due.dateTime}Z`), DEFAULT_TIMEZONE);
+    if (!parts) return { ...due };
+    wall = `${parts.date}T${parts.time}`;
+  }
+  const nineAm = `${wall.slice(0, 10)}T09:00:00`;
+  // Same zone and fixed-width prefix, so string order is time order.
+  return wall < nineAm
+    ? { ...due }
+    : { dateTime: nineAm, timeZone: DEFAULT_TIMEZONE };
+}
+
+/**
+ * Describe a flag dateTimeTimeZone envelope as UTC plus DEFAULT_TIMEZONE,
+ * e.g. "2026-03-01 09:00 UTC (2026-03-01 20:00 Australia/Melbourne)".
+ */
+function describeFlagTime(envelope) {
+  const ms =
+    envelope.timeZone === 'UTC'
+      ? Date.parse(`${envelope.dateTime}Z`)
+      : zonedWallTimeToUtcMs(envelope.dateTime, envelope.timeZone);
+  const local = (date, time) =>
+    `${date} ${time.slice(0, 5)} ${DEFAULT_TIMEZONE}`;
+  if (Number.isNaN(ms)) {
+    // DEFAULT_TIMEZONE isn't an IANA zone Intl knows; show it as given.
+    return local(envelope.dateTime.slice(0, 10), envelope.dateTime.slice(11));
+  }
+  const iso = new Date(ms).toISOString();
+  const utc = `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;
+  const parts =
+    DEFAULT_TIMEZONE === 'UTC' ? null : zonedParts(ms, DEFAULT_TIMEZONE);
+  return parts ? `${utc} (${local(parts.date, parts.time)})` : utc;
+}
+
+/**
  * Set message flag handler
  */
 async function handleSetMessageFlag(args) {
@@ -435,43 +484,38 @@ async function handleSetMessageFlag(args) {
     };
   }
 
+  // Build flag object. Zoned values (Z/offset) are sent as the same instant in
+  // UTC; zone-less values are read in DEFAULT_TIMEZONE. Bad dates are refused
+  // here, before authenticating or calling Graph.
+  const flag = {
+    flagStatus: 'flagged',
+  };
   try {
-    const accessToken = await ensureAuthenticated();
-
-    // Build flag object
-    const flag = {
-      flagStatus: 'flagged',
-    };
-
+    if (startDateTime) {
+      flag.startDateTime = toGraphDateTimeTimeZone(
+        startDateTime,
+        'startDateTime'
+      );
+    }
     if (dueDateTime) {
-      // Graph API expects { dateTime, timeZone } envelope without trailing Z
-      // When timeZone is specified, the dateTime value is interpreted in that zone
-      const dueDt = dueDateTime.replace(/Z$/i, '');
-      flag.dueDateTime = {
-        dateTime: dueDt,
-        timeZone: DEFAULT_TIMEZONE,
-      };
-
-      // Graph API requires startDateTime when dueDateTime is set
-      // Default to start of the same day if not explicitly provided
-      if (startDateTime) {
-        flag.startDateTime = {
-          dateTime: startDateTime.replace(/Z$/i, ''),
-          timeZone: DEFAULT_TIMEZONE,
-        };
-      } else {
-        const startOfDay = `${dueDt.split('T')[0]}T09:00:00`;
-        flag.startDateTime = {
-          dateTime: startOfDay,
-          timeZone: DEFAULT_TIMEZONE,
-        };
+      flag.dueDateTime = toGraphDateTimeTimeZone(dueDateTime, 'dueDateTime');
+      // Graph requires startDateTime when dueDateTime is set.
+      if (!flag.startDateTime) {
+        flag.startDateTime = deriveFlagStart(flag.dueDateTime);
       }
-    } else if (startDateTime) {
-      flag.startDateTime = {
-        dateTime: startDateTime.replace(/Z$/i, ''),
-        timeZone: DEFAULT_TIMEZONE,
+    }
+  } catch (error) {
+    if (error instanceof InvalidDateTimeError) {
+      return {
+        content: [{ type: 'text', text: error.message }],
+        isError: true,
       };
     }
+    throw error;
+  }
+
+  try {
+    const accessToken = await ensureAuthenticated();
 
     // Process all messages
     const results = [];
@@ -493,11 +537,11 @@ async function handleSetMessageFlag(args) {
     if (results.length > 0) {
       output.push(`Flagged ${results.length} message(s) for follow-up`);
 
-      if (dueDateTime) {
-        output.push(`**Due**: ${new Date(dueDateTime).toLocaleString()}`);
+      if (flag.dueDateTime) {
+        output.push(`**Due**: ${describeFlagTime(flag.dueDateTime)}`);
       }
-      if (startDateTime) {
-        output.push(`**Start**: ${new Date(startDateTime).toLocaleString()}`);
+      if (flag.startDateTime) {
+        output.push(`**Start**: ${describeFlagTime(flag.startDateTime)}`);
       }
     }
 

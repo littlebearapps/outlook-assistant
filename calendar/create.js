@@ -4,6 +4,7 @@
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { DEFAULT_TIMEZONE } = require('../config');
+const { buildAttendees } = require('./attendees');
 
 /**
  * Create event handler
@@ -24,6 +25,19 @@ async function handleCreateEvent(args) {
     };
   }
 
+  // Plain strings are required attendees; {email, type} sets the type (#249).
+  let graphAttendees;
+  if (attendees) {
+    try {
+      graphAttendees = buildAttendees(attendees);
+    } catch (error) {
+      return {
+        content: [{ type: 'text', text: error.message }],
+        isError: true,
+      };
+    }
+  }
+
   try {
     // Get access token
     const accessToken = await ensureAuthenticated();
@@ -42,10 +56,7 @@ async function handleCreateEvent(args) {
         dateTime: end.dateTime || end,
         timeZone: end.timeZone || DEFAULT_TIMEZONE,
       },
-      attendees: attendees?.map((email) => ({
-        emailAddress: { address: email },
-        type: 'required',
-      })),
+      attendees: graphAttendees,
       body: { contentType: 'HTML', content: body || '' },
     };
 

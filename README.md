@@ -143,7 +143,7 @@ Outlook Assistant is designed with safety-first principles for AI-driven email a
 
 **Input and file hardening** — IDs containing `.` or `..` path segments are refused before any request is made, continuation links (`deltaToken`) must point at `graph.microsoft.com`, and attachment downloads and exports write sanitised filenames inside the output directory without overwriting existing files or following symlinks.
 
-**Draft protections** — The `draft` tool shares `send-email` safety controls: dry-run preview, recipient allowlist, mail-tips validation, and rate limiting. The `send` action shares the `send-email` rate limit counter, preventing circumvention via the draft-then-send pathway.
+**Draft protections** — The `draft` tool shares `send-email` safety controls: dry-run preview, recipient allowlist, mail-tips validation, and rate limiting. The `send` action shares the `send-email` rate limit counter, preventing circumvention via the draft-then-send pathway. `update`, `send` and `delete` refuse any ID that is not an unsent draft, so a received or sent message is never edited, deleted or re-sent.
 
 **Token-optimised architecture** — Tools are consolidated using the STRAP (Single Tool, Resource, Action Pattern) approach. 22 tools instead of 55 reduces per-turn overhead by ~11,000 tokens (~64%), keeping more of the AI's context window available for your actual conversation. Fewer tools also means the AI selects the right tool more accurately — research shows tool selection degrades beyond ~40 tools.
 
@@ -166,7 +166,7 @@ npx @littlebearapps/outlook-assistant
 To check which version you have, or to see the available options:
 
 ```bash
-outlook-assistant --version     # prints e.g. 3.12.0
+outlook-assistant --version     # prints e.g. 3.12.1
 outlook-assistant --help        # usage, options and key environment variables
 ```
 
@@ -374,6 +374,7 @@ USE_TEST_MODE=false
 | `OUTLOOK_ALLOWED_RECIPIENTS` | Comma-separated allowlist of domains/addresses for sends, drafts, and rule forwards. | unrestricted |
 | `OUTLOOK_SHARED_MAILBOX` | Opt-in shared-mailbox support (work/school only). `read` requests `Mail.Read.Shared`; `true` (or `readwrite`/`1`) also requests `Mail.ReadWrite.Shared`. Unset leaves sign-in unchanged. After enabling, restart and run `auth action=authenticate force=true`. | unset (off) |
 | `OUTLOOK_SEARCH_SCAN_LIMIT` | How many recent messages the client-side search fallback scans. Personal accounts match `to` locally within this window, so the default caps how far back a `to` search reaches. Max 5000. | `500` |
+| `OUTLOOK_REQUEST_TIMEOUT_MS` | Inactivity timeout for each Graph request attempt, in milliseconds: an attempt that receives no data for this long is abandoned with a timeout error. It isn't an overall deadline, so a slow response that keeps arriving isn't cut off. Throttled (`429`) and busy (`503`/`504`) responses are retried automatically, honouring `Retry-After`. | `60000` |
 
 ### MCP Client Configuration
 
@@ -451,7 +452,9 @@ outlook-assistant/
 │   ├── conversations.js     # Thread listing/export
 │   ├── attachments.js       # Attachment operations
 │   └── ...
-├── calendar/                # Calendar module (3 tools; list.js builds list-events filters)
+├── calendar/                # Calendar module (3 tools)
+│   ├── attendees.js         # Attendee builder (email or {email, type})
+│   └── list.js              # list-events filters
 ├── contacts/                # Contacts module (2 tools)
 ├── categories/              # Categories module (3 tools)
 ├── settings/                # Settings module (1 tool)
@@ -462,6 +465,8 @@ outlook-assistant/
     ├── graph-api.js         # Microsoft Graph API client (includes $batch, path guards)
     ├── mailbox.js           # me vs users/{sharedMailbox} prefix, shared-mailbox opt-in
     ├── safety.js            # Rate limiting, recipient allowlist, dry-run
+    ├── safe-write.js        # Exclusive, outputDir-confined file writes
+    ├── datetime.js          # ISO 8601 parsing and timezone conversion
     ├── odata-helpers.js     # OData query building
     ├── field-presets.js     # Token-efficient field selections
     ├── response-formatter.js # Verbosity levels

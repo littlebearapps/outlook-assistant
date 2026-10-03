@@ -29,6 +29,7 @@ email/                # 8 tools: search-emails, read-email, send-email, draft, u
   └── conversations.js    # Thread listing, retrieval, export
 
 calendar/             # 3 tools: list-events, create-event, manage-event
+  ├── attendees.js        # Shared attendee builder: email strings or {email, type}; update keeps existing types
   └── list.js             # list-events: startAfter/startBefore/subject filters, UTC + local times
 folder/               # 1 tool: folders (action: list|create|move|stats|delete)
   └── resolve.js          # Path-aware, mailbox-aware folder resolver (ID, alias, Parent/Child path, name)
@@ -43,11 +44,13 @@ settings/             # 1 tool: mailbox-settings (action: get|set-auto-replies|s
 advanced/             # 2 tools: access-shared-mailbox (messages, listFolders, folderId), find-meeting-rooms
 
 utils/
-  ├── graph-api.js        # Graph API client with OData encoding, $batch, immutable IDs, dot-segment and Graph-host guards
+  ├── graph-api.js        # Graph API client with OData encoding, $batch, immutable IDs, dot-segment and Graph-host guards, throttling retries, timeout, concurrency gate
   ├── mailbox.js          # `me` vs `users/{mailbox}` prefix; shared-mailbox opt-in and address validation
   ├── schema-coerce.js    # MCP-boundary param coercion and validation
   ├── odata-helpers.js    # OData filter building and escaping
+  ├── datetime.js         # ISO 8601 parsing, Graph dateTimeTimeZone envelopes, IANA-zone conversion (no server-local time)
   ├── safety.js           # Rate limiting, recipient allowlist, dry-run preview
+  ├── safe-write.js       # Exclusive, outputDir-confined file writes with -1, -2, … collision suffixes
   ├── field-presets.js    # Field selections for token efficiency
   ├── response-formatter.js # Verbosity levels (minimal/standard/full)
   └── mock-data.js        # Test-mode data

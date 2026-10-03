@@ -47,6 +47,9 @@ function simulateGraphAPIResponse(method, path, _data, _queryParams) {
           hasAttachments: false,
           importance: 'normal',
           isRead: false,
+          // A draft, so draft update/send/delete pass the draft guard in
+          // test mode (they look the ID up before acting).
+          isDraft: true,
           internetMessageHeaders: [],
         };
       } else {

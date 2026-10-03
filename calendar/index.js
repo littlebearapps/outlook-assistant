@@ -7,13 +7,31 @@ const handleCreateEvent = require('./create');
 const handleCancelEvent = require('./cancel');
 const handleDeleteEvent = require('./delete');
 const handleUpdateEvent = require('./update');
+const { ATTENDEE_TYPES } = require('./attendees');
+
+// One attendee: an email string, or {email, type} (#249). schema-coerce
+// doesn't validate inside array items, so calendar/attendees.js re-checks.
+const ATTENDEE_ITEM_SCHEMA = {
+  oneOf: [
+    { type: 'string' },
+    {
+      type: 'object',
+      properties: {
+        email: { type: 'string' },
+        type: { type: 'string', enum: [...ATTENDEE_TYPES] },
+      },
+      required: ['email'],
+      additionalProperties: false,
+    },
+  ],
+};
 
 // Calendar tool definitions (consolidated: 5 → 3)
 const calendarTools = [
   {
     name: 'list-events',
     description:
-      'List calendar events for the signed-in user (read-only). By default returns upcoming events (start ≥ now). Optional `startAfter`, `startBefore` and `subject` filters find past, current or specifically-named events; supplying any of them replaces the default "now" lower bound and the filters are AND-ed together. Results are oldest first, except when the search only looks backwards (`startBefore` without `startAfter`, or `subject` alone), where they are newest first. Returns an array of events with id, subject, start/end, attendees, location, organiser, and webLink. Use `count` (default 10, max 50) to control page size. Each start/end is returned as a canonical UTC ISO-8601 instant (e.g. `2026-04-02T22:00:00.000Z`) followed by a labelled local rendering in the configured display timezone (default Australia/Melbourne; override with `OUTLOOK_DEFAULT_TIMEZONE`) — the UTC value is authoritative, so consumers never have to guess the zone.',
+      'List calendar events for the signed-in user (read-only). By default returns upcoming events (start ≥ now). Optional `startAfter`, `startBefore` and `subject` filters find past, current or specifically-named events; supplying any of them replaces the default "now" lower bound and the filters are AND-ed together. Results are oldest first, except when the search only looks backwards (`startBefore` without `startAfter`, or `subject` alone), where they are newest first. Each event shows its subject, location, start/end, a body preview and its id. Use `count` (default 10, max 100) to control page size. Each start/end is returned as a canonical UTC ISO-8601 instant (e.g. `2026-04-02T22:00:00.000Z`) followed by a labelled local rendering in the configured display timezone (default Australia/Melbourne; override with `OUTLOOK_DEFAULT_TIMEZONE`) — the UTC value is authoritative, so consumers never have to guess the zone.',
     annotations: {
       title: 'List Calendar Events',
       readOnlyHint: true,
@@ -24,7 +42,7 @@ const calendarTools = [
       properties: {
         count: {
           type: 'number',
-          description: 'Number of events to retrieve (default: 10, max: 50)',
+          description: 'Number of events to retrieve (default: 10, max: 100)',
         },
         startAfter: {
           type: 'string',
@@ -77,10 +95,9 @@ const calendarTools = [
         },
         attendees: {
           type: 'array',
-          items: {
-            type: 'string',
-          },
-          description: 'List of attendee email addresses',
+          items: ATTENDEE_ITEM_SCHEMA,
+          description:
+            "Attendees: email address strings (required attendees) or {email, type} objects, where type is 'required', 'optional' or 'resource' (a room or equipment)",
         },
         body: {
           type: 'string',
@@ -95,7 +112,7 @@ const calendarTools = [
   {
     name: 'manage-event',
     description:
-      "Manage an existing calendar event (destructive: covers update/decline/cancel/delete — use dryRun where supported to preview). action=`update` edits fields in place via PATCH (subject, start, end, attendees, body, location, isOnlineMeeting, sensitivity, showAs, importance, categories, reminderMinutesBeforeStart) — only fields you pass are changed; pass `dryRun: true` to preview the PATCH payload. action=`decline` declines an invitation (optional `comment`). action=`cancel` cancels an event you organised and notifies attendees. action=`delete` permanently removes the event. Returns the updated event on update; status confirmation otherwise. Note: there is no `accept` action — accept invitations in the Outlook UI (Graph's accept verb is unreliable across personal/M365).",
+      "Manage an existing calendar event (destructive: covers update/decline/cancel/delete — use dryRun where supported to preview). action=`update` edits fields in place via PATCH (subject, start, end, attendees, body, location, isOnlineMeeting, sensitivity, showAs, importance, categories, reminderMinutesBeforeStart) — only fields you pass are changed; pass `dryRun: true` to preview the PATCH payload. action=`decline` declines an invitation (optional `comment`; `sendResponse: false` declines without notifying the organiser). action=`cancel` cancels an event you organised and notifies attendees. action=`delete` removes the event from your calendar (Graph doesn't document a guaranteed recovery path, so don't count on restoring it); deleting a meeting you organised that has attendees still emails them a cancellation, so use `cancel` (with an optional `comment`) when you want to control that message. Returns the updated event on update; status confirmation otherwise. Note: there is no `accept` action — accept invitations in the Outlook UI (Graph's accept verb is unreliable across personal/M365).",
     annotations: {
       title: 'Manage Calendar Event',
       readOnlyHint: false,
@@ -121,7 +138,13 @@ const calendarTools = [
         },
         comment: {
           type: 'string',
-          description: 'Optional comment for declining or cancelling the event',
+          description:
+            'Message sent with a decline or cancel (optional; omitted if not given)',
+        },
+        sendResponse: {
+          type: 'boolean',
+          description:
+            'Send the decline to the organiser (action=decline only; default true). Pass false to decline without notifying the organiser.',
         },
         subject: {
           type: 'string',
@@ -161,9 +184,9 @@ const calendarTools = [
         },
         attendees: {
           type: 'array',
-          items: { type: 'string' },
+          items: ATTENDEE_ITEM_SCHEMA,
           description:
-            'Full replacement attendee list — pass complete desired list, or [] to clear (action=update only)',
+            "Full replacement attendee list — pass the complete desired list, or [] to clear (action=update only). Each entry is an email address string or an {email, type} object (type 'required', 'optional' or 'resource'). A string, or an object without a type, keeps the type that address already has on the event (new addresses are required); an explicit type always wins.",
         },
         body: {
           type: 'string',

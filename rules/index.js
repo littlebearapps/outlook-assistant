@@ -94,6 +94,10 @@ async function handleEditRuleSequence(args) {
       return toolError(`Rule with name "${ruleName}" not found.`);
     }
 
+    // Reordering is a write, so it shares the manage-rules limit (#273)
+    const rateLimitError = checkRateLimit('manage-rules');
+    if (rateLimitError) return rateLimitError;
+
     await callGraphAPI(
       accessToken,
       'PATCH',

@@ -1,6 +1,7 @@
 // manage-rules safety (#273): a rule whose forwarding is blocked by
 // OUTLOOK_ALLOWED_RECIPIENTS is refused whole (never saved minus the
-// forward).
+// forward), dry runs don't use up a rate-limit slot, and reorder counts
+// towards the manage-rules limit like every other write.
 //
 // The rate-limit counters live in utils/safety.js module state, so each test
 // loads fresh copies of the handlers and their mocks.
@@ -32,6 +33,7 @@ let callGraphAPI;
 let ensureAuthenticated;
 let handleCreateRule;
 let handleUpdateRule;
+let handleEditRuleSequence;
 const savedEnv = {};
 
 beforeEach(() => {
@@ -45,6 +47,7 @@ beforeEach(() => {
   ensureAuthenticated.mockResolvedValue('test_token');
   handleCreateRule = require('../../rules/create');
   handleUpdateRule = require('../../rules/update');
+  ({ handleEditRuleSequence } = require('../../rules'));
 });
 
 afterEach(() => {
@@ -156,5 +159,133 @@ describe('allowlist-blocked forwarding refuses the whole rule', () => {
     expect(writeCalls()[0][3].actions.forwardTo).toEqual([
       { emailAddress: { address: 'ok@example.com' } },
     ]);
+  });
+});
+
+describe('manage-rules rate limit', () => {
+  beforeEach(() => {
+    process.env[LIMIT_ENV] = '1';
+  });
+
+  it('a create dry run does not use up a slot', async () => {
+    callGraphAPI.mockResolvedValueOnce({ value: [] });
+    const preview = await handleCreateRule({
+      name: 'Rule',
+      containsSubject: 'x',
+      markAsRead: true,
+      dryRun: true,
+    });
+    expect(preview.content[0].text).toContain('DRY RUN');
+
+    callGraphAPI
+      .mockResolvedValueOnce({ value: [] })
+      .mockResolvedValueOnce({ id: 'new-rule-id' });
+    const created = await handleCreateRule({
+      name: 'Rule',
+      containsSubject: 'x',
+      markAsRead: true,
+    });
+    expect(created.isError).toBeUndefined();
+    expect(created.content[0].text).toContain('Successfully created rule');
+  });
+
+  it('an update dry run does not use up a slot', async () => {
+    callGraphAPI.mockResolvedValueOnce({ value: mockRules });
+    const preview = await handleUpdateRule({
+      ruleName: 'Move newsletters',
+      isEnabled: false,
+      dryRun: true,
+    });
+    expect(preview.content[0].text).toContain('DRY RUN');
+
+    callGraphAPI
+      .mockResolvedValueOnce({ value: mockRules })
+      .mockResolvedValueOnce({});
+    const updated = await handleUpdateRule({
+      ruleName: 'Move newsletters',
+      isEnabled: false,
+    });
+    expect(updated.isError).toBeUndefined();
+    expect(updated.content[0].text).toContain('Successfully updated');
+  });
+
+  it('a dry run still previews once the limit is reached', async () => {
+    callGraphAPI
+      .mockResolvedValueOnce({ value: [] })
+      .mockResolvedValueOnce({ id: 'new-rule-id' });
+    const first = await handleCreateRule({
+      name: 'A',
+      containsSubject: 'x',
+      markAsRead: true,
+    });
+    expect(first.isError).toBeUndefined();
+
+    callGraphAPI.mockResolvedValueOnce({ value: [] });
+    const preview = await handleCreateRule({
+      name: 'B',
+      containsSubject: 'x',
+      markAsRead: true,
+      dryRun: true,
+    });
+    expect(preview.isError).toBeUndefined();
+    expect(preview.content[0].text).toContain('DRY RUN');
+  });
+
+  it('returns isError once the limit is reached on create', async () => {
+    callGraphAPI
+      .mockResolvedValueOnce({ value: [] })
+      .mockResolvedValueOnce({ id: 'new-rule-id' });
+    const first = await handleCreateRule({
+      name: 'A',
+      containsSubject: 'x',
+      markAsRead: true,
+    });
+    expect(first.isError).toBeUndefined();
+
+    callGraphAPI.mockResolvedValueOnce({ value: [] });
+    const second = await handleCreateRule({
+      name: 'B',
+      containsSubject: 'x',
+      markAsRead: true,
+    });
+    expect(second.isError).toBe(true);
+    expect(second.content[0].text).toMatch(/Rate limit reached/);
+    expect(writeCalls()).toHaveLength(1);
+  });
+
+  it('counts reorder against the limit', async () => {
+    callGraphAPI
+      .mockResolvedValueOnce({ value: mockRules })
+      .mockResolvedValueOnce({});
+    const first = await handleEditRuleSequence({
+      ruleName: 'Move newsletters',
+      sequence: 5,
+    });
+    expect(first.isError).toBeUndefined();
+
+    callGraphAPI.mockResolvedValue({ value: mockRules });
+    const second = await handleEditRuleSequence({
+      ruleName: 'Move newsletters',
+      sequence: 6,
+    });
+    expect(second.isError).toBe(true);
+    expect(second.content[0].text).toMatch(/Rate limit reached/);
+    expect(writeCalls()).toHaveLength(1);
+  });
+
+  it('shares one manage-rules limit between reorder and create', async () => {
+    callGraphAPI
+      .mockResolvedValueOnce({ value: mockRules })
+      .mockResolvedValueOnce({});
+    await handleEditRuleSequence({ ruleName: 'Move newsletters', sequence: 5 });
+
+    callGraphAPI.mockResolvedValue({ value: [] });
+    const created = await handleCreateRule({
+      name: 'B',
+      containsSubject: 'x',
+      markAsRead: true,
+    });
+    expect(created.isError).toBe(true);
+    expect(created.content[0].text).toMatch(/Rate limit reached/);
   });
 });

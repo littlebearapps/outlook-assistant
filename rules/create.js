@@ -23,10 +23,6 @@ const { toolError, authRequiredError } = require('../utils/tool-error');
 async function handleCreateRule(args) {
   const { name, isEnabled = true, sequence, dryRun } = args;
 
-  // Rate limit rule creation
-  const rateLimitError = checkRateLimit('manage-rules');
-  if (rateLimitError) return rateLimitError;
-
   // Validate sequence parameter
   if (sequence !== undefined && (isNaN(sequence) || sequence < 1)) {
     return toolError('Sequence must be a positive number greater than zero.');
@@ -116,6 +112,10 @@ async function handleCreateRule(args) {
         content: [{ type: 'text', text }],
       };
     }
+
+    // Rate limit only real writes, so a dry run never uses up a slot (#273)
+    const rateLimitError = checkRateLimit('manage-rules');
+    if (rateLimitError) return rateLimitError;
 
     // Create the rule
     const response = await callGraphAPI(

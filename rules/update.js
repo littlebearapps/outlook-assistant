@@ -22,10 +22,6 @@ const { toolError, authRequiredError } = require('../utils/tool-error');
 async function handleUpdateRule(args) {
   const { ruleName, ruleId, name, isEnabled, sequence, dryRun } = args;
 
-  // Rate limit
-  const rateLimitError = checkRateLimit('manage-rules');
-  if (rateLimitError) return rateLimitError;
-
   if (!ruleName && !ruleId) {
     return toolError(
       'Either ruleName or ruleId is required to identify the rule to update.'
@@ -132,6 +128,10 @@ async function handleUpdateRule(args) {
         content: [{ type: 'text', text }],
       };
     }
+
+    // Rate limit only real writes, so a dry run never uses up a slot (#273)
+    const rateLimitError = checkRateLimit('manage-rules');
+    if (rateLimitError) return rateLimitError;
 
     // Execute PATCH
     await callGraphAPI(

@@ -49,3 +49,94 @@ describe.each([
     expect(tool.description.length).toBeLessThanOrEqual(1024);
   });
 });
+
+// #279: descriptions state facts and boundaries ("for X, use `search-emails`"),
+// never steer a model between tools, and fit the 1,024 characters VS Code
+// shows before truncating.
+describe('description hygiene', () => {
+  /** Every `description` in a schema, with where it was found. */
+  function schemaDescriptions(node, where, found = []) {
+    if (Array.isArray(node)) {
+      node.forEach((child, i) =>
+        schemaDescriptions(child, `${where}[${i}]`, found)
+      );
+    } else if (node && typeof node === 'object') {
+      for (const [key, value] of Object.entries(node)) {
+        if (key === 'description' && typeof value === 'string') {
+          found.push([where, value]);
+        } else {
+          schemaDescriptions(value, `${where}.${key}`, found);
+        }
+      }
+    }
+    return found;
+  }
+
+  const allDescriptions = TOOLS.flatMap((tool) => [
+    [tool.name, tool.description],
+    ...schemaDescriptions(tool.inputSchema, tool.name),
+  ]);
+
+  // `Prefer:` is the HTTP header name, not advice.
+  const STEERING = [
+    /\binstead of\b/i,
+    /\brather than\b/i,
+    /\bprefer\b(?!:)/i,
+    /\buse this\b/i,
+    /\bideal for\b/i,
+  ];
+
+  // These two descriptions are rewritten on the fix/v314-hardening branch
+  // (draft 1,023 and export 938 characters there). Once that lands, the
+  // second test below fails until this list is emptied.
+  const PENDING_REWRITE = ['draft', 'export'];
+
+  test.each(TOOLS.map((t) => [t.name, t]))(
+    '%s description fits 1,024 characters',
+    (name, tool) => {
+      if (PENDING_REWRITE.includes(name)) return;
+      expect(tool.description.length).toBeLessThanOrEqual(1024);
+    }
+  );
+
+  test('the pending-rewrite list holds only descriptions still too long', () => {
+    for (const name of PENDING_REWRITE) {
+      const tool = TOOLS.find((t) => t.name === name);
+      expect(tool.description.length).toBeGreaterThan(1024);
+    }
+  });
+
+  test('no tool or parameter description steers between tools', () => {
+    const steering = allDescriptions.filter(([, text]) =>
+      STEERING.some((pattern) => pattern.test(text))
+    );
+    expect(steering).toEqual([]);
+  });
+
+  test('every export.searchQuery property is described', () => {
+    const tool = TOOLS.find((t) => t.name === 'export');
+    const { properties } = tool.inputSchema.properties.searchQuery;
+    expect(Object.keys(properties).sort()).toEqual(
+      [
+        'folder',
+        'from',
+        'maxResults',
+        'receivedAfter',
+        'receivedBefore',
+        'subject',
+      ].sort()
+    );
+    for (const [name, schema] of Object.entries(properties)) {
+      expect([name, typeof schema.description]).toEqual([name, 'string']);
+      expect(schema.description.length).toBeGreaterThan(10);
+    }
+  });
+
+  test('export states the 100-message batch limit', () => {
+    const tool = TOOLS.find((t) => t.name === 'export');
+    expect(tool.description).toMatch(/100 messages per call/);
+    expect(tool.inputSchema.properties.emailIds.description).toMatch(
+      /100 per call/
+    );
+  });
+});

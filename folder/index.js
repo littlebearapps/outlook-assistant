@@ -14,7 +14,7 @@ const folderTools = [
   {
     name: 'folders',
     description:
-      "Manage mail folders. Address a folder by name, by slash-separated path for nested folders (e.g. `Inbox/Clients/Acme`, case-insensitive) or by ID; a bare name matches a unique top-level folder first, then nested ones (an ambiguous name returns the candidates). action=`list` (default) returns the tree with each folder's path and id (`includeItemCounts`, `includeChildren`). action=`create` makes `name` under the root or `parentFolder`/`parentFolderId`. action=`move` moves `emailIds` into `targetFolder`/`targetFolderId`. action=`stats` returns total/unread counts for `folder` or `folderId`. action=`delete` removes a folder (`folderName`/path or `folderId`) with everything in it, subfolders included. It skips Deleted Items and Graph documents no restore path, so pass `dryRun: true` first to see what would be lost. Protected folders (Inbox, Sent Items, etc.) can't be deleted. Every action accepts `sharedMailbox` (alias `email`) to work in a shared or delegated mailbox instead of your own.",
+      "Manage mail folders. Address a folder by name, by slash-separated path for nested folders (e.g. `Inbox/Clients/Acme`, case-insensitive) or by ID; a bare name matches a unique top-level folder first, then nested ones (an ambiguous name returns the candidates). action=`list` (default) returns the tree with each folder's path and id (`includeItemCounts`, `includeChildren`). action=`create` makes `name` under the root or `parentFolder`/`parentFolderId`. action=`move` moves `emailIds` into `targetFolder`/`targetFolderId`. action=`stats` returns total/unread counts for `folder` or `folderId`. action=`delete` removes a folder (`folderName`/path or `folderId`) with everything in it, subfolders included. It skips Deleted Items and Graph documents no restore path, so pass `dryRun: true` first to see what would be lost. Protected folders (Inbox, Sent Items, etc.) can't be deleted. Every action accepts `sharedMailbox` (alias `email`) to work in a shared or delegated mailbox (default: your own).",
     ...toolMetadata('folders', 'Mail Folders'),
     inputSchema: {
       type: 'object',
@@ -37,7 +37,7 @@ const folderTools = [
         sharedMailbox: {
           type: 'string',
           description:
-            'Email address of a shared/delegated mailbox to target instead of the signed-in account (all actions). Requires delegate access + Mail.Read.Shared (list/stats) or Mail.ReadWrite.Shared (create/move/delete). Work/school only; needs the server opt-in setting OUTLOOK_SHARED_MAILBOX (otherwise the call is refused with setup guidance).',
+            'Email address of a shared/delegated mailbox to target (all actions; default: the signed-in account). Requires delegate access + Mail.Read.Shared (list/stats) or Mail.ReadWrite.Shared (create/move/delete). Work/school only; needs the server opt-in setting OUTLOOK_SHARED_MAILBOX (otherwise the call is refused with setup guidance).',
         },
         email: {
           type: 'string',

@@ -631,7 +631,7 @@ const contactsTools = [
   {
     name: 'manage-contact',
     description:
-      "Full CRUD over the signed-in user's personal Outlook contacts (destructive: covers `delete` action). action=`list` (default) returns contacts with pagination via `skip`/`count` (default 50). action=`search` returns contacts matching `query` against name/email (default 25). action=`get` returns full contact detail by `id`. action=`create` adds a new contact and returns its `id`. action=`update` patches the given fields by `id` (only fields passed are changed). action=`delete` removes the contact by `id`; it skips Deleted Items, so treat it as permanent and pass `dryRun: true` first to confirm which contact it is. Use `outputVerbosity` (minimal/standard/full) on list/search to control field count. Prefer `search-people` for cross-source relevance ranking (contacts + directory + recent comms) — this tool only searches your personal contact store.",
+      "Full CRUD over the signed-in user's personal Outlook contacts (destructive: covers `delete` action). action=`list` (default) returns contacts with pagination via `skip`/`count` (default 50). action=`search` returns contacts matching `query` against name/email (default 25). action=`get` returns full contact detail by `id`. action=`create` adds a new contact and returns its `id`. action=`update` patches the given fields by `id` (only fields passed are changed). action=`delete` removes the contact by `id`; it skips Deleted Items, so treat it as permanent and pass `dryRun: true` first to confirm which contact it is. Use `outputVerbosity` (minimal/standard/full) on list/search to control field count. Searches only your personal contact store; for relevance-ranked search across contacts, the directory and recent communications, use `search-people`.",
     ...toolMetadata('manage-contact', 'Contacts'),
     inputSchema: {
       type: 'object',
@@ -748,7 +748,7 @@ const contactsTools = [
   {
     name: 'search-people',
     description:
-      'Relevance-ranked search across personal contacts, organisation directory, and recent communications via the Microsoft Graph People API (read-only). Returns people objects with `displayName`, `emailAddresses`, `companyName`, `jobTitle`, and relevance metadata — ideal for "who is X?" or "who do I email about Y?" lookups. Use `manage-contact` action=`search` instead when you specifically need entries from your personal contact store only.',
+      'Relevance-ranked search across personal contacts, organisation directory, and recent communications via the Microsoft Graph People API (read-only). Returns people objects with `displayName`, `emailAddresses`, `companyName`, `jobTitle`, and relevance metadata, for "who is X?" or "who do I email about Y?" lookups. For entries from your personal contact store only, use `manage-contact` action=`search`.',
     ...toolMetadata('search-people', 'People Search'),
     inputSchema: {
       type: 'object',

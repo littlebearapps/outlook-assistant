@@ -35,7 +35,7 @@ const emailTools = [
   {
     name: 'search-emails',
     description:
-      'Search, list, delta-sync, or thread-group emails — six modes selected by parameters (read-only). With no params: lists recent emails in `folder` (default `inbox`). With `query`/`from`/`to`/`subject`/date filters: full search (combines via OData filter). With `searchExpression` (deprecated alias `kqlQuery`): a raw Microsoft Graph `$search` expression for advanced server-side search. With `deltaMode: true`: returns current state plus a `deltaToken`; pass the token back on the next call for incremental changes only — ideal for inbox monitoring. With `groupByConversation: true`: returns conversation threads. With `conversationId`: returns all messages in a single thread. With `internetMessageId`: looks up a message by its RFC Message-ID header. Set `sharedMailbox` (or alias `email`) to search a shared/delegated mailbox instead of the signed-in account — works with custom folders and nested folder paths. Personal Outlook.com accounts have limited `$search` support — this tool falls back through OData filters / boolean filters / recent listing automatically, but structured filters (`from`/`subject`/`receivedAfter`/`hasAttachments`/`unreadOnly`) return cleaner results. Returns paged messages with id/subject/from/receivedDateTime/preview by default; use `outputVerbosity` to expand.',
+      'Search, list, delta-sync or thread-group emails (read-only); parameters set the mode. No params: recent emails in `folder` (default `inbox`). `query`/`from`/`to`/`subject`/date filters: search, combined as an OData filter. `searchExpression` (deprecated alias `kqlQuery`): a raw Graph `$search` expression. `deltaMode: true`: current state plus a `deltaToken` to pass back next time for changes only. `groupByConversation: true`: conversation threads. `conversationId`: every message in one thread. `internetMessageId`: the message with that RFC Message-ID. `sharedMailbox` (alias `email`) searches a shared/delegated mailbox, custom folders and nested paths included. Personal Outlook.com accounts have limited `$search`, so the tool falls back to OData filters and a recent listing automatically; structured filters (`from`/`subject`/`receivedAfter`/`hasAttachments`/`unreadOnly`) give cleaner results there. Returns up to `count` messages (id/subject/from/receivedDateTime/preview); `outputVerbosity` expands them.',
     ...toolMetadata('search-emails', 'Search Emails'),
     inputSchema: {
       type: 'object',
@@ -59,7 +59,7 @@ const emailTools = [
         groupByConversation: {
           type: 'boolean',
           description:
-            'List conversations (threads) grouped by conversationId instead of individual emails. Honors `sharedMailbox`/`email` (and custom `folder` paths) to group within a shared/delegated mailbox.',
+            'List conversations (threads) grouped by conversationId, not individual emails. Honors `sharedMailbox`/`email` (and custom `folder` paths) to group within a shared/delegated mailbox.',
         },
         // Search/list params
         query: {
@@ -75,7 +75,7 @@ const emailTools = [
         kqlQuery: {
           type: 'string',
           description:
-            'DEPRECATED alias for `searchExpression` (this was never full KQL — it is a Graph `$search` expression). Prefer `searchExpression`.',
+            'DEPRECATED alias for `searchExpression` (this was never full KQL — it is a Graph `$search` expression).',
         },
         folder: {
           type: 'string',
@@ -85,7 +85,7 @@ const emailTools = [
         sharedMailbox: {
           type: 'string',
           description:
-            'Email address of a shared/delegated mailbox to search instead of the signed-in account. Combine with `folder` (incl. custom subfolders/paths) or `searchAllFolders`. Work/school only; needs the server opt-in setting OUTLOOK_SHARED_MAILBOX (otherwise the call is refused with setup guidance).',
+            'Email address of a shared/delegated mailbox to search (default: the signed-in account). Combine with `folder` (incl. custom subfolders/paths) or `searchAllFolders`. Work/school only; needs the server opt-in setting OUTLOOK_SHARED_MAILBOX (otherwise the call is refused with setup guidance).',
         },
         email: {
           type: 'string',
@@ -127,7 +127,7 @@ const emailTools = [
         count: {
           type: 'number',
           description:
-            'Number of results (list default: 25, search default: 10, max: 50)',
+            'Number of results (list default: 25, search default: 10, max: 50). There is no page cursor: when the result says more emails are available, raise `count` or narrow `receivedAfter`/`receivedBefore`.',
         },
         outputVerbosity: {
           type: 'string',
@@ -196,7 +196,7 @@ const emailTools = [
   {
     name: 'read-email',
     description:
-      'Read a single email by id (read-only). Default: returns the full message body (HTML stripped to text by default), subject, from/to/cc, receivedDateTime, conversationId, attachments metadata, and webLink as Markdown. With `headersMode: true`: returns RFC-822 forensic headers instead (DKIM, SPF, DMARC, Received chain, Message-ID, Authentication-Results) — pair with `importantOnly: true` for the security-relevant subset, `groupByType: true` for category-bucketed view, or `raw: true` for JSON instead of Markdown. With `includeHeaders: true` (non-headers-mode): adds basic headers alongside body. Use `outputVerbosity` (minimal/standard/full) to control field count. **If the id came from a shared/delegated mailbox (e.g. via `search-emails` or `access-shared-mailbox` with `sharedMailbox` set), you MUST pass the same `sharedMailbox` (or alias `email`) here** — message IDs are mailbox-scoped, and reading a shared-mailbox id without it fails with 404 ErrorInvalidMailboxItemId.',
+      'Read a single email by id (read-only). Returns subject, from/to/cc, date and the body as Markdown (HTML stripped to text): up to 2,000 characters by default, up to 40,000 with `outputVerbosity: full`; a cut body ends with a note on how to get the rest. With `headersMode: true`: returns RFC-822 forensic headers in place of the body (DKIM, SPF, DMARC, Received chain, Message-ID, Authentication-Results) — `importantOnly: true` for the security-relevant subset, `groupByType: true` for a category-bucketed view, `raw: true` for JSON. With `includeHeaders: true` (non-headers-mode): adds basic headers alongside the body. **If the id came from a shared/delegated mailbox (e.g. via `search-emails` or `access-shared-mailbox` with `sharedMailbox` set), you MUST pass the same `sharedMailbox` (or alias `email`) here** — message IDs are mailbox-scoped, and reading a shared-mailbox id without it fails with 404 ErrorInvalidMailboxItemId.',
     ...toolMetadata('read-email', 'Read Email'),
     inputSchema: {
       type: 'object',
@@ -217,7 +217,7 @@ const emailTools = [
         headersMode: {
           type: 'boolean',
           description:
-            'Return forensic headers instead of email content (default: false)',
+            'Return forensic headers in place of the email content (default: false)',
         },
         includeHeaders: {
           type: 'boolean',
@@ -227,7 +227,8 @@ const emailTools = [
         outputVerbosity: {
           type: 'string',
           enum: ['minimal', 'standard', 'full'],
-          description: 'Output detail level (default: standard)',
+          description:
+            'Output detail level (default: standard). minimal: body preview only; standard: body up to 2,000 characters; full: adds IDs, body up to 40,000 characters. For a longer body, export it with `export` target=message.',
         },
         // Headers mode params
         groupByType: {
@@ -243,7 +244,7 @@ const emailTools = [
         raw: {
           type: 'boolean',
           description:
-            'Return raw JSON instead of Markdown (headersMode only, default: false)',
+            'Return the headers as raw JSON, not Markdown (headersMode only, default: false)',
         },
       },
       additionalProperties: false,
@@ -259,7 +260,7 @@ const emailTools = [
   {
     name: 'send-email',
     description:
-      'Compose and send an email immediately (destructive: sends external comms). Returns a confirmation. Safety controls: `dryRun: true` returns the composed message for review without sending; `checkRecipients: true` runs `get-mail-tips` first and returns its warnings. If the tips show an out-of-office reply, a full mailbox, a delivery restriction or external recipients, the send is refused until repeated with `acknowledgeWarnings: true`. Personal Outlook.com accounts return no tips, and no warnings is not proof of delivery. Subject to session rate limits (`OUTLOOK_MAX_EMAILS_PER_SESSION` env) and recipient allowlist (`OUTLOOK_ALLOWED_RECIPIENTS` env) when configured — calls outside the allowlist fail before any Graph request. For multi-step compose/review workflows prefer `draft` (action=`create` → `update` → `send`) since drafts can be inspected in Outlook before sending. Comma-separated recipient strings or arrays both accepted.',
+      'Compose and send an email immediately (destructive: sends external comms). Returns a confirmation. Safety controls: `dryRun: true` returns the composed message for review without sending; `checkRecipients: true` runs `get-mail-tips` first and returns its warnings. If the tips show an out-of-office reply, a full mailbox, a delivery restriction or external recipients, the send is refused until repeated with `acknowledgeWarnings: true`. Personal Outlook.com accounts return no tips, and no warnings is not proof of delivery. Subject to session rate limits (`OUTLOOK_MAX_EMAILS_PER_SESSION` env) and recipient allowlist (`OUTLOOK_ALLOWED_RECIPIENTS` env) when configured — calls outside the allowlist fail before any Graph request. For a review-before-send workflow, use `draft` (action=`create` → `update` → `send`); a draft can be checked in Outlook before it goes. Comma-separated recipient strings or arrays both accepted.',
     ...toolMetadata('send-email', 'Send Email'),
     inputSchema: {
       type: 'object',
@@ -391,7 +392,7 @@ const emailTools = [
   {
     name: 'update-email',
     description:
-      'Update message state without modifying content (idempotent — safe to retry). action=`mark-read`/`mark-unread` toggles the `isRead` flag on a single message by `id`. action=`flag` sets a follow-up flag with optional `dueDateTime`/`startDateTime` (ISO 8601 with a time: a value with `Z` or a ±hh:mm offset is kept as that exact instant; a value without one is read in the configured default timezone (OUTLOOK_DEFAULT_TIMEZONE); date-only or unparseable values are refused before any change). With only `dueDateTime`, the start defaults to 09:00 on the due date in the default timezone, or to the due time if that is earlier. action=`unflag` clears the flag. action=`complete` marks the flag as done. Flag/unflag/complete accept either `id` (single) or `ids` (batch array) — messages in a batch are updated one at a time (one PATCH each, not Graph `$batch`). Pass `sharedMailbox` (or alias `email`) to update messages in a shared/delegated mailbox instead of the signed-in account (requires Mail.ReadWrite.Shared + delegate access). Returns status confirmation per message.',
+      'Update message state without modifying content (idempotent — safe to retry). action=`mark-read`/`mark-unread` sets `isRead` on a single message by `id`. action=`flag` sets a follow-up flag with optional `dueDateTime`/`startDateTime`: ISO 8601 with a time, kept as that exact instant when it has `Z` or a ±hh:mm offset and read in OUTLOOK_DEFAULT_TIMEZONE when it has none; date-only or unparseable values are refused before any change. With only `dueDateTime`, the start is 09:00 on the due date, or the due time if earlier. action=`unflag` clears the flag; action=`complete` marks it done. Flag/unflag/complete take `id` (single) or `ids` (batch, updated one at a time: one PATCH each, not Graph `$batch`). `sharedMailbox` (alias `email`) updates messages in a shared/delegated mailbox (default: the signed-in account; needs Mail.ReadWrite.Shared and delegate access). Returns a status per message.',
     ...toolMetadata('update-email', 'Update Email'),
     inputSchema: {
       type: 'object',
@@ -404,7 +405,7 @@ const emailTools = [
         id: {
           type: 'string',
           description:
-            'Single message ID (required for mark-read/mark-unread, or use instead of ids for flag actions)',
+            'Single message ID (required for mark-read/mark-unread; flag actions take `id` or `ids`)',
         },
         ids: {
           type: 'array',
@@ -426,7 +427,7 @@ const emailTools = [
         sharedMailbox: {
           type: 'string',
           description:
-            'Email address of a shared/delegated mailbox whose message(s) to update instead of the signed-in account. Requires delegate access + Mail.ReadWrite.Shared. Work/school only; needs the server opt-in setting OUTLOOK_SHARED_MAILBOX (otherwise the call is refused with setup guidance).',
+            'Email address of the shared/delegated mailbox whose message(s) to update (default: the signed-in account). Requires delegate access + Mail.ReadWrite.Shared. Work/school only; needs the server opt-in setting OUTLOOK_SHARED_MAILBOX (otherwise the call is refused with setup guidance).',
         },
         email: {
           type: 'string',
@@ -539,7 +540,7 @@ const emailTools = [
   {
     name: 'export',
     description:
-      'Export emails to file formats for archival, forensics, or programmatic processing. target=`message` (default) exports a single email by `id` to `savePath` — accepts `mime`/`eml`/`markdown`/`json`/`csv`. target=`messages` batch-exports either an explicit `emailIds` array or messages matching `searchQuery` (or `query` shortcut) into `outputDir` — accepts `markdown`/`json`/`csv`. target=`conversation` exports a full thread (up to 1000 messages) by `conversationId` into `outputDir` (chronological by default; pass `order: "reverse"` for newest-first) — accepts `eml`/`mbox`/`markdown`/`json`/`html`/`csv`. target=`mime` returns raw RFC-822 MIME bytes for `id` (use `headersOnly` for just headers, `base64` for encoded transport, `maxSize` to cap at default 1MB). All targets accept `sharedMailbox` (alias `email`) to export from a shared/delegated mailbox instead of the signed-in account — pass it whenever the id(s)/conversationId/searchQuery come from a shared mailbox, or exports fail with 404 ErrorInvalidMailboxItemId. `includeAttachments` defaults to true for single-message exports and false for batch. Format support varies by target — see the format param enum.',
+      'Export emails to file formats for archival, forensics, or programmatic processing. target=`message` (default) exports a single email by `id` to `savePath` — accepts `mime`/`eml`/`markdown`/`json`/`csv`. target=`messages` batch-exports either an explicit `emailIds` array or messages matching `searchQuery` (or `query` shortcut) into `outputDir` — accepts `markdown`/`json`/`csv`; at most 100 messages per call. target=`conversation` exports a full thread (up to 1000 messages) by `conversationId` into `outputDir` (chronological by default; pass `order: "reverse"` for newest-first) — accepts `eml`/`mbox`/`markdown`/`json`/`html`/`csv`. target=`mime` returns raw RFC-822 MIME bytes for `id` (use `headersOnly` for just headers, `base64` for encoded transport, `maxSize` to cap at default 1MB). All targets accept `sharedMailbox` (alias `email`) to export from a shared/delegated mailbox (default: the signed-in account) — pass it whenever the id(s)/conversationId/searchQuery come from a shared mailbox, or exports fail with 404 ErrorInvalidMailboxItemId. `includeAttachments` defaults to true for single-message exports and false for batch. Format support varies by target — see the format param enum.',
     ...toolMetadata('export', 'Export Emails'),
     inputSchema: {
       type: 'object',
@@ -573,20 +574,43 @@ const emailTools = [
         emailIds: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Email IDs to export (target=messages)',
+          description:
+            'Email IDs to export (target=messages). At most 100 per call: any beyond the first 100 are left out, and the result says how many.',
         },
         searchQuery: {
           type: 'object',
           properties: {
-            folder: { type: 'string' },
-            from: { type: 'string' },
-            subject: { type: 'string' },
-            receivedAfter: { type: 'string' },
-            receivedBefore: { type: 'string' },
-            maxResults: { type: 'number' },
+            folder: {
+              type: 'string',
+              description:
+                'Folder to search (default: inbox): a well-known name, display name, `Parent/Child` path or folder ID',
+            },
+            from: {
+              type: 'string',
+              description: 'Sender address or name to match (Graph `$search`)',
+            },
+            subject: {
+              type: 'string',
+              description: 'Subject text to match (Graph `$search`)',
+            },
+            receivedAfter: {
+              type: 'string',
+              description:
+                'Only messages received at or after this date/time (ISO 8601)',
+            },
+            receivedBefore: {
+              type: 'string',
+              description:
+                'Only messages received at or before this date/time (ISO 8601)',
+            },
+            maxResults: {
+              type: 'number',
+              description:
+                'Most messages to export (default: 25, max: 100 per call). Newest first, or by relevance when `from`/`subject` is set.',
+            },
           },
           description:
-            'Search query to find emails (target=messages, alternative to emailIds)',
+            'Search to find emails (target=messages, alternative to emailIds)',
         },
         query: {
           type: 'string',
@@ -612,7 +636,7 @@ const emailTools = [
         sharedMailbox: {
           type: 'string',
           description:
-            'Email address of a shared/delegated mailbox to export from instead of the signed-in account. Applies to all targets (message/messages/conversation/mime) — pass it whenever the id(s)/conversationId/searchQuery belong to a shared mailbox. Requires delegate access + Mail.Read.Shared. Work/school only; needs the server opt-in setting OUTLOOK_SHARED_MAILBOX (otherwise the call is refused with setup guidance).',
+            'Email address of a shared/delegated mailbox to export from (default: the signed-in account). Applies to all targets (message/messages/conversation/mime) — pass it whenever the id(s)/conversationId/searchQuery belong to a shared mailbox. Requires delegate access + Mail.Read.Shared. Work/school only; needs the server opt-in setting OUTLOOK_SHARED_MAILBOX (otherwise the call is refused with setup guidance).',
         },
         email: {
           type: 'string',

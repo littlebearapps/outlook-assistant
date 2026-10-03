@@ -112,7 +112,7 @@ Flag dates: a `dueDateTime`/`startDateTime` with `Z` or a ±hh:mm offset is kept
 
 | Tool | Actions | Safety | Key Parameters |
 |------|---------|--------|----------------|
-| `manage-rules` | `list` (default), `create`, `update`, `reorder`, `delete` | **destructive** | `name` (or alias `displayName`), `fromAddresses`, `containsSubject`, `bodyContains`, `hasAttachments`, `moveToFolder`/`copyToFolder` (name, nested path like `Triage/Delete`, or ID), `forwardTo`, `assignCategories`, `dryRun`, `except*`, `ruleName`, `ruleId`, `sequence` |
+| `manage-rules` | `list` (default), `create`, `update`, `reorder`, `delete` | **destructive** | `name` (or alias `displayName`), `fromAddresses`, `containsSubject`, `bodyContains`, `hasAttachments`, `moveToFolder`/`copyToFolder` (name, nested path like `Triage/Delete`, or ID), `forwardTo`/`redirectTo` (a rule with any address blocked by `OUTLOOK_ALLOWED_RECIPIENTS` is refused whole), `assignCategories`, `dryRun` (create/update; doesn't count towards the rate limit), `except*`, `ruleName`, `ruleId`, `sequence`. Create, update, reorder and delete count towards `OUTLOOK_MAX_MANAGE_RULES_PER_SESSION` |
 
 ## Contacts (2 tools)
 
@@ -158,6 +158,10 @@ All four hints are set explicitly on every tool, and derived from the risk-class
 
 `idempotentHint: true` (repeating the call has no further effect) is set on every read-only tool and on `update-email`, `apply-category` and `mailbox-settings`.
 
+`send-email` and `create-event` also carry `_meta["anthropic/requiresUserInteraction"]`, so Claude Code asks before every call to them, dry runs included, even in auto-accept or bypass modes. Other clients ignore it.
+
+> **Read-only mode**: with `OUTLOOK_READ_ONLY=true` the server refuses every tool call or action that isn't a read before it runs, whatever the client's approval settings. That includes `dryRun` previews, `export` and `attachments action=download`; `auth` sign-in still works. See the [README's environment variables](../../README.md#environment-variables).
+
 > **`openWorldHint: true`** is set on tools that return content authored by external/untrusted parties (`search-emails`, `read-email`, `list-events`, `get-mail-tips`, `search-people`, `access-shared-mailbox`, `attachments`, `export`, `draft`) or that reach other people (`send-email`, `draft`, `create-event`, `manage-event`, `manage-rules`, `mailbox-settings`), signalling MCP clients to apply appropriate caution (e.g. prompt-injection defences).
 
 ## send-email Safety Controls
@@ -185,20 +189,22 @@ Check recipients before sending — detects out-of-office, mailbox full, deliver
 | `maxMessageSize` | Maximum message size limit |
 | `totalMemberCount` | Group size (total and external members) |
 
+These are the names you pass in `tipTypes`. Graph's response uses some different field names (`mailboxFull`, `deliveryRestricted`, `isModerated`), and both forms are recognised. `_meta.issues` lists each flagged condition per recipient as `{address, type}`, with `type` one of `outOfOffice`, `mailboxFull`, `customTip`, `deliveryRestricted`, `moderated`, `external` or `externalMembers`. Mail tips are Microsoft 365 only; personal accounts return none.
+
 ## Output Verbosity
 
 | Level | Description |
 |-------|-------------|
 | `minimal` | Essential fields only (token efficient) |
 | `standard` | Common fields (default) |
-| `full` | All available fields |
+| `full` | All available fields (`read-email` body up to 40,000 characters; `standard` stops at 2,000) |
 
 ## draft Safety Controls
 
 | Control | Config | Default |
 |---------|--------|---------|
 | Dry-run preview | `dryRun: true` param (create only) | Disabled |
-| Pre-save mail tips | `checkRecipients: true` param (create only) | Disabled |
+| Pre-save mail tips | `checkRecipients: true` param (create only; the tips are returned with the saved draft and never stop it) | Disabled |
 | Session rate limit (create/update) | `OUTLOOK_MAX_DRAFT_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION` | Unlimited (0) |
 | Session rate limit (send) | Counts towards the `send-email` limit (`OUTLOOK_MAX_SEND_EMAIL_PER_SESSION`, else `OUTLOOK_MAX_EMAILS_PER_SESSION`) | Unlimited (0) |
 | Recipient allowlist | `OUTLOOK_ALLOWED_RECIPIENTS` env | Allow all |

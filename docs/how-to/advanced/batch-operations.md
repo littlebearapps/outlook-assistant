@@ -85,6 +85,8 @@ params:
   outputDir: "/tmp/finance-export/"
 ```
 
+A batch export takes at most 100 messages per call, and a search stops at `searchQuery.maxResults` (default 25, max 100). When either limit leaves messages out, the result says so; export the rest in another call, or split a search into date ranges with `receivedAfter`/`receivedBefore`.
+
 ## Batch Apply Categories
 
 Apply categories to multiple emails:

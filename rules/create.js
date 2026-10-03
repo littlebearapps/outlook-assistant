@@ -3,13 +3,13 @@
  */
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
-const { checkRateLimit } = require('../utils/safety');
-const { formatRuleDryRunPreview } = require('../utils/safety');
+const { checkRateLimit, formatRuleDryRunPreview } = require('../utils/safety');
 const { getInboxRules } = require('./list');
 const {
   buildConditions,
   buildActions,
   buildExceptions,
+  checkRuleRecipients,
   hasAnyCondition,
   hasAnyAction,
 } = require('./rule-builder');
@@ -47,6 +47,10 @@ async function handleCreateRule(args) {
       'At least one action is required. Available actions: moveToFolder, copyToFolder, markAsRead, markImportance, forwardTo, redirectTo, assignCategories, stopProcessingRules, deleteMessage.'
     );
   }
+
+  // Refuse the whole rule if the allowlist blocks any forwarding (#273)
+  const recipientError = checkRuleRecipients(args, { dryRun });
+  if (recipientError) return recipientError;
 
   try {
     const accessToken = await ensureAuthenticated();

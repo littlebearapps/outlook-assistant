@@ -9,6 +9,7 @@ const {
   buildConditions,
   buildActions,
   buildExceptions,
+  checkRuleRecipients,
 } = require('./rule-builder');
 const { toolError, authRequiredError } = require('../utils/tool-error');
 
@@ -34,6 +35,13 @@ async function handleUpdateRule(args) {
   if (sequence !== undefined && (isNaN(sequence) || sequence < 1)) {
     return toolError('Sequence must be a positive number greater than zero.');
   }
+
+  // Refuse the whole update if the allowlist blocks any forwarding (#273)
+  const recipientError = checkRuleRecipients(args, {
+    operation: 'update',
+    dryRun,
+  });
+  if (recipientError) return recipientError;
 
   try {
     const accessToken = await ensureAuthenticated();

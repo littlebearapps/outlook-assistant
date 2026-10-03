@@ -476,19 +476,20 @@ describe('buildActions', () => {
     expect(checkRecipientAllowlist).toHaveBeenCalled();
   });
 
-  it('should block forwardTo when allowlist rejects', async () => {
-    checkRecipientAllowlist.mockReturnValue({
-      content: [{ type: 'text', text: 'blocked' }],
-    });
+  // #273: never build a rule minus its blocked forwarding.
+  it.each(['forwardTo', 'redirectTo'])(
+    'should throw rather than drop %s when the allowlist rejects',
+    async (param) => {
+      checkRecipientAllowlist.mockReturnValue({
+        content: [{ type: 'text', text: 'blocked' }],
+        isError: true,
+      });
 
-    const { actions, warnings } = await buildActions(
-      { forwardTo: 'blocked@evil.com' },
-      mockToken
-    );
-
-    expect(actions.forwardTo).toBeUndefined();
-    expect(warnings.some((w) => w.includes('blocked by allowlist'))).toBe(true);
-  });
+      await expect(
+        buildActions({ [param]: 'blocked@evil.com' }, mockToken)
+      ).rejects.toThrow(`${param} recipients blocked`);
+    }
+  );
 
   it('should build redirectTo', async () => {
     const { actions } = await buildActions(

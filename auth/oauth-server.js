@@ -5,6 +5,8 @@ const _fs = require('fs'); // Reserved for future HTTPS support
 const crypto = require('crypto'); // Added for generating random string
 const TokenStorage = require('./token-storage'); // Assuming TokenStorage is in the same directory
 const { loadSavedClientId } = require('./client-config');
+const { authErrorLogLabel } = require('./auth-errors');
+const { log } = require('../utils/logger');
 
 // HTML templates
 function escapeHtml(unsafe) {
@@ -197,7 +199,11 @@ function setupOAuthRoutes(
       await tokenStorage.exchangeCodeForTokens(code);
       res.send(templates.authSuccess);
     } catch (exchangeError) {
-      console.error('Token exchange error:', exchangeError);
+      log.note(
+        'auth',
+        authErrorLogLabel('token-exchange-failed', exchangeError)
+      );
+      log.debug('Token exchange error:', exchangeError);
       res.status(500).send(templates.tokenExchangeError(exchangeError));
     }
   });

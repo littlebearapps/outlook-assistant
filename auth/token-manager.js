@@ -3,6 +3,7 @@
  */
 const fs = require('fs');
 const config = require('../config');
+const { log } = require('../utils/logger');
 
 // Global variable to store tokens
 let cachedTokens = null;
@@ -38,11 +39,13 @@ function loadTokenCache() {
       cachedTokens = tokens;
       return tokens;
     } catch (parseError) {
-      console.error('Error parsing token file:', parseError.message);
+      log.note('auth', 'token-cache-unreadable');
+      log.debug('Error parsing token file:', parseError.message);
       return null;
     }
   } catch (error) {
-    console.error('Error loading token cache:', error.message);
+    log.note('auth', 'token-cache-unreadable');
+    log.debug('Error loading token cache:', error.message);
     return null;
   }
 }
@@ -64,7 +67,8 @@ function saveTokenCache(tokens) {
     cachedTokens = tokens;
     return true;
   } catch (error) {
-    console.error('Error saving token cache:', error);
+    log.note('auth', 'token-cache-save-failed');
+    log.debug('Error saving token cache:', error);
     return false;
   }
 }

@@ -86,4 +86,26 @@ function describeAuthError(input) {
   );
 }
 
-module.exports = { getAuthErrorHints, describeAuthError, AUTH_ERROR_HINTS };
+/**
+ * Short, PII-free label for the default log level (#278): `label` plus the
+ * first AADSTS code (or a network error code) found, never the description,
+ * which can carry the user's address.
+ * @param {string} label - e.g. 'refresh-failed'
+ * @param {Error|string|null|undefined} input
+ * @returns {string} - e.g. 'refresh-failed:AADSTS70008'
+ */
+function authErrorLogLabel(label, input) {
+  const aadsts = toMessage(input).match(/AADSTS\d+/);
+  if (aadsts) return `${label}:${aadsts[0]}`;
+  const code = input && input.code;
+  return typeof code === 'string' && /^[A-Z][A-Z_]{1,30}$/.test(code)
+    ? `${label}:${code}`
+    : label;
+}
+
+module.exports = {
+  getAuthErrorHints,
+  describeAuthError,
+  authErrorLogLabel,
+  AUTH_ERROR_HINTS,
+};

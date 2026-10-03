@@ -120,32 +120,44 @@ describe('export target=message with an explicit savePath file', () => {
     expect(JSON.parse(fs.readFileSync(target, 'utf8')).id).toBe(MESSAGE.id);
   });
 
-  test.each([
-    ['a dotfile', '.profile'],
-    ['a file inside a dot-directory', 'settings.json'],
-  ])(
-    'refuses to replace %s even with overwrite: true',
-    async (_label, name) => {
-      // A dotted OUTLOOK_EXPORT_DIR can be written into, but nothing in a
-      // dotted path is ever replaced.
-      const base = path.join(outside, '.archive');
-      process.env.OUTLOOK_EXPORT_DIR = base;
-      const target = path.join(base, name);
-      fs.mkdirSync(base, { recursive: true });
-      fs.writeFileSync(target, 'keep me');
+  test('refuses to replace a dotfile even with overwrite: true', async () => {
+    const base = path.join(outside, '.archive');
+    process.env.OUTLOOK_EXPORT_DIR = base;
+    const target = path.join(base, '.profile');
+    fs.mkdirSync(base, { recursive: true });
+    fs.writeFileSync(target, 'keep me');
 
-      const result = await handleExportEmail({
-        id: MESSAGE.id,
-        format: 'json',
-        savePath: target,
-        overwrite: true,
-      });
+    const result = await handleExportEmail({
+      id: MESSAGE.id,
+      format: 'json',
+      savePath: target,
+      overwrite: true,
+    });
 
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toMatch(/dot/);
-      expect(fs.readFileSync(target, 'utf8')).toBe('keep me');
-    }
-  );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/dot/);
+    expect(fs.readFileSync(target, 'utf8')).toBe('keep me');
+  });
+
+  // A dot in OUTLOOK_EXPORT_DIR itself is the user's choice: only names
+  // below the allowed directory are checked for a leading dot.
+  test('replaces a file in a dotted OUTLOOK_EXPORT_DIR with overwrite: true', async () => {
+    process.env.OUTLOOK_EXPORT_DIR = '~/.mail-exports';
+    const target = path.join(home, '.mail-exports', 'report.json');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, 'old');
+
+    const result = await handleExportEmail({
+      id: MESSAGE.id,
+      format: 'json',
+      savePath: '~/.mail-exports/report.json',
+      overwrite: true,
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(result._meta.replaced).toBe(true);
+    expect(JSON.parse(fs.readFileSync(target, 'utf8')).id).toBe(MESSAGE.id);
+  });
 
   test('refuses a new dotfile below an allowed directory', async () => {
     const result = await handleExportEmail({

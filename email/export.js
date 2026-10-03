@@ -71,17 +71,20 @@ async function handleExportEmail(args) {
   // directory is used. Writes go to the resolved path, never the raw one.
   let explicitFile = null;
   let requestedFile = null; // savePath as given, for messages
+  let explicitBase = null; // allowed directory it is in
   let targetDir;
   try {
     if (args.outputDir) {
       targetDir = confineOutputPath(args.outputDir);
     } else if (args.savePath) {
-      const { path: resolved, requested } = confineOutputTarget(args.savePath);
+      const target = confineOutputTarget(args.savePath);
+      const resolved = target.path;
       if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
         targetDir = resolved;
       } else {
         explicitFile = resolved;
-        requestedFile = requested;
+        requestedFile = target.requested;
+        explicitBase = target.base;
         // Refuse early, before fetching; writeExplicitFile checks again.
         if (!overwrite && pathEntryExists(explicitFile)) {
           throw fileExistsError(requestedFile);
@@ -164,7 +167,12 @@ async function handleExportEmail(args) {
       ({ path: finalPath, replaced } = writeExplicitFile(
         explicitFile,
         content,
-        { overwrite, encoding: 'utf8', displayPath: requestedFile }
+        {
+          overwrite,
+          encoding: 'utf8',
+          displayPath: requestedFile,
+          base: explicitBase,
+        }
       ));
     } else {
       fs.mkdirSync(targetDir, { recursive: true });

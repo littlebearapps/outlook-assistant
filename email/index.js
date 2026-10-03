@@ -569,7 +569,7 @@ const emailTools = [
         overwrite: {
           type: 'boolean',
           description:
-            'Replace an existing file at savePath (target=message, default: false). Never replaces a dotfile, a file in a dot-directory, or a symlink.',
+            'Replace an existing file at savePath (target=message, default: false). Never replaces a symlink, a hard-linked file, a dotfile, or a file in a dot-directory below the allowed folder.',
         },
         includeAttachments: {
           type: 'boolean',

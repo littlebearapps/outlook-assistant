@@ -13,6 +13,7 @@ const path = require('path');
 
 const {
   confineOutputPath,
+  confineOutputTarget,
   writeExplicitFile,
   OutputPathError,
 } = require('../../utils/safe-write');
@@ -185,6 +186,17 @@ describe('confineOutputPath', () => {
     );
   });
 
+  test('confineOutputTarget reports the allowed directory the path is in', () => {
+    const dotted = path.join(outside, '.mail-exports');
+    process.env.OUTLOOK_EXPORT_DIR = dotted;
+    expect(confineOutputTarget(path.join(dotted, 'x.md'))).toEqual({
+      path: path.join(dotted, 'x.md'),
+      requested: path.join(dotted, 'x.md'),
+      base: dotted,
+    });
+    expect(confineOutputTarget(path.join(tmp, 'x.md')).base).toBe(tmp);
+  });
+
   test('refuses a path that cannot be resolved', () => {
     expectRefused(() => confineOutputPath(`${tmp}/bad\0name`));
   });
@@ -261,6 +273,30 @@ describe('writeExplicitFile', () => {
     fs.writeFileSync(target, 'original');
     expectRefused(
       () => writeExplicitFile(target, 'new', { overwrite: true }),
+      /dot/
+    );
+    expect(fs.readFileSync(target, 'utf8')).toBe('original');
+  });
+
+  test('replaces a file in a dotted base when given that base', () => {
+    const dotted = path.join(outside, '.mail-exports');
+    const target = path.join(dotted, 'x.md');
+    fs.mkdirSync(dotted);
+    fs.writeFileSync(target, 'original');
+
+    expect(
+      writeExplicitFile(target, 'new', { overwrite: true, base: dotted })
+    ).toEqual({ path: target, replaced: true });
+    expect(fs.readFileSync(target, 'utf8')).toBe('new');
+  });
+
+  test('still refuses a dotted name below the given base', () => {
+    const target = path.join(tmp, '.config', 'x.md');
+    fs.mkdirSync(path.dirname(target));
+    fs.writeFileSync(target, 'original');
+
+    expectRefused(
+      () => writeExplicitFile(target, 'new', { overwrite: true, base: tmp }),
       /dot/
     );
     expect(fs.readFileSync(target, 'utf8')).toBe('original');

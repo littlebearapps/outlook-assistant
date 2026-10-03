@@ -151,10 +151,11 @@ function segmentsBelow(parent, child) {
  * Resolve an output file or directory and check it may be written: it must
  * be inside an allowed base, with no dotfile or dot-directory below that
  * base. Callers must write to the returned `path`, not the one passed in;
- * `requested` is the caller's path (absolute, `~` expanded) for messages.
+ * `requested` is the caller's path (absolute, `~` expanded) for messages;
+ * `base` is the allowed directory it is in.
  * @param {string} target - Path from the caller: absolute, or starting
  *   with `~`/`~/` for the home directory. Anything else is refused.
- * @returns {{path: string, requested: string}}
+ * @returns {{path: string, requested: string, base: string}}
  * @throws {OutputPathError}
  */
 function confineOutputTarget(target) {
@@ -181,7 +182,7 @@ function confineOutputTarget(target) {
     const below = segmentsBelow(base.dir, resolved);
     if (!below) continue;
     if (!below.some((segment) => segment.startsWith('.'))) {
-      return { path: resolved, requested };
+      return { path: resolved, requested, base: base.dir };
     }
     dotted = true;
   }
@@ -213,12 +214,19 @@ function confineOutputPath(target) {
 }
 
 /**
- * Whether any segment of a resolved path starts with a dot.
+ * Whether any segment of a resolved path starts with a dot. With `base`
+ * (the allowed directory the path was confined to), only the segments below
+ * it count, so a dotted OUTLOOK_EXPORT_DIR doesn't make every file in it
+ * look dotted; without one, or if the path isn't below it, every segment
+ * counts.
  * @param {string} resolved
+ * @param {string} [base]
  * @returns {boolean}
  */
-function hasDotSegment(resolved) {
-  return resolved.split(path.sep).some((segment) => segment.startsWith('.'));
+function hasDotSegment(resolved, base) {
+  const segments =
+    (base && segmentsBelow(base, resolved)) || resolved.split(path.sep);
+  return segments.some((segment) => segment.startsWith('.'));
 }
 
 const MAX_ATTEMPTS = 1000;
@@ -372,20 +380,21 @@ function fileExistsError(filePath) {
  * Write `data` to a file path the caller chose (already confined). A new file
  * is created exclusively. An existing one is replaced only with
  * `overwrite: true`, and only if it is a regular file with a single link and
- * no segment of its path starts with a dot. The replacement is written to a
+ * no segment of its path (below `base`, when given) starts with a dot. The replacement is written to a
  * temporary file beside it and renamed over it, so a link swapped in after
  * the check is replaced, not followed.
  * @param {string} filePath - Resolved target path
  * @param {string|Buffer} data - File contents
- * @param {{overwrite?: boolean, encoding?: string, displayPath?: string}} [options]
- *   displayPath: the path as the caller gave it, used in refusals
+ * @param {{overwrite?: boolean, encoding?: string, displayPath?: string, base?: string}} [options]
+ *   displayPath: the path as the caller gave it, used in refusals;
+ *   base: the allowed directory from confineOutputTarget (dot check below it)
  * @returns {{path: string, replaced: boolean}}
  * @throws {OutputPathError} When the file exists and may not be replaced
  */
 function writeExplicitFile(
   filePath,
   data,
-  { overwrite = false, encoding, displayPath = filePath } = {}
+  { overwrite = false, encoding, displayPath = filePath, base } = {}
 ) {
   const dir = path.dirname(filePath);
   fs.mkdirSync(dir, { recursive: true });
@@ -400,7 +409,7 @@ function writeExplicitFile(
   }
 
   if (!overwrite) throw fileExistsError(displayPath);
-  if (hasDotSegment(filePath)) {
+  if (hasDotSegment(filePath, base)) {
     throw new OutputPathError(
       `Refusing to replace ${displayPath}: files that are dotfiles or inside a dot-directory are never replaced, even with overwrite: true. Nothing was written.`,
       'Choose a different savePath, or pass a directory so a new, unique file name is used.'

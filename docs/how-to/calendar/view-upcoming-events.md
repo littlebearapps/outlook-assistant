@@ -98,7 +98,7 @@ Each event shows:
 
 ## Tips
 
-- `list-events` is read-only and auto-approved, so no confirmation is needed
+- `list-events` is read-only, so clients that support MCP annotations can run it without asking for confirmation. Event subjects and previews are written by the organiser, so treat them as untrusted content (the tool is marked `openWorldHint`)
 - Ask your AI assistant to summarise your day: "What meetings do I have today?"
 - Combine with email search: "Find any emails from people I'm meeting today"
 - Prepare for a recurring meeting by finding the last one: "When did we last have the vendor review, and what was in the invite?"

@@ -146,15 +146,15 @@ Flag dates: a `dueDateTime`/`startDateTime` with `Z` or a ±hh:mm offset is kept
 
 ## Safety Annotations
 
-All four hints are set explicitly on every tool, and derived from the risk-class map in `utils/risk-classes.js`, so they can't drift from what the tool does. `destructiveHint` covers deletes, and also anything that reaches other people or keeps acting after the call (sends, invitations, cancellations, inbox rules, automatic replies).
+All four hints are set explicitly on every tool, and derived from the risk-class map in `utils/risk-classes.js`, so every tool and action is classified on purpose. Annotations are hints: your MCP client decides whether to prompt, and a client set to auto-approve a tool, or running in a mode that skips prompts, won't ask. `destructiveHint` covers deletes, and also anything that reaches other people or keeps acting after the call (sends, invitations, cancellations, inbox rules, automatic replies).
 
 | Category | Tools | Client Behaviour |
 |----------|-------|------------------|
-| **Read-only** (7) | `search-emails`, `read-email`, `list-events`, `search-people`, `access-shared-mailbox`, `find-meeting-rooms`, `get-mail-tips` | Auto-approved by MCP clients that support annotations |
-| **Destructive** (10) | `send-email`, `draft`, `create-event`, `manage-event`, `manage-rules`, `mailbox-settings`, `folders`, `manage-contact`, `manage-category`, `manage-focused-inbox` | Client prompts for confirmation |
-| **Other writes** (5) | `auth`, `update-email`, `apply-category`, `attachments`, `export` | Normal approval flow |
+| **Read-only** (7) | `search-emails`, `read-email`, `list-events`, `search-people`, `access-shared-mailbox`, `find-meeting-rooms`, `get-mail-tips` | May be auto-approved by clients that support annotations |
+| **Destructive** (10) | `send-email`, `draft`, `create-event`, `manage-event`, `manage-rules`, `mailbox-settings`, `folders`, `manage-contact`, `manage-category`, `manage-focused-inbox` | Clients that honour the hint prompt for confirmation |
+| **Other writes** (5) | `auth`, `update-email`, `apply-category`, `attachments`, `export` | Your client's normal approval settings |
 
-`idempotentHint: true` (safe to retry) is set on every read-only tool and on `update-email`, `apply-category` and `mailbox-settings`.
+`idempotentHint: true` (repeating the call has no further effect) is set on every read-only tool and on `update-email`, `apply-category` and `mailbox-settings`.
 
 > **`openWorldHint: true`** is set on tools that return content authored by external/untrusted parties (`search-emails`, `read-email`, `list-events`, `get-mail-tips`, `search-people`, `access-shared-mailbox`, `attachments`, `export`, `draft`) or that reach other people (`send-email`, `draft`, `create-event`, `manage-event`, `manage-rules`, `mailbox-settings`), signalling MCP clients to apply appropriate caution (e.g. prompt-injection defences).
 
@@ -164,7 +164,7 @@ All four hints are set explicitly on every tool, and derived from the risk-class
 |---------|--------|---------|
 | Pre-send mail tips | `checkRecipients: true` param | Disabled |
 | Dry-run preview | `dryRun: true` param | Disabled |
-| Session rate limit | `OUTLOOK_MAX_EMAILS_PER_SESSION` env | Unlimited (0) |
+| Session rate limit | `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION` (shared with `draft action=send`) | Unlimited (0) |
 | Recipient allowlist | `OUTLOOK_ALLOWED_RECIPIENTS` env | Allow all |
 
 ### get-mail-tips
@@ -196,8 +196,8 @@ Check recipients before sending — detects out-of-office, mailbox full, deliver
 |---------|--------|---------|
 | Dry-run preview | `dryRun: true` param (create only) | Disabled |
 | Pre-save mail tips | `checkRecipients: true` param (create only) | Disabled |
-| Session rate limit (create/update) | `OUTLOOK_MAX_DRAFT_PER_SESSION` env | Unlimited (0) |
-| Session rate limit (send) | `OUTLOOK_MAX_EMAILS_PER_SESSION` env (shared with `send-email`) | Unlimited (0) |
+| Session rate limit (create/update) | `OUTLOOK_MAX_DRAFT_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION` | Unlimited (0) |
+| Session rate limit (send) | Counts towards the `send-email` limit (`OUTLOOK_MAX_SEND_EMAIL_PER_SESSION`, else `OUTLOOK_MAX_EMAILS_PER_SESSION`) | Unlimited (0) |
 | Recipient allowlist | `OUTLOOK_ALLOWED_RECIPIENTS` env | Allow all |
 | Drafts-only guard (update/send/delete) | Always on | Non-drafts refused |
 

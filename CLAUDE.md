@@ -46,7 +46,7 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 
 ## Safety Controls
 
-- **MCP annotations** on all 22 tools: all four hints set explicitly and derived from the risk-class map (`utils/risk-classes.js`: `read`/`reversible`/`outward`/`destructive`/`persistent` per tool and action), plus a top-level `title`. `destructiveHint` = any outward, destructive or persistent action; `openWorldHint` = surfaces untrusted content (#92) or reaches other people. A test fails on any unclassified tool or action (#270, #277)
+- **MCP annotations** on all 22 tools: all four hints set explicitly and derived from the risk-class map (`utils/risk-classes.js`: `read`/`reversible`/`outward`/`destructive`/`persistent` per tool and action), plus a top-level `title`. `destructiveHint` = any outward, destructive or persistent action; `openWorldHint` = surfaces untrusted content (#92) or reaches other people; `idempotentHint` = read-only or the tool's `idempotent` flag. A test fails on any unclassified tool or action (#270, #277)
 - **get-mail-tips**: pre-send recipient validation (out-of-office, mailbox full, delivery restrictions)
 - **send-email**: `dryRun` param, `checkRecipients` param (mail tips), session rate limiting (`OUTLOOK_MAX_EMAILS_PER_SESSION`), recipient allowlist (`OUTLOOK_ALLOWED_RECIPIENTS`)
 - **draft**: `dryRun` on create, `checkRecipients` (mail tips), recipient allowlist, rate limiting. Send action shares limit with `send-email`. `update`/`send`/`delete` look the ID up first and refuse anything that isn't an unsent draft (`assertIsDraft` in `email/draft.js`).
@@ -130,11 +130,10 @@ Common errors (auth, device code, search, timezones) and fixes live in [`docs/tr
 ## Testing
 
 ```bash
-npm test                    # Jest unit tests (60 suites / 1544 tests at v3.13.0)
+npm test                    # Jest unit tests (71 suites / 1866 tests with the unreleased v3.14.0 work)
 npm run lint                # ESLint (0 errors expected)
 npm run format:check        # Prettier (CI runs this)
-./test-modular-server.sh    # MCP Inspector interactive
-./test-direct.sh            # Direct testing
+node scripts/e2e-stdio.js <tool> '<argsJson>'  # Fresh stdio server: initialize + one tools/call
 USE_TEST_MODE=true npm start # Mock data mode
 ```
 

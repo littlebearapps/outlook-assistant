@@ -406,7 +406,7 @@ USE_TEST_MODE=false
 |----------|---------|---------|
 | `OUTLOOK_AUTH_AUDIENCE` | OAuth audience: `common`, `consumers` (personal-only Azure apps), `organizations`, or single-tenant GUID. Fixes `AADSTS9002331` for personal-only app registrations. | `common` |
 | `OUTLOOK_DEFAULT_TIMEZONE` | IANA timezone applied to calendar events when callers don't pass one (e.g. `Europe/London`, `America/New_York`). | `Australia/Melbourne` |
-| `OUTLOOK_MAX_EMAILS_PER_SESSION` | Cap on `send-email` + `draft send` per MCP server lifetime. | unlimited |
+| `OUTLOOK_MAX_EMAILS_PER_SESSION` | Default per-session cap for each rate-limited tool, counted separately until the server restarts: `send-email` (including `draft action=send`), `draft` create/update, and `manage-rules`. Override one tool with `OUTLOOK_MAX_<TOOL>_PER_SESSION`, e.g. `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION`. | unlimited |
 | `OUTLOOK_ALLOWED_RECIPIENTS` | Comma-separated allowlist of domains/addresses for sends, drafts, and rule forwards. | unrestricted |
 | `OUTLOOK_SHARED_MAILBOX` | Opt-in shared-mailbox support (work/school only). `read` requests `Mail.Read.Shared`; `true` (or `readwrite`/`1`) also requests `Mail.ReadWrite.Shared`. Unset leaves sign-in unchanged. After enabling, restart and run `auth action=authenticate force=true`. | unset (off) |
 | `OUTLOOK_SEARCH_SCAN_LIMIT` | How many recent messages the client-side search fallback scans. Personal accounts match `to` locally within this window, so the default caps how far back a `to` search reaches. Max 5000. | `500` |
@@ -476,7 +476,10 @@ This starts a local server on port 3333 to handle the OAuth callback. (The `outl
 
 ```
 outlook-assistant/
-├── index.js                 # Main entry point (22 tools)
+├── index.js                 # Entry point: CLI flags, stdio transport
+├── server.js                # MCP server factory (capabilities, request handler)
+├── tools.js                 # Tool registry (22 tools)
+├── request-handler.js       # Routes MCP requests; JSON-RPC errors for unknown methods/tools
 ├── config.js                # Configuration settings
 ├── outlook-auth-server.js   # OAuth server (port 3333)
 ├── auth/                    # Authentication module (1 tool)
@@ -499,6 +502,8 @@ outlook-assistant/
 └── utils/
     ├── graph-api.js         # Microsoft Graph API client (includes $batch, path guards)
     ├── mailbox.js           # me vs users/{sharedMailbox} prefix, shared-mailbox opt-in
+    ├── risk-classes.js      # Risk class per tool/action; derives annotations and titles
+    ├── tool-error.js        # isError tool results with a next step
     ├── safety.js            # Rate limiting, recipient allowlist, dry-run
     ├── safe-write.js        # Exclusive, outputDir-confined file writes
     ├── datetime.js          # ISO 8601 parsing and timezone conversion
@@ -543,9 +548,9 @@ Enable "Allow public client flows" in Azure Portal > App registrations > Authent
 
 Fixed in v3.7.2. Earlier versions sent `client_secret` in token refresh requests for device-code auth, which Microsoft rejects for public client flows. Update to v3.7.2+ or re-authenticate.
 
-### Empty API responses
+### "Authentication required."
 
-Check authentication status with the `auth` tool (action=status). Tokens may have expired — re-authenticate if needed.
+You're signed out, or the saved token expired and couldn't be refreshed. The error says what to do next: sign in with the `auth` tool with `action=authenticate` (add `force=true` to replace an existing session), then retry the call. `auth action=status` shows the current state.
 
 ## Development
 
@@ -569,9 +574,10 @@ USE_TEST_MODE=true npm start
 1. Create a new module directory (e.g. `tasks/`)
 2. Implement tool handlers in separate files
 3. Export tool definitions from the module's `index.js`
-4. Import and add tools to the `TOOLS` array in main `index.js`
-5. Add tests in `test/`
-6. Update `docs/quickrefs/tools-reference.md`
+4. Add the module's tools to the `TOOLS` array in `tools.js`
+5. Classify every tool and action in `utils/risk-classes.js` (a test fails on anything unclassified); the annotations and title come from there
+6. Add tests in `test/`
+7. Update `docs/quickrefs/tools-reference.md`
 
 ## Documentation
 

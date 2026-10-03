@@ -74,7 +74,7 @@ Use `search-people` when you're not sure where the person is — it casts a wide
 
 ## Tips
 
-- `search-people` is read-only and auto-approved — fast for quick lookups
+- `search-people` is read-only, so clients that support MCP annotations can auto-approve it — fast for quick lookups
 - People API results include job titles and departments from your organisation's directory
 - For managing contacts (create, update, delete), see [Manage Contacts](manage-contacts.md)
 

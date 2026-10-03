@@ -72,7 +72,7 @@ params:
 
 The draft is sent and moved to Sent Items. **Note**: The draft ID becomes invalid after sending — the message gets a new ID in Sent Items.
 
-The send action shares rate limits with `send-email`, so the same `OUTLOOK_MAX_EMAILS_PER_SESSION` limit applies.
+The send action counts towards the `send-email` rate limit (`OUTLOOK_MAX_SEND_EMAIL_PER_SESSION`, or `OUTLOOK_MAX_EMAILS_PER_SESSION` when that isn't set).
 
 ## Delete a Draft
 
@@ -153,8 +153,8 @@ The `draft` tool inherits the same safety controls as `send-email`:
 | Dry-run preview | `create` | `dryRun: true` |
 | Mail-tips check | `create` | `checkRecipients: true` |
 | Recipient allowlist | `create`, `update`, `forward` | `OUTLOOK_ALLOWED_RECIPIENTS` env |
-| Rate limiting | `create`, `update` | `OUTLOOK_MAX_DRAFT_PER_SESSION` env |
-| Send rate limiting | `send` | `OUTLOOK_MAX_EMAILS_PER_SESSION` env (shared with `send-email`) |
+| Rate limiting | `create`, `update` | `OUTLOOK_MAX_DRAFT_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION` |
+| Send rate limiting | `send` | Shared with `send-email`: `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION` |
 | Drafts-only guard | `update`, `send`, `delete` | Always on (non-drafts are refused) |
 
 ## Tips

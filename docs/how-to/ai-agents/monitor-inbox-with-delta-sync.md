@@ -63,11 +63,11 @@ The response includes:
 
 ## Handling Token Expiry
 
-Delta tokens expire after an extended period of inactivity. If you receive a `410 Gone` error, your token has expired — start a fresh initial sync (no token) to get a new baseline.
+Delta tokens expire after an extended period of inactivity. If the call fails with a **Delta Token Expired** error (Graph answered `410 Gone` or asked for a resync), your token has expired — start a fresh initial sync (no token) to get a new baseline.
 
 ```
 // Recovery pattern:
-1. Call with deltaToken → 410 error
+1. Call with deltaToken → "Delta Token Expired" error
 2. Discard expired token
 3. Call without deltaToken (fresh initial sync)
 4. Save new deltaToken

@@ -4,8 +4,8 @@
 
 | Version  | Supported          |
 | -------- | ------------------ |
-| 3.12.x   | :white_check_mark: |
-| < 3.12.0 | :x:                |
+| 3.13.x   | :white_check_mark: |
+| < 3.13.0 | :x:                |
 
 Security fixes ship in the latest release only. v3.11.2 and v3.12.0 both
 contain security fixes (see [`CHANGELOG.md`](CHANGELOG.md)), so upgrade rather
@@ -81,17 +81,18 @@ Outlook Assistant includes multiple layers of safety controls for AI-driven acce
 
 ### Tool Annotations
 
-Every tool carries [MCP annotations](https://modelcontextprotocol.io/docs/concepts/tools#annotations) that inform AI clients about the nature of each operation:
+Every tool carries [MCP annotations](https://modelcontextprotocol.io/docs/concepts/tools#annotations), with all four hints set explicitly, that tell AI clients about the nature of each operation. Annotations are hints: your client decides whether to prompt, and a client set to auto-approve a tool, or running in a mode that skips prompts, won't ask.
 
-| Annotation | Meaning | Effect |
+| Annotation | Meaning | Typical client behaviour |
 |------------|---------|--------|
-| `readOnlyHint: true` | Tool only reads data | MCP clients auto-approve (no prompt) |
-| `destructiveHint: true` | Tool can cause irreversible changes | Client prompts for explicit confirmation |
-| `idempotentHint: true` | Safe to retry without side effects | Client may auto-retry on failure |
+| `readOnlyHint: true` | Tool only reads data | May be auto-approved (no prompt) |
+| `destructiveHint: true` | Tool can delete data, reach other people, or keep acting after the call | Clients that honour it prompt for confirmation |
+| `idempotentHint: true` | Repeating the call with the same arguments has no further effect | May be retried on failure |
+| `openWorldHint: true` | Tool returns content written by other people, or reaches other people | Treat returned content as untrusted (prompt injection) |
 
-- **7 read-only tools** are auto-approved (search, read, list operations)
-- **10 destructive tools** (`send-email`, `draft`, `create-event`, `manage-event`, `manage-rules`, `mailbox-settings`, `folders`, `manage-contact`, `manage-category`, `manage-focused-inbox`) prompt for confirmation. Destructive here also covers anything that reaches other people or keeps acting after the call, such as invitations, inbox rules and automatic replies
-- **5 other write tools** (`auth`, `update-email`, `apply-category`, `attachments`, `export`) follow normal approval flows
+- **7 read-only tools** (search, read and list operations) can be auto-approved
+- **10 destructive tools** (`send-email`, `draft`, `create-event`, `manage-event`, `manage-rules`, `mailbox-settings`, `folders`, `manage-contact`, `manage-category`, `manage-focused-inbox`) are the ones clients prompt for. Destructive here also covers anything that reaches other people or keeps acting after the call, such as invitations, inbox rules and automatic replies
+- **5 other write tools** (`auth`, `update-email`, `apply-category`, `attachments`, `export`) follow your client's normal approval settings
 
 See the [Tools Reference](docs/quickrefs/tools-reference.md#safety-annotations) for the full list.
 
@@ -130,7 +131,7 @@ OUTLOOK_ALLOWED_RECIPIENTS=mycompany.com,partner@example.com
 
 These controls are not a substitute for careful oversight:
 
-- Annotations depend on the AI client respecting them — not all clients support MCP annotations
+- Annotations depend on the AI client respecting them — not all clients support MCP annotations, and a client set to auto-approve tools (or running in a mode that bypasses prompts) won't ask before sending or deleting
 - Rate limits reset when the MCP server restarts
 - The recipient allowlist applies to `send-email`, `draft` (create, update, forward) and `manage-rules` forward/redirect targets — it doesn't cover anything done outside Outlook Assistant
 - AI models can still make mistakes in composing email content, selecting recipients, or interpreting instructions

@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the model to sign in with the `auth` tool with `action=authenticate`; 24 of
   these messages pointed to an `authenticate` tool that no longer exists
   (#275).
+- **An export search that matches nothing says so.** A search-driven batch
+  export (`target=messages` with `searchQuery` or `query`) that found no
+  messages replied "Provide emailIds or searchQuery", although you had. It
+  now reports that nothing matched and nothing was exported (#275).
 - **Protocol errors are real JSON-RPC errors** (#276).
   - Unknown methods (including the 2026-07-28 `server/discover` probe)
     return `-32601`, internal failures `-32603`, and an unknown tool `-32602`,
@@ -33,8 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `manage-event` and `manage-rules` are now open-world.
     `manage-category` and `manage-focused-inbox` are now destructive, because
     they can delete. `list-events` and `get-mail-tips` are now open-world,
-    because event text and out-of-office replies are written by other people. Clients that prompt on destructive tools will now prompt
-    for these too.
+    because event text and out-of-office replies are written by other people.
+    Clients that prompt on destructive tools will now prompt for these too.
 
 ### Changed
 

@@ -169,7 +169,7 @@ The shared mailbox address must be a plain email address in printable ASCII (for
 
 ## Tips
 
-- `access-shared-mailbox` itself is read-only and auto-approved by MCP clients that support annotations
+- `access-shared-mailbox` itself is read-only, so MCP clients that support annotations can auto-approve it
 - You can't *send, draft, reply, reply-all, or forward* from a shared mailbox through Outlook Assistant — those tools always act on your own mailbox. Use the Outlook UI for send-as or send-on-behalf.
 - Use `outputVerbosity: "minimal"` for quick checks on high-volume shared inboxes
 - Mailbox settings, inbox rules and Focused Inbox always apply to your own mailbox

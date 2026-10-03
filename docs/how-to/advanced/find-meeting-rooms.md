@@ -94,8 +94,8 @@ The tool first queries `/places`, which needs the `Place.Read.All` Microsoft Gra
 
 ## Tips
 
-- This tool is read-only and auto-approved
-- Combine with `create-event` to book a room: find it, then use the room's email as a location
+- This tool is read-only, so clients that support MCP annotations can auto-approve it
+- Combine with `create-event` to book a room: find it, then add the room's email as an attendee with `type: "resource"`
 - Not all organisations have room resources configured — check with your IT admin
 
 ## Related

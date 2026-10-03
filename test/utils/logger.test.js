@@ -27,6 +27,31 @@ describe('redact', () => {
     );
   });
 
+  test('masks addresses with non-ASCII local parts and domains', () => {
+    expect(redact('from josé@example.com today')).toBe(
+      'from <redacted-email> today'
+    );
+    // e + combining acute accent
+    expect(redact('jose\u0301@example.com')).toBe('<redacted-email>');
+    expect(redact('to jane@exämple.de')).toBe('to <redacted-email>');
+    expect(redact('用户@例子.广告')).toBe('<redacted-email>');
+    expect(redact('users/josé%40example.com/messages')).toBe(
+      'users/<redacted-email>/messages'
+    );
+  });
+
+  test.each([
+    ['a long run with no @', 'a'.repeat(200000)],
+    ['a long non-ASCII run with no @', 'é'.repeat(200000)],
+    ['a long run of dotted words', 'ab.'.repeat(70000)],
+    ['many %40 with no domain dot', 'a%40'.repeat(50000)],
+    ['an @ before a long dotless domain', `a@${'b'.repeat(200000)}`],
+  ])('stays fast on %s', (_label, input) => {
+    const started = Date.now();
+    redact(input);
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
   test('keeps the quotes around a quoted address', () => {
     expect(redact("address eq 'jane@example.com'")).toBe(
       "address eq '<redacted-email>'"

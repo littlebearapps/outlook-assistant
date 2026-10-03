@@ -21,6 +21,7 @@ const config = require('./config');
 const { coerceArgsAgainstSchema } = require('./utils/schema-coerce');
 const { readOnlyRefusal } = require('./utils/read-only');
 const { riskMeta } = require('./utils/risk-classes');
+const { log, withCallContext, formatNoteValue } = require('./utils/logger');
 
 /**
  * A visible tool-error result.
@@ -36,7 +37,7 @@ function toolErrorResult(text) {
  * @param {Array<object>} TOOLS
  */
 function listTools(TOOLS) {
-  console.error(`TOOLS COUNT: ${TOOLS.length}`);
+  log.debug(`tools/list: ${TOOLS.length} tools`);
   return {
     tools: TOOLS.map((tool) => {
       // Client-specific flags derived from the risk map (#271), e.g.
@@ -69,19 +70,80 @@ function runTool(tool, args) {
 }
 
 /**
- * tools/call: validate arguments, then run the tool's handler.
+ * The action to show on the call line: only a value from the tool's own
+ * `action` enum, `?` for anything else, so free text never reaches the log.
+ * @param {object|undefined} tool
+ * @param {object} args
+ * @returns {string|undefined}
+ */
+function loggableAction(tool, args) {
+  const action = args && args.action;
+  if (action === undefined) return undefined;
+  const allowed = tool?.inputSchema?.properties?.action?.enum;
+  return Array.isArray(allowed) && allowed.includes(action) ? action : '?';
+}
+
+/**
+ * The one default-level line per tool call (#278): tool name, action,
+ * outcome and duration, plus any notes (e.g. a Graph status) collected
+ * during the call. Never the arguments.
+ */
+function logToolCall({ tool, action, outcome, startedAt, notes }) {
+  const parts = [`tool=${tool}`];
+  if (action !== undefined) parts.push(`action=${action}`);
+  parts.push(`outcome=${outcome}`, `ms=${Date.now() - startedAt}`);
+  for (const [key, value] of notes) {
+    parts.push(`${key}=${formatNoteValue(value)}`);
+  }
+  log.info(parts.join(' '));
+}
+
+/**
+ * tools/call: validate arguments, then run the tool's handler. Logs one
+ * line per call (see logToolCall).
  * @param {Array<object>} TOOLS
  * @param {object} [params]
  */
-async function callTool(TOOLS, params) {
+function callTool(TOOLS, params) {
   const { name, arguments: args = {} } = params || {};
-  console.error(`TOOL CALL: ${name}`);
-
   const tool = TOOLS.find((t) => t.name === name);
-  if (!tool || !tool.handler) {
-    throw new McpError(ErrorCode.InvalidParams, `Unknown tool: ${name}`);
-  }
+  const startedAt = Date.now();
 
+  return withCallContext(async (ctx) => {
+    const line = {
+      tool: tool ? name : '?',
+      action: loggableAction(tool, args),
+      startedAt,
+      notes: ctx.notes,
+    };
+    if (!tool || !tool.handler) {
+      logToolCall({ ...line, outcome: 'unknown-tool' });
+      throw new McpError(ErrorCode.InvalidParams, `Unknown tool: ${name}`);
+    }
+    log.debug(
+      `tools/call ${name} args: ${Object.keys(args || {}).join(', ') || '(none)'}`
+    );
+
+    const { result, error } = await runToolCall(tool, name, args);
+    if (error) {
+      // Class name only (e.g. TypeError): the message can carry user data.
+      const errorClass = /^[A-Za-z]{1,40}$/.test(error?.name)
+        ? error.name
+        : 'Error';
+      ctx.notes.set('error', errorClass);
+      logToolCall({ ...line, outcome: 'thrown' });
+    } else {
+      logToolCall({ ...line, outcome: result?.isError ? 'isError' : 'ok' });
+    }
+    return result;
+  });
+}
+
+/**
+ * Coerce and validate the arguments, then run the handler.
+ * @returns {Promise<{result: object, error?: Error}>}
+ */
+async function runToolCall(tool, name, args) {
   try {
     // Coerce + validate args against the tool's inputSchema before
     // dispatching. Catches array-as-string, boolean-as-string, unknown
@@ -90,16 +152,21 @@ async function callTool(TOOLS, params) {
     if (tool.inputSchema) {
       const coerced = coerceArgsAgainstSchema(args, tool.inputSchema);
       if (coerced.error) {
-        return toolErrorResult(
-          `Invalid arguments for tool '${name}':\n${coerced.error}`
-        );
+        return {
+          result: toolErrorResult(
+            `Invalid arguments for tool '${name}':\n${coerced.error}`
+          ),
+        };
       }
-      return await runTool(tool, coerced.args);
+      return { result: await runTool(tool, coerced.args) };
     }
-    return await runTool(tool, args);
+    return { result: await runTool(tool, args) };
   } catch (error) {
-    console.error(`Error in tools/call:`, error);
-    return toolErrorResult(`Error processing tool call: ${error.message}`);
+    log.debug('Error in tools/call:', error);
+    return {
+      result: toolErrorResult(`Error processing tool call: ${error.message}`),
+      error,
+    };
   }
 }
 
@@ -111,14 +178,15 @@ async function callTool(TOOLS, params) {
 function createRequestHandler(TOOLS) {
   return async (request) => {
     const { method, params, id } = request;
-    console.error(`REQUEST: ${method} [${id}]`);
+    log.debug(`REQUEST: ${method} [${id}]`);
 
     try {
       if (method === 'tools/list') return listTools(TOOLS);
       if (method === 'tools/call') return await callTool(TOOLS, params);
     } catch (error) {
       if (error instanceof McpError) throw error;
-      console.error(`Error in fallbackRequestHandler:`, error);
+      log.info(`Error in fallbackRequestHandler: ${error.name || 'Error'}`);
+      log.debug('Error in fallbackRequestHandler:', error);
       throw new McpError(
         ErrorCode.InternalError,
         `Error processing request: ${error.message}`

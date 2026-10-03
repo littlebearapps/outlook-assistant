@@ -12,6 +12,7 @@ const { quoteSearchPhrase } = require('../utils/odata-helpers');
 const { toolMetadata } = require('../utils/risk-classes');
 const { toolError, authRequiredError } = require('../utils/tool-error');
 const { dryRunResult } = require('../utils/safety');
+const { log } = require('../utils/logger');
 
 /**
  * Contact field presets for different use cases
@@ -244,7 +245,7 @@ async function handleSearchContacts(args) {
       );
     } catch (filterError) {
       // Fallback: fetch all contacts and filter client-side if $filter is unsupported
-      console.error(
+      log.debug(
         `Contact $filter failed (${filterError.message}), falling back to client-side filter`
       );
       const allParams = {

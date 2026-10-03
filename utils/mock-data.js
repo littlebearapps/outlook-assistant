@@ -2,6 +2,8 @@
  * Mock data functions for test mode
  */
 
+const { log } = require('./logger');
+
 /**
  * Simulates Microsoft Graph API responses for testing
  * @param {string} method - HTTP method
@@ -11,7 +13,7 @@
  * @returns {object} - Simulated API response
  */
 function simulateGraphAPIResponse(method, path, _data, _queryParams) {
-  console.error(`Simulating response for: ${method} ${path}`);
+  log.debug(`Simulating response for: ${method} ${path}`);
 
   if (method === 'GET') {
     if (path.includes('messages') && !path.includes('sendMail')) {
@@ -148,7 +150,7 @@ function simulateGraphAPIResponse(method, path, _data, _queryParams) {
   }
 
   // If we get here, we don't have a simulation for this endpoint
-  console.error(`No simulation available for: ${method} ${path}`);
+  log.debug(`No simulation available for: ${method} ${path}`);
   return {};
 }
 

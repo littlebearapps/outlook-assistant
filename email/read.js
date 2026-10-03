@@ -14,6 +14,7 @@ const {
 const { getEmailFields } = require('../utils/field-presets');
 const { buildMailboxPrefix } = require('../utils/mailbox');
 const { toolError, authRequiredError } = require('../utils/tool-error');
+const { log } = require('../utils/logger');
 
 /**
  * Get field preset based on verbosity and options
@@ -107,7 +108,7 @@ async function handleReadEmail(args) {
         },
       };
     } catch (error) {
-      console.error(`Error reading email: ${error.message}`);
+      log.debug(`Error reading email: ${error.message}`);
 
       // Improved error handling with more specific messages
       if (error.message.includes("doesn't belong to the targeted mailbox")) {

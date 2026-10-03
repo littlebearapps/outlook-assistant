@@ -8,6 +8,7 @@ const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { buildMailboxPrefix } = require('../utils/mailbox');
 const { toolError, authRequiredError } = require('../utils/tool-error');
+const { log } = require('../utils/logger');
 
 /**
  * Important headers to highlight (in order of relevance)
@@ -283,7 +284,7 @@ async function handleGetEmailHeaders(args) {
         },
       };
     } catch (error) {
-      console.error(`Error getting email headers: ${error.message}`);
+      log.debug(`Error getting email headers: ${error.message}`);
 
       if (error.message.includes("doesn't belong to the targeted mailbox")) {
         return toolError(

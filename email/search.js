@@ -20,6 +20,7 @@ const {
   quoteSearchPhrase,
 } = require('../utils/odata-helpers');
 const { toolError, authRequiredError } = require('../utils/tool-error');
+const { log } = require('../utils/logger');
 
 // Upper bound on how many recent messages the client-side fallback scans
 // before giving up. Deliberately DECOUPLED from the requested result count so
@@ -110,12 +111,12 @@ async function handleSearchEmails(args) {
     let endpoint;
     if (searchAllFolders) {
       endpoint = `${buildMailboxPrefix(sharedMailbox)}/messages`;
-      console.error(
+      log.debug(
         `Searching across all mail folders${sharedMailbox ? ` in ${sharedMailbox}` : ''}`
       );
     } else {
       endpoint = await resolveFolderPath(accessToken, folder, sharedMailbox);
-      console.error(`Using endpoint: ${endpoint} for folder: ${folder}`);
+      log.debug(`Using endpoint: ${endpoint} for folder: ${folder}`);
     }
 
     // Execute progressive search with pagination
@@ -241,7 +242,7 @@ async function retryFieldScopedExpression(ctx) {
   const translated = parseFieldScopedExpression(trimmedKql);
   if (!translated) return null;
 
-  console.error(
+  log.debug(
     `Retrying field-scoped searchExpression as OData filters: ${JSON.stringify(translated)}`
   );
   const retry = await progressiveSearch(
@@ -342,7 +343,7 @@ async function progressiveSearch(
     };
 
     try {
-      console.error(`Attempting raw KQL search: ${kqlForSearch}`);
+      log.debug(`Attempting raw KQL search: ${kqlForSearch}`);
       searchAttempts.push('raw-kql');
 
       const kqlParams = {
@@ -358,7 +359,7 @@ async function progressiveSearch(
         kqlParams,
         maxCount
       );
-      console.error(
+      log.debug(
         `Raw KQL search complete: ${response.value?.length || 0} results`
       );
       const matched = response.value?.length || 0;
@@ -385,7 +386,7 @@ async function progressiveSearch(
           const retry = await retryFieldScopedExpression(translationContext);
           if (retry) return retry;
         } catch (retryError) {
-          console.error(`Translated retry failed: ${retryError.message}`);
+          log.debug(`Translated retry failed: ${retryError.message}`);
         }
       }
 
@@ -393,7 +394,7 @@ async function progressiveSearch(
       // would ignore kqlQuery and return unrelated emails.
       return response;
     } catch (error) {
-      console.error(`Raw KQL search failed: ${error.message}`);
+      log.debug(`Raw KQL search failed: ${error.message}`);
       searchAttempts.push('raw-kql-error');
 
       // A field-scoped expression is what Graph rejects here on personal
@@ -407,7 +408,7 @@ async function progressiveSearch(
           return retry;
         }
       } catch (retryError) {
-        console.error(`Translated retry also failed: ${retryError.message}`);
+        log.debug(`Translated retry also failed: ${retryError.message}`);
       }
 
       // Surface the failure rather than masking it with unrelated results.
@@ -439,7 +440,7 @@ async function progressiveSearch(
     (filterTerms.hasAttachments === true || filterTerms.unreadOnly === true)
   ) {
     // Skip directly to boolean-only filter (step 3) — combined search is redundant
-    console.error('Only boolean filters provided, skipping combined search');
+    log.debug('Only boolean filters provided, skipping combined search');
   } else {
     try {
       const params = buildSearchParams(
@@ -448,7 +449,7 @@ async function progressiveSearch(
         Math.min(50, maxCount),
         selectFields
       );
-      console.error('Attempting combined search with params:', params);
+      log.debug('Attempting combined search with params:', params);
       searchAttempts.push('combined-search');
 
       const response = await callGraphAPIPaginated(
@@ -459,7 +460,7 @@ async function progressiveSearch(
         maxCount
       );
       if (response.value && response.value.length > 0) {
-        console.error(
+        log.debug(
           `Combined search successful: found ${response.value.length} results`
         );
         response._searchInfo = {
@@ -473,7 +474,7 @@ async function progressiveSearch(
         return response;
       }
     } catch (error) {
-      console.error(`Combined search failed: ${error.message}`);
+      log.debug(`Combined search failed: ${error.message}`);
     }
   }
 
@@ -488,9 +489,7 @@ async function progressiveSearch(
     // 2a. Server-side single-term attempt (isolated try/catch — a failure
     // here just falls through to the one client-side fallback below).
     try {
-      console.error(
-        `Attempting search with only ${term}: "${searchTerms[term]}"`
-      );
+      log.debug(`Attempting search with only ${term}: "${searchTerms[term]}"`);
       searchAttempts.push(`single-term-${term}`);
 
       const simplifiedParams = {
@@ -550,7 +549,7 @@ async function progressiveSearch(
             secondaryApplied.length > 0
               ? ` after local ${secondaryApplied.join(', ')} narrowing of ${response.value.length}`
               : '';
-          console.error(
+          log.debug(
             `Search with ${term} successful: found ${matched.length} results${narrowing}`
           );
           narrowResponse(response, matched);
@@ -567,12 +566,12 @@ async function progressiveSearch(
           return response;
         }
         recordNarrowingMiss(scanState, response.value.length);
-        console.error(
+        log.debug(
           `Search with ${term} found ${response.value.length} results, but none also satisfied ${secondaryApplied.join(', ')} — continuing`
         );
       }
     } catch (error) {
-      console.error(`Search with ${term} failed: ${error.message}`);
+      log.debug(`Search with ${term} failed: ${error.message}`);
       // Fall through to the client-side fallback below.
     }
 
@@ -582,7 +581,7 @@ async function progressiveSearch(
     // try/catch prevents the double-scan/double-label a throw inside a
     // success-path fallback would otherwise cause. (#169)
     if (term === 'to' || term === 'query') {
-      console.error(
+      log.debug(
         `${term} unsatisfied server-side, trying client-side filtering`
       );
       searchAttempts.push(`client-side-${term}`);
@@ -599,7 +598,7 @@ async function progressiveSearch(
         );
         if (fallback) return fallback;
       } catch (fallbackError) {
-        console.error(
+        log.debug(
           `Client-side ${term} fallback also failed: ${fallbackError.message}`
         );
       }
@@ -613,7 +612,7 @@ async function progressiveSearch(
     filterTerms.receivedAfter || filterTerms.receivedBefore;
   if (hasBooleanFilters || hasDateFilters) {
     try {
-      console.error('Attempting search with only boolean/date filters');
+      log.debug('Attempting search with only boolean/date filters');
       searchAttempts.push('boolean-filters-only');
 
       const filterOnlyParams = {
@@ -636,7 +635,7 @@ async function progressiveSearch(
         filterOnlyParams,
         maxCount
       );
-      console.error(
+      log.debug(
         `Boolean filter search found ${response.value?.length || 0} results`
       );
       // This step applied only the boolean/date filters. Narrow by the
@@ -662,15 +661,15 @@ async function progressiveSearch(
         return response;
       }
       recordNarrowingMiss(scanState, response.value.length);
-      console.error(
+      log.debug(
         `Boolean filter search found ${response.value.length} results, but none satisfied ${secondaryApplied.join(', ')} — continuing`
       );
     } catch (error) {
-      console.error(`Boolean filter search failed: ${error.message}`);
+      log.debug(`Boolean filter search failed: ${error.message}`);
       // Retry without $orderby if it was the issue
       if (error.message && error.message.includes('InefficientFilter')) {
         try {
-          console.error('Retrying boolean filters without $orderby');
+          log.debug('Retrying boolean filters without $orderby');
           const retryParams = {
             $top: Math.min(50, maxCount),
             $select: selectFields,
@@ -707,13 +706,11 @@ async function progressiveSearch(
             return response;
           }
           recordNarrowingMiss(scanState, response.value.length);
-          console.error(
+          log.debug(
             `Boolean filter retry found ${response.value.length} results, but none satisfied ${secondaryApplied.join(', ')} — continuing`
           );
         } catch (retryError) {
-          console.error(
-            `Boolean filter retry also failed: ${retryError.message}`
-          );
+          log.debug(`Boolean filter retry also failed: ${retryError.message}`);
         }
       }
     }
@@ -730,7 +727,7 @@ async function progressiveSearch(
     searchTerms.kqlQuery;
 
   if (hasAnyFilters) {
-    console.error(
+    log.debug(
       'All search strategies exhausted with filters active — returning 0 results'
     );
     searchAttempts.push('no-results');
@@ -759,7 +756,7 @@ async function progressiveSearch(
   }
 
   // No search filters specified — return recent emails (list mode)
-  console.error('No search filters specified, returning recent emails');
+  log.debug('No search filters specified, returning recent emails');
   searchAttempts.push('recent-emails');
 
   const basicParams = {
@@ -775,7 +772,7 @@ async function progressiveSearch(
     basicParams,
     maxCount
   );
-  console.error(`Recent emails: found ${response.value?.length || 0} results`);
+  log.debug(`Recent emails: found ${response.value?.length || 0} results`);
 
   response._searchInfo = {
     attemptsCount: searchAttempts.length,
@@ -1162,7 +1159,7 @@ async function runClientSideFallback(
   if (matched.length === 0) {
     return null;
   }
-  console.error(
+  log.debug(
     `Client-side ${kind} matched ${matched.length} of ${messages.length} scanned messages`
   );
   return {
@@ -1242,7 +1239,7 @@ function buildSearchParams(searchTerms, filterTerms, count, selectFields) {
       const afterDate = new Date(filterTerms.receivedAfter).toISOString();
       filterConditions.push(`receivedDateTime ge ${afterDate}`);
     } catch (_e) {
-      console.error(`Invalid receivedAfter date: ${filterTerms.receivedAfter}`);
+      log.debug(`Invalid receivedAfter date: ${filterTerms.receivedAfter}`);
     }
   }
 
@@ -1251,9 +1248,7 @@ function buildSearchParams(searchTerms, filterTerms, count, selectFields) {
       const beforeDate = new Date(filterTerms.receivedBefore).toISOString();
       filterConditions.push(`receivedDateTime le ${beforeDate}`);
     } catch (_e) {
-      console.error(
-        `Invalid receivedBefore date: ${filterTerms.receivedBefore}`
-      );
+      log.debug(`Invalid receivedBefore date: ${filterTerms.receivedBefore}`);
     }
   }
 
@@ -1292,7 +1287,7 @@ function addBooleanFilters(params, filterTerms) {
       const afterDate = new Date(filterTerms.receivedAfter).toISOString();
       filterConditions.push(`receivedDateTime ge ${afterDate}`);
     } catch (_e) {
-      console.error(`Invalid receivedAfter date: ${filterTerms.receivedAfter}`);
+      log.debug(`Invalid receivedAfter date: ${filterTerms.receivedAfter}`);
     }
   }
 
@@ -1301,9 +1296,7 @@ function addBooleanFilters(params, filterTerms) {
       const beforeDate = new Date(filterTerms.receivedBefore).toISOString();
       filterConditions.push(`receivedDateTime le ${beforeDate}`);
     } catch (_e) {
-      console.error(
-        `Invalid receivedBefore date: ${filterTerms.receivedBefore}`
-      );
+      log.debug(`Invalid receivedBefore date: ${filterTerms.receivedBefore}`);
     }
   }
 
@@ -1593,7 +1586,7 @@ async function handleSearchByMessageId(args) {
       $top: '10', // Usually only one match, but allow for edge cases
     };
 
-    console.error(`Searching for Message-ID: ${messageId}`);
+    log.debug(`Searching for Message-ID: ${messageId}`);
 
     const response = await callGraphAPI(
       accessToken,

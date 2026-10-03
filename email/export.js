@@ -22,6 +22,7 @@ const { quoteSearchPhrase } = require('../utils/odata-helpers');
 const { safeAttachmentFilename } = require('./attachments');
 const { writeClaimedFile } = require('../utils/safe-write');
 const { toolError, authRequiredError } = require('../utils/tool-error');
+const { log } = require('../utils/logger');
 
 // Export format constants
 const EXPORT_FORMATS = {
@@ -268,7 +269,7 @@ async function handleBatchExportEmails(args) {
     const limitNote = batchLimitNote(idsToExport.length, emailIds, searchQuery);
     if (idsToExport.length > maxBatch) {
       idsToExport = idsToExport.slice(0, maxBatch);
-      console.error(`Batch export limited to ${maxBatch} emails`);
+      log.debug(`Batch export limited to ${maxBatch} emails`);
     }
 
     // CSV batch export: aggregate all emails into a single CSV file
@@ -677,7 +678,7 @@ async function saveAttachments(
       }
     }
   } catch (error) {
-    console.error(`Failed to save attachments: ${error.message}`);
+    log.debug(`Failed to save attachments: ${error.message}`);
   }
 
   return saved;

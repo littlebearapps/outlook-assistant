@@ -12,6 +12,7 @@ const { ensureAuthenticated } = require('../auth');
 const { buildMailboxPrefix } = require('../utils/mailbox');
 const { writeClaimedFile } = require('../utils/safe-write');
 const { toolError, authRequiredError } = require('../utils/tool-error');
+const { log } = require('../utils/logger');
 
 const MAX_FILENAME_LENGTH = 200;
 
@@ -65,7 +66,7 @@ async function handleListAttachments(args) {
       $select: 'id,name,contentType,size,isInline',
     };
 
-    console.error(`Fetching attachments for message: ${messageId}`);
+    log.debug(`Fetching attachments for message: ${messageId}`);
     const response = await callGraphAPI(
       accessToken,
       'GET',
@@ -140,7 +141,7 @@ async function handleDownloadAttachment(args) {
 
     // First, get attachment metadata to get the filename and content
     const metadataEndpoint = `${prefix}/messages/${messageId}/attachments/${attachmentId}`;
-    console.error(`Fetching attachment metadata: ${attachmentId}`);
+    log.debug(`Fetching attachment metadata: ${attachmentId}`);
 
     const metadata = await callGraphAPI(
       accessToken,
@@ -247,7 +248,7 @@ async function handleGetAttachmentContent(args) {
     const accessToken = await ensureAuthenticated();
 
     const endpoint = `${prefix}/messages/${messageId}/attachments/${attachmentId}`;
-    console.error(`Fetching attachment content: ${attachmentId}`);
+    log.debug(`Fetching attachment content: ${attachmentId}`);
 
     const response = await callGraphAPI(accessToken, 'GET', endpoint, null, {});
 

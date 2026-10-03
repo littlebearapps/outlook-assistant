@@ -6,6 +6,7 @@
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { buildMailboxPrefix } = require('../utils/mailbox');
+const { toolMetadata } = require('../utils/risk-classes');
 
 // Category color presets (Outlook uses these names)
 const CATEGORY_COLORS = [
@@ -832,12 +833,7 @@ const categoriesTools = [
     name: 'manage-category',
     description:
       "Manage the user's master category list (the colour-coded labels available across mail/calendar/contacts). action=`list` (default) returns categories with id/displayName/color. action=`create` adds a new category — `displayName` required, `color` optional (preset0-preset24, e.g. preset0=Red, preset7=Blue). action=`update` (alias `set` — deprecated) changes name/colour by `id`. action=`delete` removes a category — this does NOT untag messages already labelled with it; existing messages retain the orphaned label until manually cleaned. Use `apply-category` to tag/untag specific messages.",
-    annotations: {
-      title: 'Master Categories',
-      readOnlyHint: false,
-      destructiveHint: false,
-      openWorldHint: false,
-    },
+    ...toolMetadata('manage-category', 'Master Categories'),
     inputSchema: {
       type: 'object',
       properties: {
@@ -907,12 +903,7 @@ const categoriesTools = [
     name: 'apply-category',
     description:
       "Tag or untag email messages with master categories (those created via `manage-category`). action=`set` (default) replaces the message's category set with the supplied `categories` array. action=`add` appends categories to whatever's already on the message. action=`remove` removes only the named categories, leaving the rest. Accepts either `messageId` (single) or `messageIds` (batch via Graph `$batch`). `categories` are matched by display name — names must already exist in the target mailbox's master list. For your own mailbox, create them via `manage-category` first; for a shared mailbox, the names must already exist there (`manage-category` only manages the signed-in account's master list). Pass `sharedMailbox` (or alias `email`) to categorise messages in a shared/delegated mailbox instead of the signed-in account (requires Mail.ReadWrite.Shared + delegate access). Returns per-message confirmation.",
-    annotations: {
-      title: 'Apply Categories',
-      readOnlyHint: false,
-      destructiveHint: false,
-      openWorldHint: false,
-    },
+    ...toolMetadata('apply-category', 'Apply Categories'),
     inputSchema: {
       type: 'object',
       properties: {
@@ -955,12 +946,7 @@ const categoriesTools = [
     name: 'manage-focused-inbox',
     description:
       'Manage Focused Inbox sender overrides — explicit rules that force messages from a given sender into Focused or Other regardless of the ML classifier. action=`list` (default) returns existing overrides with id/sender/classifyAs. action=`set` creates or updates an override for `emailAddress` (optional `name`), routing future mail to `focused` (default) or `other`. action=`delete` removes the override for `emailAddress`. Note: this only works on accounts that have Focused Inbox enabled — personal Outlook.com accounts without it return an empty list.',
-    annotations: {
-      title: 'Focused Inbox',
-      readOnlyHint: false,
-      destructiveHint: false,
-      openWorldHint: false,
-    },
+    ...toolMetadata('manage-focused-inbox', 'Focused Inbox'),
     inputSchema: {
       type: 'object',
       properties: {

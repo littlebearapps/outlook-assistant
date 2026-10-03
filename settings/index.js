@@ -6,6 +6,7 @@
  */
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
+const { toolMetadata } = require('../utils/risk-classes');
 
 // Days of the week for working hours
 const DAYS_OF_WEEK = [
@@ -616,12 +617,7 @@ const settingsTools = [
     name: 'mailbox-settings',
     description:
       'Read or update mailbox-level settings (idempotent — safe to retry; sets are PATCH-style and merge with existing state). action=`get` (default) returns settings — use `section` to filter (`language`, `timeZone`, `workingHours`, `automaticRepliesSetting`, or `all`). action=`set-auto-replies` configures out-of-office: `enabled` true/false, optional `startDateTime`/`endDateTime` (ISO 8601) for scheduled mode, `internalReplyMessage` and (optionally) `externalReplyMessage`. action=`set-working-hours` updates the schedule: `startTime`/`endTime` (HH:MM) and `daysOfWeek` (array of `monday`..`sunday`). Returns the updated settings object on set actions.',
-    annotations: {
-      title: 'Mailbox Settings',
-      readOnlyHint: false,
-      destructiveHint: false,
-      idempotentHint: true,
-    },
+    ...toolMetadata('mailbox-settings', 'Mailbox Settings'),
     inputSchema: {
       type: 'object',
       properties: {

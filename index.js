@@ -81,16 +81,8 @@ const {
 const config = require('./config');
 const { createRequestHandler } = require('./request-handler');
 
-// Import module tools
-const { authTools, setToolCount } = require('./auth');
-const { calendarTools } = require('./calendar');
-const { emailTools } = require('./email');
-const { folderTools } = require('./folder');
-const { rulesTools } = require('./rules');
-const { contactsTools } = require('./contacts');
-const { categoriesTools } = require('./categories');
-const { settingsTools } = require('./settings');
-const { advancedTools } = require('./advanced');
+const { setToolCount } = require('./auth');
+const { TOOLS } = require('./tools');
 
 // Log startup information
 console.error(`STARTING ${config.SERVER_NAME.toUpperCase()} MCP SERVER`);
@@ -108,19 +100,6 @@ if (
     '⚠ Safety belts not configured. Consider setting OUTLOOK_MAX_EMAILS_PER_SESSION and OUTLOOK_ALLOWED_RECIPIENTS in your .mcp.json env block for safer AI-assisted sending. See `auth action=about` for details.'
   );
 }
-
-// Combine all tools
-const TOOLS = [
-  ...authTools,
-  ...calendarTools,
-  ...emailTools,
-  ...folderTools,
-  ...rulesTools,
-  ...contactsTools,
-  ...categoriesTools,
-  ...settingsTools,
-  ...advancedTools,
-];
 
 // Set dynamic tool count for auth about handler
 setToolCount(TOOLS.length);

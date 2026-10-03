@@ -26,6 +26,7 @@ const {
   zonedParts,
   zonedWallTimeToUtcMs,
 } = require('../utils/datetime');
+const { toolMetadata } = require('../utils/risk-classes');
 
 /**
  * Format an email for display (simplified)
@@ -869,13 +870,7 @@ const advancedTools = [
     name: 'access-shared-mailbox',
     description:
       "List emails — or enumerate folders — from a shared mailbox the signed-in user has been granted access to (read-only). Returns paged messages from the named `sharedMailbox` (or alias `email`) and `folder` (default `inbox`) with id/subject/from/receivedDateTime/preview — same shape as `search-emails` list mode. `folder` accepts a well-known name (inbox, sent, archive…), a custom/localized folder display name (e.g. `Archiv`), a nested folder path (e.g. `Inbox/Vendors/Acme`), or pass a raw `folderId`. Set `listFolders: true` to enumerate the shared mailbox's full folder tree (names, paths, IDs, counts) — use this to discover custom subfolders before reading them. Requires that the shared mailbox has been delegated to the signed-in user in Exchange (admin-configured). Use `outputVerbosity` to control field count and `count` (default 25, max 50) for page size. For full search/filter capability over a shared mailbox, prefer `search-emails` with `sharedMailbox` set. Custom/localized names, nested paths and `listFolders` need the server opt-in setting OUTLOOK_SHARED_MAILBOX (work/school only); without it `folder` must be a well-known name or a folder ID, as before.",
-    annotations: {
-      title: 'Shared Mailbox',
-      readOnlyHint: true,
-      // openWorldHint: returns shared-mailbox messages authored by external
-      // senders. (#92)
-      openWorldHint: true,
-    },
+    ...toolMetadata('access-shared-mailbox', 'Shared Mailbox'),
     inputSchema: {
       type: 'object',
       properties: {
@@ -922,11 +917,7 @@ const advancedTools = [
     name: 'find-meeting-rooms',
     description:
       "Discover bookable meeting rooms in the user's organisation via the Graph rooms endpoint (read-only). Returns room resources with displayName, emailAddress, building, floor, capacity, and bookingType — suitable for piping into `create-event` as attendees. Filter by `query` (matches name/email), `building`, `floor`, or minimum `capacity`. Returns empty list on personal accounts (the rooms endpoint is M365-only). Use `outputVerbosity` to control field count.",
-    annotations: {
-      title: 'Meeting Rooms',
-      readOnlyHint: true,
-      openWorldHint: false,
-    },
+    ...toolMetadata('find-meeting-rooms', 'Meeting Rooms'),
     inputSchema: {
       type: 'object',
       properties: {

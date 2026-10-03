@@ -27,6 +27,7 @@ const handleDraft = require('./draft');
 
 // Import flag handlers from advanced module
 const { handleSetMessageFlag, handleClearMessageFlag } = require('../advanced');
+const { toolMetadata } = require('../utils/risk-classes');
 
 // Consolidated email tool definitions (17 → 6)
 const emailTools = [
@@ -34,13 +35,7 @@ const emailTools = [
     name: 'search-emails',
     description:
       'Search, list, delta-sync, or thread-group emails — six modes selected by parameters (read-only). With no params: lists recent emails in `folder` (default `inbox`). With `query`/`from`/`to`/`subject`/date filters: full search (combines via OData filter). With `searchExpression` (deprecated alias `kqlQuery`): a raw Microsoft Graph `$search` expression for advanced server-side search. With `deltaMode: true`: returns current state plus a `deltaToken`; pass the token back on the next call for incremental changes only — ideal for inbox monitoring. With `groupByConversation: true`: returns conversation threads. With `conversationId`: returns all messages in a single thread. With `internetMessageId`: looks up a message by its RFC Message-ID header. Set `sharedMailbox` (or alias `email`) to search a shared/delegated mailbox instead of the signed-in account — works with custom folders and nested folder paths. Personal Outlook.com accounts have limited `$search` support — this tool falls back through OData filters / boolean filters / recent listing automatically, but structured filters (`from`/`subject`/`receivedAfter`/`hasAttachments`/`unreadOnly`) return cleaner results. Returns paged messages with id/subject/from/receivedDateTime/preview by default; use `outputVerbosity` to expand.',
-    annotations: {
-      title: 'Search Emails',
-      readOnlyHint: true,
-      // openWorldHint: output includes email content authored by external
-      // senders (bodies/previews/threads) — may contain prompt-injection. (#92)
-      openWorldHint: true,
-    },
+    ...toolMetadata('search-emails', 'Search Emails'),
     inputSchema: {
       type: 'object',
       properties: {
@@ -201,12 +196,7 @@ const emailTools = [
     name: 'read-email',
     description:
       'Read a single email by id (read-only). Default: returns the full message body (HTML stripped to text by default), subject, from/to/cc, receivedDateTime, conversationId, attachments metadata, and webLink as Markdown. With `headersMode: true`: returns RFC-822 forensic headers instead (DKIM, SPF, DMARC, Received chain, Message-ID, Authentication-Results) — pair with `importantOnly: true` for the security-relevant subset, `groupByType: true` for category-bucketed view, or `raw: true` for JSON instead of Markdown. With `includeHeaders: true` (non-headers-mode): adds basic headers alongside body. Use `outputVerbosity` (minimal/standard/full) to control field count. **If the id came from a shared/delegated mailbox (e.g. via `search-emails` or `access-shared-mailbox` with `sharedMailbox` set), you MUST pass the same `sharedMailbox` (or alias `email`) here** — message IDs are mailbox-scoped, and reading a shared-mailbox id without it fails with 404 ErrorInvalidMailboxItemId.',
-    annotations: {
-      title: 'Read Email',
-      readOnlyHint: true,
-      // openWorldHint: returns full message body from external senders. (#92)
-      openWorldHint: true,
-    },
+    ...toolMetadata('read-email', 'Read Email'),
     inputSchema: {
       type: 'object',
       properties: {
@@ -269,13 +259,7 @@ const emailTools = [
     name: 'send-email',
     description:
       'Compose and send an email immediately (destructive: sends external comms). Returns a confirmation with the saved-message id. Safety controls: `dryRun: true` returns the composed message for review without sending; `checkRecipients: true` runs `get-mail-tips` first to flag out-of-office / mailbox-full / delivery-restricted / external recipients; combine both for a full pre-send review. Subject to session rate limits (`OUTLOOK_MAX_EMAILS_PER_SESSION` env) and recipient allowlist (`OUTLOOK_ALLOWED_RECIPIENTS` env) when configured — calls outside the allowlist fail before any Graph request. For multi-step compose/review workflows prefer `draft` (action=`create` → `update` → `send`) since drafts can be inspected in Outlook before sending. Comma-separated recipient strings or arrays both accepted.',
-    annotations: {
-      title: 'Send Email',
-      readOnlyHint: false,
-      destructiveHint: true,
-      idempotentHint: false,
-      openWorldHint: true,
-    },
+    ...toolMetadata('send-email', 'Send Email'),
     inputSchema: {
       type: 'object',
       properties: {
@@ -328,13 +312,7 @@ const emailTools = [
     name: 'draft',
     description:
       'Full draft lifecycle for review-before-send workflows (destructive: covers `send` and `delete`). action=`create` saves a new draft in the Drafts folder and returns its id (use `dryRun: true` to preview without saving; `checkRecipients: true` runs mail-tips first). action=`update` patches an existing draft by `id` (only fields passed are changed). action=`send` dispatches an existing draft — shares the rate limit with `send-email`. action=`delete` deletes a draft: it skips Deleted Items and goes to Recoverable Items (restorable for a limited time, depending on your account, via "Recover deleted items" in Outlook). update/send/delete refuse any `id` that is not an unsent draft (received or sent messages are never changed). action=`reply`/`reply-all` creates a reply draft from a message `id` (use `comment` to prepend text — mutually exclusive with `body`). action=`forward` creates a forward draft (requires `id` and `to`). Recipient allowlist applies to create/update/forward. Returns the draft object on create/update/reply/forward; status confirmation on send/delete.',
-    annotations: {
-      title: 'Draft Operations',
-      readOnlyHint: false,
-      destructiveHint: true,
-      idempotentHint: false,
-      openWorldHint: true,
-    },
+    ...toolMetadata('draft', 'Draft Operations'),
     inputSchema: {
       type: 'object',
       properties: {
@@ -407,13 +385,7 @@ const emailTools = [
     name: 'update-email',
     description:
       'Update message state without modifying content (idempotent — safe to retry). action=`mark-read`/`mark-unread` toggles the `isRead` flag on a single message by `id`. action=`flag` sets a follow-up flag with optional `dueDateTime`/`startDateTime` (ISO 8601 with a time: a value with `Z` or a ±hh:mm offset is kept as that exact instant; a value without one is read in the configured default timezone (OUTLOOK_DEFAULT_TIMEZONE); date-only or unparseable values are refused before any change). With only `dueDateTime`, the start defaults to 09:00 on the due date in the default timezone, or to the due time if that is earlier. action=`unflag` clears the flag. action=`complete` marks the flag as done. Flag/unflag/complete accept either `id` (single) or `ids` (batch array) — messages in a batch are updated one at a time (one PATCH each, not Graph `$batch`). Pass `sharedMailbox` (or alias `email`) to update messages in a shared/delegated mailbox instead of the signed-in account (requires Mail.ReadWrite.Shared + delegate access). Returns status confirmation per message.',
-    annotations: {
-      title: 'Update Email',
-      readOnlyHint: false,
-      destructiveHint: false,
-      idempotentHint: true,
-      openWorldHint: false,
-    },
+    ...toolMetadata('update-email', 'Update Email'),
     inputSchema: {
       type: 'object',
       properties: {
@@ -506,14 +478,7 @@ const emailTools = [
     name: 'attachments',
     description:
       'Inspect or retrieve email attachments. action=`list` (default) returns metadata for all attachments on `messageId` (id, name, contentType, size, isInline) — read-only. action=`view` returns inline content for text/JSON/XML attachments via `attachmentId`; binary types require download. action=`download` saves the attachment to disk at `outputDir` (default system tmpdir, auto-created) and returns the saved file path. `messageId` is required for all actions; `attachmentId` is required for view/download. If `messageId` came from a shared/delegated mailbox, pass the same `sharedMailbox` (or alias `email`) — attachment IDs are scoped to the message and fail under /me otherwise. Use `outputVerbosity` to control list field count.',
-    annotations: {
-      title: 'Attachments',
-      readOnlyHint: false,
-      destructiveHint: false,
-      // openWorldHint: action=view returns attachment content supplied by
-      // external senders. (#92)
-      openWorldHint: true,
-    },
+    ...toolMetadata('attachments', 'Attachments'),
     inputSchema: {
       type: 'object',
       properties: {
@@ -578,14 +543,7 @@ const emailTools = [
     name: 'export',
     description:
       'Export emails to file formats for archival, forensics, or programmatic processing. target=`message` (default) exports a single email by `id` to `savePath` — accepts `mime`/`eml`/`markdown`/`json`/`csv`. target=`messages` batch-exports either an explicit `emailIds` array or messages matching `searchQuery` (or `query` shortcut) into `outputDir` — accepts `markdown`/`json`/`csv`. target=`conversation` exports a full thread (up to 1000 messages) by `conversationId` into `outputDir` (chronological by default; pass `order: "reverse"` for newest-first) — accepts `eml`/`mbox`/`markdown`/`json`/`html`/`csv`. target=`mime` returns raw RFC-822 MIME bytes for `id` (use `headersOnly` for just headers, `base64` for encoded transport, `maxSize` to cap at default 1MB). All targets accept `sharedMailbox` (alias `email`) to export from a shared/delegated mailbox instead of the signed-in account — pass it whenever the id(s)/conversationId/searchQuery come from a shared mailbox, or exports fail with 404 ErrorInvalidMailboxItemId. `includeAttachments` defaults to true for single-message exports and false for batch. Format support varies by target — see the format param enum.',
-    annotations: {
-      title: 'Export Emails',
-      readOnlyHint: false,
-      destructiveHint: false,
-      // openWorldHint: exports full message/MIME/conversation content from
-      // external senders. (#92)
-      openWorldHint: true,
-    },
+    ...toolMetadata('export', 'Export Emails'),
     inputSchema: {
       type: 'object',
       properties: {
@@ -707,11 +665,7 @@ const emailTools = [
     name: 'get-mail-tips',
     description:
       'Pre-send recipient validation via Graph `POST /me/getMailTips` (read-only; uses the existing `Mail.Read` scope — no extra permissions). Returns per-recipient tips covering automatic replies (out-of-office), mailbox full status, custom admin mail tips, delivery restrictions, moderation requirements, external-vs-internal scope, max message size, and group member counts (total + external). Use ahead of `send-email` or `draft` action=`create` to catch issues like OOO replies or external-recipient warnings before the message goes out; `send-email`/`draft` accept `checkRecipients: true` to invoke this automatically. Accepts either a comma-separated string or an array of addresses; `tipTypes` filters which tips are requested (defaults to all).',
-    annotations: {
-      title: 'Mail Tips',
-      readOnlyHint: true,
-      openWorldHint: false,
-    },
+    ...toolMetadata('get-mail-tips', 'Mail Tips'),
     inputSchema: {
       type: 'object',
       properties: {

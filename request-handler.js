@@ -51,6 +51,7 @@ function createRequestHandler(TOOLS) {
         return {
           tools: TOOLS.map((tool) => ({
             name: tool.name,
+            ...(tool.title && { title: tool.title }),
             description: tool.description,
             inputSchema: tool.inputSchema,
             ...(tool.annotations && { annotations: tool.annotations }),

@@ -6,6 +6,7 @@ const handleCreateFolder = require('./create');
 const handleMoveEmails = require('./move');
 const handleGetFolderStats = require('./stats');
 const handleDeleteFolder = require('./delete');
+const { toolMetadata } = require('../utils/risk-classes');
 
 // Consolidated folder tool definition
 const folderTools = [
@@ -13,12 +14,7 @@ const folderTools = [
     name: 'folders',
     description:
       "Manage mail folders (tool-level destructiveHint=true because `delete` removes a folder and its contents; `list` and `stats` are read-only sub-actions despite the annotation). Folders can be addressed by name, by a slash-separated PATH for nested folders (e.g. `Triage/Delete`, `Inbox/Clients/Acme`, case-insensitive), or by explicit ID; `list` output includes each folder's full path and `[id: …]`. A bare name resolves a unique top-level folder first, then searches nested folders (ambiguous names return the candidates — disambiguate with a path or ID). action=`list` (default) returns the folder tree (toggle `includeItemCounts` for unread/total, `includeChildren` for hierarchy). action=`create` makes a new folder under the root, or under `parentFolder` (name/path) / `parentFolderId`, and returns its id. action=`move` relocates emails (`emailIds`) into `targetFolder` (name/path) or `targetFolderId`. action=`stats` returns counts (totalItemCount/unreadItemCount) for `folder` (name/path) or `folderId`, suitable for pagination planning. action=`delete` removes a folder (by `folderName`/path or `folderId`) and its contents — it does not go to Deleted Items, and Graph doesn't document whether it can be restored (some accounts may offer Outlook's \"Recover deleted items\" for a limited time, but don't rely on it), so move out anything you might need first. Every action accepts `sharedMailbox` (alias `email`) to target a shared/delegated mailbox instead of the signed-in account — folder names, paths, and IDs are then resolved inside that mailbox. Protected folders cannot be deleted in any mailbox.",
-    annotations: {
-      title: 'Mail Folders',
-      readOnlyHint: false,
-      destructiveHint: true,
-      openWorldHint: false,
-    },
+    ...toolMetadata('folders', 'Mail Folders'),
     inputSchema: {
       type: 'object',
       properties: {

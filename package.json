@@ -60,6 +60,7 @@
     "index.js",
     "config.js",
     "request-handler.js",
+    "tools.js",
     "outlook-auth-server.js",
     "auth/",
     "calendar/",

@@ -7,6 +7,7 @@ const handleUpdateRule = require('./update');
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { checkRateLimit } = require('../utils/safety');
+const { toolMetadata } = require('../utils/risk-classes');
 
 /**
  * Delete rule handler
@@ -181,12 +182,7 @@ const rulesTools = [
     name: 'manage-rules',
     description:
       'Server-side inbox rule CRUD (destructive: covers `delete`; supports `dryRun` on create/update for preview). Rules run on the Exchange server regardless of which client is open. action=`list` (default) returns rules with id/name/sequence — pass `includeDetails: true` to expand conditions/actions/exceptions. action=`create` builds a new rule from condition params (12 supported: fromAddresses, containsSubject, bodyContains, hasAttachments, importance, sentTo, sensitivity, etc.), action params (9 supported: moveToFolder/copyToFolder — folder name, nested path like `Triage/Delete`, or ID — forwardTo, redirectTo, assignCategories, markAsRead, delete, etc.), and optional `except*` exceptions. action=`update` patches the named fields by `ruleId`. action=`reorder` changes execution priority via `sequence` (lower = earlier). action=`delete` removes a rule. Recipient allowlist applies to forwardTo/redirectTo. `permanentDelete` action is intentionally omitted (too dangerous for AI use — use the Outlook UI). Subject to session rate limits (`OUTLOOK_MAX_MANAGE_RULES_PER_SESSION`).',
-    annotations: {
-      title: 'Inbox Rules',
-      readOnlyHint: false,
-      destructiveHint: true,
-      openWorldHint: false,
-    },
+    ...toolMetadata('manage-rules', 'Inbox Rules'),
     inputSchema: {
       type: 'object',
       properties: {

@@ -20,11 +20,11 @@ The file is enforced by `.claude/hooks/faq-protection.sh` which blocks deletion 
 Review the FAQ at every release for accuracy and additions. The trigger checklist:
 
 - **New tool added or removed** → update the "What you can do" / installation answers if relevant.
-- **Auth flow change** (device code, browser, scopes, token handling) → update questions 3, 4, 7 (permissions, tokens, device-vs-browser).
+- **Auth flow change** (device code, browser, scopes, token handling) → update the permissions, tokens and device-code-vs-browser answers.
 - **New safety controls** (rate limit, allowlist, dryRun additions, MCP annotations) → update the read-only-mode answer.
 - **Account-compatibility shift** (new feature gated to M365, new personal-account caveat) → update the personal-account answer.
 - **Privacy / data-flow change** → update the "Will Outlook Assistant send my email content..." answer.
-- **Install/update/uninstall procedure change** (new client config, new env var, package rename) → update questions 1, 8, 9.
+- **Install/update/uninstall procedure change** (new client config, new env var, package rename) → update the install, update and uninstall answers.
 - **Major version bumps** (3.x → 4.x) — review every question end to end.
 
 ## Quality bar

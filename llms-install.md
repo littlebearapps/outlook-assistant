@@ -69,9 +69,13 @@ Add these to the same `env` block if needed:
 |----------|---------|
 | `OUTLOOK_AUTH_AUDIENCE` | `consumers` for Azure apps registered as personal-accounts-only (fixes `AADSTS9002331`); `organizations` or a tenant GUID for work-only apps. Default `common` |
 | `OUTLOOK_DEFAULT_TIMEZONE` | IANA timezone for calendar times (default `Australia/Melbourne`) |
-| `OUTLOOK_MAX_EMAILS_PER_SESSION` | Cap on sends per server session |
+| `OUTLOOK_MAX_EMAILS_PER_SESSION` | Default per-session cap for `send-email`, `draft` and `manage-rules` (override one tool with `OUTLOOK_MAX_<TOOL>_PER_SESSION`, e.g. `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION`) |
 | `OUTLOOK_ALLOWED_RECIPIENTS` | Comma-separated allowlist of recipient domains/addresses |
 | `OUTLOOK_SHARED_MAILBOX` | Opt-in shared-mailbox support, work/school accounts only: `read` or `true` (read and organise). Also add `Mail.Read.Shared` (and `Mail.ReadWrite.Shared` for `true`) in Azure, restart, then run `auth` with `action=authenticate` and `force=true` |
+| `OUTLOOK_SEARCH_SCAN_LIMIT` | Messages scanned by the local search fallback on personal accounts (default 500, max 5000) |
+| `OUTLOOK_REQUEST_TIMEOUT_MS` | Per-attempt Graph inactivity timeout in milliseconds (default 60000); not an overall deadline |
+
+Run `npx @littlebearapps/outlook-assistant --help` for the full list of environment variables.
 
 ## Configuration Files by Client
 

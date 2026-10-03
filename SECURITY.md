@@ -102,7 +102,7 @@ The `send-email` tool includes additional server-side controls:
 | Control | Environment Variable | Default | Description |
 |---------|---------------------|---------|-------------|
 | Dry-run mode | — (use `dryRun: true` param) | Disabled | Preview composed email without sending |
-| Session rate limit | `OUTLOOK_MAX_EMAILS_PER_SESSION` | Unlimited | Maximum emails per server session |
+| Session rate limit | `OUTLOOK_MAX_EMAILS_PER_SESSION` | Unlimited | Default per-session cap for `send-email`, `draft` and `manage-rules`; override one tool with `OUTLOOK_MAX_<TOOL>_PER_SESSION` |
 | Recipient allowlist | `OUTLOOK_ALLOWED_RECIPIENTS` | Allow all | Comma-separated domains/addresses |
 
 Example configuration:
@@ -119,9 +119,10 @@ OUTLOOK_ALLOWED_RECIPIENTS=mycompany.com,partner@example.com
   resource.
 - Continuation links (`deltaToken`, `nextLink`) must be `https` URLs on
   `graph.microsoft.com`; the access token is never sent anywhere else.
-- Attachment downloads and exports write sanitised filenames with exclusive
-  create (no overwriting, no following symlinks) and stay inside the chosen
-  output directory.
+- Attachment downloads and exports (including conversation exports) write
+  sanitised filenames with exclusive create (no overwriting, no following
+  symlinks) and stay inside the chosen output directory. A write that fails
+  part-way removes the partly written file.
 - Shared-mailbox addresses must be printable-ASCII email addresses, and
   shared-mailbox access is off unless `OUTLOOK_SHARED_MAILBOX` is set.
 

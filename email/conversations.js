@@ -21,6 +21,7 @@ const {
   formatEmailsAsCSV,
   stripHtml,
   VERBOSITY,
+  DEFAULT_LIMITS,
 } = require('../utils/response-formatter');
 const { toolError, authRequiredError } = require('../utils/tool-error');
 // Note: buildFromFilter/buildToFilter from search.js use OData $filter which causes
@@ -390,7 +391,13 @@ async function handleGetConversation(args) {
 
     messages.forEach((msg, index) => {
       output.push(`## Message ${index + 1} of ${messages.length}`);
-      output.push(formatEmailContent(msg, verbosity, { includeHeaders }));
+      output.push(
+        formatEmailContent(msg, verbosity, {
+          includeHeaders,
+          sharedMailbox,
+          maxFullBodyChars: DEFAULT_LIMITS.maxFullBodyChars,
+        })
+      );
       output.push('\n---\n');
     });
 

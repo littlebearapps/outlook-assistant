@@ -9,6 +9,7 @@ const { ensureAuthenticated } = require('../auth');
 const {
   formatEmailContent,
   VERBOSITY,
+  DEFAULT_LIMITS,
 } = require('../utils/response-formatter');
 const { getEmailFields } = require('../utils/field-presets');
 const { buildMailboxPrefix } = require('../utils/mailbox');
@@ -49,7 +50,8 @@ async function handleReadEmail(args) {
   const includeHeaders = args.includeHeaders || false;
   // Message IDs are mailbox-scoped: an ID issued by a shared/delegated mailbox
   // is not resolvable under /me. Route to /users/{mailbox} when supplied.
-  const prefix = buildMailboxPrefix(args.sharedMailbox || args.email || null);
+  const sharedMailbox = args.sharedMailbox || args.email || null;
+  const prefix = buildMailboxPrefix(sharedMailbox);
 
   if (!emailId) {
     return toolError('Email ID is required.');
@@ -86,6 +88,8 @@ async function handleReadEmail(args) {
       const formattedOutput = formatEmailContent(email, verbosity, {
         includeHeaders: includeHeaders,
         includeAllHeaders: false, // Only important headers by default
+        sharedMailbox,
+        maxFullBodyChars: DEFAULT_LIMITS.maxFullBodyChars,
       });
 
       return {

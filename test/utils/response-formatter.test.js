@@ -3,8 +3,10 @@ const {
   escapeCSV,
   stripZeroWidth,
   formatEmailContent,
+  formatEmailList,
   stripHtml,
   VERBOSITY,
+  DEFAULT_LIMITS,
 } = require('../../utils/response-formatter');
 
 describe('stripHtml (CodeQL js/double-escaping, js/incomplete-multi-character-sanitization)', () => {
@@ -109,6 +111,79 @@ describe('formatEmailContent body cleanup (F-16 integration)', () => {
     expect(result).toContain('Hello world');
     expect(result).not.toContain('\u200B');
     expect(result).not.toContain('\uFEFF');
+  });
+});
+
+// #279: result hints name only parameters that exist, and the full body is
+// capped so one message can't flood the client.
+describe('result hints (#279)', () => {
+  const longEmail = (length) => ({
+    id: 'AAMk-msg-1',
+    subject: 'Long',
+    from: { emailAddress: { address: 'a@example.com', name: 'A' } },
+    receivedDateTime: '2026-05-05T12:00:00Z',
+    body: { contentType: 'text', content: 'x'.repeat(length) },
+  });
+
+  it('caps a full body at 40,000 characters', () => {
+    expect(DEFAULT_LIMITS.maxFullBodyChars).toBe(40000);
+  });
+
+  it('points a standard-verbosity truncation at outputVerbosity=full', () => {
+    const result = formatEmailContent(longEmail(5000), VERBOSITY.STANDARD);
+    expect(result).not.toContain('includeFullBody');
+    expect(result).toContain('truncated at 2,000 of 5,000 characters');
+    expect(result).toMatch(/read-email with id=`AAMk-msg-1`/);
+    expect(result).toContain('outputVerbosity=full');
+  });
+
+  it('carries the shared mailbox into the hint', () => {
+    const result = formatEmailContent(longEmail(5000), VERBOSITY.STANDARD, {
+      sharedMailbox: 'team@example.com',
+    });
+    expect(result).toContain('sharedMailbox=team@example.com');
+  });
+
+  it('mentions export too when the body is over the full cap', () => {
+    const result = formatEmailContent(longEmail(60000), VERBOSITY.STANDARD);
+    expect(result).toContain('outputVerbosity=full');
+    expect(result).toMatch(/export with target=message/);
+  });
+
+  it('leaves a full body whole unless a cap is asked for', () => {
+    const result = formatEmailContent(longEmail(60000), VERBOSITY.FULL);
+    expect(result).toContain('x'.repeat(60000));
+    expect(result).not.toContain('truncated');
+  });
+
+  it('truncates a full body at the cap and says how to get the rest', () => {
+    const result = formatEmailContent(longEmail(60000), VERBOSITY.FULL, {
+      maxFullBodyChars: DEFAULT_LIMITS.maxFullBodyChars,
+    });
+    expect(result).toContain('x'.repeat(40000));
+    expect(result).not.toContain('x'.repeat(40001));
+    expect(result).toContain('truncated at 40,000 of 60,000 characters');
+    expect(result).toMatch(
+      /export with target=message, id=`AAMk-msg-1` and format=markdown/
+    );
+  });
+
+  it('does not truncate a full body under the cap', () => {
+    const result = formatEmailContent(longEmail(39000), VERBOSITY.FULL, {
+      maxFullBodyChars: DEFAULT_LIMITS.maxFullBodyChars,
+    });
+    expect(result).not.toContain('truncated');
+  });
+
+  it('describes how to see more emails without a nextPageToken', () => {
+    const emails = [longEmail(10)];
+    const result = formatEmailList(emails, 'inbox', VERBOSITY.STANDARD, {
+      hasMore: true,
+      nextPageToken: 'abc',
+    });
+    expect(result).not.toMatch(/nextPageToken/);
+    expect(result).toContain('`count`');
+    expect(result).toContain('`receivedBefore`');
   });
 });
 

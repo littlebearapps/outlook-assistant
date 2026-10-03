@@ -82,10 +82,18 @@ const { createServer } = require('./server');
 
 const { setToolCount } = require('./auth');
 const { TOOLS } = require('./tools');
+const { isDebugEnabled } = require('./utils/logger');
 
 // Log startup information
-console.error(`STARTING ${config.SERVER_NAME.toUpperCase()} MCP SERVER`);
+console.error(
+  `STARTING ${config.SERVER_NAME.toUpperCase()} MCP SERVER v${config.SERVER_VERSION}`
+);
 console.error(`Test mode is ${config.USE_TEST_MODE ? 'enabled' : 'disabled'}`);
+if (isDebugEnabled()) {
+  console.error(
+    'Debug logging is on (OUTLOOK_DEBUG): stderr includes search terms, subjects and Graph errors, with addresses and IDs redacted.'
+  );
+}
 
 // F-1 / F-48: warn at startup when safety belts are unset. Mirrors the
 // warning surfaced by `auth action=about`. Visible to operators reading

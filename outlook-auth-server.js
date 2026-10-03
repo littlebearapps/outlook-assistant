@@ -35,6 +35,9 @@ require('dotenv').config();
 
 // Import scopes and token path from central config to stay in sync
 const { AUTH_CONFIG: centralAuth } = require('./config');
+// Console output never includes the secret, the CSRF state or an auth code,
+// and Azure error text is redacted (it can carry the user's address) (#278).
+const { redact } = require('./utils/logger');
 
 // Log to console
 console.log('Starting Outlook Authentication Server');
@@ -64,7 +67,9 @@ const server = http.createServer((req, res) => {
 
     if (query.error) {
       console.error(
-        `Authentication error: ${query.error} - ${query.error_description}`
+        redact(
+          `Authentication error: ${query.error} - ${query.error_description}`
+        )
       );
       res.writeHead(400, SECURITY_HEADERS);
       res.end(`
@@ -147,7 +152,7 @@ const server = http.createServer((req, res) => {
           `);
         })
         .catch((error) => {
-          console.error(`Token exchange error: ${error.message}`);
+          console.error(redact(`Token exchange error: ${error.message}`));
           res.writeHead(500, SECURITY_HEADERS);
           res.end(`
             <html>
@@ -253,7 +258,9 @@ const server = http.createServer((req, res) => {
     // Use the audience from config (defaults to "common"; configurable via
     // OUTLOOK_AUTH_AUDIENCE for personal-only / single-tenant Azure apps).
     const authUrl = `${AUTH_CONFIG.authorizeEndpoint}?${querystring.stringify(authParams)}`;
-    console.log(`Redirecting to: ${authUrl}`);
+    console.log(
+      `Redirecting to Microsoft sign-in: ${AUTH_CONFIG.authorizeEndpoint}`
+    );
 
     // Redirect to Microsoft's login page
     res.writeHead(302, { Location: authUrl });

@@ -15,6 +15,7 @@ const {
 } = require('./utils/field-presets');
 const { VERBOSITY, DEFAULT_LIMITS } = require('./utils/response-formatter');
 const { resolveClientId } = require('./auth/client-config');
+const { redact } = require('./utils/logger');
 
 // Ensure we have a home directory path — never fall back to /tmp (world-readable)
 const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
@@ -90,7 +91,8 @@ function parseSharedMailboxMode(raw) {
   if (['true', 'readwrite', '1'].includes(value)) return 'readwrite';
   if (value && !['false', '0', 'off', 'no'].includes(value)) {
     console.warn(
-      `[outlook-assistant] OUTLOOK_SHARED_MAILBOX="${raw}" is not a recognised value. ` +
+      // redact(): people sometimes put the shared mailbox's address here.
+      `[outlook-assistant] OUTLOOK_SHARED_MAILBOX="${redact(raw)}" is not a recognised value. ` +
         'Expected read, true/readwrite/1, or unset. Shared-mailbox support stays off.'
     );
   }

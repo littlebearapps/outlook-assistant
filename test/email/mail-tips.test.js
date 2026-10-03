@@ -405,3 +405,106 @@ describe('mail-tips issues (#272)', () => {
     );
   });
 });
+
+describe('mail-tips text agrees with the issues (#272)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    ensureAuthenticated.mockResolvedValue('test_token');
+  });
+
+  it('counts an external recipient as a warning, not a ✓', () => {
+    const { formatted, warningCount } = formatMailTips([
+      { emailAddress: { address: 'a@other.com' }, recipientScope: 'external' },
+    ]);
+
+    expect(warningCount).toBe(1);
+    expect(formatted).toContain('### ⚠ a@other.com');
+    expect(formatted).toContain('**Warnings**: External');
+  });
+
+  it('counts a group with external members as a warning, not a ✓', () => {
+    const { formatted, warningCount } = formatMailTips([
+      {
+        emailAddress: { address: 'team@example.com' },
+        totalMemberCount: 20,
+        externalMemberCount: 3,
+      },
+    ]);
+
+    expect(warningCount).toBe(1);
+    expect(formatted).toContain('### ⚠ team@example.com');
+    expect(formatted).toContain('**Warnings**: External Members');
+  });
+
+  it('shows Warnings: 1 in the header for an external recipient', async () => {
+    callGraphAPI.mockResolvedValue({
+      value: [
+        {
+          emailAddress: { address: 'a@other.com' },
+          recipientScope: 'external',
+        },
+      ],
+    });
+
+    const result = await handleGetMailTips({ recipients: ['a@other.com'] });
+
+    expect(result.content[0].text).toContain('**Warnings**: 1');
+    expect(result._meta.warningCount).toBe(1);
+  });
+
+  it.each([
+    ['an internal recipient scope', { recipientScope: 'internal' }],
+    ['an external member count alone', { externalMemberCount: 2 }],
+    [
+      'a per-recipient error',
+      { error: { code: 'ErrorMailTipsFailed', message: 'x' } },
+    ],
+  ])('does not call %s an empty response', async (_label, fields) => {
+    callGraphAPI.mockResolvedValue({
+      value: [{ emailAddress: { address: 'a@example.com' }, ...fields }],
+    });
+
+    const result = await handleGetMailTips({ recipients: ['a@example.com'] });
+
+    expect(result._meta.allEmpty).toBe(false);
+  });
+
+  it('ignores recipientNotFound, which Graph does not return', async () => {
+    callGraphAPI.mockResolvedValue({
+      value: [
+        {
+          emailAddress: { address: 'a@example.com' },
+          recipientNotFound: true,
+        },
+      ],
+    });
+
+    const result = await handleGetMailTips({ recipients: ['a@example.com'] });
+
+    expect(result._meta.allEmpty).toBe(true);
+  });
+
+  it('still calls a response with only a "none" scope empty', async () => {
+    callGraphAPI.mockResolvedValue({
+      value: [
+        { emailAddress: { address: 'a@outlook.com' }, recipientScope: 'none' },
+      ],
+    });
+
+    const result = await handleGetMailTips({ recipients: ['a@outlook.com'] });
+
+    expect(result._meta.allEmpty).toBe(true);
+  });
+
+  it('says a recipient could not be checked when Graph returns an error for it', () => {
+    const { formatted } = formatMailTips([
+      {
+        emailAddress: { address: 'a@example.com' },
+        error: { code: 'ErrorMailTipsFailed', message: 'Lookup failed' },
+      },
+    ]);
+
+    expect(formatted).not.toContain('No issues detected');
+    expect(formatted).toContain('ErrorMailTipsFailed');
+  });
+});

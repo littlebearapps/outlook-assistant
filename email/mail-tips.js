@@ -34,7 +34,8 @@ const MAIL_TIP_TYPES = [
  * @returns {{formatted: string, warningCount: number, issues: Array<{address: string, type: string}>}}
  *   `issues` lists each flagged condition per recipient, with `type` one of
  *   outOfOffice, mailboxFull, customTip, deliveryRestricted, moderated,
- *   external or externalMembers
+ *   external or externalMembers. Every issue is also a warning in the text,
+ *   so the text never shows ✓ for a recipient send-email would refuse
  */
 function formatMailTips(mailTips) {
   const lines = [];
@@ -109,6 +110,7 @@ function formatMailTips(mailTips) {
 
     // Recipient scope: external, externalPartner or externalNonPartner
     if (/^external/i.test(tip.recipientScope || '')) {
+      warnings.push('External');
       flag('external');
       tipLines.push(`  **External**: Recipient is outside your organisation`);
     }
@@ -120,10 +122,24 @@ function formatMailTips(mailTips) {
     }
 
     // Group member counts
-    if (tip.externalMemberCount > 0) flag('externalMembers');
-    if (tip.totalMemberCount > 0) {
+    if (tip.externalMemberCount > 0) {
+      warnings.push('External Members');
+      flag('externalMembers');
+    }
+    if (tip.totalMemberCount > 0 || tip.externalMemberCount > 0) {
       tipLines.push(
         `  *Group members*: ${tip.totalMemberCount} total (${tip.externalMemberCount || 0} external)`
+      );
+    }
+
+    // Graph couldn't check this recipient, so its other fields say nothing.
+    if (tip.error) {
+      warnings.push('Not Checked');
+      const code = /^[A-Za-z0-9]{1,64}$/.test(tip.error.code || '')
+        ? ` (${tip.error.code})`
+        : '';
+      tipLines.push(
+        `  **Not checked**: Graph returned an error for this recipient${code}`
       );
     }
 
@@ -145,6 +161,28 @@ function formatMailTips(mailTips) {
   }
 
   return { formatted: lines.join('\n'), warningCount, issues };
+}
+
+/**
+ * Whether Graph returned anything actionable for a recipient: any field a
+ * personal Outlook.com account leaves out. A recipientScope of `none` (or
+ * none at all) says nothing.
+ * @param {object} tip - One mailTips object from Graph
+ * @returns {boolean}
+ */
+function hasTipContent(tip) {
+  return Boolean(
+    tip.error ||
+    tip.mailboxFull ||
+    tip.deliveryRestricted ||
+    tip.isModerated ||
+    tip.automaticReplies?.message ||
+    tip.maxMessageSize ||
+    tip.totalMemberCount ||
+    tip.externalMemberCount ||
+    tip.customMailTip ||
+    (tip.recipientScope && tip.recipientScope !== 'none')
+  );
 }
 
 /**
@@ -228,18 +266,7 @@ async function handleGetMailTips(args) {
     // accounts surface this as a successful empty response rather
     // than a feature-unsupported error, leading to false confidence
     // when callers see "No issues detected".
-    const allEmpty = mailTips.every((tip) => {
-      const hasContent =
-        tip.recipientNotFound ||
-        tip.mailboxFull ||
-        tip.deliveryRestricted ||
-        tip.isModerated ||
-        tip.automaticReplies?.message ||
-        tip.maxMessageSize ||
-        tip.totalMemberCount ||
-        tip.customMailTip;
-      return !hasContent;
-    });
+    const allEmpty = mailTips.every((tip) => !hasTipContent(tip));
 
     let header = `# Mail Tips\n\n`;
     header += `**Recipients checked**: ${mailTips.length}\n`;

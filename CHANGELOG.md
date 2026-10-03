@@ -91,7 +91,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and attachment download (one shared implementation): an existing file or
   symlink is never touched and the new file gets a `-1`, `-2`, … suffix. `eml`
   exports go into a new directory the export creates (`…_conversation-1/` on a
-  second run), never an existing or symlinked one.
+  second run), never an existing or symlinked one. A write that fails part-way
+  (for example, a full disk) now removes the partly written file instead of
+  leaving a truncated file under that name.
 - **Conversation read and export failed on personal accounts.**
   `search-emails conversationId` and `export target=conversation` combined the
   `conversationId` filter with `$orderby`, which Graph rejects on Outlook.com

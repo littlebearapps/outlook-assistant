@@ -75,6 +75,56 @@ describe('writeClaimedFile', () => {
     ).toThrow(/outside outputDir/);
     expect(fs.existsSync(path.join(scratchDir, 'escaped.txt'))).toBe(false);
   });
+
+  describe('when the write itself fails', () => {
+    const realWrite = fs.writeFileSync;
+    afterEach(() => jest.restoreAllMocks());
+
+    function failAfterCreating(code, contents) {
+      return (file) => {
+        realWrite(file, contents);
+        const error = new Error(`${code}: simulated`);
+        error.code = code;
+        throw error;
+      };
+    }
+
+    test('removes the partial file and rethrows on a mid-write error', () => {
+      jest
+        .spyOn(fs, 'writeFileSync')
+        .mockImplementationOnce(failAfterCreating('ENOSPC', 'trunc'));
+
+      expect(() =>
+        writeClaimedFile(outputDir, 'report', 'md', null, 'full contents')
+      ).toThrow(expect.objectContaining({ code: 'ENOSPC' }));
+      expect(fs.existsSync(path.join(outputDir, 'report.md'))).toBe(false);
+    });
+
+    test('rethrows the write error even if the partial file is already gone', () => {
+      const error = new Error('EIO: simulated');
+      error.code = 'EIO';
+      jest.spyOn(fs, 'writeFileSync').mockImplementationOnce(() => {
+        throw error;
+      });
+
+      expect(() =>
+        writeClaimedFile(outputDir, 'report', 'md', null, 'x')
+      ).toThrow(error);
+    });
+
+    test('never removes a file that was already there (EEXIST)', () => {
+      jest
+        .spyOn(fs, 'writeFileSync')
+        .mockImplementationOnce(failAfterCreating('EEXIST', 'planted'));
+
+      const written = writeClaimedFile(outputDir, 'report', 'md', null, 'x');
+
+      expect(written).toBe(path.join(outputDir, 'report-1.md'));
+      expect(fs.readFileSync(path.join(outputDir, 'report.md'), 'utf8')).toBe(
+        'planted'
+      );
+    });
+  });
 });
 
 describe('makeClaimedDir', () => {

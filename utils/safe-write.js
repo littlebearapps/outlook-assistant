@@ -78,10 +78,25 @@ function claimUniquePath(outputDir, base, extension, claimed) {
 }
 
 /**
+ * Best-effort removal of a file this call created before its write failed
+ * (e.g. ENOSPC/EIO), so no truncated file is left under the claimed name.
+ * Only called for non-EEXIST errors: with EEXIST the entry isn't ours.
+ * @param {string} candidate
+ */
+function removePartialFile(candidate) {
+  try {
+    fs.unlinkSync(candidate);
+  } catch {
+    // Already gone (ENOENT) or not removable; the original error matters more.
+  }
+}
+
+/**
  * Claim a unique name in `outputDir` and write `data` to it exclusively. The
  * `wx` flag fails on any existing entry — including a dangling symlink planted
  * after the claim — so a write never overwrites a file or follows a link; on
- * EEXIST the next suffix is claimed instead.
+ * EEXIST the next suffix is claimed instead. Any other write error removes the
+ * partly written file before it is rethrown.
  * @param {string} outputDir - Target directory (must already exist)
  * @param {string} base - Filename without extension (already sanitised)
  * @param {string} extension - Extension without a leading dot ('' for none)
@@ -98,7 +113,10 @@ function writeClaimedFile(outputDir, base, extension, claimed, data, encoding) {
       fs.writeFileSync(candidate, data, { encoding, flag: 'wx' });
       return candidate;
     } catch (error) {
-      if (error.code !== 'EEXIST') throw error;
+      if (error.code !== 'EEXIST') {
+        removePartialFile(candidate);
+        throw error;
+      }
     }
   }
   throw new Error(`Too many files named ${base} in ${outputDir}`);

@@ -136,6 +136,30 @@ describe('confineOutputPath', () => {
     );
   });
 
+  itSymlink('does not follow a symlinked file as the last component', () => {
+    const victim = path.join(tmp, 'victim.txt');
+    fs.writeFileSync(victim, 'keep me');
+    fs.symlinkSync(victim, path.join(tmp, 'x.md'));
+    expect(confineOutputPath(path.join(tmp, 'x.md'))).toBe(
+      path.join(tmp, 'x.md')
+    );
+  });
+
+  itSymlink('keeps a dangling symlink as the last component', () => {
+    fs.symlinkSync(path.join(tmp, 'missing.txt'), path.join(tmp, 'x.md'));
+    expect(confineOutputPath(path.join(tmp, 'x.md'))).toBe(
+      path.join(tmp, 'x.md')
+    );
+  });
+
+  itSymlink('follows a symlinked directory as the last component', () => {
+    fs.mkdirSync(path.join(tmp, 'real'));
+    fs.symlinkSync(path.join(tmp, 'real'), path.join(tmp, 'alias'));
+    expect(confineOutputPath(path.join(tmp, 'alias'))).toBe(
+      path.join(tmp, 'real')
+    );
+  });
+
   itSymlink('follows a symlinked base to where it really is', () => {
     const realDocs = path.join(outside, 'docs');
     fs.mkdirSync(realDocs);
@@ -255,6 +279,26 @@ describe('writeExplicitFile', () => {
     expect(fs.readFileSync(victim, 'utf8')).toBe('original');
     expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
   });
+
+  itSymlink(
+    'never replaces a symlink to a file inside an allowed directory',
+    () => {
+      const victim = path.join(tmp, 'victim.txt');
+      fs.writeFileSync(victim, 'original');
+      const link = path.join(tmp, 'x.md');
+      fs.symlinkSync(victim, link);
+      const target = confineOutputPath(link);
+
+      expectRefused(() => writeExplicitFile(target, 'new'), /already exists/);
+      const error = expectRefused(
+        () => writeExplicitFile(target, 'new', { overwrite: true }),
+        /symbolic link/
+      );
+      expect(error.message).toContain(link);
+      expect(error.message).not.toContain(victim);
+      expect(fs.readFileSync(victim, 'utf8')).toBe('original');
+    }
+  );
 
   itSymlink('does not write through a dangling symlink', () => {
     const victim = path.join(outside, 'victim.txt');

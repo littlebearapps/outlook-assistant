@@ -24,6 +24,7 @@ const {
   writeClaimedFile,
   writeExplicitFile,
   confineOutputPath,
+  confineOutputTarget,
   fileExistsError,
   pathEntryExists,
   OutputPathError,
@@ -69,19 +70,21 @@ async function handleExportEmail(args) {
   // there, otherwise the file to write. With no path, the system temp
   // directory is used. Writes go to the resolved path, never the raw one.
   let explicitFile = null;
+  let requestedFile = null; // savePath as given, for messages
   let targetDir;
   try {
     if (args.outputDir) {
       targetDir = confineOutputPath(args.outputDir);
     } else if (args.savePath) {
-      const resolved = confineOutputPath(args.savePath);
+      const { path: resolved, requested } = confineOutputTarget(args.savePath);
       if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
         targetDir = resolved;
       } else {
         explicitFile = resolved;
+        requestedFile = requested;
         // Refuse early, before fetching; writeExplicitFile checks again.
         if (!overwrite && pathEntryExists(explicitFile)) {
-          throw fileExistsError(explicitFile);
+          throw fileExistsError(requestedFile);
         }
       }
     } else {
@@ -161,7 +164,7 @@ async function handleExportEmail(args) {
       ({ path: finalPath, replaced } = writeExplicitFile(
         explicitFile,
         content,
-        { overwrite, encoding: 'utf8' }
+        { overwrite, encoding: 'utf8', displayPath: requestedFile }
       ));
     } else {
       fs.mkdirSync(targetDir, { recursive: true });

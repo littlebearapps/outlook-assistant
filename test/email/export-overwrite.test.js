@@ -179,6 +179,95 @@ describe('export target=message with an explicit savePath file', () => {
     }
   );
 
+  // The link and the file it points to are both inside an allowed
+  // directory, so only the symlink rule can refuse this.
+  describe('a savePath that is a symlink to a file inside an allowed directory', () => {
+    let victim;
+    let link;
+    beforeEach(() => {
+      if (process.platform === 'win32') return;
+      victim = path.join(home, 'Documents', 'notes.txt');
+      fs.mkdirSync(path.dirname(victim), { recursive: true });
+      fs.writeFileSync(victim, 'keep me');
+      link = path.join(tmp, 'report.json');
+      fs.symlinkSync(victim, link);
+    });
+
+    itSymlink(
+      'is refused without overwrite, naming the given path',
+      async () => {
+        const result = await handleExportEmail({
+          id: MESSAGE.id,
+          format: 'json',
+          savePath: link,
+        });
+
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toContain(`already exists: ${link}`);
+        expect(result.content[0].text).not.toContain(victim);
+        expect(callGraphAPI).not.toHaveBeenCalled();
+        expect(fs.readFileSync(victim, 'utf8')).toBe('keep me');
+        expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+      }
+    );
+
+    itSymlink(
+      'is refused with overwrite: true, naming the given path',
+      async () => {
+        const result = await handleExportEmail({
+          id: MESSAGE.id,
+          format: 'json',
+          savePath: link,
+          overwrite: true,
+        });
+
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toMatch(/symbolic link/);
+        expect(result.content[0].text).toContain(link);
+        expect(result.content[0].text).not.toContain(victim);
+        expect(fs.readFileSync(victim, 'utf8')).toBe('keep me');
+        expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+      }
+    );
+  });
+
+  itSymlink(
+    'a savePath symlink to a directory is still used as that directory',
+    async () => {
+      const realDir = path.join(tmp, 'real');
+      fs.mkdirSync(realDir);
+      fs.symlinkSync(realDir, path.join(tmp, 'alias'));
+
+      const result = await handleExportEmail({
+        id: MESSAGE.id,
+        format: 'json',
+        savePath: path.join(tmp, 'alias'),
+      });
+
+      expect(result.isError).toBeUndefined();
+      expect(path.dirname(result._meta.filePath)).toBe(realDir);
+    }
+  );
+
+  itSymlink(
+    'names the given path when the file exists behind a symlinked folder',
+    async () => {
+      fs.mkdirSync(path.join(tmp, 'real'));
+      fs.writeFileSync(path.join(tmp, 'real', 'report.json'), 'keep me');
+      fs.symlinkSync(path.join(tmp, 'real'), path.join(tmp, 'alias'));
+      const given = path.join(tmp, 'alias', 'report.json');
+
+      const result = await handleExportEmail({
+        id: MESSAGE.id,
+        format: 'json',
+        savePath: given,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain(`already exists: ${given}`);
+    }
+  );
+
   test('refuses a savePath outside the allowed directories before calling Graph', async () => {
     const target = path.join(outside, 'report.json');
 

@@ -16,6 +16,8 @@
  * A file path the caller names (export savePath) is also created exclusively;
  * it replaces an existing file only with `overwrite: true`, and never a
  * symlink, a hard-linked file or anything in a dotted path (writeExplicitFile).
+ * A symlink as the last component of a caller path is not followed unless it
+ * leads to a directory, so a link to a file is refused, not written through.
  */
 const crypto = require('crypto');
 const fs = require('fs');
@@ -56,6 +58,37 @@ function resolveReal(target) {
       current = parent;
     }
   }
+}
+
+/**
+ * Resolve an output target without following a symlink in its last
+ * component: the parent goes through resolveReal and the name is appended.
+ * A last-component symlink to a directory is followed (it is used as that
+ * directory, and confined where it leads); any other symlink — to a file,
+ * or dangling — is kept as the link itself, which the writers refuse.
+ * @param {string} absolute - Absolute path
+ * @returns {string}
+ */
+function resolveTarget(absolute) {
+  const normalised = path.resolve(absolute);
+  const parent = path.dirname(normalised);
+  if (parent === normalised) return resolveReal(normalised); // filesystem root
+  const candidate = path.join(resolveReal(parent), path.basename(normalised));
+  let stat;
+  try {
+    stat = fs.lstatSync(candidate);
+  } catch (error) {
+    if (error.code === 'ENOENT') return candidate;
+    throw error;
+  }
+  if (!stat.isSymbolicLink()) return candidate;
+  try {
+    const real = fs.realpathSync.native(candidate);
+    if (fs.statSync(real).isDirectory()) return real;
+  } catch {
+    // Dangling or unreadable: keep the link itself.
+  }
+  return candidate;
 }
 
 /**
@@ -117,13 +150,14 @@ function segmentsBelow(parent, child) {
 /**
  * Resolve an output file or directory and check it may be written: it must
  * be inside an allowed base, with no dotfile or dot-directory below that
- * base. Callers must write to the returned path, not the one passed in.
+ * base. Callers must write to the returned `path`, not the one passed in;
+ * `requested` is the caller's path (absolute, `~` expanded) for messages.
  * @param {string} target - Path from the caller: absolute, or starting
  *   with `~`/`~/` for the home directory. Anything else is refused.
- * @returns {string} The resolved path
+ * @returns {{path: string, requested: string}}
  * @throws {OutputPathError}
  */
-function confineOutputPath(target) {
+function confineOutputTarget(target) {
   const absolute = typeof target === 'string' ? expandHome(target) : target;
   if (typeof absolute !== 'string' || !path.isAbsolute(absolute)) {
     throw new OutputPathError(
@@ -131,9 +165,10 @@ function confineOutputPath(target) {
       'Pass an absolute path, or omit the path to use the system temp directory.'
     );
   }
+  const requested = path.resolve(absolute);
   let resolved;
   try {
-    resolved = resolveReal(absolute);
+    resolved = resolveTarget(absolute);
   } catch (error) {
     throw new OutputPathError(
       `Cannot use output path ${JSON.stringify(target)}: ${error.message}`,
@@ -145,7 +180,9 @@ function confineOutputPath(target) {
   for (const base of bases) {
     const below = segmentsBelow(base.dir, resolved);
     if (!below) continue;
-    if (!below.some((segment) => segment.startsWith('.'))) return resolved;
+    if (!below.some((segment) => segment.startsWith('.'))) {
+      return { path: resolved, requested };
+    }
     dotted = true;
   }
 
@@ -163,6 +200,16 @@ function confineOutputPath(target) {
     `Refusing to write to ${resolved}: exports and attachment downloads can only write inside ${baseList}.${exportDirNote}`,
     'Choose a path inside one of those directories, or ask the user to set OUTLOOK_EXPORT_DIR to an absolute directory in the MCP server env and restart the server.'
   );
+}
+
+/**
+ * confineOutputTarget, returning only the resolved path.
+ * @param {string} target
+ * @returns {string}
+ * @throws {OutputPathError}
+ */
+function confineOutputPath(target) {
+  return confineOutputTarget(target).path;
 }
 
 /**
@@ -330,14 +377,15 @@ function fileExistsError(filePath) {
  * the check is replaced, not followed.
  * @param {string} filePath - Resolved target path
  * @param {string|Buffer} data - File contents
- * @param {{overwrite?: boolean, encoding?: string}} [options]
+ * @param {{overwrite?: boolean, encoding?: string, displayPath?: string}} [options]
+ *   displayPath: the path as the caller gave it, used in refusals
  * @returns {{path: string, replaced: boolean}}
  * @throws {OutputPathError} When the file exists and may not be replaced
  */
 function writeExplicitFile(
   filePath,
   data,
-  { overwrite = false, encoding } = {}
+  { overwrite = false, encoding, displayPath = filePath } = {}
 ) {
   const dir = path.dirname(filePath);
   fs.mkdirSync(dir, { recursive: true });
@@ -351,10 +399,10 @@ function writeExplicitFile(
     }
   }
 
-  if (!overwrite) throw fileExistsError(filePath);
+  if (!overwrite) throw fileExistsError(displayPath);
   if (hasDotSegment(filePath)) {
     throw new OutputPathError(
-      `Refusing to replace ${filePath}: files that are dotfiles or inside a dot-directory are never replaced, even with overwrite: true. Nothing was written.`,
+      `Refusing to replace ${displayPath}: files that are dotfiles or inside a dot-directory are never replaced, even with overwrite: true. Nothing was written.`,
       'Choose a different savePath, or pass a directory so a new, unique file name is used.'
     );
   }
@@ -365,7 +413,7 @@ function writeExplicitFile(
   else if (stat.nlink > 1) problem = 'it has other hard links';
   if (problem) {
     throw new OutputPathError(
-      `Refusing to replace ${filePath}: ${problem}. Nothing was written.`,
+      `Refusing to replace ${displayPath}: ${problem}. Nothing was written.`,
       'Choose a different savePath, or pass a directory so a new, unique file name is used.'
     );
   }
@@ -389,6 +437,7 @@ module.exports = {
   makeClaimedDir,
   writeExplicitFile,
   confineOutputPath,
+  confineOutputTarget,
   allowedOutputBases,
   fileExistsError,
   pathEntryExists,

@@ -26,7 +26,7 @@ beforeEach(() => {
   jest.resetAllMocks();
   jest.spyOn(console, 'error').mockImplementation();
   ensureAuthenticated.mockResolvedValue('token');
-  callGraphAPI.mockImplementation(async (_token, _method, endpoint) =>
+  callGraphAPI.mockImplementation((_token, _method, endpoint) =>
     message(endpoint.split('/').pop())
   );
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'outlook-batch-'));
@@ -66,7 +66,7 @@ test('100 or fewer emailIds carry no limit note', async () => {
 });
 
 test('a search that fills maxResults says more may match', async () => {
-  callGraphAPI.mockImplementation(async (_token, _method, endpoint) =>
+  callGraphAPI.mockImplementation((_token, _method, endpoint) =>
     endpoint.endsWith('/messages')
       ? { value: ids(25).map((id) => ({ id })) }
       : message(endpoint.split('/').pop())
@@ -85,7 +85,7 @@ test('a search that fills maxResults says more may match', async () => {
 });
 
 test('a search under maxResults carries no limit note', async () => {
-  callGraphAPI.mockImplementation(async (_token, _method, endpoint) =>
+  callGraphAPI.mockImplementation((_token, _method, endpoint) =>
     endpoint.endsWith('/messages')
       ? { value: ids(3).map((id) => ({ id })) }
       : message(endpoint.split('/').pop())

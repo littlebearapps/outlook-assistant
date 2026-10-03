@@ -132,15 +132,18 @@ async function resolveWellKnown(accessToken, alias, mailbox) {
   return toRecord(resp, resp.displayName);
 }
 
-async function resolveById(accessToken, id, mailbox) {
+async function resolveById(accessToken, id, mailbox, extraSelect) {
   const resp = await callGraphAPI(
     accessToken,
     'GET',
     `${buildMailboxPrefix(mailbox)}/mailFolders/${id}`,
     null,
-    { $select: FOLDER_SELECT }
+    { $select: extraSelect ? `${FOLDER_SELECT},${extraSelect}` : FOLDER_SELECT }
   );
-  return toRecord(resp, resp.displayName);
+  // The ID asked for stands in if a response leaves `id` out.
+  const folder = { ...resp, id: resp?.id || id };
+  const record = toRecord(folder, folder.displayName);
+  return extraSelect ? { ...record, fields: folder } : record;
 }
 
 /**
@@ -300,8 +303,10 @@ function looksLikeFolderId(value) {
 /**
  * Resolve a folder from a name/path and/or explicit ID.
  * @param {string} accessToken
- * @param {{name?: string, id?: string, mailbox?: string|null}} spec
- * @returns {Promise<{id: string, displayName: string, parentId: string|null, path: string}>}
+ * @param {{name?: string, id?: string, mailbox?: string|null, extraSelect?: string}} spec
+ *   `extraSelect`: more fields to read when resolving by ID (e.g. item
+ *   counts), returned as `fields` so the caller needn't read the folder again
+ * @returns {Promise<{id: string, displayName: string, parentId: string|null, path: string, fields?: object}>}
  *   `path` is the full slash-separated path when resolved by name/path/alias;
  *   when resolved by ID it is the folder's display name only (ancestors are not
  *   fetched).
@@ -310,7 +315,7 @@ async function resolveFolder(accessToken, spec = {}) {
   const mailbox = spec.mailbox || null;
   const id = (spec.id || '').trim();
   if (id) {
-    return resolveById(accessToken, id, mailbox);
+    return resolveById(accessToken, id, mailbox, spec.extraSelect);
   }
   const name = (spec.name || '').trim();
   if (!name) {

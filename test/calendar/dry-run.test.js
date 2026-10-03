@@ -352,3 +352,57 @@ describe('manage-event dryRun through the tool', () => {
     expect(dryRun.description).not.toMatch(/action=update only/);
   });
 });
+
+describe('previews of events with missing fields', () => {
+  // An invitation with no subject and no organiser details.
+  const BARE = { ...INVITE, subject: undefined, organizer: undefined };
+
+  test.each([
+    ['cancel', handleCancelEvent],
+    ['decline', handleDeclineEvent],
+    ['delete', handleDeleteEvent],
+  ])('%s says "(no subject)", never "undefined"', async (_action, handler) => {
+    mockReads({ ...BARE, isOrganizer: _action === 'cancel' });
+
+    const result = await handler({ eventId: 'evt-1', dryRun: true });
+
+    expect(textOf(result)).not.toContain('undefined');
+    expect(textOf(result)).toContain('(no subject)');
+  });
+
+  test('decline without organiser details names "the organiser" once', async () => {
+    mockReads(BARE);
+
+    const result = await handleDeclineEvent({ eventId: 'evt-1', dryRun: true });
+
+    const text = textOf(result);
+    expect(text).not.toContain('the organiser, the organiser');
+    expect(text).toMatch(/emails your response to the organiser \(/);
+  });
+
+  test('decline with sendResponse=false without organiser details', async () => {
+    mockReads(BARE);
+
+    const result = await handleDeclineEvent({
+      eventId: 'evt-1',
+      sendResponse: false,
+      dryRun: true,
+    });
+
+    const text = textOf(result);
+    expect(text).not.toContain('the organiser, the organiser');
+    expect(text).toContain(
+      'without notifying the organiser (sendResponse=false)'
+    );
+  });
+
+  test('delete as an attendee without organiser details', async () => {
+    mockReads(BARE);
+
+    const result = await handleDeleteEvent({ eventId: 'evt-1', dryRun: true });
+
+    const text = textOf(result);
+    expect(text).not.toContain('the organiser, the organiser');
+    expect(text).toContain("Nobody is emailed: the organiser isn't told");
+  });
+});

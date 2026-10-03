@@ -299,6 +299,27 @@ describe('send-email without warnings', () => {
     expect(result.content[0].text).toMatch(/personal/i);
   });
 
+  it.each([
+    ['no tips at all', []],
+    [
+      'tips with nothing in them',
+      [{ emailAddress: { address: 'someone@example.com' } }],
+    ],
+  ])(
+    'states the M365-only caveat once when there are %s',
+    async (_label, tips) => {
+      mockGraph(tips);
+
+      const result = await handleSendEmail({
+        ...BASE_ARGS,
+        checkRecipients: true,
+      });
+
+      const mentions = result.content[0].text.match(/M365-only/g) || [];
+      expect(mentions).toHaveLength(1);
+    }
+  );
+
   it('does not call getMailTips or change the result without checkRecipients', async () => {
     callGraphAPI.mockResolvedValue({});
 

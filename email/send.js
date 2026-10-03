@@ -209,6 +209,8 @@ async function handleSendEmail(args) {
       return { content: [{ type: 'text', text: sentText }] };
     }
 
+    // Empty tips already carry their own M365-only note; don't repeat it.
+    const caveat = mailTips.meta?.allEmpty ? '' : `\n\n${DELIVERY_CAVEAT}`;
     const acknowledged =
       mailTips.blocking.length > 0
         ? `\n\nSent with ${mailTips.blocking.length} acknowledged warning(s):\n${formatBlockingIssues(mailTips.blocking)}`
@@ -217,7 +219,7 @@ async function handleSendEmail(args) {
       content: [
         {
           type: 'text',
-          text: `${sentText}${acknowledged}\n\n---\n\n${mailTips.text}\n\n${DELIVERY_CAVEAT}`,
+          text: `${sentText}${acknowledged}\n\n---\n\n${mailTips.text}${caveat}`,
         },
       ],
       _meta: { mailTips: mailTips.meta },

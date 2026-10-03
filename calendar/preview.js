@@ -132,12 +132,25 @@ function eventWhen(event) {
     : 'at an unknown time';
 }
 
+/** The organiser's name and address, or null if Graph gave neither. */
 function organiserLabel(event) {
   const organiser = event.organizer?.emailAddress || {};
   if (organiser.name && organiser.address) {
     return `${organiser.name} <${organiser.address}>`;
   }
-  return organiser.address || organiser.name || 'the organiser';
+  return organiser.address || organiser.name || null;
+}
+
+/** "the organiser, Name <address>", or just "the organiser" if unknown. */
+function theOrganiser(event) {
+  const label = organiserLabel(event);
+  return label ? `the organiser, ${label}` : 'the organiser';
+}
+
+/** "'Subject' on …", with a fallback for an event that has no subject. */
+function eventTitle(event) {
+  const subject = event.subject ? `'${event.subject}'` : '(no subject)';
+  return `${subject} ${eventWhen(event)}`;
 }
 
 /** Read the fields a preview needs, with times in UTC. */
@@ -194,7 +207,7 @@ async function previewCreateEvent(event) {
 async function previewCancelEvent(accessToken, { eventId, comment }) {
   const event = await fetchEvent(accessToken, eventId);
   const meta = { action: 'cancel', eventId };
-  const title = `'${event.subject}' ${eventWhen(event)}`;
+  const title = eventTitle(event);
 
   if (!event.isOrganizer) {
     return dryRunResult(
@@ -232,8 +245,8 @@ async function previewDeclineEvent(
 ) {
   const event = await fetchEvent(accessToken, eventId);
   const meta = { action: 'decline', eventId };
-  const title = `'${event.subject}' ${eventWhen(event)}`;
-  const organiser = organiserLabel(event);
+  const title = eventTitle(event);
+  const organiser = theOrganiser(event);
 
   if (event.isOrganizer) {
     return dryRunResult(
@@ -247,7 +260,7 @@ async function previewDeclineEvent(
 
   if (sendResponse === false) {
     return dryRunResult(
-      `Declines ${title} without notifying the organiser, ${organiser} (sendResponse=false).`,
+      `Declines ${title} without notifying ${organiser} (sendResponse=false).`,
       { ...meta, notified: 0 }
     );
   }
@@ -261,7 +274,7 @@ async function previewDeclineEvent(
 
   return dryRunResult(
     [
-      `Declines ${title} and emails your response to the organiser, ${organiser}${status}.`,
+      `Declines ${title} and emails your response to ${organiser}${status}.`,
       messageLine(comment),
     ],
     { ...meta, notified: 1 }
@@ -272,12 +285,15 @@ async function previewDeclineEvent(
 async function previewDeleteEvent(accessToken, { eventId }) {
   const event = await fetchEvent(accessToken, eventId);
   const meta = { action: 'delete', eventId };
-  const head = `Deletes '${event.subject}' ${eventWhen(event)} from your calendar`;
+  const head = `Deletes ${eventTitle(event)} from your calendar`;
 
   if (!event.isOrganizer) {
+    const organiser = organiserLabel(event)
+      ? `${theOrganiser(event)},`
+      : theOrganiser(event);
     return dryRunResult(
       [
-        `${head}. Nobody is emailed: the organiser, ${organiserLabel(event)}, isn't told you won't attend (use action=decline for that).`,
+        `${head}. Nobody is emailed: ${organiser} isn't told you won't attend (use action=decline for that).`,
         RESTORE_NOTE,
       ],
       { ...meta, notified: 0 }

@@ -47,6 +47,7 @@ Key environment variables:
   OUTLOOK_IMMUTABLE_IDS             Set to "true" for message IDs that survive folder moves
   OUTLOOK_SEARCH_SCAN_LIMIT         Local search fallback window (default 500, max 5000)
   OUTLOOK_REQUEST_TIMEOUT_MS        Graph request inactivity timeout (default 60000)
+  OUTLOOK_DEBUG                     Set to "true" for detailed stderr logs (addresses redacted)
   USE_TEST_MODE                     Set to "true" to run against mock data
 
 Documentation: https://github.com/littlebearapps/outlook-assistant`;

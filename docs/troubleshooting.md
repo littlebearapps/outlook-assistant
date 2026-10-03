@@ -77,11 +77,28 @@ rm ~/.outlook-assistant-tokens.json ~/.outlook-assistant-pending-auth.json
 # Then call the auth tool again with action=authenticate
 ```
 
+## Server Logs and Debug Logging
+
+The server writes its logs to stderr (stdout carries the MCP protocol). Where you read them depends on the client: Claude Desktop writes them to `mcp-server-<name>.log` in its logs folder (`<name>` is the key in your MCP config), and the MCP Inspector (`npm run inspect`) shows them live.
+
+By default, after the startup lines, each tool call logs exactly one line and never its arguments:
+
+```text
+tool=search-emails outcome=ok ms=412
+tool=folders action=create outcome=isError ms=230 graph="409 POST me/mailFolders/{id}/childFolders"
+tool=read-email outcome=isError ms=95 auth=refresh-failed:AADSTS70008
+```
+
+`outcome` is `ok`, `isError` (the tool returned an error to the assistant), `thrown` (with `error=<class>`) or `unknown-tool`. Optional fields: `graph=` is the last failed Graph request in the call (status or network error code, method, and the path with IDs shown as `{id}` and mailboxes as `<mailbox>`), `graphRetries=` counts throttling retries, and `auth=` is a sign-in or token problem with its `AADSTS` code. Search terms, filters, addresses, folder names, subjects and Message-IDs don't appear.
+
+To see what a tool actually did, set `OUTLOOK_DEBUG=true` (also `1`, `yes`, `on`) in the server's `env` block and restart it. Lines starting `[debug]` then show the search strategy and filters tried, the Graph request and error bodies, folder resolution and the auth steps. Even then, email addresses (including Message-IDs) become `<redacted-email>` and long IDs `<id>`; tokens, device codes and the client secret are never logged in either mode. Debug output can still include search terms, subjects and folder names, so check it before pasting it into an issue, and turn debug off when you're done.
+
 ## Reporting Issues
 
 Report issues at <https://github.com/littlebearapps/outlook-assistant/issues> with:
 
 - Error message (full text)
+- The server's stderr lines for the failing call (the default one-line log is safe to share; check `OUTLOOK_DEBUG` output for search terms or subjects first)
 - The output of `auth action=about` (version, configured and granted scopes; it never includes tokens). Don't paste the token file.
 - Auth method: device code or browser
 - Account type: personal (Microsoft/Outlook.com) or work/school

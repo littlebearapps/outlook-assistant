@@ -103,11 +103,11 @@ function saveClientId(id) {
  * @returns {{name: string, value: string}|null}
  */
 function getEnvClientId() {
-  if (process.env.OUTLOOK_CLIENT_ID) {
-    return { name: 'OUTLOOK_CLIENT_ID', value: process.env.OUTLOOK_CLIENT_ID };
-  }
-  if (process.env.MS_CLIENT_ID) {
-    return { name: 'MS_CLIENT_ID', value: process.env.MS_CLIENT_ID };
+  // Trimmed, and blank counts as unset: plugin managers pass "" (or stray
+  // whitespace) for an unset option, which must not hide a saved ID.
+  for (const name of ['OUTLOOK_CLIENT_ID', 'MS_CLIENT_ID']) {
+    const value = (process.env[name] || '').trim();
+    if (value) return { name, value };
   }
   return null;
 }

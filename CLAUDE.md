@@ -125,7 +125,7 @@ Common errors (auth, device code, search, timezones) and fixes live in [`docs/tr
 ## Testing
 
 ```bash
-npm test                    # Jest unit tests (60 suites / 1542 tests at v3.13.0)
+npm test                    # Jest unit tests (60 suites / 1544 tests at v3.13.0)
 npm run lint                # ESLint (0 errors expected)
 npm run format:check        # Prettier (CI runs this)
 ./test-modular-server.sh    # MCP Inspector interactive

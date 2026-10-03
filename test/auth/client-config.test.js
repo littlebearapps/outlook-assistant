@@ -202,6 +202,18 @@ describe('resolveClientId / getClientIdSource precedence', () => {
     expect(getClientIdSource()).toBe('saved');
   });
 
+  test('a whitespace-only env var does not shadow the saved file', () => {
+    saveClientId(GUID_A);
+    process.env.OUTLOOK_CLIENT_ID = '   ';
+    expect(resolveClientId()).toBe(GUID_A);
+    expect(getClientIdSource()).toBe('saved');
+  });
+
+  test('env values are trimmed', () => {
+    process.env.OUTLOOK_CLIENT_ID = `  ${GUID_B}\n`;
+    expect(resolveClientId()).toBe(GUID_B);
+  });
+
   test('an invalid saved ID resolves to "" / none', () => {
     fs.writeFileSync(configFile(), JSON.stringify({ clientId: 'nope' }));
     expect(resolveClientId()).toBe('');

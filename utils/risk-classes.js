@@ -202,15 +202,16 @@ function classesOf(entry) {
 /**
  * Risk class for a tool call.
  * @param {string} toolName
- * @param {string} [action] - the call's `action` argument, for action tools;
- *   when left out, the tool's defaultAction (if any) is classified
+ * @param {string|null} [action] - the call's `action` argument, for action
+ *   tools; when left out or null (handlers treat both alike), the tool's
+ *   defaultAction (if any) is classified
  * @returns {string|undefined} the class, or undefined if unclassified
  */
 function classify(toolName, action) {
   const entry = TOOL_RISK[toolName];
   if (!entry) return undefined;
   if (!entry.actions) return entry.default;
-  const effective = action === undefined ? entry.defaultAction : action;
+  const effective = action ?? entry.defaultAction;
   return Object.hasOwn(entry.actions, effective)
     ? entry.actions[effective]
     : undefined;

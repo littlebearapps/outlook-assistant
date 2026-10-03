@@ -47,7 +47,7 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 ## Safety Controls
 
 - **MCP annotations** on all 22 tools: all four hints set explicitly and derived from the risk-class map (`utils/risk-classes.js`: `read`/`reversible`/`outward`/`destructive`/`persistent` per tool and action), plus a top-level `title`. `destructiveHint` = any outward, destructive or persistent action; `openWorldHint` = surfaces untrusted content (#92) or reaches other people; `idempotentHint` = read-only or the tool's `idempotent` flag. A test fails on any unclassified tool or action (#270, #277)
-- **Read-only mode** (`OUTLOOK_READ_ONLY`, #271): `request-handler.js` refuses every call whose risk class isn't `read` after validation and before the handler (`utils/read-only.js`), dry runs included; unclassified calls fail closed; `auth` is exempt so sign-in works. Calls that leave `action` out are classified by the map's `defaultAction`
+- **Read-only mode** (`OUTLOOK_READ_ONLY`, #271): `request-handler.js` refuses every call whose risk class isn't `read` after validation and before the handler (`utils/read-only.js`), dry runs included; unclassified calls fail closed; only `auth` authenticate/device-code-complete are exempt (sign-in). Calls that leave `action` out (or null) are classified by the map's `defaultAction`; `test/dispatcher/read-classes-dont-write.test.js` proves no `read` call writes
 - **Server `instructions`** (`utils/server-instructions.js`, #271): hard rules in the first 512 characters, under 2,000 in total; `send-email` and `create-event` carry `_meta["anthropic/requiresUserInteraction"]` (risk-map flag, never on mixed read/write tools)
 - **get-mail-tips**: pre-send recipient validation (out-of-office, mailbox full, delivery restrictions)
 - **send-email**: `dryRun` param, `checkRecipients` param (mail tips), session rate limiting (`OUTLOOK_MAX_EMAILS_PER_SESSION`), recipient allowlist (`OUTLOOK_ALLOWED_RECIPIENTS`)
@@ -70,7 +70,7 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 | `request-handler.js` | MCP request dispatcher: `tools/list`/`tools/call` with schema coercion. Protocol errors are thrown as JSON-RPC errors (-32601 unknown method, -32602 unknown tool, -32603 internal); tool failures return visible `isError` content |
 | `utils/risk-classes.js` | Risk-class map per tool/action; derives every tool's annotations (`toolMetadata`) |
 | `utils/server-instructions.js` | Server `instructions` text (hard rules first); read-only note follows `config.READ_ONLY` |
-| `utils/read-only.js` | `OUTLOOK_READ_ONLY` gate: refusal for any non-`read` call (`auth` exempt) |
+| `utils/read-only.js` | `OUTLOOK_READ_ONLY` gate: refusal for any non-`read` call (`auth` sign-in actions exempt) |
 | `utils/tool-error.js` | `toolError(message, { nextStep })` and `authRequiredError()`: every handler error returns `isError: true` |
 | `config.js` | API endpoint, auth settings, defaults |
 | `utils/schema-coerce.js` | MCP-boundary param coercion + validation (string→array/boolean/number, `additionalProperties: false`, required, enums) |

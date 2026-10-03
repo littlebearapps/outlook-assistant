@@ -78,6 +78,14 @@ describe('classify', () => {
     expect(classify('apply-category')).toBe('reversible');
   });
 
+  test('treats a null action like a missing one, as the handlers do', () => {
+    // Coercion lets `action: null` through; handlers then run their
+    // default (`args.action || 'list'`), so the gate must classify that.
+    expect(classify('folders', null)).toBe('read');
+    expect(classify('apply-category', null)).toBe('reversible');
+    expect(classify('draft', null)).toBeUndefined();
+  });
+
   test('returns undefined when action is required but missing', () => {
     expect(classify('draft')).toBeUndefined();
     expect(classify('manage-event')).toBeUndefined();

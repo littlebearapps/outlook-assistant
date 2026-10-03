@@ -151,6 +151,35 @@ describe('read-only mode on', () => {
     expect(refused.content[0].text).toContain('apply-category action=set');
   });
 
+  test('action: null runs the default action, as the handler does', async () => {
+    const tools = spiedTools();
+    expect((await call(tools, 'folders', { action: null })).isError).toBe(
+      undefined
+    );
+    const refused = await call(tools, 'apply-category', {
+      action: null,
+      messageId: 'm1',
+      categories: ['Red'],
+    });
+    expect(refused.isError).toBe(true);
+  });
+
+  test('the auth exemption covers sign-in only, not any future auth action', () => {
+    const { readOnlyRefusal } = require('../../utils/read-only');
+    for (const action of [
+      undefined,
+      'status',
+      'about',
+      'authenticate',
+      'device-code-complete',
+    ]) {
+      expect(readOnlyRefusal('auth', { action })).toBeNull();
+    }
+    expect(readOnlyRefusal('auth', { action: 'revoke-all' }).isError).toBe(
+      true
+    );
+  });
+
   test('dry runs are refused too', async () => {
     const tools = spiedTools();
     const result = await call(tools, 'send-email', {

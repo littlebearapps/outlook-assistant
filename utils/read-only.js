@@ -9,14 +9,19 @@
  *   and action, so the gate never relies on it.
  * - A call with no risk class (an unknown tool or action) is refused: the
  *   gate fails closed.
- * - The `auth` tool is exempt. Signing in only writes the local token file,
- *   and without it no read tool can work.
+ * - Signing in is exempt: `auth` authenticate and device-code-complete only
+ *   talk to Microsoft's sign-in endpoints and write the local token, pending
+ *   sign-in and client-ID files; without them no read tool can work. Other
+ *   `auth` actions go through the map like any tool (status and about are
+ *   read), so a future auth action is not exempt by accident.
  */
 const { TOOL_RISK, classify } = require('./risk-classes');
 const { toolError } = require('./tool-error');
 
-/** Tools that run in read-only mode whatever their class. */
-const READ_ONLY_EXEMPT = new Set(['auth']);
+/** Tool actions that run in read-only mode whatever their class. */
+const READ_ONLY_EXEMPT = {
+  auth: new Set(['authenticate', 'device-code-complete']),
+};
 
 /** What a call of each class would do, for the refusal message. */
 const EFFECTS = {
@@ -37,7 +42,7 @@ const NEXT_STEP =
  * @returns {{content: Array<{type: 'text', text: string}>, isError: true}|null}
  */
 function readOnlyRefusal(toolName, args = {}) {
-  if (READ_ONLY_EXEMPT.has(toolName)) return null;
+  if (READ_ONLY_EXEMPT[toolName]?.has(args.action)) return null;
   const riskClass = classify(toolName, args.action);
   if (riskClass === 'read') return null;
 

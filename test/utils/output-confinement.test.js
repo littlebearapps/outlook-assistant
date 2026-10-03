@@ -165,15 +165,30 @@ describe('confineOutputPath', () => {
     expectRefused(() => confineOutputPath(`${tmp}/bad\0name`));
   });
 
-  test('resolves a relative path against the working directory', () => {
-    const cwd = process.cwd();
-    try {
-      process.chdir(tmp);
-      expect(confineOutputPath('rel/x.md')).toBe(path.join(tmp, 'rel/x.md'));
-    } finally {
-      process.chdir(cwd);
-    }
+  // Caller paths: a leading ~ means the home directory; any other
+  // non-absolute path is refused rather than resolved against the server's
+  // working directory (which the caller can't see or choose).
+  test.each([
+    ['~/Downloads/r.md', ['Downloads', 'r.md']],
+    ['~/Documents', ['Documents']],
+  ])('expands a leading ~ in %j', (input, parts) => {
+    expect(confineOutputPath(input)).toBe(path.join(home, ...parts));
   });
+
+  test.each(['rel/x.md', 'x.md', './x.md', '../x.md', '~other/x.md', ''])(
+    'refuses the non-absolute path %j, even from inside a base',
+    (input) => {
+      const cwd = process.cwd();
+      try {
+        process.chdir(tmp);
+        const error = expectRefused(() => confineOutputPath(input), /absolute/);
+        expect(error.nextStep).toMatch(/absolute path/);
+        expect(error.nextStep).toMatch(/temp/);
+      } finally {
+        process.chdir(cwd);
+      }
+    }
+  );
 });
 
 describe('writeExplicitFile', () => {

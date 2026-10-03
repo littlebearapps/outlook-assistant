@@ -124,7 +124,7 @@ async function handleListAttachments(args) {
  * @param {object} args - Tool arguments
  * @param {string} args.messageId - The ID of the email message
  * @param {string} args.attachmentId - The ID of the attachment
- * @param {string} args.savePath - Optional path to save the file (defaults to current directory)
+ * @param {string} args.savePath - Deprecated alias for outputDir (absolute or ~/…; default: system temp directory)
  * @returns {object} - MCP response with download result
  */
 async function handleDownloadAttachment(args) {

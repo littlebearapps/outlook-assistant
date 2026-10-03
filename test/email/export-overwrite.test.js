@@ -233,6 +233,107 @@ describe('export target=message with an explicit savePath file', () => {
   });
 });
 
+describe('caller paths must be absolute or start with ~', () => {
+  // Run from inside the temp base, so a relative path resolved against the
+  // working directory would have been accepted.
+  async function fromTmp(fn) {
+    const cwd = process.cwd();
+    process.chdir(tmp);
+    try {
+      return await fn();
+    } finally {
+      process.chdir(cwd);
+    }
+  }
+
+  test('export savePath "~/Downloads/r.md" writes into the home Downloads folder', async () => {
+    const result = await handleExportEmail({
+      id: MESSAGE.id,
+      format: 'json',
+      savePath: '~/Downloads/r.md',
+    });
+
+    expect(result.isError).toBeUndefined();
+    const target = path.join(home, 'Downloads', 'r.md');
+    expect(result._meta.filePath).toBe(target);
+    expect(fs.existsSync(target)).toBe(true);
+  });
+
+  test('export refuses a relative savePath before calling Graph', async () => {
+    const result = await fromTmp(() =>
+      handleExportEmail({
+        id: MESSAGE.id,
+        format: 'json',
+        savePath: 'report.json',
+      })
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/must be absolute/);
+    expect(callGraphAPI).not.toHaveBeenCalled();
+    expect(fs.readdirSync(tmp)).toEqual([]);
+  });
+
+  test('target=messages refuses a relative outputDir', async () => {
+    const result = await fromTmp(() =>
+      handleBatchExportEmails({
+        target: 'messages',
+        emailIds: [MESSAGE.id],
+        format: 'json',
+        outputDir: 'exports',
+      })
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/must be absolute/);
+    expect(callGraphAPI).not.toHaveBeenCalled();
+    expect(fs.readdirSync(tmp)).toEqual([]);
+  });
+
+  test('target=conversation refuses a relative outputDir', async () => {
+    const result = await fromTmp(() =>
+      handleExportConversation({
+        conversationId: 'conv-1',
+        outputDir: 'exports',
+      })
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/must be absolute/);
+    expect(callGraphAPI).not.toHaveBeenCalled();
+    expect(fs.readdirSync(tmp)).toEqual([]);
+  });
+
+  test('attachments refuses a relative outputDir', async () => {
+    const result = await fromTmp(() =>
+      handleDownloadAttachment({
+        messageId: 'm1',
+        attachmentId: 'a1',
+        outputDir: 'downloads',
+      })
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/must be absolute/);
+    expect(callGraphAPI).not.toHaveBeenCalled();
+    expect(fs.readdirSync(tmp)).toEqual([]);
+  });
+
+  test('attachments expands a leading ~ in outputDir', async () => {
+    callGraphAPI.mockResolvedValue({
+      '@odata.type': '#microsoft.graph.fileAttachment',
+      name: 'invoice.pdf',
+      contentType: 'application/pdf',
+      contentBytes: Buffer.from('pdf').toString('base64'),
+    });
+    const result = await handleDownloadAttachment({
+      messageId: 'm1',
+      attachmentId: 'a1',
+      outputDir: '~/Downloads',
+    });
+    expect(result.isError).toBeUndefined();
+    expect(fs.existsSync(path.join(home, 'Downloads', 'invoice.pdf'))).toBe(
+      true
+    );
+  });
+});
+
 describe('export output directories are confined', () => {
   test('target=message with no savePath still writes to the temp directory', async () => {
     const result = await handleExportEmail({ id: MESSAGE.id, format: 'json' });

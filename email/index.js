@@ -510,7 +510,7 @@ const emailTools = [
         outputDir: {
           type: 'string',
           description:
-            'Directory to save file (action=download, default: system temp directory). Auto-created if missing. Must be inside the system temp directory, ~/Downloads, ~/Documents or OUTLOOK_EXPORT_DIR, with no dot-prefixed folder names.',
+            'Absolute directory (or ~/…) to save the file in (action=download, default: system temp directory). Auto-created if missing. Must be inside the system temp directory, ~/Downloads, ~/Documents or OUTLOOK_EXPORT_DIR, with no dot-prefixed folder names.',
         },
         savePath: {
           type: 'string',
@@ -564,7 +564,7 @@ const emailTools = [
         savePath: {
           type: 'string',
           description:
-            'File path or directory (target=message). Must be inside the system temp directory, ~/Downloads, ~/Documents or OUTLOOK_EXPORT_DIR. An existing file is not replaced unless overwrite is true.',
+            'Absolute file path or directory, or one starting with ~/ (target=message). Relative paths are refused. Must be inside the system temp directory, ~/Downloads, ~/Documents or OUTLOOK_EXPORT_DIR. An existing file is not replaced unless overwrite is true.',
         },
         overwrite: {
           type: 'boolean',
@@ -626,7 +626,7 @@ const emailTools = [
         outputDir: {
           type: 'string',
           description:
-            'Output directory (target=messages, required; target=message/conversation, default: system temp directory). Must be inside the system temp directory, ~/Downloads, ~/Documents or OUTLOOK_EXPORT_DIR.',
+            'Absolute output directory, or one starting with ~/ (target=messages, required; target=message/conversation, default: system temp directory). Must be inside the system temp directory, ~/Downloads, ~/Documents or OUTLOOK_EXPORT_DIR.',
         },
         // Conversation export
         conversationId: {

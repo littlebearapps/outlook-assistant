@@ -4,7 +4,9 @@
  *
  * Every output path is first confined (confineOutputPath) to the system temp
  * directory, ~/Downloads, ~/Documents or OUTLOOK_EXPORT_DIR, with no dotfile
- * or dot-directory below them.
+ * or dot-directory below them. Caller paths must be absolute or start with
+ * `~`; relative paths are refused rather than resolved against the server's
+ * working directory.
  *
  * Every file the server names itself is written with exclusive create (`wx`),
  * so an existing file is never overwritten and a planted symlink — even a
@@ -116,18 +118,26 @@ function segmentsBelow(parent, child) {
  * Resolve an output file or directory and check it may be written: it must
  * be inside an allowed base, with no dotfile or dot-directory below that
  * base. Callers must write to the returned path, not the one passed in.
- * @param {string} target - Path from the caller (absolute or relative)
+ * @param {string} target - Path from the caller: absolute, or starting
+ *   with `~`/`~/` for the home directory. Anything else is refused.
  * @returns {string} The resolved path
  * @throws {OutputPathError}
  */
 function confineOutputPath(target) {
+  const absolute = typeof target === 'string' ? expandHome(target) : target;
+  if (typeof absolute !== 'string' || !path.isAbsolute(absolute)) {
+    throw new OutputPathError(
+      `Refusing to write to ${JSON.stringify(target)}: output paths must be absolute (or start with ~/ for the home directory). A relative path would land in the server's working directory.`,
+      'Pass an absolute path, or omit the path to use the system temp directory.'
+    );
+  }
   let resolved;
   try {
-    resolved = resolveReal(target);
+    resolved = resolveReal(absolute);
   } catch (error) {
     throw new OutputPathError(
       `Cannot use output path ${JSON.stringify(target)}: ${error.message}`,
-      'Pass a plain absolute path.'
+      'Pass a plain absolute path, or omit the path to use the system temp directory.'
     );
   }
   const bases = allowedOutputBases();

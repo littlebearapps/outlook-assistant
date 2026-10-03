@@ -35,7 +35,7 @@ const TIPS = [
 const READ_ONLY_ON =
   'Read-only mode is on (OUTLOOK_READ_ONLY): only read tools and actions run. Anything else is refused with nothing changed; tell the user rather than trying another way.';
 const READ_ONLY_OFF =
-  'If OUTLOOK_READ_ONLY is set, only read tools and actions run and every change is refused.';
+  'Read-only mode (OUTLOOK_READ_ONLY) is off: changes can run, subject to the rules above.';
 
 const SKILL_POINTER =
   'If a `using-outlook-assistant` skill is available, read it before the first Outlook tool call.';

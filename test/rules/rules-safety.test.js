@@ -34,6 +34,7 @@ let ensureAuthenticated;
 let handleCreateRule;
 let handleUpdateRule;
 let handleEditRuleSequence;
+let handleDeleteRule;
 const savedEnv = {};
 
 beforeEach(() => {
@@ -47,7 +48,7 @@ beforeEach(() => {
   ensureAuthenticated.mockResolvedValue('test_token');
   handleCreateRule = require('../../rules/create');
   handleUpdateRule = require('../../rules/update');
-  ({ handleEditRuleSequence } = require('../../rules'));
+  ({ handleEditRuleSequence, handleDeleteRule } = require('../../rules'));
 });
 
 afterEach(() => {
@@ -268,6 +269,44 @@ describe('manage-rules rate limit', () => {
       ruleName: 'Move newsletters',
       sequence: 6,
     });
+    expect(second.isError).toBe(true);
+    expect(second.content[0].text).toMatch(/Rate limit reached/);
+    expect(writeCalls()).toHaveLength(1);
+  });
+
+  // #279: delete checked the limit before its arguments, so a call with no
+  // rule or an unknown rule used up a slot without deleting anything.
+  it('a delete with no rule does not use up a slot', async () => {
+    const missing = await handleDeleteRule({});
+    expect(missing.isError).toBe(true);
+    expect(missing.content[0].text).toMatch(/ruleName or ruleId/);
+
+    callGraphAPI.mockResolvedValueOnce({});
+    const deleted = await handleDeleteRule({ ruleId: 'rule-1' });
+    expect(deleted.isError).toBeUndefined();
+    expect(writeCalls()).toHaveLength(1);
+  });
+
+  it('a delete of an unknown rule does not use up a slot', async () => {
+    callGraphAPI.mockResolvedValueOnce({ value: mockRules });
+    const unknown = await handleDeleteRule({ ruleName: 'No such rule' });
+    expect(unknown.isError).toBe(true);
+    expect(unknown.content[0].text).toMatch(/not found/);
+
+    callGraphAPI
+      .mockResolvedValueOnce({ value: mockRules })
+      .mockResolvedValueOnce({});
+    const deleted = await handleDeleteRule({ ruleName: 'Move newsletters' });
+    expect(deleted.isError).toBeUndefined();
+    expect(deleted.content[0].text).toContain('Successfully deleted rule');
+  });
+
+  it('counts delete against the limit', async () => {
+    callGraphAPI.mockResolvedValueOnce({});
+    const first = await handleDeleteRule({ ruleId: 'rule-1' });
+    expect(first.isError).toBeUndefined();
+
+    const second = await handleDeleteRule({ ruleId: 'rule-2' });
     expect(second.isError).toBe(true);
     expect(second.content[0].text).toMatch(/Rate limit reached/);
     expect(writeCalls()).toHaveLength(1);

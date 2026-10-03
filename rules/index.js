@@ -18,10 +18,6 @@ const { toolError, authRequiredError } = require('../utils/tool-error');
 async function handleDeleteRule(args) {
   const { ruleName, ruleId } = args;
 
-  // Rate limit
-  const rateLimitError = checkRateLimit('manage-rules');
-  if (rateLimitError) return rateLimitError;
-
   if (!ruleName && !ruleId) {
     return toolError('Either ruleName or ruleId is required.');
   }
@@ -42,6 +38,11 @@ async function handleDeleteRule(args) {
       resolvedId = rule.id;
       displayName = ruleName;
     }
+
+    // Checked only once there is a rule to delete, so a bad call doesn't
+    // use up a slot (#279)
+    const rateLimitError = checkRateLimit('manage-rules');
+    if (rateLimitError) return rateLimitError;
 
     await callGraphAPI(
       accessToken,

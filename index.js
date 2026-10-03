@@ -74,12 +74,11 @@ Documentation: https://github.com/littlebearapps/outlook-assistant`;
   process.exit(0);
 }
 
-const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
 const {
   StdioServerTransport,
 } = require('@modelcontextprotocol/sdk/server/stdio.js');
 const config = require('./config');
-const { createRequestHandler } = require('./request-handler');
+const { createServer } = require('./server');
 
 const { setToolCount } = require('./auth');
 const { TOOLS } = require('./tools');
@@ -104,22 +103,7 @@ if (
 // Set dynamic tool count for auth about handler
 setToolCount(TOOLS.length);
 
-// Create server with tools capabilities
-const server = new Server(
-  { name: config.SERVER_NAME, version: config.SERVER_VERSION },
-  {
-    capabilities: {
-      tools: TOOLS.reduce((acc, tool) => {
-        acc[tool.name] = {};
-        return acc;
-      }, {}),
-    },
-  }
-);
-
-// Handle all requests. Dispatch + error-shaping logic lives in
-// request-handler.js so it is unit-testable without starting the transport.
-server.fallbackRequestHandler = createRequestHandler(TOOLS);
+const server = createServer(TOOLS);
 
 // Make the script executable
 process.on('SIGTERM', () => {

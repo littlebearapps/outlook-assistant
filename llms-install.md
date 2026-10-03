@@ -11,8 +11,7 @@ Add to your MCP client configuration:
       "command": "npx",
       "args": ["-y", "@littlebearapps/outlook-assistant"],
       "env": {
-        "OUTLOOK_CLIENT_ID": "<user-must-provide>",
-        "OUTLOOK_CLIENT_SECRET": "<user-must-provide>"
+        "OUTLOOK_CLIENT_ID": "<user-must-provide>"
       }
     }
   }
@@ -36,7 +35,10 @@ Users must create an Azure app registration to get credentials:
 6. Click "Register"
 7. Copy the **Application (client) ID** → this is `OUTLOOK_CLIENT_ID`
 
-### Create a client secret:
+If the client ID is left out of the config, the `auth` tool asks for it at sign-in (`auth action=authenticate clientId=<id>`) and saves it to `~/.outlook-assistant-config.json`.
+
+### Create a client secret (browser flow only):
+The default device-code sign-in doesn't need a secret; skip this unless you'll use `method=browser`, and then add `OUTLOOK_CLIENT_SECRET` to the `env` block.
 1. Go to "Certificates & secrets" → "New client secret"
 2. Add a description, select expiration, click "Add"
 3. **Copy the Value immediately** (not the Secret ID) → this is `OUTLOOK_CLIENT_SECRET`

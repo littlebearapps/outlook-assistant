@@ -47,3 +47,10 @@ docs/tests/
 
 # Local research notes — never committed (private business/legal material)
 docs/research/
+
+# Local MCP client configs (may hold secret-manager calls); the template
+# .mcp.json.example stays tracked
+/.mcp.json
+/.mcp.*.json
+/.envrc
+/.untether-outbox/

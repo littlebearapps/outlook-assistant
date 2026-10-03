@@ -119,7 +119,7 @@ Rarely. Access tokens expire after about 1 hour, but the MCP server automaticall
 
 Yes, but each computer needs its own authentication. The token file (`~/.outlook-assistant-tokens.json`) is stored locally and is not shared between machines. Run through the [authentication steps](connect-outlook-to-claude.md#authenticate-for-the-first-time) on each computer.
 
-Your Azure app registration and client credentials (`OUTLOOK_CLIENT_ID`/`OUTLOOK_CLIENT_SECRET`) are the same across all computers — only the token file differs.
+Your Azure app registration and client credentials (`OUTLOOK_CLIENT_ID`/`OUTLOOK_CLIENT_SECRET`) are the same across all computers — only the token file differs. If you gave the client ID to the `auth` tool instead of setting `OUTLOOK_CLIENT_ID`, it's saved per computer in `~/.outlook-assistant-config.json`, so pass it again (`auth action=authenticate clientId=<id>`) on each new machine.
 
 ### What is the auth server and do I need it running all the time?
 

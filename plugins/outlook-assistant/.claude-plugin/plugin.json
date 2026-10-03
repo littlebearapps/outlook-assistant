@@ -1,0 +1,64 @@
+{
+  "name": "outlook-assistant",
+  "displayName": "Outlook Assistant",
+  "version": "3.13.0",
+  "description": "Microsoft Outlook email, calendar and contacts for Claude: 22 tools via Microsoft Graph, with dry-run previews, send limits and recipient allowlists. Works with Outlook.com and Microsoft 365.",
+  "author": {
+    "name": "Little Bear Apps",
+    "url": "https://littlebearapps.com"
+  },
+  "homepage": "https://littlebearapps.com/builds/outlook-assistant/",
+  "repository": "https://github.com/littlebearapps/outlook-assistant",
+  "license": "MIT",
+  "keywords": [
+    "outlook",
+    "email",
+    "calendar",
+    "contacts",
+    "microsoft-365",
+    "microsoft-graph"
+  ],
+  "icon": "./logo.png",
+  "documentationUrl": "https://github.com/littlebearapps/outlook-assistant#readme",
+  "supportUrl": "https://github.com/littlebearapps/outlook-assistant/issues",
+  "privacyPolicyUrl": "https://littlebearapps.com/privacy/",
+  "termsOfServiceUrl": "https://littlebearapps.com/terms/",
+  "userConfig": {
+    "client_id": {
+      "type": "string",
+      "title": "Azure application (client) ID",
+      "description": "The Application (client) ID of your own Azure app registration. Not a secret. Leave blank to enter it later, when you first ask Claude to connect to Outlook.",
+      "default": ""
+    },
+    "auth_audience": {
+      "type": "string",
+      "title": "Sign-in audience",
+      "description": "Must match your Azure app's supported account types: common (personal and work/school), consumers (personal only), organizations (work/school only) or a tenant ID.",
+      "default": "common"
+    },
+    "max_emails_per_session": {
+      "type": "string",
+      "title": "Send limit per session",
+      "description": "Maximum emails, drafts sent and rule changes per session. 0 means no limit.",
+      "default": "10"
+    },
+    "allowed_recipients": {
+      "type": "string",
+      "title": "Allowed recipients",
+      "description": "Optional comma-separated domains or addresses that email can be sent to. Leave blank to allow all recipients.",
+      "default": ""
+    }
+  },
+  "mcpServers": {
+    "outlook": {
+      "command": "npx",
+      "args": ["-y", "@littlebearapps/outlook-assistant@3.13.0"],
+      "env": {
+        "OUTLOOK_CLIENT_ID": "${user_config.client_id}",
+        "OUTLOOK_AUTH_AUDIENCE": "${user_config.auth_audience}",
+        "OUTLOOK_MAX_EMAILS_PER_SESSION": "${user_config.max_emails_per_session}",
+        "OUTLOOK_ALLOWED_RECIPIENTS": "${user_config.allowed_recipients}"
+      }
+    }
+  }
+}

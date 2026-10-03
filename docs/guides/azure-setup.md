@@ -132,7 +132,9 @@ If you're using a work/school Microsoft 365 account, your organisation may requi
 
 ## 4. Create a Client Secret
 
-The client secret proves your app's identity when requesting tokens.
+> **Only needed for the browser redirect flow.** The default device-code sign-in (step 5) doesn't use a client secret, so you can skip this step and leave `OUTLOOK_CLIENT_SECRET` unset.
+
+The client secret proves your app's identity when the browser flow exchanges its authorisation code for tokens.
 
 1. From your app registration, click **Certificates & secrets** in the left sidebar
 2. Click the **Client secrets** tab
@@ -192,9 +194,11 @@ The device code flow lets you authenticate without running the auth server — i
 
 ## 6. Configure Outlook Assistant
 
-You now have two values:
-- **Application (client) ID** → `OUTLOOK_CLIENT_ID`
-- **Client secret Value** → `OUTLOOK_CLIENT_SECRET`
+You now have:
+- **Application (client) ID** → `OUTLOOK_CLIENT_ID` (always needed)
+- **Client secret Value** → `OUTLOOK_CLIENT_SECRET` (browser flow only; omit it for device-code sign-in)
+
+You can also leave `OUTLOOK_CLIENT_ID` out of your config. Your assistant then asks for it the first time you connect and saves it to `~/.outlook-assistant-config.json` (`auth action=authenticate clientId=…`). An environment value always takes precedence over the saved one.
 
 ### Option A: MCP Client Config (Recommended)
 

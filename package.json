@@ -1,6 +1,6 @@
 {
   "name": "@littlebearapps/outlook-assistant",
-  "version": "3.12.1",
+  "version": "3.13.0",
   "mcpName": "io.github.littlebearapps/outlook-assistant",
   "description": "Outlook Assistant — MCP server with 22 tools for email, calendar, contacts, and settings via Microsoft Graph API",
   "main": "index.js",
@@ -18,7 +18,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky || true",
-    "version": "node -e \"const s=require('./server.json');const p=require('./package.json');s.version=p.version;s.packages[0].version=p.version;require('fs').writeFileSync('./server.json',JSON.stringify(s,null,2)+'\\n')\" && git add server.json"
+    "version": "node scripts/sync-version.js && git add server.json plugins/outlook-assistant",
+    "version:check": "node scripts/sync-version.js --check"
   },
   "lint-staged": {
     "*.js": [

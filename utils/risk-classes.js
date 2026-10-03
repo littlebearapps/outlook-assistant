@@ -103,8 +103,8 @@ const TOOL_RISK = {
     defaultAction: 'list',
     untrustedContent: true,
   },
-  // Writes local files.
-  export: { default: 'reversible', untrustedContent: true },
+  // Writes local files, and with overwrite: true can replace an existing one.
+  export: { default: 'destructive', untrustedContent: true },
   // Echoes recipients' out-of-office messages.
   'get-mail-tips': { default: 'read', untrustedContent: true },
 

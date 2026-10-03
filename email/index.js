@@ -480,7 +480,7 @@ const emailTools = [
   {
     name: 'attachments',
     description:
-      'Inspect or retrieve email attachments. action=`list` (default) returns metadata for all attachments on `messageId` (id, name, contentType, size, isInline) — read-only. action=`view` returns inline content for text/JSON/XML attachments via `attachmentId`; binary types require download. action=`download` saves the attachment to disk at `outputDir` (default system tmpdir, auto-created) and returns the saved file path. `messageId` is required for all actions; `attachmentId` is required for view/download. If `messageId` came from a shared/delegated mailbox, pass the same `sharedMailbox` (or alias `email`) — attachment IDs are scoped to the message and fail under /me otherwise. Use `outputVerbosity` to control list field count.',
+      'Inspect or retrieve email attachments. action=`list` (default) returns metadata for all attachments on `messageId` (id, name, contentType, size, isInline) — read-only. action=`view` returns inline content for text/JSON/XML attachments via `attachmentId`; binary types require download. action=`download` saves the attachment under a new, unique name in `outputDir` (default system temp directory, auto-created; must be inside the temp directory, ~/Downloads, ~/Documents or OUTLOOK_EXPORT_DIR) and returns the saved file path. `messageId` is required for all actions; `attachmentId` is required for view/download. If `messageId` came from a shared/delegated mailbox, pass the same `sharedMailbox` (or alias `email`) — attachment IDs are scoped to the message and fail under /me otherwise. Use `outputVerbosity` to control list field count.',
     ...toolMetadata('attachments', 'Attachments'),
     inputSchema: {
       type: 'object',
@@ -510,7 +510,7 @@ const emailTools = [
         outputDir: {
           type: 'string',
           description:
-            'Directory to save file (action=download, default: system tmpdir). Auto-created if missing.',
+            'Directory to save file (action=download, default: system temp directory). Auto-created if missing. Must be inside the system temp directory, ~/Downloads, ~/Documents or OUTLOOK_EXPORT_DIR, with no dot-prefixed folder names.',
         },
         savePath: {
           type: 'string',
@@ -540,7 +540,7 @@ const emailTools = [
   {
     name: 'export',
     description:
-      'Export emails to files for archival, forensics or processing. target=`message` (default) exports one email by `id` to `savePath` (`mime`/`eml`/`markdown`/`json`/`csv`). target=`messages` batch-exports an `emailIds` array or messages matching `searchQuery` (or `query`) into `outputDir` (`markdown`/`json`/`csv`), at most 100 messages per call. target=`conversation` exports a thread (up to 1000 messages) by `conversationId` into `outputDir`, oldest first (`order: "reverse"` for newest first) (`eml`/`mbox`/`markdown`/`json`/`html`/`csv`). target=`mime` returns raw RFC-822 MIME for `id` (`headersOnly`, `base64`, `maxSize` default 1MB). All targets accept `sharedMailbox` (alias `email`); pass it whenever the ids come from a shared mailbox, or exports fail with 404 ErrorInvalidMailboxItemId. `includeAttachments` defaults to true for single messages and false for batches. Format support varies by target (see the `format` enum).',
+      'Export emails to files. target=`message` (default) exports one email by `id` (mime/eml/markdown/json/csv) to `savePath`: a directory gets a new, unique file name; a file path is created new and an existing file is replaced only with `overwrite: true`. target=`messages` batch-exports `emailIds`, or matches for `searchQuery`/`query`, into `outputDir` (markdown/json/csv), at most 100 messages per call. target=`conversation` exports a thread (up to 1000 messages) by `conversationId` into `outputDir` (eml/mbox/markdown/json/html/csv; `order: "reverse"` for newest first). target=`mime` returns raw RFC-822 MIME for `id` (`headersOnly`, `base64`, `maxSize`, default 1MB). Files are written only inside the system temp directory (the default), ~/Downloads, ~/Documents or OUTLOOK_EXPORT_DIR, never to dot-prefixed names. Pass `sharedMailbox` (alias `email`) when the ids come from a shared mailbox. `includeAttachments` defaults to true for one message, false for batch.',
     ...toolMetadata('export', 'Export Emails'),
     inputSchema: {
       type: 'object',
@@ -563,7 +563,13 @@ const emailTools = [
         },
         savePath: {
           type: 'string',
-          description: 'File path or directory (target=message)',
+          description:
+            'File path or directory (target=message). Must be inside the system temp directory, ~/Downloads, ~/Documents or OUTLOOK_EXPORT_DIR. An existing file is not replaced unless overwrite is true.',
+        },
+        overwrite: {
+          type: 'boolean',
+          description:
+            'Replace an existing file at savePath (target=message, default: false). Never replaces a dotfile, a file in a dot-directory, or a symlink.',
         },
         includeAttachments: {
           type: 'boolean',
@@ -620,7 +626,7 @@ const emailTools = [
         outputDir: {
           type: 'string',
           description:
-            'Output directory (target=messages/conversation, required)',
+            'Output directory (target=messages, required; target=message/conversation, default: system temp directory). Must be inside the system temp directory, ~/Downloads, ~/Documents or OUTLOOK_EXPORT_DIR.',
         },
         // Conversation export
         conversationId: {

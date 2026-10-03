@@ -67,6 +67,11 @@ describe('classify', () => {
     expect(classify('search-emails')).toBe('read');
   });
 
+  test('export is destructive: overwrite: true can replace a file', () => {
+    expect(classify('export')).toBe('destructive');
+    expect(riskAnnotations('export', 'Export').destructiveHint).toBe(true);
+  });
+
   test('returns undefined for an unknown tool or action', () => {
     expect(classify('no-such-tool')).toBeUndefined();
     expect(classify('draft', 'no-such-action')).toBeUndefined();

@@ -153,16 +153,27 @@ function clean(value) {
 }
 
 /**
- * An address for the prompt. A long one is shortened in the local part only,
- * so the domain (where the mail goes) is always shown in full.
+ * Free text for the prompt (subjects, names, anything that isn't a plain
+ * address or ID). It can contain spaces, so it could carry a sentence posing
+ * as the hook's own words: a long value shows only its start and end, with
+ * its length, so a fake sentence is cut short while two long values that
+ * differ at the end still look different.
+ */
+function clip(value) {
+  const text = oneLine(value);
+  if (text.length <= MAX_TEXT) return text;
+  return `${text.slice(0, 50)}...${text.slice(-20)} (${text.length} characters)`;
+}
+
+/**
+ * An address for the prompt. A plain address has no spaces, so it can't
+ * carry a sentence, and is shown whole. Anything else is clipped, quoted and
+ * labelled, and every domain in it is named, so no recipient can hide in it.
  */
 function cleanAddress(value) {
   const text = oneLine(value);
   if (PLAIN_ADDRESS.test(text)) return whole(text, MAX_ADDRESS);
-  // Anything else is quoted and labelled, so it can't pass as the hook's own
-  // words, but still shown whole, with every domain in it named, so no
-  // recipient can hide in a long string.
-  const shown = whole(text, MAX_ADDRESS).replace(/['"]/g, '\u2019');
+  const shown = clip(text).replace(/['"]/g, '\u2019');
   const domains = [
     ...new Set(
       [...text.matchAll(/@([A-Za-z0-9.-]+)/g)].map((m) => m[1].toLowerCase())
@@ -175,13 +186,17 @@ function cleanAddress(value) {
 /** A plain email address: no spaces, quotes, angle brackets or separators. */
 const PLAIN_ADDRESS = /^[^\s@,;'"<>()]+@[A-Za-z0-9.-]+\.[A-Za-z0-9-]+$/;
 
+/** A Graph-style ID or folder path: no spaces, so it can't carry a sentence. */
+const PLAIN_ID = /^[A-Za-z0-9+/=_.:-]+$/;
+
 /**
- * An identifier or name for the prompt, shown whole (up to MAX_ID, then its
- * start and end) so two long IDs or folder paths never look the same. It is
- * always quoted by the caller, so it can't pass as the hook's own words.
+ * An identifier or name for the prompt. A plain ID or path is shown whole
+ * (Graph IDs often pass 150 characters and share long prefixes, so cutting
+ * one could make two targets look the same); anything else is clipped.
  */
 function idText(value) {
-  return whole(value, MAX_ID);
+  const text = oneLine(value);
+  return PLAIN_ID.test(text) ? whole(text, MAX_ID) : clip(text);
 }
 
 /** One line of text shown whole, or its start and end if over `max`. */
@@ -251,7 +266,7 @@ function recipients(input) {
  */
 function quoted(value, fallback) {
   if (value == null || value === '') return fallback;
-  return `'${clean(value).replace(/'/g, '\u2019')}'`;
+  return `'${clip(value).replace(/'/g, '\u2019')}'`;
 }
 
 /**

@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": ".*outlook.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/hooks/outlook-gate.js\" PreToolUse copilot",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": ".*outlook.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/hooks/outlook-gate.js\" PostToolUse copilot",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

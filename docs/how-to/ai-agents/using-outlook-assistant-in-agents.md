@@ -47,6 +47,10 @@ When a client connects, the server returns `instructions` in its `initialize` re
 
 The instructions also say whether read-only mode is on. If your agent framework doesn't forward server instructions to the model, put these rules in your own system prompt.
 
+## Agent Skill
+
+The [plugin](../../../plugins/outlook-assistant/) ships an agent skill, [`using-outlook-assistant`](../../../plugins/outlook-assistant/skills/using-outlook-assistant/SKILL.md), which Claude Code, GitHub Copilot and Cursor load automatically. It restates the hard rules above and adds what the tool descriptions leave out: who each send, reply-all, invitation or cancellation reaches, what each delete loses, prompt-injection patterns, and efficient search. Its `references/` folder has one file per surface. If your framework supports Agent Skills but you run the server without the plugin, copy the skill folder into your skills directory. In Claude Code and GitHub Copilot (and, with limits, Cursor), the plugin's hook also asks the user before outward, destructive and persistent calls (see the [plugin README](../../../plugins/outlook-assistant/README.md#skill-and-safety-hook)).
+
 ## Safety Annotations
 
 Every tool includes MCP annotations, with all four hints set explicitly, that indicate its safety profile. They're hints: the client decides whether to prompt, and a client set to auto-approve a tool, or running in a mode that skips prompts, won't ask the user.

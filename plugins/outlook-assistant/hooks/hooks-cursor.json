@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeMCPExecution": [
+      {
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/hooks/outlook-gate.js\" beforeMCPExecution cursor",
+        "timeout": 30,
+        "failClosed": true
+      }
+    ],
+    "postToolUse": [
+      {
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/hooks/outlook-gate.js\" postToolUse cursor",
+        "matcher": "MCP:.*",
+        "timeout": 30
+      }
+    ]
+  }
+}

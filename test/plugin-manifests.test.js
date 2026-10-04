@@ -21,6 +21,9 @@ const claudePlugin = require(
 );
 const agentPlugin = require(path.join(PLUGIN, 'plugin.json'));
 const agentMcp = require(path.join(PLUGIN, 'mcp.json'));
+const cursorPlugin = require(
+  path.join(PLUGIN, '.cursor-plugin', 'plugin.json')
+);
 
 const PINNED = `${pkg.name}@${pkg.version}`;
 
@@ -37,6 +40,7 @@ describe('plugin manifests', () => {
   test('versions match package.json', () => {
     expect(claudePlugin.version).toBe(pkg.version);
     expect(agentPlugin.version).toBe(pkg.version);
+    expect(cursorPlugin.version).toBe(pkg.version);
   });
 
   test('every npx launcher is pinned to the exact package version', () => {
@@ -59,7 +63,12 @@ describe('plugin manifests', () => {
   });
 
   test('no manifest carries a client secret', () => {
-    const text = JSON.stringify([claudePlugin, agentPlugin, agentMcp]);
+    const text = JSON.stringify([
+      claudePlugin,
+      agentPlugin,
+      agentMcp,
+      cursorPlugin,
+    ]);
     expect(text).not.toMatch(/CLIENT_SECRET/);
   });
 
@@ -68,5 +77,12 @@ describe('plugin manifests', () => {
       expect(option).toHaveProperty('default');
       expect(option.sensitive).toBeUndefined();
     }
+  });
+
+  test('the Cursor manifest declares no MCP servers, so Cursor uses mcp.json', () => {
+    // Without .cursor-plugin, Cursor loads .claude-plugin's inline servers
+    // and passes ${user_config.*} through unexpanded (Cursor CLI 2026.10.01).
+    expect(cursorPlugin.mcpServers).toBeUndefined();
+    expect(JSON.stringify(agentMcp)).not.toMatch(/\$\{user_config\./);
   });
 });

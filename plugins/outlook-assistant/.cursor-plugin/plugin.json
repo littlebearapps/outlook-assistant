@@ -1,0 +1,22 @@
+{
+  "name": "outlook-assistant",
+  "version": "3.13.0",
+  "description": "Microsoft Outlook email, calendar and contacts: 22 MCP tools via Microsoft Graph, with dry-run previews, send limits, recipient allowlists and a safety hook that asks before anything reaches other people. Works with Outlook.com and Microsoft 365.",
+  "author": {
+    "name": "Little Bear Apps"
+  },
+  "homepage": "https://littlebearapps.com/builds/outlook-assistant/",
+  "repository": "https://github.com/littlebearapps/outlook-assistant",
+  "license": "MIT",
+  "keywords": [
+    "outlook",
+    "email",
+    "calendar",
+    "contacts",
+    "microsoft-365",
+    "microsoft-graph",
+    "mcp"
+  ],
+  "logo": "logo.png",
+  "hooks": "./hooks/hooks-cursor.json"
+}

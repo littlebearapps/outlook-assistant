@@ -103,8 +103,8 @@ const TOOL_RISK = {
     defaultAction: 'list',
     untrustedContent: true,
   },
-  // Writes local files.
-  export: { default: 'reversible', untrustedContent: true },
+  // Writes local files, and with overwrite: true can replace an existing one.
+  export: { default: 'destructive', untrustedContent: true },
   // Echoes recipients' out-of-office messages.
   'get-mail-tips': { default: 'read', untrustedContent: true },
 
@@ -186,10 +186,12 @@ const TOOL_RISK = {
 };
 
 /**
- * Which calls return a preview for `dryRun: true` and change nothing: `true`
- * for a single-purpose tool, or the list of its actions that preview. The
- * plugin hook lets these previews run without asking; any other call with
- * `dryRun: true` is treated as the real thing. A test checks this map against
+ * Which calls genuinely honour `dryRun: true` (#274): `true` for a
+ * single-purpose tool, or the list of actions that return a preview and
+ * change nothing. The dispatcher refuses `dryRun: true` on every other call
+ * (including read actions) before the handler runs, so a "preview" can never
+ * really send, delete or change anything, and the plugin hook lets only these
+ * previews run without asking. A test checks this map against
  * every tool whose schema has a `dryRun` property.
  */
 const DRY_RUN_ACTIONS = {
@@ -247,9 +249,8 @@ function effectiveAction(toolName, action) {
 }
 
 /**
- * Whether a call returns a preview for `dryRun: true` (see DRY_RUN_ACTIONS).
- * Resolves a missing or null action to the tool's defaultAction, like
- * classify().
+ * Whether a call honours `dryRun: true` (see DRY_RUN_ACTIONS). Resolves a
+ * missing or null action to the tool's defaultAction, like classify().
  * @param {string} toolName
  * @param {string|null} [action]
  * @returns {boolean}

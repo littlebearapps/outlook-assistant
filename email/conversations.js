@@ -14,7 +14,13 @@ const { ensureAuthenticated } = require('../auth');
 const { getEmailFields } = require('../utils/field-presets');
 const { resolveFolderPath } = require('./folder-utils');
 const { buildMailboxPrefix } = require('../utils/mailbox');
-const { writeClaimedFile, makeClaimedDir } = require('../utils/safe-write');
+const {
+  writeClaimedFile,
+  ensureOutputDir,
+  makeClaimedDir,
+  confineOutputPath,
+  OutputPathError,
+} = require('../utils/safe-write');
 const { escapeODataString } = require('../utils/odata-helpers');
 const {
   formatEmailContent,
@@ -454,6 +460,16 @@ async function handleExportConversation(args) {
     return toolError(`Invalid format. Use: ${validFormats.join(', ')}`);
   }
 
+  // Resolve and check the directory before fetching anything; write only to
+  // the resolved path.
+  let resolvedDir;
+  try {
+    resolvedDir = confineOutputPath(outputDir);
+  } catch (error) {
+    if (!(error instanceof OutputPathError)) throw error;
+    return toolError(error.message, { nextStep: error.nextStep });
+  }
+
   try {
     const accessToken = await ensureAuthenticated();
 
@@ -476,9 +492,8 @@ async function handleExportConversation(args) {
     }
 
     // Create output directory
-    const resolvedDir = path.resolve(outputDir);
     if (!fs.existsSync(resolvedDir)) {
-      fs.mkdirSync(resolvedDir, { recursive: true });
+      ensureOutputDir(resolvedDir);
     }
 
     // Generate filename base

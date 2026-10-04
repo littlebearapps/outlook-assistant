@@ -67,6 +67,12 @@ params:
 
 The preview starts with `DRY RUN — nothing was changed.` and lists each attendee, counting and marking the **external** ones: addresses whose domain differs from your own (read from your signed-in account). If your own address can't be read, the external count is shown as unknown rather than guessed. Rooms and resources are listed separately.
 
+### Allowed attendees
+
+If the server has a recipient allowlist (`OUTLOOK_ALLOWED_RECIPIENTS`), every attendee, rooms included, must be on it. One address that isn't allowed refuses the whole event: nothing is created and nobody is invited, and the error lists the blocked addresses. A `dryRun` reports the same refusal. Each attendee must be a single plain email address. The same check applies to the attendee list you set with `manage-event` action=`update`. See [Send Email Safely](../email/send-email-safely.md#recipient-allowlist) for what the allowlist does and doesn't cover.
+
+`create-event` also counts towards the session rate limit when one is set (`OUTLOOK_MAX_CREATE_EVENT_PER_SESSION`, or `OUTLOOK_MAX_EMAILS_PER_SESSION`); previews don't count.
+
 ## Add a Description
 
 > "Set up an offsite planning session with an agenda"

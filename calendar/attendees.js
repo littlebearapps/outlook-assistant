@@ -9,6 +9,9 @@
  * new address. An explicit type always wins.
  */
 
+const { findBlockedRecipients } = require('../utils/safety');
+const { toolError } = require('../utils/tool-error');
+
 const ATTENDEE_TYPES = ['required', 'optional', 'resource'];
 const ATTENDEE_FIELDS = new Set(['email', 'type']);
 
@@ -93,8 +96,41 @@ function buildAttendees(list, current = []) {
   }));
 }
 
+/**
+ * Refuse an attendee list that OUTLOOK_ALLOWED_RECIPIENTS doesn't fully
+ * allow: Graph emails every attendee (rooms and resources included) an
+ * invitation or update carrying the event body. The whole call is refused,
+ * never sent with the blocked attendees dropped, and a dry run reports the
+ * refusal too. Needs no Graph call.
+ * @param {Array<{emailAddress: {address: string}}>} attendees - Graph attendees
+ * @param {{operation?: 'create'|'update', dryRun?: boolean}} [options]
+ * @returns {object|null} - toolError naming the blocked addresses, or null
+ */
+function checkAttendeeAllowlist(
+  attendees,
+  { operation = 'create', dryRun = false } = {}
+) {
+  if (!attendees || attendees.length === 0) return null;
+  const result = findBlockedRecipients(attendees);
+  if (!result) return null;
+
+  const subject = operation === 'update' ? 'Event update' : 'Event';
+  const lead = dryRun
+    ? `DRY RUN — ${subject.toLowerCase()} would be refused`
+    : `${subject} refused`;
+  const outcome = operation === 'update' ? 'changed' : 'created';
+  return toolError(
+    `${lead}: OUTLOOK_ALLOWED_RECIPIENTS does not allow attendee ${result.blocked.join(', ')} (allowed recipients/domains: ${result.allowed.join(', ')}). Graph emails every attendee, so nothing was ${outcome}; the call is refused whole rather than sent without them.`,
+    {
+      nextStep:
+        'Remove those attendees and retry, or ask the user to add them to OUTLOOK_ALLOWED_RECIPIENTS in the server configuration and restart the server.',
+    }
+  );
+}
+
 module.exports = {
   ATTENDEE_TYPES,
+  checkAttendeeAllowlist,
   normaliseAttendeeInput,
   normaliseAttendees,
   buildAttendees,

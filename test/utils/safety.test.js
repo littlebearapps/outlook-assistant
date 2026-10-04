@@ -3,6 +3,7 @@
 const {
   checkRateLimit,
   checkRecipientAllowlist,
+  findBlockedRecipients,
   DRY_RUN_LABEL,
   dryRunResult,
 } = require('../../utils/safety');
@@ -59,5 +60,69 @@ describe('dryRunResult', () => {
     expect(dryRunResult('One line.').content[0].text).toBe(
       'DRY RUN — nothing was changed.\n\nOne line.'
     );
+  });
+});
+
+// With an allowlist set, only a single plain address can be allowed: a
+// string holding several addresses, a display name or stray characters is
+// blocked, even when it ends with an allowed domain.
+describe('findBlockedRecipients address validation', () => {
+  const saved = process.env.OUTLOOK_ALLOWED_RECIPIENTS;
+  beforeEach(() => {
+    process.env.OUTLOOK_ALLOWED_RECIPIENTS = 'example.com,boss@partner.test';
+  });
+  afterEach(() => {
+    if (saved === undefined) delete process.env.OUTLOOK_ALLOWED_RECIPIENTS;
+    else process.env.OUTLOOK_ALLOWED_RECIPIENTS = saved;
+  });
+
+  test.each([
+    'x@elsewhere.test;bob@example.com',
+    'x@elsewhere.test,bob@example.com',
+    'Bob <bob@example.com>',
+    '<bob@example.com>',
+    '"x@elsewhere.test"@example.com',
+    'x@elsewhere.test@example.com',
+    'bob @example.com',
+    'bob@example.com ',
+    'bob\t@example.com',
+    'bob\n@example.com',
+    'bob\u0000@example.com',
+    'bob​@example.com',
+    '@example.com',
+    'bob@',
+    'bob',
+    '',
+    'boss@partner.test;x@elsewhere.test',
+  ])('blocks %j', (address) => {
+    const result = findBlockedRecipients([recipient(address)]);
+    expect(result).not.toBeNull();
+    expect(result.blocked).toHaveLength(1);
+  });
+
+  test.each([
+    'bob@example.com',
+    'Bob.Smith+tag@Example.com',
+    "o'brien@example.com",
+    'boss@partner.test',
+  ])('allows %j', (address) => {
+    expect(findBlockedRecipients([recipient(address)])).toBeNull();
+  });
+
+  test('names the refused string and why', () => {
+    const refusal = checkRecipientAllowlist([
+      recipient('x@elsewhere.test;bob@example.com'),
+    ]);
+    expect(refusal.isError).toBe(true);
+    expect(refusal.content[0].text).toMatch(
+      /"x@elsewhere\.test;bob@example\.com" \(not a single plain email address\)/
+    );
+  });
+
+  test('without an allowlist nothing is blocked', () => {
+    delete process.env.OUTLOOK_ALLOWED_RECIPIENTS;
+    expect(
+      findBlockedRecipients([recipient('x@elsewhere.test;bob@example.com')])
+    ).toBeNull();
   });
 });

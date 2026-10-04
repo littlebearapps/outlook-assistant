@@ -5,7 +5,8 @@ const { randomUUID } = require('crypto');
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { DEFAULT_TIMEZONE } = require('../config');
-const { buildAttendees } = require('./attendees');
+const { buildAttendees, checkAttendeeAllowlist } = require('./attendees');
+const { checkRateLimit } = require('../utils/safety');
 const { toolError, authRequiredError } = require('../utils/tool-error');
 const { previewCreateEvent } = require('./preview');
 
@@ -34,6 +35,8 @@ async function handleCreateEvent(args) {
         isError: true,
       };
     }
+    const allowlistError = checkAttendeeAllowlist(graphAttendees, { dryRun });
+    if (allowlistError) return allowlistError;
   }
 
   // Request body
@@ -54,6 +57,10 @@ async function handleCreateEvent(args) {
   try {
     // dryRun: say who would be invited; create nothing (#274).
     if (dryRun) return await previewCreateEvent(bodyContent);
+
+    // Counts real creates only; unlimited unless a limit is configured.
+    const rateLimitError = checkRateLimit('create-event');
+    if (rateLimitError) return rateLimitError;
 
     // Get access token
     const accessToken = await ensureAuthenticated();

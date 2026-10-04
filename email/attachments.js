@@ -3,14 +3,18 @@
  * Provides tools to list and download email attachments via Microsoft Graph API
  */
 const _https = require('https'); // Reserved for future use
-const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const _config = require('../config'); // Reserved for future use
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { buildMailboxPrefix } = require('../utils/mailbox');
-const { writeClaimedFile } = require('../utils/safe-write');
+const {
+  writeClaimedFile,
+  ensureOutputDir,
+  confineOutputPath,
+  OutputPathError,
+} = require('../utils/safe-write');
 const { toolError, authRequiredError } = require('../utils/tool-error');
 const { log } = require('../utils/logger');
 
@@ -120,7 +124,7 @@ async function handleListAttachments(args) {
  * @param {object} args - Tool arguments
  * @param {string} args.messageId - The ID of the email message
  * @param {string} args.attachmentId - The ID of the attachment
- * @param {string} args.savePath - Optional path to save the file (defaults to current directory)
+ * @param {string} args.savePath - Deprecated alias for outputDir (absolute or ~/…; default: system temp directory)
  * @returns {object} - MCP response with download result
  */
 async function handleDownloadAttachment(args) {
@@ -134,6 +138,18 @@ async function handleDownloadAttachment(args) {
 
   if (!messageId || !attachmentId) {
     return toolError('Error: Both messageId and attachmentId are required');
+  }
+
+  // Determine save location before fetching anything. F-19: default to
+  // os.tmpdir() instead of cwd so attachments don't silently land in the
+  // source tree when the caller forgets to pass outputDir. The directory
+  // must be inside an allowed base; write only to the resolved path.
+  let outputDir;
+  try {
+    outputDir = confineOutputPath(savePath || os.tmpdir());
+  } catch (error) {
+    if (!(error instanceof OutputPathError)) throw error;
+    return toolError(error.message, { nextStep: error.nextStep });
   }
 
   try {
@@ -166,14 +182,10 @@ async function handleDownloadAttachment(args) {
         return toolError('Error: No content found in attachment');
       }
 
-      // Determine save location. F-19: default to os.tmpdir() instead
-      // of cwd so attachments don't silently land in the source tree
-      // when the caller forgets to pass outputDir. Auto-create the
-      // target directory.
+      // Auto-create the target directory.
       // The filename is sender-controlled (GHSA-755c-c45g-69rv): reduce it
       // to a safe basename and never overwrite or follow a symlink.
-      const outputDir = savePath || os.tmpdir();
-      fs.mkdirSync(outputDir, { recursive: true });
+      ensureOutputDir(outputDir);
 
       // Decode base64 and save to file
       const buffer = Buffer.from(contentBytes, 'base64');

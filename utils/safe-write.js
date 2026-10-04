@@ -2,15 +2,298 @@
  * Safe output writes, shared by attachment download, message export and
  * conversation export.
  *
+ * Every output path is first confined (confineOutputPath) to the system temp
+ * directory, ~/Downloads, ~/Documents or OUTLOOK_EXPORT_DIR, with no dotfile
+ * or dot-directory below them. Caller paths must be absolute or start with
+ * `~`; relative paths are refused rather than resolved against the server's
+ * working directory.
+ *
  * Every file the server names itself is written with exclusive create (`wx`),
  * so an existing file is never overwritten and a planted symlink — even a
  * dangling one — is never followed. A clash gets a `-1`, `-2`, … suffix
  * instead, and the result is always confined to `outputDir`.
+ *
+ * A file path the caller names (export savePath) is also created exclusively;
+ * it replaces an existing file only with `overwrite: true`, and never a
+ * symlink, a hard-linked file or anything in a dotted path (writeExplicitFile).
+ * A symlink as the last component of a caller path is not followed unless it
+ * leads to a directory, so a link to a file is refused, not written through.
+ *
+ * Files are created with mode 0600 and directories the server creates with
+ * 0700, set explicitly so the umask can't widen or narrow them; existing
+ * directories keep their mode, and a replaced file keeps the mode it had.
  */
+const crypto = require('crypto');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
+/**
+ * A refused output path. The message says what was refused and why; nextStep
+ * says what to do instead. Handlers turn it into a tool error.
+ */
+class OutputPathError extends Error {
+  constructor(message, nextStep) {
+    super(message);
+    this.name = 'OutputPathError';
+    this.nextStep = nextStep;
+  }
+}
+
+/**
+ * Resolve a path to where it really is: `..` is resolved, and the longest
+ * existing prefix goes through realpath (so symlinked directories are
+ * followed); the not-yet-existing remainder is appended as is.
+ * @param {string} target
+ * @returns {string} Absolute path
+ */
+function resolveReal(target) {
+  const absolute = path.resolve(target);
+  const missing = [];
+  let current = absolute;
+  for (;;) {
+    try {
+      const real = fs.realpathSync.native(current);
+      return missing.length ? path.join(real, ...missing.reverse()) : real;
+    } catch (error) {
+      const parent = path.dirname(current);
+      if (error.code !== 'ENOENT' || parent === current) throw error;
+      missing.push(path.basename(current));
+      current = parent;
+    }
+  }
+}
+
+/**
+ * Resolve an output target without following a symlink in its last
+ * component: the parent goes through resolveReal and the name is appended.
+ * A last-component symlink to a directory is followed (it is used as that
+ * directory, and confined where it leads); any other symlink — to a file,
+ * or dangling — is kept as the link itself, which the writers refuse.
+ * @param {string} absolute - Absolute path
+ * @returns {string}
+ */
+function resolveTarget(absolute) {
+  const normalised = path.resolve(absolute);
+  const parent = path.dirname(normalised);
+  if (parent === normalised) return resolveReal(normalised); // filesystem root
+  const candidate = path.join(resolveReal(parent), path.basename(normalised));
+  let stat;
+  try {
+    stat = fs.lstatSync(candidate);
+  } catch (error) {
+    if (error.code === 'ENOENT') return candidate;
+    throw error;
+  }
+  if (!stat.isSymbolicLink()) return candidate;
+  try {
+    const real = fs.realpathSync.native(candidate);
+    if (fs.statSync(real).isDirectory()) return real;
+  } catch {
+    // Dangling or unreadable: keep the link itself.
+  }
+  return candidate;
+}
+
+/**
+ * Expand a leading `~` to the home directory.
+ * @param {string} p
+ * @returns {string}
+ */
+function expandHome(p) {
+  if (p === '~') return os.homedir();
+  if (p.startsWith('~/') || p.startsWith('~\\')) {
+    return path.join(os.homedir(), p.slice(2));
+  }
+  return p;
+}
+
+/**
+ * The directories exports and downloads may write into, each resolved to
+ * where it really is. Read on every call, so env changes apply at once.
+ * @returns {Array<{label: string, dir: string}>}
+ */
+function allowedOutputBases() {
+  const home = os.homedir();
+  const bases = [
+    { label: 'the system temp directory', dir: os.tmpdir() },
+    { label: '~/Downloads', dir: path.join(home, 'Downloads') },
+    { label: '~/Documents', dir: path.join(home, 'Documents') },
+  ];
+  const exportDir = (process.env.OUTLOOK_EXPORT_DIR || '').trim();
+  if (exportDir) {
+    bases.push({
+      label: 'OUTLOOK_EXPORT_DIR',
+      dir: path.resolve(expandHome(exportDir)),
+    });
+  }
+  return bases.flatMap((base) => {
+    try {
+      return [{ ...base, dir: resolveReal(base.dir) }];
+    } catch {
+      return []; // Unresolvable (e.g. unreadable): not usable as a base
+    }
+  });
+}
+
+/**
+ * Path segments of `child` below `parent`, or null if it is not inside.
+ * @param {string} parent - Resolved directory
+ * @param {string} child - Resolved path
+ * @returns {string[]|null}
+ */
+function segmentsBelow(parent, child) {
+  const rel = path.relative(parent, child);
+  if (rel === '') return [];
+  if (rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) {
+    return null;
+  }
+  return rel.split(path.sep);
+}
+
+/**
+ * Resolve an output file or directory and check it may be written: it must
+ * be inside an allowed base, with no dotfile or dot-directory below that
+ * base. Callers must write to the returned `path`, not the one passed in;
+ * `requested` is the caller's path (absolute, `~` expanded) for messages;
+ * `base` is the allowed directory it is in.
+ * @param {string} target - Path from the caller: absolute, or starting
+ *   with `~`/`~/` for the home directory. Anything else is refused.
+ * @returns {{path: string, requested: string, base: string}}
+ * @throws {OutputPathError}
+ */
+function confineOutputTarget(target) {
+  const absolute = typeof target === 'string' ? expandHome(target) : target;
+  if (typeof absolute !== 'string' || !path.isAbsolute(absolute)) {
+    throw new OutputPathError(
+      `Refusing to write to ${JSON.stringify(target)}: output paths must be absolute (or start with ~/ for the home directory). A relative path would land in the server's working directory.`,
+      'Pass an absolute path, or omit the path to use the system temp directory.'
+    );
+  }
+  const requested = path.resolve(absolute);
+  let resolved;
+  try {
+    resolved = resolveTarget(absolute);
+  } catch (error) {
+    throw new OutputPathError(
+      `Cannot use output path ${JSON.stringify(target)}: ${error.message}`,
+      'Pass a plain absolute path, or omit the path to use the system temp directory.'
+    );
+  }
+  const bases = allowedOutputBases();
+  let dotted = false;
+  for (const base of bases) {
+    const below = segmentsBelow(base.dir, resolved);
+    if (!below) continue;
+    if (!below.some((segment) => segment.startsWith('.'))) {
+      return { path: resolved, requested, base: base.dir };
+    }
+    dotted = true;
+  }
+
+  const baseList = bases.map((b) => `${b.label} (${b.dir})`).join(', ');
+  if (dotted) {
+    throw new OutputPathError(
+      `Refusing to write to ${resolved}: exports and attachment downloads never write to a dotfile or into a dot-directory (a name starting with ".").`,
+      `Choose a path without a dot-prefixed name inside one of: ${baseList}.`
+    );
+  }
+  const exportDirNote = process.env.OUTLOOK_EXPORT_DIR
+    ? ''
+    : ' OUTLOOK_EXPORT_DIR is not set.';
+  throw new OutputPathError(
+    `Refusing to write to ${resolved}: exports and attachment downloads can only write inside ${baseList}.${exportDirNote}`,
+    'Choose a path inside one of those directories, or ask the user to set OUTLOOK_EXPORT_DIR to an absolute directory in the MCP server env and restart the server.'
+  );
+}
+
+/**
+ * confineOutputTarget, returning only the resolved path.
+ * @param {string} target
+ * @returns {string}
+ * @throws {OutputPathError}
+ */
+function confineOutputPath(target) {
+  return confineOutputTarget(target).path;
+}
+
+/**
+ * Whether any segment of a resolved path starts with a dot. With `base`
+ * (the allowed directory the path was confined to), only the segments below
+ * it count, so a dotted OUTLOOK_EXPORT_DIR doesn't make every file in it
+ * look dotted; without one, or if the path isn't below it, every segment
+ * counts.
+ * @param {string} resolved
+ * @param {string} [base]
+ * @returns {boolean}
+ */
+function hasDotSegment(resolved, base) {
+  const segments =
+    (base && segmentsBelow(base, resolved)) || resolved.split(path.sep);
+  return segments.some((segment) => segment.startsWith('.'));
+}
+
 const MAX_ATTEMPTS = 1000;
+
+/** Mode for every file exports and downloads create: owner read/write. */
+const FILE_MODE = 0o600;
+/** Mode for every directory they create: owner only. */
+const DIR_MODE = 0o700;
+
+/**
+ * Set a mode regardless of the umask. Best effort: the mode given at create
+ * time (narrowed by the umask, never widened) stays if the filesystem
+ * refuses chmod.
+ * @param {() => void} chmod
+ */
+function forceMode(chmod) {
+  try {
+    chmod();
+  } catch {
+    // e.g. EPERM on a filesystem without POSIX modes
+  }
+}
+
+/**
+ * Create `filePath` exclusively (`wx`: fails on any existing entry,
+ * including a symlink), set its mode, and write `data`. If the write fails
+ * part-way, the file this call created is removed before rethrowing.
+ * @param {string} filePath
+ * @param {string|Buffer} data
+ * @param {string} [encoding]
+ * @param {number} [mode]
+ */
+function writeNewFile(filePath, data, encoding, mode = FILE_MODE) {
+  const fd = fs.openSync(filePath, 'wx', mode);
+  try {
+    forceMode(() => fs.fchmodSync(fd, mode));
+    fs.writeFileSync(fd, data, { encoding });
+  } catch (error) {
+    fs.closeSync(fd);
+    removePartialFile(filePath);
+    throw error;
+  }
+  fs.closeSync(fd);
+}
+
+/**
+ * Create `dir` and any missing parents with mode 0700. Directories that
+ * already exist keep their mode.
+ * @param {string} dir
+ */
+function ensureOutputDir(dir) {
+  const target = path.resolve(dir);
+  const first = fs.mkdirSync(target, { recursive: true, mode: DIR_MODE });
+  if (!first) return; // Nothing was created
+  const below = segmentsBelow(first, target) || [];
+  let current = first;
+  forceMode(() => fs.chmodSync(current, DIR_MODE));
+  for (const segment of below) {
+    current = path.join(current, segment);
+    const created = current;
+    forceMode(() => fs.chmodSync(created, DIR_MODE));
+  }
+}
 
 /**
  * Like fs.existsSync, but a dangling symlink counts as existing (existsSync
@@ -110,13 +393,10 @@ function writeClaimedFile(outputDir, base, extension, claimed, data, encoding) {
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const candidate = claimUniquePath(outputDir, base, extension, seen);
     try {
-      fs.writeFileSync(candidate, data, { encoding, flag: 'wx' });
+      writeNewFile(candidate, data, encoding);
       return candidate;
     } catch (error) {
-      if (error.code !== 'EEXIST') {
-        removePartialFile(candidate);
-        throw error;
-      }
+      if (error.code !== 'EEXIST') throw error;
     }
   }
   throw new Error(`Too many files named ${base} in ${outputDir}`);
@@ -136,7 +416,8 @@ function makeClaimedDir(outputDir, base) {
   for (let suffix = 0; suffix < MAX_ATTEMPTS; suffix++) {
     const candidate = candidatePath(root, base, '', suffix);
     try {
-      fs.mkdirSync(candidate);
+      fs.mkdirSync(candidate, { mode: DIR_MODE });
+      forceMode(() => fs.chmodSync(candidate, DIR_MODE));
       return candidate;
     } catch (error) {
       if (error.code !== 'EEXIST') throw error;
@@ -145,7 +426,92 @@ function makeClaimedDir(outputDir, base) {
   throw new Error(`Too many directories named ${base} in ${root}`);
 }
 
+/**
+ * The refusal for an explicit file path that already exists.
+ * @param {string} filePath
+ * @returns {OutputPathError}
+ */
+function fileExistsError(filePath) {
+  return new OutputPathError(
+    `File already exists: ${filePath}. Nothing was written.`,
+    'Pass overwrite: true to replace it, choose a different savePath, or pass a directory as savePath so a new, unique file name is used.'
+  );
+}
+
+/**
+ * Write `data` to a file path the caller chose (already confined). A new file
+ * is created exclusively. An existing one is replaced only with
+ * `overwrite: true`, and only if it is a regular file with a single link and
+ * no segment of its path (below `base`, when given) starts with a dot. The replacement is written to a
+ * temporary file beside it and renamed over it, so a link swapped in after
+ * the check is replaced, not followed.
+ * @param {string} filePath - Resolved target path
+ * @param {string|Buffer} data - File contents
+ * @param {{overwrite?: boolean, encoding?: string, displayPath?: string, base?: string}} [options]
+ *   displayPath: the path as the caller gave it, used in refusals;
+ *   base: the allowed directory from confineOutputTarget (dot check below it)
+ * @returns {{path: string, replaced: boolean}}
+ * @throws {OutputPathError} When the file exists and may not be replaced
+ */
+function writeExplicitFile(
+  filePath,
+  data,
+  { overwrite = false, encoding, displayPath = filePath, base } = {}
+) {
+  const dir = path.dirname(filePath);
+  ensureOutputDir(dir);
+  try {
+    writeNewFile(filePath, data, encoding);
+    return { path: filePath, replaced: false };
+  } catch (error) {
+    if (error.code !== 'EEXIST') throw error;
+  }
+
+  if (!overwrite) throw fileExistsError(displayPath);
+  if (hasDotSegment(filePath, base)) {
+    throw new OutputPathError(
+      `Refusing to replace ${displayPath}: files that are dotfiles or inside a dot-directory are never replaced, even with overwrite: true. Nothing was written.`,
+      'Choose a different savePath, or pass a directory so a new, unique file name is used.'
+    );
+  }
+  const stat = fs.lstatSync(filePath);
+  let problem = null;
+  if (stat.isSymbolicLink()) problem = 'it is a symbolic link';
+  else if (!stat.isFile()) problem = 'it is not a regular file';
+  else if (stat.nlink > 1) problem = 'it has other hard links';
+  if (problem) {
+    throw new OutputPathError(
+      `Refusing to replace ${displayPath}: ${problem}. Nothing was written.`,
+      'Choose a different savePath, or pass a directory so a new, unique file name is used.'
+    );
+  }
+
+  const temp = path.join(
+    dir,
+    `.${path.basename(filePath)}.${crypto.randomBytes(6).toString('hex')}.tmp`
+  );
+  try {
+    // The replacement keeps the mode the file had.
+    writeNewFile(temp, data, encoding, stat.mode & 0o777);
+    fs.renameSync(temp, filePath);
+  } catch (error) {
+    removePartialFile(temp);
+    throw error;
+  }
+  return { path: filePath, replaced: true };
+}
+
 module.exports = {
+  FILE_MODE,
+  DIR_MODE,
+  ensureOutputDir,
   writeClaimedFile,
   makeClaimedDir,
+  writeExplicitFile,
+  confineOutputPath,
+  confineOutputTarget,
+  allowedOutputBases,
+  fileExistsError,
+  pathEntryExists,
+  OutputPathError,
 };

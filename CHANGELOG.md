@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.14.0] - 2026-10-04
+
+Security and safety release. Upgrading is recommended for everyone on 3.13.0
+or earlier: it fixes three advisories (see Security below).
+
 ### Upgrade notes
 
 What you'll notice after upgrading:
@@ -35,8 +40,21 @@ What you'll notice after upgrading:
   `OUTLOOK_DEBUG=true` for the troubleshooting detail you used to see, with
   addresses redacted.
 - **More tools count as destructive.** `create-event`, `mailbox-settings`,
-  `manage-category` and `manage-focused-inbox` are now marked destructive, so
-  clients that prompt on destructive tools will prompt for them too.
+  `manage-category`, `manage-focused-inbox` and `export` are now marked
+  destructive, so clients that prompt on destructive tools will prompt for
+  them too.
+- **The recipient allowlist covers more.** With `OUTLOOK_ALLOWED_RECIPIENTS`
+  set, `draft` reply, reply-all, forward and send, and the attendees of
+  `create-event` and `manage-event` update, are checked too, and each entry
+  must be a single plain address. `create-event` now counts towards
+  `OUTLOOK_MAX_EMAILS_PER_SESSION`.
+- **`export` no longer replaces files, and writes only to known folders.** An
+  existing file at `savePath` is kept unless you pass `overwrite: true`.
+  Exports and attachment downloads go to the system temp folder,
+  `~/Downloads`, `~/Documents` or `OUTLOOK_EXPORT_DIR`; relative paths are
+  refused.
+- **`dryRun: true` is refused where there's no preview.** Instead of running
+  for real, those calls return an error and change nothing.
 - **Cursor now loads the plugin properly.** If sign-in failed with
   AADSTS900023 in Cursor on v3.13.0, update the plugin. Cursor shows its own
   generic prompt rather than the hook's reason, so don't allowlist Outlook's
@@ -243,6 +261,31 @@ What you'll notice after upgrading:
 
 ### Security
 
+- **The recipient allowlist can't be bypassed**
+  ([GHSA-4f33-42r6-jmmm](https://github.com/littlebearapps/outlook-assistant/security/advisories/GHSA-4f33-42r6-jmmm)).
+  `OUTLOOK_ALLOWED_RECIPIENTS` was checked on `send-email`, `draft` create
+  and rule forwarding, but not on `draft` reply, reply-all and send (which
+  could send a draft's existing recipients), nor on calendar invitations,
+  and a string like `a@x.com;b@allowed.com` could match an allowed entry.
+  Draft sends, replies and forwards now re-check every recipient, event
+  attendees on `create-event` and `manage-event` update are checked, only a
+  single plain address can match, and `create-event` counts towards the
+  session cap.
+- **`export` can't overwrite files or write outside known folders**
+  ([GHSA-h97f-q9gv-8hx7](https://github.com/littlebearapps/outlook-assistant/security/advisories/GHSA-h97f-q9gv-8hx7)).
+  An explicit `savePath` replaced any existing file with email-derived
+  content, and `outputDir` could point anywhere. Existing files are now kept
+  unless `overwrite: true` is passed (never a symlink, hard link or
+  dotfile), writes are confined to the system temp folder, `~/Downloads`,
+  `~/Documents` or `OUTLOOK_EXPORT_DIR`, `~` is expanded and relative paths
+  are refused, symlinked paths aren't followed, and exported and downloaded
+  files are created with private modes (0600, folders 0700).
+- **`dryRun: true` never runs a write**
+  ([GHSA-2jfv-ggc3-9xph](https://github.com/littlebearapps/outlook-assistant/security/advisories/GHSA-2jfv-ggc3-9xph)).
+  Several schemas accepted `dryRun` but only some actions honoured it, so a
+  requested preview of, for example, `draft` send or delete, or
+  `manage-rules` reorder or delete, ran for real. Any action that can't
+  preview now refuses `dryRun` with an error and changes nothing.
 - **Sign-in codes, tokens and secrets stay out of logs** (#278).
   - The device-code user code is no longer written to stderr; it reaches you
     only through the tool result. Access and refresh tokens, device codes

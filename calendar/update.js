@@ -30,7 +30,11 @@
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { DEFAULT_TIMEZONE } = require('../config');
-const { normaliseAttendees, buildAttendees } = require('./attendees');
+const {
+  normaliseAttendees,
+  buildAttendees,
+  checkAttendeeAllowlist,
+} = require('./attendees');
 const { toolError, authRequiredError } = require('../utils/tool-error');
 const { dryRunResult } = require('../utils/safety');
 
@@ -114,6 +118,12 @@ async function handleUpdateEvent(args) {
       };
     }
     patch.attendees = buildAttendees(entries);
+    // Graph emails every attendee on the new list, so check them all.
+    const allowlistError = checkAttendeeAllowlist(patch.attendees, {
+      operation: 'update',
+      dryRun,
+    });
+    if (allowlistError) return allowlistError;
     if (entries.some((entry) => !entry.type)) untypedAttendees = entries;
   }
 

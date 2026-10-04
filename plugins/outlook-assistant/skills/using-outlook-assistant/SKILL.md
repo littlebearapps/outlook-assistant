@@ -4,7 +4,7 @@ description: Safety, privacy and efficient-use rules for the Outlook Assistant (
 license: MIT
 compatibility: Needs the Outlook Assistant MCP server (@littlebearapps/outlook-assistant, v3.14.0 or later), which the outlook-assistant plugin installs and runs locally with Node.js 18.18 or later.
 metadata:
-  version: '3.13.0'
+  version: '3.14.0'
   author: Little Bear Apps
   homepage: https://github.com/littlebearapps/outlook-assistant
 ---
@@ -52,7 +52,7 @@ Every tool and action has one class. The server, the plugin hook and these rules
 | `draft`                 |                   | create, update, reply, reply-all, forward      | send                            | delete      |                         |
 | `update-email`          |                   | mark-read, mark-unread, flag, unflag, complete |                                 |             |                         |
 | `attachments`           | list, view        | download                                       |                                 |             |                         |
-| `export`                |                   | all                                            |                                 |             |                         |
+| `export`                |                   |                                                |                                 | all         |                         |
 | `get-mail-tips`         | all               |                                                |                                 |             |                         |
 | `folders`               | list, stats       | create, move                                   |                                 | delete      |                         |
 | `manage-rules`          | list              |                                                |                                 | delete      | create, update, reorder |
@@ -67,7 +67,7 @@ Every tool and action has one class. The server, the plugin hook and these rules
 
 <!-- risk-table:end -->
 
-`dryRun: true` returns a preview and changes nothing on `send-email`, `create-event`, every `manage-event` action, `draft` create, `manage-rules` create and update, `mailbox-settings` set-auto-replies, and `folders` and `manage-contact` delete. Elsewhere there is no preview: describe the change and confirm it instead.
+`dryRun: true` returns a preview and changes nothing on `send-email`, `create-event`, every `manage-event` action, `draft` create, `manage-rules` create and update, `mailbox-settings` set-auto-replies, and `folders` and `manage-contact` delete. Every other call refuses `dryRun: true` and runs nothing (`dryRun is not supported for …`), so don't pass it there: describe the change and confirm it instead.
 
 ## Where to read next
 
@@ -109,5 +109,7 @@ A good confirmation is one short message the user can approve without opening Ou
 
 - A result with `isError: true` is a failure, not data. Read its "Next step" and follow it.
 - `Authentication required`: sign in with `auth`, then retry the read. Retry a write only after checking it didn't already happen (rule 4).
-- `Rate limit reached`, `Recipient not allowed`, `Rule refused`, read-only mode, or a 403: stop and tell the user (rule 5).
+- `Rate limit reached`, `Recipient not allowed`, `Draft not sent`, `Rule refused`, `Event refused`, read-only mode, or a 403: stop and tell the user (rule 5).
+- `dryRun is not supported`: nothing ran. Describe the change, confirm it, then make the call without `dryRun`.
+- `File already exists` or `Refusing to write to …`: nothing was written. Ask the user for another path in an allowed folder (see [references/privacy.md](references/privacy.md)); never add `overwrite: true` on your own.
 - A search whose `_meta.searchMetadata.droppedFilters` isn't empty returned broader results than you asked for. Narrow it again before acting on them.

@@ -1,6 +1,6 @@
 # CLAUDE.md - Outlook Assistant
 
-MCP server for Microsoft Outlook via Graph API (v3.13.0). 22 tools across 9 modules. Runtime Node ≥ 18.18; dev tooling (lint-staged hook, `npm run inspect`) needs Node ≥ 22.22.1.
+MCP server for Microsoft Outlook via Graph API (v3.14.0). 22 tools across 9 modules. Runtime Node ≥ 18.18; dev tooling (lint-staged hook, `npm run inspect`) needs Node ≥ 22.22.1.
 
 ## Commands
 
@@ -49,20 +49,21 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 - **MCP annotations** on all 22 tools: all four hints set explicitly and derived from the risk-class map (`utils/risk-classes.js`: `read`/`reversible`/`outward`/`destructive`/`persistent` per tool and action), plus a top-level `title`. `destructiveHint` = any outward, destructive or persistent action; `openWorldHint` = surfaces untrusted content (#92) or reaches other people; `idempotentHint` = read-only or the tool's `idempotent` flag. A test fails on any unclassified tool or action (#270, #277)
 - **Read-only mode** (`OUTLOOK_READ_ONLY`, plugin setting `read_only`, #271): `request-handler.js` refuses every call whose risk class isn't `read` after validation and before the handler (`utils/read-only.js`), dry runs included; unclassified calls fail closed; only `auth` authenticate/device-code-complete are exempt (sign-in). Calls that leave `action` out (or null) are classified by the map's `defaultAction`; `test/dispatcher/read-classes-dont-write.test.js` proves no `read` call writes
 - **Server `instructions`** (`utils/server-instructions.js`, #271): hard rules in the first 512 characters, under 2,000 in total; `send-email` and `create-event` carry `_meta["anthropic/requiresUserInteraction"]` (risk-map flag via `riskMeta`, never on mixed read/write tools)
-- **`dryRun` previews** (#274): `send-email`, `draft` create, `manage-rules` create/update, `create-event`, every `manage-event` action, `mailbox-settings` set-auto-replies, `folders` delete, `manage-contact` delete. The #274 previews start `DRY RUN — nothing was changed.` via `dryRunResult` (`utils/safety.js`); calendar ones (`calendar/preview.js`) may read but never write, and say who would be emailed with an external count
+- **`dryRun` previews** (#274): `send-email`, `draft` create, `manage-rules` create/update, `create-event`, every `manage-event` action, `mailbox-settings` set-auto-replies, `folders` delete, `manage-contact` delete. The #274 previews start `DRY RUN — nothing was changed.` via `dryRunResult` (`utils/safety.js`); calendar ones (`calendar/preview.js`) may read but never write, and say who would be emailed with an external count. That list is `DRY_RUN_ACTIONS` (`utils/risk-classes.js`): `request-handler.js` refuses `dryRun: true` on any other call before the handler (handlers there ignore it and would really write) and stamps `_meta.dryRun` plus the label on supported previews; `test/dispatcher/dry-run-honoured.test.js` checks every tool/action
 - **get-mail-tips**: pre-send recipient validation (out-of-office, mailbox full, delivery restrictions); `_meta.issues` lists each flag per recipient
 - **send-email**: `dryRun`, `checkRecipients` (mail tips), session rate limiting (`OUTLOOK_MAX_EMAILS_PER_SESSION`), recipient allowlist (`OUTLOOK_ALLOWED_RECIPIENTS`). With `checkRecipients`, a failed check refuses the send, and a flagged recipient (out of office, mailbox full, delivery restricted, external, group with external members) refuses it until `acknowledgeWarnings: true` (#272); tips never go in the `sendMail` payload
-- **draft**: `dryRun` on create, `checkRecipients` (mail tips), recipient allowlist, rate limiting. Send action shares limit with `send-email`. `update`/`send`/`delete` look the ID up first and refuse anything that isn't an unsent draft (`assertIsDraft` in `email/draft.js`).
+- **draft**: `dryRun` on create, `checkRecipients` (mail tips), recipient allowlist (create/update/forward; reply/reply-all check the generated recipients and delete a refused draft; send re-checks the draft's current to/cc/bcc), rate limiting (create/update/reply/reply-all/forward). Send action shares limit with `send-email`. `update`/`send`/`delete` look the ID up first and refuse anything that isn't an unsent draft (`assertIsDraft` in `email/draft.js`).
 - **manage-rules**: `dryRun` on create/update, rate limiting (`OUTLOOK_MAX_MANAGE_RULES_PER_SESSION`), recipient allowlist on forwardTo/redirectTo, no `permanentDelete` (too dangerous for AI). An allowlist-blocked forward/redirect refuses the whole rule or update, dry runs included (`checkRuleRecipients`, #273). The limit counts real writes only: create/update (not dry runs), reorder, and delete once the rule is found (#273, #279). Supports 12 conditions, 9 actions, and exceptions.
-- **create-event**: each call sends a fresh Graph `transactionId`, so a 429 retry can't book the meeting twice (#280)
-- **manage-event**: every action is `outward` (updates, declines, cancellations and organiser deletes notify attendees). `accept` is deliberately omitted — Microsoft Graph doesn't expose an `accept` verb in a way that works across personal/M365 reliably; use the Outlook UI to accept invitations.
+- **create-event**: recipient allowlist on every attendee (rooms included; the whole call is refused, dry runs report it; `checkAttendeeAllowlist` in `calendar/attendees.js`), rate limiting (`OUTLOOK_MAX_CREATE_EVENT_PER_SESSION`, else `OUTLOOK_MAX_EMAILS_PER_SESSION`; real creates only); each call sends a fresh Graph `transactionId`, so a 429 retry can't book the meeting twice (#280)
+- **Recipient allowlist scope** (`findBlockedRecipients` in `utils/safety.js`): send-email to/cc/bcc; draft create/update/forward/reply/reply-all and the draft's current to/cc/bcc on send; rule forwardTo/redirectTo; create-event attendees; the attendee list set by manage-event update. With an allowlist set, anything that isn't one plain address (exactly one `@`; no `;`, `,`, `<>`, quotes, brackets, whitespace or control/format characters) is blocked. Not covered: manage-event cancel/decline messages and organiser deletes, updates sent to attendees already on an event when other fields change, and `mailbox-settings` automatic replies
+- **manage-event**: every action is `outward` (updates, declines, cancellations and organiser deletes notify attendees). `update` with `attendees` checks the whole new list against the recipient allowlist. `accept` is deliberately omitted — Microsoft Graph doesn't expose an `accept` verb in a way that works across personal/M365 reliably; use the Outlook UI to accept invitations.
 - **Shared mailboxes**: off unless `OUTLOOK_SHARED_MAILBOX` is set (`read` = read-only shared access); addresses must be printable-ASCII emails (`utils/mailbox.js`); sending from a shared mailbox is never supported (`Mail.Send.Shared` not requested)
 - **Path/ID hardening** (`utils/graph-api.js`): `.`/`..` segments in resource paths (incl. percent-encoded, `$batch`, relative delta tokens) are refused before any request; full URLs (deltaToken/nextLink) must be `https://graph.microsoft.com`, so the token never leaves Graph
-- **File writes** (`attachments` download, `export` incl. conversations; all via `utils/safe-write.js`): server-chosen names are sanitised, written with exclusive create (no overwrite, no symlink following, `-1`, `-2`, … suffixes) and confined to `outputDir` (default system tmpdir); a write that fails part-way removes the partial file; only an explicit single-message `export` file path is written as given
+- **File writes** (`attachments` download, `export` incl. conversations; all via `utils/safe-write.js`): caller paths must be absolute or start with `~`/`~/` (relative paths are refused); every output path is resolved (realpath of the parent; a last-component symlink is followed only to a directory, otherwise kept and refused) and must sit inside the system tmpdir (default), `~/Downloads`, `~/Documents` or `OUTLOOK_EXPORT_DIR`, with no dot-prefixed segment below them (`confineOutputPath`); server-chosen names are sanitised and written with exclusive create (no overwrite, no symlink following, `-1`, `-2`, … suffixes) inside that directory; an explicit single-message `export` `savePath` file is created exclusively and replaced only with `overwrite: true`, never if it is a symlink, hard-linked or has a dotted segment below its allowed directory (`writeExplicitFile`, temp file + rename keeping the original mode); files are created 0600 and server-created directories 0700 (explicit fchmod/chmod, umask-independent; `ensureOutputDir`); a write that fails part-way removes the partial file
 - **Logs** (`utils/logger.js`, #278): stderr only. By default one line per tool call (tool, action, outcome, ms; never arguments); `OUTLOOK_DEBUG` adds detail. `redact()` masks addresses, long IDs and credentials at every level. New logging goes through `log.info` (PII-free lines only) or `log.debug`, not `console.*`
 - **list-events**: invalid `startAfter`/`startBefore`/`subject` return `isError` before any Graph call
 - **Plugin skill and hook** (#282, #283; client-side, plugin installs only): the `using-outlook-assistant` skill restates the hard rules; `outlook-gate.js` asks with a plain-English reason before outward, destructive or persistent calls (level: Claude Code `confirm_level` setting, elsewhere `OUTLOOK_CONFIRM_LEVEL`) and marks retrieved content as untrusted. It runs in Claude Code, Copilot CLI / VS Code and Cursor, which differ in tool names, prompts and fail-open/closed: see [`docs/how-to/getting-started/supported-clients.md`](docs/how-to/getting-started/supported-clients.md), [`docs/cross-client-matrix.md`](docs/cross-client-matrix.md) and the maintenance rule
-- 7 tools are `readOnlyHint: true`; 10 are `destructiveHint: true` (`send-email`, `draft`, `create-event`, `manage-event`, `manage-rules`, `mailbox-settings`, `folders`, `manage-contact`, `manage-category`, `manage-focused-inbox`), so annotation-aware clients confirm them
+- 7 tools are `readOnlyHint: true`; 11 are `destructiveHint: true` (`send-email`, `draft`, `create-event`, `manage-event`, `manage-rules`, `mailbox-settings`, `folders`, `manage-contact`, `manage-category`, `manage-focused-inbox`, `export`), so annotation-aware clients confirm them
 
 ## Key Files
 
@@ -71,7 +72,7 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 | `index.js` | Entry point: CLI flags, startup warnings, connects `createServer()` to the stdio transport |
 | `tools.js` | Tool registry: every module's tools combined into `TOOLS` (tests import it) |
 | `server.js` | `createServer()`: SDK `Server` with `tools: {listChanged: false}` and the dispatcher |
-| `request-handler.js` | MCP request dispatcher: `tools/list` (adds `riskMeta` `_meta`) and `tools/call` (coerce → read-only gate → handler → one log line). Protocol errors are thrown as JSON-RPC errors (-32601 unknown method, -32602 unknown tool, -32603 internal); tool failures return visible `isError` content |
+| `request-handler.js` | MCP request dispatcher: `tools/list` (adds `riskMeta` `_meta`) and `tools/call` (coerce → read-only gate → unsupported-`dryRun` gate → handler → one log line). Protocol errors are thrown as JSON-RPC errors (-32601 unknown method, -32602 unknown tool, -32603 internal); tool failures return visible `isError` content |
 | `utils/risk-classes.js` | Risk-class map per tool/action and `DRY_RUN_ACTIONS`; derives every tool's annotations (`toolMetadata`), read-only mode and the plugin hook's `risk-map.json` |
 | `plugins/outlook-assistant/` | Marketplace plugin: one manifest per client (`.claude-plugin/`, root `plugin.json` + `mcp.json`, `.cursor-plugin/`), the hook and the skill. Layout: [`docs/architecture.md`](docs/architecture.md); upkeep: [`.claude/rules/plugin-and-skill-maintenance.md`](.claude/rules/plugin-and-skill-maintenance.md) |
 | `plugins/outlook-assistant/hooks/outlook-gate.js` | Plugin hook for Claude Code (`hooks/hooks.json`), Copilot CLI/VS Code (`com.github.copilot/hooks/hooks.json`, arg `copilot`) and Cursor (`hooks/hooks-cursor.json` via `.cursor-plugin/plugin.json`, arg `cursor`): before outward/destructive/persistent calls, `ask` with a plain-English reason (`describe()`; unknown tool or action asks), after untrusted-content tools a note; classifies with the generated `hooks/risk-map.json` |
@@ -96,7 +97,7 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 | `calendar/preview.js` | `dryRun` previews for `create-event` and `manage-event` cancel/decline/delete (attendees, external count) |
 | `email/mail-tips.js` | Pre-send recipient validation |
 | `utils/safety.js` | Rate limiter, allowlist, dry-run previews (`dryRunResult`) |
-| `utils/safe-write.js` | Shared exclusive-create, `outputDir`-confined file writer (attachments, export) |
+| `utils/safe-write.js` | Shared file writer (attachments, export): output-path confinement to the allowed folders, exclusive create, `overwrite`-gated replace of an explicit `savePath`, 0600/0700 modes |
 | `utils/field-presets.js` | Optimised field selections per operation |
 
 ## Configuration
@@ -106,8 +107,8 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 OUTLOOK_CLIENT_ID=your-client-id           # or save at runtime: auth action=authenticate clientId=<id>
 OUTLOOK_CLIENT_SECRET=your-secret-VALUE    # Browser flow only; NOT the Secret ID!
 USE_TEST_MODE=false
-OUTLOOK_MAX_EMAILS_PER_SESSION=10          # Optional: default per-session cap for send-email, draft, manage-rules (per tool: OUTLOOK_MAX_<TOOL>_PER_SESSION)
-OUTLOOK_ALLOWED_RECIPIENTS=example.com     # Optional: restrict recipients
+OUTLOOK_MAX_EMAILS_PER_SESSION=10          # Optional: default per-session cap for send-email, draft, manage-rules, create-event (per tool: OUTLOOK_MAX_<TOOL>_PER_SESSION)
+OUTLOOK_ALLOWED_RECIPIENTS=example.com     # Optional: restrict recipients and event attendees (scope: Safety Controls)
 OUTLOOK_READ_ONLY=true                     # Optional: refuse every non-read tool call (true|1|yes|on; unrecognised = on)
 OUTLOOK_IMMUTABLE_IDS=true                 # Optional: IDs persist through folder moves
 OUTLOOK_AUTH_METHOD=device-code            # Optional: default auth method (device-code|browser)
@@ -117,6 +118,7 @@ OUTLOOK_SHARED_MAILBOX=read                # Optional, opt-in: read|true (work/s
 OUTLOOK_SEARCH_SCAN_LIMIT=500              # Optional: client-side search fallback window (max 5000)
 OUTLOOK_REQUEST_TIMEOUT_MS=60000           # Optional: per-attempt Graph inactivity timeout (ms with no data; not an overall deadline)
 OUTLOOK_DEBUG=true                         # Optional: detailed stderr logs (utils/logger.js; addresses/IDs redacted). Default: one line per tool call, no arguments
+OUTLOOK_EXPORT_DIR=~/mail-archive          # Optional: extra folder export/attachment downloads may write to (besides tmpdir, ~/Downloads, ~/Documents)
 OUTLOOK_CONFIRM_LEVEL=outward              # Plugin hook only, not read by the server: outward|all-writes|off (unknown = outward). Claude Code uses the confirm_level setting instead
 ```
 
@@ -149,7 +151,7 @@ Common errors (auth, device code, search, timezones) and fixes live in [`docs/tr
 ## Testing
 
 ```bash
-npm test                    # Jest unit tests (93 suites / 2607 tests at v3.14.0-dev)
+npm test                    # Jest unit tests (100 suites / 2846 tests at v3.14.0)
 npm run lint                # ESLint (0 errors expected)
 npm run format:check        # Prettier (CI runs this)
 node scripts/e2e-stdio.js <tool> '<argsJson>'  # Fresh stdio server: initialize + one tools/call

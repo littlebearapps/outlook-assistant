@@ -23,12 +23,12 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 | `draft` | Create, update, send, delete, reply, forward drafts | **destructive** | `action` (required), `id`, `to`, `subject`, `body`, `comment`, `dryRun`, `checkRecipients` |
 | `get-mail-tips` | Pre-send recipient validation | read-only | `recipients`, `tipTypes` |
 | `update-email` | Mark read/unread, flag/unflag/complete | idempotent | `action` (required), `id`, `ids`, `dueDateTime`, `startDateTime`, `sharedMailbox` (alias `email`) |
-| `attachments` | List, view, or download attachments | moderate write | `action` (`list`/`view`/`download`), `messageId`, `attachmentId`, `outputDir` (download; default system tmpdir), `sharedMailbox` (alias `email`) |
-| `export` | Export emails to various formats | moderate write | `target` (`message`/`messages`/`conversation`/`mime`), `id`, `emailIds`, `searchQuery`/`query`, `conversationId`, `format`, `outputDir` (or `savePath` for a single message), `sharedMailbox` (alias `email`) |
+| `attachments` | List, view, or download attachments | moderate write | `action` (`list`/`view`/`download`), `messageId`, `attachmentId`, `outputDir` (download; absolute or `~/…`; default system tmpdir), `sharedMailbox` (alias `email`) |
+| `export` | Export emails to various formats | **destructive** | `target` (`message`/`messages`/`conversation`/`mime`), `id`, `emailIds`, `searchQuery`/`query`, `conversationId`, `format`, `outputDir` (or `savePath` for a single message; absolute or `~/…`), `overwrite` (replace an existing `savePath` file; default false), `sharedMailbox` (alias `email`) |
 
 > **`sharedMailbox` is opt-in (work/school only).** Set `OUTLOOK_SHARED_MAILBOX=read` (read: `Mail.Read.Shared`) or `=true` (read and organise: adds `Mail.ReadWrite.Shared`), restart, then run `auth action=authenticate force=true`. While it's unset, `sharedMailbox` calls are refused with these steps, and `access-shared-mailbox` reads only well-known folder names or folder IDs, as before (`listFolders` and custom/nested names need the setting).
 >
-> **Downloads and exports stay in the output directory.** Server-chosen filenames are sanitised, written with exclusive create (an existing file or symlink is never overwritten or followed; a clash gets a numbered suffix) and confined to `outputDir`. IDs containing `.` or `..` path segments are refused before any Graph request.
+> **Downloads and exports stay in allowed folders.** Every output path must be absolute (a leading `~` means the home directory; relative paths are refused) and resolve to somewhere inside the system temp directory (the default), `~/Downloads`, `~/Documents` or `OUTLOOK_EXPORT_DIR`, with no dot-prefixed name below them; anything else is refused. Server-chosen filenames are sanitised, written with exclusive create (an existing file or symlink is never overwritten or followed; a clash gets a numbered suffix) and confined to the chosen folder. An explicit `savePath` file is never replaced unless `overwrite: true` is passed, and never if it is a symlink, has other hard links, or is a dotfile or inside a dot-directory below the allowed folder. Files are created with mode `0600` and new folders `0700`; a replaced file keeps its mode. IDs containing `.` or `..` path segments are refused before any Graph request.
 >
 > **`sharedMailbox` is read/organise only.** `send-email` and `draft` (create/update/send/delete, reply, reply-all, forward) deliberately take no `sharedMailbox` parameter — they always act on the signed-in user's own mailbox, and `Mail.Send.Shared` is not requested.
 
@@ -79,7 +79,7 @@ Flag dates: a `dueDateTime`/`startDateTime` with `Z` or a ±hh:mm offset is kept
 | `reply-all` | Create reply-all draft from message | `id` |
 | `forward` | Create forward draft with new recipients | `id`, `to` |
 
-> **Draft safety**: `dryRun: true` previews without saving (create only). `checkRecipients: true` validates recipients via mail-tips before saving. The `send` action shares rate limits with `send-email`. Recipient allowlist applies to create, update, and forward. `update`, `send` and `delete` check the `id` first and refuse anything that is not an unsent draft, so a received or sent message is never edited, deleted or re-sent. `comment` and `body` are mutually exclusive on reply/forward.
+> **Draft safety**: `dryRun: true` previews without saving (create only). `checkRecipients: true` validates recipients via mail-tips before saving. The `send` action shares rate limits with `send-email`. Recipient allowlist applies to create, update, forward, reply and reply-all (a reply draft with a recipient outside it is deleted and refused), and send re-checks the draft's current to/cc/bcc. Reply, reply-all and forward count towards the draft rate limit. `update`, `send` and `delete` check the `id` first and refuse anything that is not an unsent draft, so a received or sent message is never edited, deleted or re-sent. `comment` and `body` are mutually exclusive on reply/forward.
 
 ### Export formats
 
@@ -99,8 +99,8 @@ Flag dates: a `dueDateTime`/`startDateTime` with `Z` or a ±hh:mm offset is kept
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
 | `list-events` | List events: upcoming by default, or past/current/by name with filters (times as canonical UTC ISO-8601 + labelled local) | read-only | `count` (default 10, max 100), `startAfter`/`startBefore` (ISO 8601 with `Z` or ±hh:mm, normalised to UTC), `subject` (case-insensitive contains, ≤ 255 chars). Supplying any filter replaces the default `start ≥ now` bound and filters are AND-ed; backward-looking searches (`startBefore` alone, or `subject` alone) return newest first. Invalid values return a tool error before any Graph call |
-| `create-event` | Create new event | **destructive** (sends invitations) | `subject`, `start`, `end`, `attendees` (email strings are required attendees; `{email, type}` objects set `type` to `required`/`optional`/`resource`), `body`, `dryRun` (preview who would be invited, with an external count, without creating anything). Times use configured timezone (default: Australia/Melbourne; override with `OUTLOOK_DEFAULT_TIMEZONE` env var) — omit `Z` suffix for local time |
-| `manage-event` | Update, decline, cancel, or delete (delete removes the event and Graph doesn't document a guaranteed recovery path; deleting a meeting you organised that has attendees emails them a cancellation; use `cancel` with a `comment` to control the message) | **destructive** | `action` (`update`/`decline`/`cancel`/`delete`), `eventId` (or alias `id`), `comment` (decline/cancel; omitted if not given), `sendResponse` (decline only; `false` declines without notifying the organiser), `subject`/`start`/`end`/`attendees`/`body`/`location`/`isOnlineMeeting`/`sensitivity`/`showAs`/`importance`/`categories`/`reminderMinutesBeforeStart` (update only — only the fields you pass are changed; `attendees` is a full replacement list of email strings or `{email, type}` objects, and an entry without a type keeps the type that address already has, new addresses being required), `dryRun` (all actions; nothing is changed or sent: decline/cancel/delete read the event and say who would be emailed, with an external count; update previews the PATCH, reading the event first when attendees are untyped so the preview shows the resolved types) |
+| `create-event` | Create new event | **destructive** (sends invitations) | `subject`, `start`, `end`, `attendees` (email strings are required attendees; `{email, type}` objects set `type` to `required`/`optional`/`resource`), `body`, `dryRun` (preview who would be invited, with an external count, without creating anything). With `OUTLOOK_ALLOWED_RECIPIENTS` set, every attendee must be allowed or nothing is created; counts towards `OUTLOOK_MAX_CREATE_EVENT_PER_SESSION` (else `OUTLOOK_MAX_EMAILS_PER_SESSION`). Times use configured timezone (default: Australia/Melbourne; override with `OUTLOOK_DEFAULT_TIMEZONE` env var) — omit `Z` suffix for local time |
+| `manage-event` | Update, decline, cancel, or delete (delete removes the event and Graph doesn't document a guaranteed recovery path; deleting a meeting you organised that has attendees emails them a cancellation; use `cancel` with a `comment` to control the message) | **destructive** | `action` (`update`/`decline`/`cancel`/`delete`), `eventId` (or alias `id`), `comment` (decline/cancel; omitted if not given), `sendResponse` (decline only; `false` declines without notifying the organiser), `subject`/`start`/`end`/`attendees`/`body`/`location`/`isOnlineMeeting`/`sensitivity`/`showAs`/`importance`/`categories`/`reminderMinutesBeforeStart` (update only — only the fields you pass are changed; `attendees` is a full replacement list of email strings or `{email, type}` objects, and an entry without a type keeps the type that address already has, new addresses being required; with `OUTLOOK_ALLOWED_RECIPIENTS` set, every address on the list must be allowed or the update is refused), `dryRun` (all actions; nothing is changed or sent: decline/cancel/delete read the event and say who would be emailed, with an external count; update previews the PATCH, reading the event first when attendees are untyped so the preview shows the resolved types) |
 
 ## Folder (1 tool)
 
@@ -153,8 +153,8 @@ All four hints are set explicitly on every tool, and derived from the risk-class
 | Category | Tools | Client Behaviour |
 |----------|-------|------------------|
 | **Read-only** (7) | `search-emails`, `read-email`, `list-events`, `search-people`, `access-shared-mailbox`, `find-meeting-rooms`, `get-mail-tips` | May be auto-approved by clients that support annotations |
-| **Destructive** (10) | `send-email`, `draft`, `create-event`, `manage-event`, `manage-rules`, `mailbox-settings`, `folders`, `manage-contact`, `manage-category`, `manage-focused-inbox` | Clients that honour the hint prompt for confirmation |
-| **Other writes** (5) | `auth`, `update-email`, `apply-category`, `attachments`, `export` | Your client's normal approval settings |
+| **Destructive** (11) | `send-email`, `draft`, `create-event`, `manage-event`, `manage-rules`, `mailbox-settings`, `folders`, `manage-contact`, `manage-category`, `manage-focused-inbox`, `export` (can replace a local file with `overwrite: true`) | Clients that honour the hint prompt for confirmation |
+| **Other writes** (4) | `auth`, `update-email`, `apply-category`, `attachments` | Your client's normal approval settings |
 
 `idempotentHint: true` (repeating the call has no further effect) is set on every read-only tool and on `update-email`, `apply-category` and `mailbox-settings`.
 
@@ -166,6 +166,8 @@ All four hints are set explicitly on every tool, and derived from the risk-class
 
 > **Read-only mode**: with `OUTLOOK_READ_ONLY=true` the server refuses every tool call or action that isn't a read before it runs, whatever the client's approval settings. That includes `dryRun` previews, `export` and `attachments action=download`; `auth` sign-in still works. See the [README's environment variables](../../README.md#environment-variables).
 
+> **`dryRun` only where it previews**: `send-email`, `draft` create, `create-event`, every `manage-event` action, `manage-rules` create/update, `mailbox-settings` set-auto-replies, and `folders` and `manage-contact` delete. `dryRun: true` on any other call is refused before it runs (`dryRun is not supported for …; nothing was changed.`), so a preview never makes the change for real.
+
 > **`openWorldHint: true`** is set on tools that return content authored by external/untrusted parties (`search-emails`, `read-email`, `list-events`, `get-mail-tips`, `search-people`, `access-shared-mailbox`, `attachments`, `export`, `draft`) or that reach other people (`send-email`, `draft`, `create-event`, `manage-event`, `manage-rules`, `mailbox-settings`), signalling MCP clients to apply appropriate caution (e.g. prompt-injection defences).
 
 ## send-email Safety Controls
@@ -175,8 +177,8 @@ All four hints are set explicitly on every tool, and derived from the risk-class
 | Pre-send mail tips | `checkRecipients: true` param. Out-of-office, mailbox full, delivery restricted or external recipients refuse the send | Disabled |
 | Send despite mail-tip warnings | `acknowledgeWarnings: true` param (with `checkRecipients`) | `false` |
 | Dry-run preview | `dryRun: true` param | Disabled |
-| Session rate limit | `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION` (shared with `draft action=send`) | Unlimited (0) |
-| Recipient allowlist | `OUTLOOK_ALLOWED_RECIPIENTS` env | Allow all |
+| Session rate limit | `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION` (shared with `draft action=send`) | Unlimited (unset or `0`) |
+| Recipient allowlist | `OUTLOOK_ALLOWED_RECIPIENTS` env. Also covers `draft`, rule forwards, `create-event` attendees and `manage-event` update attendees; not cancel/decline messages or `mailbox-settings` automatic replies. Anything that isn't a single plain address is refused while it's set | Allow all |
 
 ### get-mail-tips
 
@@ -208,11 +210,11 @@ These are the names you pass in `tipTypes`. Graph's response uses some different
 
 | Control | Config | Default |
 |---------|--------|---------|
-| Dry-run preview | `dryRun: true` param (create only) | Disabled |
+| Dry-run preview | `dryRun: true` param (create only; refused on other actions) | Disabled |
 | Pre-save mail tips | `checkRecipients: true` param (create only; the tips are returned with the saved draft and never stop it) | Disabled |
-| Session rate limit (create/update) | `OUTLOOK_MAX_DRAFT_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION` | Unlimited (0) |
-| Session rate limit (send) | Counts towards the `send-email` limit (`OUTLOOK_MAX_SEND_EMAIL_PER_SESSION`, else `OUTLOOK_MAX_EMAILS_PER_SESSION`) | Unlimited (0) |
-| Recipient allowlist | `OUTLOOK_ALLOWED_RECIPIENTS` env | Allow all |
+| Session rate limit (create/update/reply/reply-all/forward) | `OUTLOOK_MAX_DRAFT_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION` | Unlimited (unset or `0`) |
+| Session rate limit (send) | Counts towards the `send-email` limit (`OUTLOOK_MAX_SEND_EMAIL_PER_SESSION`, else `OUTLOOK_MAX_EMAILS_PER_SESSION`) | Unlimited (unset or `0`) |
+| Recipient allowlist | `OUTLOOK_ALLOWED_RECIPIENTS` env: create, update, forward, reply and reply-all (a refused reply draft is deleted); send re-checks the draft's current to/cc/bcc | Allow all |
 | Drafts-only guard (update/send/delete) | Always on | Non-drafts refused |
 
 ## Common Patterns
@@ -253,7 +255,7 @@ send-email(to: "...", subject: "...", body: "...", dryRun: true)
 read-email(id: "...", headersMode: true, importantOnly: true)
 
 // Export conversation to markdown
-export(target: "conversation", conversationId: "...", format: "markdown", outputDir: "/tmp")
+export(target: "conversation", conversationId: "...", format: "markdown", outputDir: "~/Downloads")
 
 // Upcoming events (default)
 list-events(count: 10)

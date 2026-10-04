@@ -20,7 +20,16 @@ const { resolveFolderPath } = require('./folder-utils');
 const { buildMailboxPrefix } = require('../utils/mailbox');
 const { quoteSearchPhrase } = require('../utils/odata-helpers');
 const { safeAttachmentFilename } = require('./attachments');
-const { writeClaimedFile } = require('../utils/safe-write');
+const {
+  writeClaimedFile,
+  ensureOutputDir,
+  writeExplicitFile,
+  confineOutputPath,
+  confineOutputTarget,
+  fileExistsError,
+  pathEntryExists,
+  OutputPathError,
+} = require('../utils/safe-write');
 const { toolError, authRequiredError } = require('../utils/tool-error');
 const { log } = require('../utils/logger');
 
@@ -38,24 +47,55 @@ const EXPORT_FORMATS = {
  * @param {object} args - Tool arguments
  * @param {string} args.id - Email ID (required)
  * @param {string} [args.format] - Export format (mime, eml, markdown, json)
- * @param {string} [args.savePath] - File path to save (optional)
+ * @param {string} [args.savePath] - File path or directory to save to (optional)
+ * @param {string} [args.outputDir] - Directory to save to (optional)
+ * @param {boolean} [args.overwrite] - Replace an existing savePath file (default: false)
  * @param {boolean} [args.includeAttachments] - Include attachments (default: true)
  * @returns {object} - MCP response with export status
  */
 async function handleExportEmail(args) {
   const emailId = args.id;
   const format = (args.format || EXPORT_FORMATS.MARKDOWN).toLowerCase();
-  // F-27: accept `outputDir` (canonical) and `savePath` (legacy alias).
-  // Previously single-message exports ignored outputDir entirely and
-  // hardcoded os.tmpdir(), inconsistent with target=messages.
-  const savePath = args.outputDir || args.savePath;
   const includeAttachments = args.includeAttachments !== false;
+  const overwrite = args.overwrite === true;
   // Message IDs are mailbox-scoped: route to /users/{mailbox} for a shared/
   // delegated mailbox, else /me.
   const prefix = buildMailboxPrefix(args.sharedMailbox || args.email || null);
 
   if (!emailId) {
     return toolError('Email ID is required.');
+  }
+
+  // Where to write, checked before anything is fetched. F-27: `outputDir`
+  // is always a directory. `savePath` names a directory if one exists
+  // there, otherwise the file to write. With no path, the system temp
+  // directory is used. Writes go to the resolved path, never the raw one.
+  let explicitFile = null;
+  let requestedFile = null; // savePath as given, for messages
+  let explicitBase = null; // allowed directory it is in
+  let targetDir;
+  try {
+    if (args.outputDir) {
+      targetDir = confineOutputPath(args.outputDir);
+    } else if (args.savePath) {
+      const target = confineOutputTarget(args.savePath);
+      const resolved = target.path;
+      if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
+        targetDir = resolved;
+      } else {
+        explicitFile = resolved;
+        requestedFile = target.requested;
+        explicitBase = target.base;
+        // Refuse early, before fetching; writeExplicitFile checks again.
+        if (!overwrite && pathEntryExists(explicitFile)) {
+          throw fileExistsError(requestedFile);
+        }
+      }
+    } else {
+      targetDir = confineOutputPath(os.tmpdir());
+    }
+  } catch (error) {
+    return outputPathError(error);
   }
 
   try {
@@ -85,16 +125,6 @@ async function handleExportEmail(args) {
 
     // Paths claimed while writing this message (main file + attachments).
     const claimedPaths = new Set();
-
-    // Determine the save location. An explicit file path is the caller's to
-    // control — honour it exactly, including overwriting, since that is what
-    // an explicit path means. A directory (or the default temp dir) means we
-    // choose the name, so the write is exclusive (`wx`): it never clobbers an
-    // existing file and never follows a planted symlink.
-    const explicitFile =
-      savePath &&
-      !(fs.existsSync(savePath) && fs.statSync(savePath).isDirectory());
-    const targetDir = explicitFile ? null : savePath || os.tmpdir();
 
     // Export based on format
     let content;
@@ -128,14 +158,25 @@ async function handleExportEmail(args) {
     }
 
     // Save main file. Auto-create the directory so callers don't have to
-    // pre-mkdir.
+    // pre-mkdir. An explicit file is created exclusively and replaces an
+    // existing file only with overwrite: true. A directory means we choose
+    // the name, so the write is exclusive (`wx`): it never clobbers an
+    // existing file and never follows a planted symlink.
     let finalPath;
+    let replaced = false;
     if (explicitFile) {
-      finalPath = savePath;
-      fs.mkdirSync(path.dirname(finalPath), { recursive: true });
-      fs.writeFileSync(finalPath, content, 'utf8');
+      ({ path: finalPath, replaced } = writeExplicitFile(
+        explicitFile,
+        content,
+        {
+          overwrite,
+          encoding: 'utf8',
+          displayPath: requestedFile,
+          base: explicitBase,
+        }
+      ));
     } else {
-      fs.mkdirSync(targetDir, { recursive: true });
+      ensureOutputDir(targetDir);
       finalPath = writeClaimedFile(
         targetDir,
         defaultBase,
@@ -162,6 +203,7 @@ async function handleExportEmail(args) {
     resultText += `| Property | Value |\n`;
     resultText += `|----------|-------|\n`;
     resultText += `| File | \`${finalPath}\` |\n`;
+    if (replaced) resultText += `| Replaced | yes (existing file) |\n`;
     resultText += `| Format | ${format.toUpperCase()} |\n`;
     resultText += `| Size | ${content.length.toLocaleString()} bytes |\n`;
     resultText += `| Subject | ${email.subject} |\n`;
@@ -184,6 +226,7 @@ async function handleExportEmail(args) {
       ],
       _meta: {
         filePath: finalPath,
+        replaced,
         format: format,
         sizeBytes: content.length,
         attachmentsSaved: attachmentsSaved.length,
@@ -191,12 +234,25 @@ async function handleExportEmail(args) {
       },
     };
   } catch (error) {
+    if (error instanceof OutputPathError) {
+      return outputPathError(error);
+    }
     if (error.message === 'Authentication required') {
       return authRequiredError();
     }
 
     return toolError(`Export failed: ${error.message}`);
   }
+}
+
+/**
+ * Tool error for a refused output path; rethrows anything else.
+ * @param {Error} error
+ * @returns {object} MCP error response
+ */
+function outputPathError(error) {
+  if (!(error instanceof OutputPathError)) throw error;
+  return toolError(error.message, { nextStep: error.nextStep });
 }
 
 /**
@@ -219,21 +275,25 @@ async function handleBatchExportEmails(args) {
     searchQuery.subject = args.query;
   }
   const format = (args.format || EXPORT_FORMATS.MARKDOWN).toLowerCase();
-  const outputDir = args.outputDir;
   const includeAttachments = args.includeAttachments === true; // Default false for batch
   // Scope the whole batch (search + per-message fetch + attachments) to a
   // shared/delegated mailbox when supplied.
   const mailbox = args.sharedMailbox || args.email || null;
   const prefix = buildMailboxPrefix(mailbox);
 
-  if (!outputDir) {
+  if (!args.outputDir) {
     return toolError('Output directory is required.');
   }
 
-  // Ensure output directory exists
-  if (!fs.existsSync(outputDir)) {
-    fs.mkdirSync(outputDir, { recursive: true });
+  // Resolve and check the directory before creating it; write only to the
+  // resolved path.
+  let outputDir;
+  try {
+    outputDir = confineOutputPath(args.outputDir);
+  } catch (error) {
+    return outputPathError(error);
   }
+  ensureOutputDir(outputDir);
 
   try {
     const accessToken = await ensureAuthenticated();
@@ -295,7 +355,7 @@ async function handleBatchExportEmails(args) {
 
       const csvContent = formatEmailsAsCSV(emails);
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      fs.mkdirSync(outputDir, { recursive: true });
+      ensureOutputDir(outputDir);
       const csvPath = writeClaimedFile(
         outputDir,
         `batch_export_${timestamp}`,

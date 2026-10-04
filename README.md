@@ -137,13 +137,13 @@ Outlook Assistant is designed with safety-first principles for AI-driven email a
 
 See [Supported Clients and Their Limits](docs/how-to/getting-started/supported-clients.md) for the details.
 
-**Dry-run previews** (`dryRun: true`) — See what a call would do without changing or sending anything: `send-email`, `draft` create, `create-event` (who would be invited, with a count of external addresses), `manage-event` update/decline/cancel/delete (who would be emailed), `mailbox-settings` set-auto-replies (who gets each reply, and when), `manage-rules` create/update, and `folders` delete and `manage-contact` delete (what would be lost).
+**Dry-run previews** (`dryRun: true`) — See what a call would do without changing or sending anything: `send-email`, `draft` create, `create-event` (who would be invited, with a count of external addresses), `manage-event` update/decline/cancel/delete (who would be emailed), `mailbox-settings` set-auto-replies (who gets each reply, and when), `manage-rules` create/update, and `folders` delete and `manage-contact` delete (what would be lost). Any other call with `dryRun: true` is refused before it runs, so a preview can never send, delete or change anything for real.
 
 **Send-email protections** — The `send-email` tool includes:
 - **Pre-send mail tips** (`checkRecipients: true`) — check recipients for out-of-office, mailbox full and delivery restrictions. If the tips show any of those, an external recipient or a group with external members, the send is refused with the warnings listed; repeat it with `acknowledgeWarnings: true` once you've seen them. A failed check also stops the send. Mail tips are Microsoft 365 only: personal accounts return none
 - **Dry-run mode** (`dryRun: true`) — preview composed emails without sending
 - **Session rate limiting** — configurable via `OUTLOOK_MAX_EMAILS_PER_SESSION` (default: unlimited)
-- **Recipient allowlist** — restrict sending to approved addresses/domains via `OUTLOOK_ALLOWED_RECIPIENTS`. The allowlist also covers inbox-rule forwarding: a rule that would forward or redirect to a blocked address is refused whole
+- **Recipient allowlist** — restrict recipients to approved addresses/domains via `OUTLOOK_ALLOWED_RECIPIENTS`. It covers `send-email`, `draft` (create, update, forward, reply, reply-all and send), rule forward/redirect (a rule that would forward or redirect to a blocked address is refused whole), `create-event` attendees and `manage-event` update attendees; it doesn't cover `manage-event` cancel/decline messages, the cancellation an organiser's delete sends, or `mailbox-settings` automatic replies. Anything that isn't a single plain email address is refused while it's set
 
 > **Recommended setup**: enable both safety belts in your `.mcp.json` from day one. They're off by default; `auth action=about` reports their state and prints a setup hint when unset. See [`.mcp.json.example`](.mcp.json.example) for a copy-paste template.
 >
@@ -155,9 +155,9 @@ See [Supported Clients and Their Limits](docs/how-to/getting-started/supported-c
 > }
 > ```
 
-**Input and file hardening** — IDs containing `.` or `..` path segments are refused before any request is made, continuation links (`deltaToken`) must point at `graph.microsoft.com`, and attachment downloads and exports write sanitised filenames inside the output directory without overwriting existing files or following symlinks.
+**Input and file hardening** — IDs containing `.` or `..` path segments are refused before any request is made, continuation links (`deltaToken`) must point at `graph.microsoft.com`, and attachment downloads and exports write only inside the system temp directory, `~/Downloads`, `~/Documents` or `OUTLOOK_EXPORT_DIR` (never to dot-prefixed names), using sanitised filenames without overwriting existing files or following symlinks. Paths must be absolute (or start with `~/`). An explicit `export` file path is replaced only when you pass `overwrite: true`, and never if it's a symlink. Files are created readable only by you (`0600`; new folders `0700`).
 
-**Draft protections** — The `draft` tool shares `send-email` safety controls: dry-run preview, recipient allowlist, mail-tips validation, and rate limiting. The `send` action shares the `send-email` rate limit counter, preventing circumvention via the draft-then-send pathway. `update`, `send` and `delete` refuse any ID that is not an unsent draft, so a received or sent message is never edited, deleted or re-sent.
+**Draft protections** — The `draft` tool shares `send-email` safety controls: dry-run preview (`create`), mail-tips validation, rate limiting and the recipient allowlist. The allowlist is checked on create, update and forward; a reply or reply-all draft whose recipients it doesn't allow is deleted again; and `send` re-checks the draft's current to/cc/bcc, so a draft edited in Outlook can't slip past it. The `send` action shares the `send-email` rate limit counter, preventing circumvention via the draft-then-send pathway. `update`, `send` and `delete` refuse any ID that is not an unsent draft, so a received or sent message is never edited, deleted or re-sent.
 
 **Token-optimised architecture** — Tools are consolidated using the STRAP (Single Tool, Resource, Action Pattern) approach. 22 tools instead of 55 reduces per-turn overhead by ~11,000 tokens (~64%), keeping more of the AI's context window available for your actual conversation. Fewer tools also means the AI selects the right tool more accurately — research shows tool selection degrades beyond ~40 tools.
 
@@ -180,7 +180,7 @@ npx @littlebearapps/outlook-assistant
 To check which version you have, or to see the available options:
 
 ```bash
-outlook-assistant --version     # prints e.g. 3.13.0
+outlook-assistant --version     # prints e.g. 3.14.0
 outlook-assistant --help        # usage, options and key environment variables
 ```
 
@@ -434,13 +434,14 @@ USE_TEST_MODE=false
 |----------|---------|---------|
 | `OUTLOOK_AUTH_AUDIENCE` | OAuth audience: `common`, `consumers` (personal-only Azure apps), `organizations`, or single-tenant GUID. Fixes `AADSTS9002331` for personal-only app registrations. | `common` |
 | `OUTLOOK_DEFAULT_TIMEZONE` | IANA timezone applied to calendar events when callers don't pass one (e.g. `Europe/London`, `America/New_York`). | `Australia/Melbourne` |
-| `OUTLOOK_MAX_EMAILS_PER_SESSION` | Default per-session cap for each rate-limited tool, counted separately until the server restarts: `send-email` (including `draft action=send`), `draft` create/update, and `manage-rules`. Override one tool with `OUTLOOK_MAX_<TOOL>_PER_SESSION`, e.g. `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION`. | unlimited |
-| `OUTLOOK_ALLOWED_RECIPIENTS` | Comma-separated allowlist of domains/addresses for sends, drafts, and rule forwards. | unrestricted |
+| `OUTLOOK_MAX_EMAILS_PER_SESSION` | Default per-session cap for each rate-limited tool, counted separately until the server restarts: `send-email` (including `draft action=send`), `draft` create/update/reply/reply-all/forward, `manage-rules` and `create-event`. Override one tool with `OUTLOOK_MAX_<TOOL>_PER_SESSION`, e.g. `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION`. | unlimited |
+| `OUTLOOK_ALLOWED_RECIPIENTS` | Comma-separated allowlist of domains/addresses for sends, drafts, rule forwards and calendar invitations (`create-event` and `manage-event` update attendees). Not applied to cancellation/decline messages or automatic replies. | unrestricted |
 | `OUTLOOK_SHARED_MAILBOX` | Opt-in shared-mailbox support (work/school only). `read` requests `Mail.Read.Shared`; `true` (or `readwrite`/`1`) also requests `Mail.ReadWrite.Shared`. Unset leaves sign-in unchanged. After enabling, restart and run `auth action=authenticate force=true`. | unset (off) |
 | `OUTLOOK_SEARCH_SCAN_LIMIT` | How many recent messages the client-side search fallback scans. Personal accounts match `to` locally within this window, so the default caps how far back a `to` search reaches. Max 5000. | `500` |
 | `OUTLOOK_REQUEST_TIMEOUT_MS` | Inactivity timeout for each Graph request attempt, in milliseconds: an attempt that receives no data for this long is abandoned with a timeout error. It isn't an overall deadline, so a slow response that keeps arriving isn't cut off. Throttled (`429`) and busy (`503`/`504`) responses are retried automatically, honouring `Retry-After`. | `60000` |
 | `OUTLOOK_READ_ONLY` | Read-only mode: `true` (or `1`/`yes`/`on`) refuses every tool call or action that isn't a read, including dry runs, exports and attachment downloads, before it runs. Signing in still works. An unrecognised value also turns it on, with a warning. Restart the server after changing it. | off |
 | `OUTLOOK_DEBUG` | Detailed stderr logs: `true` (or `1`/`yes`/`on`) adds search strategies, subjects, folder names and Graph error bodies, with email addresses and long IDs redacted. Off, each tool call logs one line (tool, action, outcome, duration) and never its arguments. Tokens, device codes and secrets are never logged. See [Server Logs and Debug Logging](docs/troubleshooting.md#server-logs-and-debug-logging). | off |
+| `OUTLOOK_EXPORT_DIR` | Extra folder that `export` and `attachments` downloads may write into. Without it, files can only go to the system temp directory, `~/Downloads` or `~/Documents`; other paths are refused. Absolute path (a leading `~` is expanded). | unset |
 
 `OUTLOOK_CONFIRM_LEVEL` (`outward`, `all-writes` or `off`; default `outward`) isn't a server setting: the plugin's safety hook reads it, in clients with no plugin settings (GitHub Copilot, VS Code, Cursor). Set it in the environment the client starts from, not in the server's `env` block. In Claude Code, use the plugin's **Confirmation level** setting instead. See [Supported Clients and Their Limits](docs/how-to/getting-started/supported-clients.md).
 
@@ -537,7 +538,7 @@ outlook-assistant/
     ├── risk-classes.js      # Risk class per tool/action; derives annotations and titles
     ├── tool-error.js        # isError tool results with a next step
     ├── safety.js            # Rate limiting, recipient allowlist, dry-run
-    ├── safe-write.js        # Exclusive, outputDir-confined file writes
+    ├── safe-write.js        # Exclusive, folder-confined file writes
     ├── datetime.js          # ISO 8601 parsing and timezone conversion
     ├── odata-helpers.js     # OData query building
     ├── field-presets.js     # Token-efficient field selections
@@ -634,7 +635,7 @@ Full documentation: [docs/](docs/README.md)
 - **Focused Inbox**: Only available on work/school Microsoft 365 accounts.
 - **Shared mailboxes**: Require a work/school account and are **opt-in**: set `OUTLOOK_SHARED_MAILBOX=read` (read) or `=true` (read and organise), restart the server, then re-authenticate with `auth action=authenticate force=true`. Until then, `sharedMailbox` calls are refused with setup guidance (`access-shared-mailbox` keeps its previous well-known-folder behaviour). `auth action=about` shows whether the shared scopes were actually granted. Support covers reading and organising only. Reading needs `Mail.Read.Shared`; organising (move/categorise/flag/mark-read/create folders via `sharedMailbox`) needs `Mail.ReadWrite.Shared` — add it in Azure and re-authenticate (until then, shared-scoped writes fail with 403; they never fall back to your own mailbox). Custom subfolders are supported — pass `folder` as a display name or nested path (e.g. `Inbox/Vendors/Acme`), a raw `folderId`, or use `listFolders: true` (or `folders action=list, sharedMailbox: …`) to discover them. **Sending, drafts, replies, and forwards from a shared mailbox are not supported** — `send-email` and `draft` (including reply/reply-all/forward) always act on the signed-in user's own mailbox, and `Mail.Send.Shared` is not requested.
 - **Meeting room search**: Requires `Place.Read.All` permission with admin consent (work/school accounts only).
-- **Export default path**: Exports and attachment downloads save to the system temp directory by default. Use `outputDir` (or `savePath`) to choose a different location.
+- **Export default path**: Exports and attachment downloads save to the system temp directory by default (a batch `export` with `target=messages` needs an `outputDir`). Use `outputDir` (or `savePath`) with an absolute path (or one starting with `~/`) inside the system temp directory, `~/Downloads`, `~/Documents` or `OUTLOOK_EXPORT_DIR`; relative paths and other folders are refused. An existing `savePath` file is replaced only with `overwrite: true`.
 - **`list-events` date filters**: `startAfter`/`startBefore` must include `Z` or a ±hh:mm offset; zone-less and date-only values are rejected rather than guessed.
 
 ## Contributing

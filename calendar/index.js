@@ -69,7 +69,7 @@ const calendarTools = [
   {
     name: 'create-event',
     description:
-      "Create a new calendar event on the signed-in user's default calendar. Returns the created event with its `id`, `webLink`, and (if attendees are present) an auto-generated online-meeting URL — attendees receive invitations on save, so pass `dryRun: true` first to preview who would be invited (and how many are external) without creating anything. Times use the configured timezone (default Australia/Melbourne; override with `OUTLOOK_DEFAULT_TIMEZONE`); omit the `Z` suffix to send local time. Use `manage-event` action=`update` to modify an event after creation, or `manage-event` action=`cancel`/`delete` to remove it.",
+      "Create a new calendar event on the signed-in user's default calendar. Returns the created event with its `id`, `webLink`, and (if attendees are present) an auto-generated online-meeting URL — attendees receive invitations on save, so pass `dryRun: true` first to preview who would be invited (and how many are external) without creating anything. When `OUTLOOK_ALLOWED_RECIPIENTS` is set, every attendee must be allowed or nothing is created. Times use the configured timezone (default Australia/Melbourne; override with `OUTLOOK_DEFAULT_TIMEZONE`); omit the `Z` suffix to send local time. Use `manage-event` action=`update` to modify an event after creation, or `manage-event` action=`cancel`/`delete` to remove it.",
     ...toolMetadata('create-event', 'Create Calendar Event'),
     inputSchema: {
       type: 'object',
@@ -179,7 +179,7 @@ const calendarTools = [
           type: 'array',
           items: ATTENDEE_ITEM_SCHEMA,
           description:
-            "Full replacement attendee list — pass the complete desired list, or [] to clear (action=update only). Each entry is an email address string or an {email, type} object (type 'required', 'optional' or 'resource'). A string, or an object without a type, keeps the type that address already has on the event (new addresses are required); an explicit type always wins.",
+            "Full replacement attendee list — pass the complete desired list, or [] to clear (action=update only). Each entry is an email address string or an {email, type} object (type 'required', 'optional' or 'resource'). A string, or an object without a type, keeps the type that address already has on the event (new addresses are required); an explicit type always wins. When OUTLOOK_ALLOWED_RECIPIENTS is set, every address on the list must be allowed or the update is refused.",
         },
         body: {
           type: 'string',

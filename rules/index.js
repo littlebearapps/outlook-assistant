@@ -160,7 +160,7 @@ const rulesTools = [
         dryRun: {
           type: 'boolean',
           description:
-            'Preview rule without creating/updating (action=create, action=update)',
+            'Preview only (action=create or update): shows the rule without creating or changing it. Other actions refuse dryRun and change nothing. Default false.',
         },
         isEnabled: {
           type: 'boolean',

@@ -9,6 +9,8 @@ const { ensureAuthenticated } = require('../auth');
 const {
   checkRateLimit,
   checkRecipientAllowlist,
+  findBlockedRecipients,
+  getRecipientAllowlist,
   formatDryRunPreview,
 } = require('../utils/safety');
 const { handleGetMailTips } = require('./mail-tips');
@@ -24,6 +26,18 @@ function formatRecipients(recipientString) {
   return recipientString.split(',').map((email) => ({
     emailAddress: { address: email.trim() },
   }));
+}
+
+/** Graph fields holding a message's recipients. */
+const RECIPIENT_FIELDS = ['toRecipients', 'ccRecipients', 'bccRecipients'];
+
+/**
+ * Every to/cc/bcc recipient on a Graph message.
+ * @param {object} message - Graph message
+ * @returns {Array<{emailAddress: {address: string}}>}
+ */
+function recipientsOf(message) {
+  return RECIPIENT_FIELDS.flatMap((field) => message?.[field] || []);
 }
 
 /**
@@ -109,9 +123,11 @@ class DraftGuardError extends Error {}
  * @param {string} accessToken - Graph access token
  * @param {string} id - Message id the caller passed as the draft id
  * @param {string} action - The draft action being guarded (for the message)
+ * @param {string[]} [extraFields] - Further fields to fetch in the same GET
+ * @returns {Promise<object>} The draft, with id, isDraft, subject and extraFields
  * @throws {DraftGuardError} If the id is not a draft or does not exist
  */
-async function assertIsDraft(accessToken, id, action) {
+async function assertIsDraft(accessToken, id, action, extraFields = []) {
   let message;
   try {
     message = await callGraphAPI(
@@ -120,7 +136,7 @@ async function assertIsDraft(accessToken, id, action) {
       `me/messages/${id}`,
       null,
       {
-        $select: 'id,isDraft,subject',
+        $select: ['id', 'isDraft', 'subject', ...extraFields].join(','),
       }
     );
   } catch (error) {
@@ -138,6 +154,7 @@ async function assertIsDraft(accessToken, id, action) {
       `Message \`${id}\`${subject} is not a draft, so draft action=${action} refused it and nothing was changed. update/send/delete only act on unsent drafts.`
     );
   }
+  return message;
 }
 
 /**
@@ -313,7 +330,24 @@ async function handleSendDraft(args) {
 
   try {
     const accessToken = await ensureAuthenticated();
-    await assertIsDraft(accessToken, id, 'send');
+    // Fetch the recipients as they are now: the draft may have been edited
+    // (here or in Outlook) since it was created.
+    const draft = await assertIsDraft(
+      accessToken,
+      id,
+      'send',
+      RECIPIENT_FIELDS
+    );
+    const blocked = findBlockedRecipients(recipientsOf(draft));
+    if (blocked) {
+      return toolError(
+        `Draft not sent: it is addressed to ${blocked.blocked.join(', ')}, which OUTLOOK_ALLOWED_RECIPIENTS does not allow (allowed recipients/domains: ${blocked.allowed.join(', ')}). The draft is unchanged and still in Drafts.`,
+        {
+          nextStep:
+            'Remove those recipients from the draft (in Outlook, or with draft action=update), or ask the user to add them to OUTLOOK_ALLOWED_RECIPIENTS.',
+        }
+      );
+    }
 
     // Rate limit via send-email counter (shares limit with direct sends)
     const rateLimitError = checkRateLimit('send-email');
@@ -390,6 +424,13 @@ async function handleReplyDraft(args, endpoint) {
     };
   }
 
+  const actionName = endpoint === 'createReplyAll' ? 'reply-all' : 'reply';
+
+  // Counted before the draft is created: a reply that the allowlist refuses
+  // below has still written (and removed) a draft.
+  const rateLimitError = checkRateLimit('draft');
+  if (rateLimitError) return rateLimitError;
+
   try {
     const accessToken = await ensureAuthenticated();
     const draft = await callGraphAPI(
@@ -398,17 +439,69 @@ async function handleReplyDraft(args, endpoint) {
       `me/messages/${id}/${endpoint}`,
       Object.keys(requestBody).length > 0 ? requestBody : null
     );
-    const label =
-      endpoint === 'createReplyAll'
-        ? 'reply-all draft created'
-        : 'reply draft created';
-    return formatDraftResponse(draft, label);
+
+    // Graph fills in the recipients from the original message, so they can
+    // only be checked once the draft exists.
+    const refusal = await refuseBlockedReply(accessToken, draft, actionName);
+    if (refusal) return refusal;
+
+    return formatDraftResponse(draft, `${actionName} draft created`);
   } catch (error) {
-    return handleError(
-      `creating ${endpoint === 'createReplyAll' ? 'reply-all' : 'reply'} draft`,
-      error
+    return handleError(`creating ${actionName} draft`, error);
+  }
+}
+
+/**
+ * When a recipient allowlist is configured, check the recipients Graph put
+ * on a new reply draft. If any is not allowed, delete the draft and return a
+ * refusal; otherwise return null.
+ * @param {string} accessToken - Graph access token
+ * @param {object} draft - The draft Graph returned from createReply/createReplyAll
+ * @param {string} actionName - 'reply' or 'reply-all'
+ * @returns {Promise<object|null>} A tool error, or null to keep the draft
+ */
+async function refuseBlockedReply(accessToken, draft, actionName) {
+  if (!getRecipientAllowlist()) return null;
+
+  let reason;
+  let nextStep;
+  try {
+    let message = draft;
+    if (!RECIPIENT_FIELDS.every((field) => Array.isArray(draft?.[field]))) {
+      message = await callGraphAPI(
+        accessToken,
+        'GET',
+        `me/messages/${draft.id}`,
+        null,
+        { $select: ['id', ...RECIPIENT_FIELDS].join(',') }
+      );
+    }
+    const blocked = findBlockedRecipients(recipientsOf(message));
+    if (!blocked) return null;
+    reason = `The ${actionName} draft would be addressed to ${blocked.blocked.join(', ')}, which OUTLOOK_ALLOWED_RECIPIENTS does not allow (allowed recipients/domains: ${blocked.allowed.join(', ')}).`;
+    nextStep =
+      'Reply only to allowed recipients (for example, action=reply rather than reply-all, or draft action=create addressed to them), or ask the user to add those recipients to OUTLOOK_ALLOWED_RECIPIENTS.';
+  } catch (error) {
+    // Unchecked recipients are treated like blocked ones.
+    reason = `The ${actionName} draft's recipients could not be checked against OUTLOOK_ALLOWED_RECIPIENTS (${error.message}).`;
+    nextStep = 'Try the call again.';
+  }
+
+  try {
+    await callGraphAPI(accessToken, 'DELETE', `me/messages/${draft.id}`);
+  } catch (error) {
+    return toolError(
+      `${reason} The draft Graph created could not be deleted (${error.message}), so it is still in Drafts with ID \`${draft.id}\`. Do not send it.`,
+      {
+        nextStep: `Delete it with draft action=delete id=${draft.id} (or in Outlook). ${nextStep}`,
+      }
     );
   }
+
+  return toolError(
+    `${reason} The draft Graph created was deleted, so nothing was kept.`,
+    { nextStep }
+  );
 }
 
 /**
@@ -436,6 +529,9 @@ async function handleForwardDraft(args) {
   // Check recipient allowlist
   const allowlistError = checkRecipientAllowlist(toRecipients);
   if (allowlistError) return allowlistError;
+
+  const rateLimitError = checkRateLimit('draft');
+  if (rateLimitError) return rateLimitError;
 
   const requestBody = {
     toRecipients,

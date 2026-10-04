@@ -39,6 +39,8 @@ params:
 
 If any attendee is given without a type, the event's current attendee list is read first, so `dryRun: true` also signs in and shows the types that would be sent.
 
+If the server has a recipient allowlist (`OUTLOOK_ALLOWED_RECIPIENTS`), every address on the new `attendees` list, rooms included, must be on it. One blocked address refuses the whole update (`Event update refused: …`): nothing changes and nobody is emailed, and a `dryRun` reports the same refusal. The allowlist isn't checked when you change other fields without passing `attendees`, or on decline, cancel and delete. See [Send Email Safely](../email/send-email-safely.md#recipient-allowlist).
+
 Updates preserve attendee RSVP state — unlike delete-and-recreate, attendees keep their accepted/tentative status on the rescheduled event. Attendees are notified of the change.
 
 ## Decline an Event

@@ -4,8 +4,8 @@
 
 | Version  | Supported          |
 | -------- | ------------------ |
-| 3.13.x   | :white_check_mark: |
-| < 3.13.0 | :x:                |
+| 3.14.x   | :white_check_mark: |
+| < 3.14.0 | :x:                |
 
 Security fixes ship in the latest release only. v3.11.2 and v3.12.0 both
 contain security fixes (see [`CHANGELOG.md`](CHANGELOG.md)), so upgrade rather
@@ -91,7 +91,7 @@ Every tool carries [MCP annotations](https://modelcontextprotocol.io/docs/concep
 | `openWorldHint: true` | Tool returns content written by other people, or reaches other people | Treat returned content as untrusted (prompt injection) |
 
 - **7 read-only tools** (search, read and list operations) can be auto-approved
-- **10 destructive tools** (`send-email`, `draft`, `create-event`, `manage-event`, `manage-rules`, `mailbox-settings`, `folders`, `manage-contact`, `manage-category`, `manage-focused-inbox`) are the ones clients prompt for. Destructive here also covers anything that reaches other people or keeps acting after the call, such as invitations, inbox rules and automatic replies
+- **11 destructive tools** (`send-email`, `draft`, `create-event`, `manage-event`, `manage-rules`, `mailbox-settings`, `folders`, `manage-contact`, `manage-category`, `manage-focused-inbox`, `export`) are the ones clients prompt for. Destructive here also covers anything that reaches other people or keeps acting after the call, such as invitations, inbox rules and automatic replies
 - **5 other write tools** (`auth`, `update-email`, `apply-category`, `attachments`, `export`) follow your client's normal approval settings
 
 See the [Tools Reference](docs/quickrefs/tools-reference.md#safety-annotations) for the full list.
@@ -127,7 +127,7 @@ Set `OUTLOOK_READ_ONLY=true` (or turn on **Read-only mode** in the Claude Code p
 
 ### Dry-Run Previews
 
-`dryRun: true` shows what a call would do without changing or sending anything. It covers `send-email`, `draft` create, `create-event`, `manage-event` (update, decline, cancel, delete), `mailbox-settings` set-auto-replies, `manage-rules` create/update, `folders` delete and `manage-contact` delete. Previews that email other people say who, with a count of external addresses; delete previews say what would be lost.
+`dryRun: true` shows what a call would do without changing or sending anything. It covers `send-email`, `draft` create, `create-event`, `manage-event` (update, decline, cancel, delete), `mailbox-settings` set-auto-replies, `manage-rules` create/update, `folders` delete and `manage-contact` delete. Previews that email other people say who, with a count of external addresses; delete previews say what would be lost. Any other call with `dryRun: true` is refused before it runs, so a preview can never send, delete or change anything for real.
 
 ### Send-Email Protections
 
@@ -137,8 +137,8 @@ The `send-email` tool includes additional server-side controls:
 |---------|---------------------|---------|-------------|
 | Pre-send mail tips | — (use `checkRecipients: true` param) | Disabled | Refuses to send when Microsoft 365 mail tips show an out-of-office reply, a full mailbox, a delivery restriction, an external recipient or a group with external members, or when the check fails. Send anyway with `acknowledgeWarnings: true` |
 | Dry-run mode | — (use `dryRun: true` param) | Disabled | Preview composed email without sending |
-| Session rate limit | `OUTLOOK_MAX_EMAILS_PER_SESSION` | Unlimited | Default per-session cap for `send-email`, `draft` and `manage-rules`; override one tool with `OUTLOOK_MAX_<TOOL>_PER_SESSION` |
-| Recipient allowlist | `OUTLOOK_ALLOWED_RECIPIENTS` | Allow all | Comma-separated domains/addresses |
+| Session rate limit | `OUTLOOK_MAX_EMAILS_PER_SESSION` | Unlimited | Default per-session cap, counted separately per tool, for `send-email` (including `draft` send), `draft` create/update/reply/reply-all/forward, `manage-rules` writes and `create-event`; dry runs don't count. Override one tool with `OUTLOOK_MAX_<TOOL>_PER_SESSION` |
+| Recipient allowlist | `OUTLOOK_ALLOWED_RECIPIENTS` | Allow all | Comma-separated domains/addresses for outgoing mail, rule forwards and event attendees (scope below) |
 
 Example configuration:
 
@@ -155,9 +155,21 @@ OUTLOOK_ALLOWED_RECIPIENTS=mycompany.com,partner@example.com
 - Continuation links (`deltaToken`, `nextLink`) must be `https` URLs on
   `graph.microsoft.com`; the access token is never sent anywhere else.
 - Attachment downloads and exports (including conversation exports) write
-  sanitised filenames with exclusive create (no overwriting, no following
-  symlinks) and stay inside the chosen output directory. A write that fails
-  part-way removes the partly written file.
+  the files they name with sanitised filenames and exclusive create (no
+  overwriting, no following symlinks; a clash gets a `-1`, `-2`, … suffix)
+  and stay inside the chosen output directory. A single-message `export` to
+  a `savePath` file is also created new, and an existing file is replaced
+  only with `overwrite: true`, never if it is a symlink, has other hard links
+  or is a dotfile. A write that fails part-way removes the partly written
+  file.
+- Output paths must be absolute (a leading `~` means your home directory);
+  relative paths are refused. Files are only written inside the system temp
+  directory, `~/Downloads`, `~/Documents` or `OUTLOOK_EXPORT_DIR`, never to a
+  dot-prefixed name below them. A `savePath` that is a symlink to a file is
+  refused, with or without `overwrite: true`.
+- Exported and downloaded files are created readable only by you (mode
+  `0600`), and folders the server creates with mode `0700`. A file replaced
+  with `overwrite: true` keeps its previous mode.
 - Shared-mailbox addresses must be printable-ASCII email addresses, and
   shared-mailbox access is off unless `OUTLOOK_SHARED_MAILBOX` is set.
 
@@ -179,7 +191,8 @@ These controls are not a substitute for careful oversight:
 - Annotations depend on the AI client respecting them — not all clients support MCP annotations, and a client set to auto-approve tools (or running in a mode that bypasses prompts) won't ask before sending or deleting
 - The safety hook runs only where the plugin is installed (Claude Code, GitHub Copilot, Cursor), and each of those clients can run a call without the hook's prompt in some modes (see the table above). Read-only mode, the allowlist, rate limits and mail-tips refusals are enforced by the server in every client
 - Rate limits reset when the MCP server restarts
-- The recipient allowlist applies to `send-email`, `draft` (create, update, forward) and `manage-rules` forward/redirect targets (a rule with a blocked target is refused whole) — it doesn't cover anything done outside Outlook Assistant
+- The recipient allowlist applies to `send-email` (to, cc, bcc), `draft` (create, update, forward, reply, reply-all, and the draft's current recipients on send), `manage-rules` forward/redirect targets (a rule with a blocked target is refused whole), `create-event` attendees, and the attendee list set by `manage-event` update. With an allowlist set, a recipient that isn't a single plain email address (for example `a@other.test;b@example.com` or `Name <b@example.com>`) is refused
+- The allowlist does **not** cover: cancellation messages from `manage-event` cancel (or deleting a meeting you organised), responses sent by `manage-event` decline, updates sent to attendees already on an event when you change other fields with `manage-event` update, automatic replies set with `mailbox-settings` (including replies to external senders), or anything done outside Outlook Assistant
 - Mail tips are Microsoft 365 only: on personal Outlook.com accounts `checkRecipients` returns no tips and can't refuse a send
 - AI models can still make mistakes in composing email content, selecting recipients, or interpreting instructions
 - No automated system can fully prevent prompt injection attacks or adversarial manipulation

@@ -68,11 +68,11 @@ Every tool includes MCP annotations, with all four hints set explicitly, that in
 
 ### Destructive Tools (clients that honour annotations prompt)
 
-`send-email`, `draft`, `create-event`, `manage-event`, `manage-rules` and `mailbox-settings` (all destructive + openWorld: they reach other people), plus `folders`, `manage-contact`, `manage-category` and `manage-focused-inbox` (destructive: they can delete)
+`send-email`, `draft`, `create-event`, `manage-event`, `manage-rules` and `mailbox-settings` (all destructive + openWorld: they reach other people), plus `folders`, `manage-contact`, `manage-category` and `manage-focused-inbox` (destructive: they can delete) and `export` (destructive: with `overwrite: true` it can replace a local file)
 
 ### Other Tools
 
-The remaining tools (`auth`, `update-email`, `apply-category`, `attachments`, `export`) write but aren't destructive. Whether they prompt depends on the user's client permission settings.
+The remaining tools (`auth`, `update-email`, `apply-category`, `attachments`) write but aren't destructive. Whether they prompt depends on the user's client permission settings.
 
 ### Always-Confirm Tools in Claude
 
@@ -120,6 +120,10 @@ Common error patterns:
 | `Rate limit reached: …` | The session cap (`OUTLOOK_MAX_EMAILS_PER_SESSION` or `OUTLOOK_MAX_<TOOL>_PER_SESSION`) was hit | Inform the user; no more calls of that kind until the server restarts |
 | `Recipient not allowed: …` | A recipient isn't in `OUTLOOK_ALLOWED_RECIPIENTS` | Inform the user; don't work around it |
 | `Rule refused` or `Rule update refused: OUTLOOK_ALLOWED_RECIPIENTS does not allow …` (`manage-rules`) | A `forwardTo`/`redirectTo` address isn't on the allowlist, so the whole rule was refused | Inform the user; remove the blocked address only if they ask |
+| `Event refused` / `Event update refused: OUTLOOK_ALLOWED_RECIPIENTS does not allow attendee …` | An attendee isn't on the allowlist, so nothing was created or changed | Inform the user; remove the attendee only if they ask |
+| `Draft not sent: …` or `The reply draft would be addressed to …` (`draft`) | The draft's current recipients, or the recipients a reply copies from the original, aren't all on the allowlist; a refused reply draft is deleted | Inform the user; don't strip or swap recipients unless they ask |
+| `dryRun is not supported for …; nothing was changed.` | `dryRun: true` on a call that can't preview | Nothing ran. Confirm the change with the user, then call without `dryRun` |
+| `File already exists: …` or `Refusing to write to …` (`export`, `attachments`) | The file exists and `overwrite` wasn't passed, or the path is relative or outside the allowed folders (temp, `~/Downloads`, `~/Documents`, `OUTLOOK_EXPORT_DIR`) | Nothing was written. Pick a new name or allowed folder; pass `overwrite: true` only if the user asked to replace that file |
 | `Email not sent: the recipient check flagged …` (`send-email` with `checkRecipients`) | Mail tips showed an out-of-office reply, full mailbox, delivery restriction or external recipient | Show the user the warnings; repeat with `acknowledgeWarnings: true` only if they still want to send |
 | `Outlook Assistant is in read-only mode (OUTLOOK_READ_ONLY)` | The server is in read-only mode | Inform the user; don't retry or try another tool |
 | `Invalid startAfter` / `Invalid startBefore` (`list-events`) | Date without `Z` or ±hh:mm offset, date-only, or impossible | Resend with a zoned ISO 8601 timestamp; nothing reached Graph |
@@ -187,7 +191,7 @@ See [Investigate Email Headers](../advanced/investigate-email-headers.md) for he
 
 - Always check `auth` status before multi-step workflows
 - Draft first: a `draft` can be reviewed in Outlook before it's sent, while `send-email` sends immediately
-- Use `dryRun: true` to show the user what a change would do before making it: on `send-email`, `draft` create, `create-event`, `manage-event`, `mailbox-settings` set-auto-replies, `manage-rules` create/update, and `folders` and `manage-contact` delete
+- Use `dryRun: true` to show the user what a change would do before making it: on `send-email`, `draft` create, `create-event`, `manage-event`, `mailbox-settings` set-auto-replies, `manage-rules` create/update, and `folders` and `manage-contact` delete. Every other call refuses `dryRun: true`, so a preview never runs for real
 - `search-people` ranks people across personal contacts, the organisation directory and recent communications, and is read-only; `manage-contact` action=`search` covers only the user's personal contact store
 - Use `searchExpression` (formerly `kqlQuery`) for complex boolean searches on work/school accounts, standard params for simple filters — on personal accounts only `from:`/`to:`/`subject:` expressions are translated and retried, so structured filters are the reliable route
 - After any search, check `_meta.searchMetadata`: `finalStrategy` names the rung that answered, and `droppedFilters` lists any filter that could not be honoured. Treat a non-empty `droppedFilters` as "these results are broader than I asked for" and narrow again rather than acting on them

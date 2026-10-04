@@ -9,6 +9,7 @@
  *     version and the pinned npx launcher
  *   - plugins/outlook-assistant/plugin.json + mcp.json (Agent Plugins:
  *     Copilot, VS Code, Cursor): version and the pinned npx launcher
+ *   - the plugin skill's SKILL.md: frontmatter `metadata.version`
  *
  * Plugin directories reject unpinned launchers, so the npx argument must
  * always name an exact version.
@@ -50,9 +51,28 @@ const updates = {
   },
 };
 
+/** Markdown files whose version lives in a line of YAML frontmatter. */
+const SKILL_MD =
+  'plugins/outlook-assistant/skills/using-outlook-assistant/SKILL.md';
+const textUpdates = {
+  [SKILL_MD]: (text) =>
+    text.replace(
+      /^( {2}version: )(['"])[^'"]*\2$/m,
+      (_match, key, quote) => `${key}${quote}${version}${quote}`
+    ),
+};
+
 async function main() {
   const prettier = await import('prettier');
   const stale = [];
+  for (const [file, update] of Object.entries(textUpdates)) {
+    const filePath = path.join(root, file);
+    const before = fs.readFileSync(filePath, 'utf8');
+    const after = update(before);
+    if (after === before) continue;
+    stale.push(file);
+    if (!check) fs.writeFileSync(filePath, after);
+  }
   for (const [file, update] of Object.entries(updates)) {
     const filePath = path.join(root, file);
     const before = JSON.parse(fs.readFileSync(filePath, 'utf8'));

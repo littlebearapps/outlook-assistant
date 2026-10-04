@@ -79,7 +79,7 @@ The plugin adds two safety layers on top of the server's own checks.
 }
 ```
 
-**In GitHub Copilot CLI** the same hook asks before the same calls, always at the `outward` level (Copilot has no plugin settings), and it doesn't add the untrusted-content note. **VS Code** reads the same hook file, but it hasn't been checked there yet. **Cursor** gets the skill and the server's own checks, but not the hook yet.
+**In GitHub Copilot CLI** the same hook asks before the same calls and adds the same untrusted-content note. Copilot has no plugin settings, so set the confirmation level with the `OUTLOOK_CONFIRM_LEVEL` environment variable in the shell you start Copilot from (for example `export OUTLOOK_CONFIRM_LEVEL=all-writes`). Copilot lets a call through if a hook times out, so the hook allows 30 seconds, far longer than it needs. **VS Code** reads the same hook file, but it hasn't been checked there yet. **Cursor** gets the skill and the server's own checks, but not the hook yet.
 
 ## Data and privacy
 
@@ -100,7 +100,7 @@ More detail is in the [security policy](https://github.com/littlebearapps/outloo
 | Send limit per session | `OUTLOOK_MAX_EMAILS_PER_SESSION` | `10` |
 | Allowed recipients | `OUTLOOK_ALLOWED_RECIPIENTS` | none (all allowed) |
 | Read-only mode | `OUTLOOK_READ_ONLY` | `false` |
-| Confirmation level (safety hook) | none (Claude Code plugin setting) | `outward` |
+| Confirmation level (safety hook) | Claude Code plugin setting; `OUTLOOK_CONFIRM_LEVEL` in Copilot CLI | `outward` |
 
 Claude Code shows these as plugin settings. Other environment variables, such as `OUTLOOK_SHARED_MAILBOX` and `OUTLOOK_IMMUTABLE_IDS`, are in the [main README](https://github.com/littlebearapps/outlook-assistant#configuration). Use a manual MCP configuration if you need them.
 

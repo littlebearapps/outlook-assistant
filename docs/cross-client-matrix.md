@@ -26,7 +26,7 @@ S5 runs against the mock mailbox: start the server with `USE_TEST_MODE=true` and
 | MCP Inspector | n/a | | | | | | n/a | | n/a | n/a | | |
 | VS Code + Copilot | GPT | | | | | | | | | | | Hook ships via `com.github.copilot/hooks/hooks.json`; not yet checked in VS Code |
 | VS Code + Copilot | Claude | | | | | | | | | | | |
-| Copilot CLI 1.0.91 | Copilot default model | v3.14.0-dev | | | ✅ | | | | ✅ | ✅ | 2026-10-04 | Hook ran in `-p` mode with `--allow-all-tools`. A user-confirmed `manage-rules` create was denied ("unable to ask user") with the hook's reason, and a read ran without a prompt. The skill and its rules reference loaded first. Copilot doesn't pass PostToolUse `additionalContext` to the model |
+| Copilot CLI 1.0.91 | Copilot default model | v3.14.0-dev | | | ✅ | | | | ✅ | ✅ | 2026-10-04 | Hook ran in `-p` mode with `--allow-all-tools`. A user-confirmed `manage-rules` create was denied ("unable to ask user") with the hook's reason, and a read ran without a prompt. The skill and its rules reference loaded first. The PostToolUse note reaches the model once it's sent as a flat `additionalContext`. `OUTLOOK_CONFIRM_LEVEL=all-writes` makes a flag change ask |
 | Cursor | | | | | | | | | | n/a | | Hook deferred |
 | Codex CLI 0.157.1 | GPT, default model | v3.14.0-dev | | | ✅ | | ⚠️ | | n/a | n/a | 2026-10-04 | S5 (IT rule), 2 runs: no rule created, and the model reported the request. Run 1 tried a `manage-rules` call, which Codex's approval policy blocked. Codex's own Outlook connector also answered some calls; disable it when testing |
 | Gemini CLI | | | | | | | | | n/a | n/a | | |

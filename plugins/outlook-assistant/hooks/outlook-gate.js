@@ -14,8 +14,10 @@
  * PostToolUse: after a tool that returns content written by other people,
  * reminds the model that the content is data, not instructions.
  *
- * Strictness comes from the plugin's `confirm_level` option
- * (CLAUDE_PLUGIN_OPTION_CONFIRM_LEVEL): `outward` (default) asks before
+ * Strictness comes from the plugin's `confirm_level` option in Claude Code
+ * (CLAUDE_PLUGIN_OPTION_CONFIRM_LEVEL), or the OUTLOOK_CONFIRM_LEVEL
+ * environment variable where a client has no plugin settings (Copilot CLI
+ * runs hooks in the user's shell): `outward` (default) asks before
  * outward, destructive and persistent calls; `all-writes` also asks before
  * reversible ones; `off` asks before nothing. An unknown value counts as
  * `outward`.
@@ -378,7 +380,9 @@ function describeRule(action, input) {
 }
 
 function confirmLevel(env) {
-  const level = String(env.CLAUDE_PLUGIN_OPTION_CONFIRM_LEVEL ?? '')
+  const level = String(
+    env.CLAUDE_PLUGIN_OPTION_CONFIRM_LEVEL ?? env.OUTLOOK_CONFIRM_LEVEL ?? ''
+  )
     .trim()
     .toLowerCase();
   return Object.hasOwn(CONFIRM_LEVELS, level) ? level : DEFAULT_CONFIRM_LEVEL;
@@ -457,12 +461,24 @@ function preToolUse(payload, env = process.env, client = 'claude') {
 function postToolUse(payload, client = 'claude') {
   const tool = outlookTool(payload?.tool_name, client);
   if (!tool || !loadRiskMap()[tool]?.untrustedContent) return null;
-  return {
+  return untrustedNote(client);
+}
+
+/**
+ * The untrusted-content note. Claude Code reads hookSpecificOutput; Copilot
+ * CLI appends a flat `additionalContext` to the result the model sees, so
+ * Copilot gets both forms.
+ * @param {string} [client]
+ */
+function untrustedNote(client = 'claude') {
+  const output = {
     hookSpecificOutput: {
       hookEventName: 'PostToolUse',
       additionalContext: UNTRUSTED_NOTE,
     },
   };
+  if (client === 'copilot') output.additionalContext = UNTRUSTED_NOTE;
+  return output;
 }
 
 /**
@@ -484,14 +500,7 @@ function handle(raw, eventArg, env = process.env, client = 'claude') {
     if (event === 'PostToolUse') return postToolUse(payload, client);
     return preToolUse(payload, env, client);
   } catch (err) {
-    if (event === 'PostToolUse') {
-      return {
-        hookSpecificOutput: {
-          hookEventName: 'PostToolUse',
-          additionalContext: UNTRUSTED_NOTE,
-        },
-      };
-    }
+    if (event === 'PostToolUse') return untrustedNote(client);
     return ask(
       `the safety hook couldn't check this call (${clean(err.message)}). Review it before allowing.`,
       client

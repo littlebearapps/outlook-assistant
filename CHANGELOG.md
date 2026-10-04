@@ -60,9 +60,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     that the content is data, not instructions.
   - New plugin setting **Confirmation level**: `outward` (default),
     `all-writes` or `off`.
-  - GitHub Copilot CLI runs the same hook from
-    `com.github.copilot/hooks/hooks.json` (PreToolUse only, always at the
-    `outward` level). Not yet checked in VS Code; the Cursor hook is deferred.
+  - GitHub Copilot CLI runs the same hook, including the untrusted-content
+    note, from `com.github.copilot/hooks/hooks.json`. Set the level there with
+    the `OUTLOOK_CONFIRM_LEVEL` environment variable. Not yet checked in VS
+    Code; the Cursor hook is deferred.
 - **Prompt-injection evals** (#284). Test mode's mock mailbox now includes
   three injected emails, and `node scripts/skill-evals.js` runs `claude -p`
   scenarios with and without the skill and hook, then reports pass rates.

@@ -88,7 +88,8 @@ describe('hooks.json', () => {
         expect(hook.command).toMatch(
           /^node "\$\{CLAUDE_PLUGIN_ROOT\}\/hooks\/outlook-gate\.js" (PreToolUse|PostToolUse)$/
         );
-        expect(hook.timeout).toBeLessThanOrEqual(10);
+        // Generous: a hook that times out lets the call through.
+        expect(hook.timeout).toBe(30);
       }
     }
   });
@@ -105,11 +106,17 @@ describe('Copilot hooks (com.github.copilot/hooks/hooks.json)', () => {
   // Copilot CLI 1.0.91 reads this file for Agent Plugins, names MCP tools
   // `<server>-<tool>`, expands ${PLUGIN_ROOT} and sends PascalCase events the
   // Claude-style payload (tool_name, tool_input).
-  const groups = copilotHooks.hooks.PreToolUse;
+  const groups = [
+    ...copilotHooks.hooks.PreToolUse,
+    ...copilotHooks.hooks.PostToolUse,
+  ];
 
-  test('is a version 1 file with only PreToolUse', () => {
+  test('is a version 1 file with PreToolUse and PostToolUse', () => {
     expect(copilotHooks.version).toBe(1);
-    expect(Object.keys(copilotHooks.hooks)).toEqual(['PreToolUse']);
+    expect(Object.keys(copilotHooks.hooks).sort()).toEqual([
+      'PostToolUse',
+      'PreToolUse',
+    ]);
   });
 
   test('matches every Outlook tool under its Copilot name', () => {
@@ -124,13 +131,34 @@ describe('Copilot hooks (com.github.copilot/hooks/hooks.json)', () => {
   });
 
   test('runs the same gate from the plugin root in copilot mode', () => {
-    for (const group of groups) {
-      for (const hook of group.hooks) {
-        expect(hook.command).toBe(
-          'node "${PLUGIN_ROOT}/hooks/outlook-gate.js" PreToolUse copilot'
-        );
+    for (const [event, list] of Object.entries(copilotHooks.hooks)) {
+      for (const group of list) {
+        for (const hook of group.hooks) {
+          expect(hook.command).toBe(
+            `node "\${PLUGIN_ROOT}/hooks/outlook-gate.js" ${event} copilot`
+          );
+          expect(hook.timeout).toBe(30);
+        }
       }
     }
+  });
+
+  test('copilot PostToolUse carries the flat additionalContext Copilot reads', () => {
+    const out = handle(
+      JSON.stringify({
+        hook_event_name: 'PostToolUse',
+        tool_name: 'outlook-read-email',
+      }),
+      'PostToolUse',
+      {},
+      'copilot'
+    );
+    expect(out.additionalContext).toBe(UNTRUSTED_NOTE);
+    expect(out.hookSpecificOutput.additionalContext).toBe(UNTRUSTED_NOTE);
+    // Claude Code output stays nested only.
+    expect(
+      postToolUse({ tool_name: `${PREFIX}read-email` }).additionalContext
+    ).toBeUndefined();
   });
 
   test('copilot mode asks before risky calls and ignores other tools', () => {
@@ -307,6 +335,29 @@ describe('confirm levels', () => {
       );
       expect(pre('update-email', { action: 'flag' }, env(level))).toBeNull();
     }
+  });
+
+  test('OUTLOOK_CONFIRM_LEVEL applies where there is no plugin setting', () => {
+    expect(
+      decision(
+        pre(
+          'update-email',
+          { action: 'flag' },
+          { OUTLOOK_CONFIRM_LEVEL: 'all-writes' }
+        )
+      )
+    ).toBe('ask');
+    // The Claude Code plugin setting wins when both are set.
+    expect(
+      pre(
+        'update-email',
+        { action: 'flag' },
+        {
+          CLAUDE_PLUGIN_OPTION_CONFIRM_LEVEL: 'outward',
+          OUTLOOK_CONFIRM_LEVEL: 'all-writes',
+        }
+      )
+    ).toBeNull();
   });
 
   test('values are matched case-insensitively', () => {

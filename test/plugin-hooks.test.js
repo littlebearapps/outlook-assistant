@@ -181,6 +181,10 @@ describe('Copilot hooks (com.github.copilot/hooks/hooks.json)', () => {
   });
 
   test.each([
+    // VS Code (Local agent): mcp_ + server prefix (serverInfo name cut to
+    // 13 characters, a digit added on a clash, or the mcp.json key) + tool.
+    'mcp_outlook-assis_send-email',
+    'mcp_outlook-assis1_send-email',
     'mcp_outlook_send-email',
     'outlook/send-email',
     'outlook-assistant-outlook-send-email',
@@ -193,6 +197,20 @@ describe('Copilot hooks (com.github.copilot/hooks/hooks.json)', () => {
       'copilot'
     );
     expect(reason(out)).toMatch(/Sends an email to a@x\.com/);
+  });
+
+  test('VS Code names classify like Copilot CLI names', () => {
+    for (const name of [
+      'mcp_outlook-assis_search-emails',
+      'outlook-search-emails',
+    ]) {
+      expect(outlookTool(name, 'copilot')).toBe('search-emails');
+    }
+    expect(outlookTool('mcp_outlook-assis_manage-rules', 'copilot')).toBe(
+      'manage-rules'
+    );
+    // VS Code ignores matchers, so the gate sees its built-in tools too.
+    expect(outlookTool('copilot_readFile', 'copilot')).toBeNull();
   });
 
   test('an Outlook-named tool it can’t place asks', () => {

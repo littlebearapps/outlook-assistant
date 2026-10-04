@@ -79,7 +79,7 @@ The plugin adds two safety layers on top of the server's own checks.
 }
 ```
 
-**In GitHub Copilot CLI** the same hook asks before the same calls and adds the same untrusted-content note. Copilot has no plugin settings, so set the confirmation level with the `OUTLOOK_CONFIRM_LEVEL` environment variable in the shell you start Copilot from (for example `export OUTLOOK_CONFIRM_LEVEL=all-writes`). Copilot lets a call through if a hook times out, so the hook allows 30 seconds, far longer than it needs. **VS Code** reads the same hook file, but it hasn't been checked there yet. **Cursor** gets the skill and the server's own checks, but not the hook yet.
+**In GitHub Copilot CLI** the same hook asks before the same calls and adds the same untrusted-content note. Copilot has no plugin settings, so set the confirmation level with the `OUTLOOK_CONFIRM_LEVEL` environment variable in the shell you start Copilot from (for example `export OUTLOOK_CONFIRM_LEVEL=all-writes`). Copilot lets a call through if a hook times out, so the hook allows 30 seconds, far longer than it needs. **VS Code** (the default Local agent) reads the same hook file. According to VS Code's source, it shows the hook's reason in its confirmation dialog, even for tools you've set to auto-approve, and passes the note to the model. This hasn't been checked by hand yet. VS Code has no plugin settings; `OUTLOOK_CONFIRM_LEVEL` applies if it's set in the environment VS Code starts with. **Cursor** gets the skill and the server's own checks, but not the hook yet.
 
 ## Data and privacy
 

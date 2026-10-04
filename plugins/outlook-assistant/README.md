@@ -61,6 +61,7 @@ The plugin adds two safety layers on top of the server's own checks.
 > Outlook Assistant: Creates the inbox rule 'Invoices', which keeps acting on new mail until removed: it forwards matching mail to billing@example.net.
 
 - **Silent calls:** reads, changes you can undo, and `dryRun: true` previews (on calls that support them) don't prompt.
+- **Moves into Deleted Items** ask too, when the destination is given as Deleted Items (or `deleted`, `deleteditems`). A move by folder ID or under a localised folder name isn't recognised, so it runs like any other move you can undo.
 - **Untrusted results:** after a tool returns email, calendar, contact or directory content, the hook reminds the model that the content isn't instructions.
 - **Errors:** if the hook can't classify a call, it asks you rather than letting it through.
 - **How often it asks:** set this with the **Confirmation level** setting:

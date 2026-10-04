@@ -76,6 +76,23 @@ body:
       required: true
 
   - type: dropdown
+    id: client
+    attributes:
+      label: MCP client
+      description: Which app are you using Outlook Assistant from?
+      options:
+        - Claude Code
+        - Claude Desktop
+        - GitHub Copilot (VS Code)
+        - Copilot CLI
+        - Cursor
+        - Codex CLI
+        - Gemini CLI
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
     id: module
     attributes:
       label: Affected Module
@@ -90,6 +107,7 @@ body:
         - Folder
         - Rules
         - Advanced
+        - Plugin (skill or safety hook)
         - Other / Unknown
     validations:
       required: false
@@ -98,7 +116,7 @@ body:
     id: errors
     attributes:
       label: Error Messages
-      description: Paste any error messages or logs.
+      description: Paste any error messages or logs. For more detail, restart the server with `OUTLOOK_DEBUG=true`; addresses and long IDs are redacted, but check the output before posting it.
       render: shell
 
   - type: textarea

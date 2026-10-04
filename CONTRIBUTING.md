@@ -78,10 +78,18 @@ When adding new tools:
 1. Create a new module directory if needed (e.g. `tasks/`)
 2. Implement tool handlers in separate files
 3. Export tool definitions from the module's `index.js` — prefer consolidating related operations into a single tool with an `action` parameter (STRAP pattern)
-4. Classify the tool, and each of its actions, in `utils/risk-classes.js`, then spread `...toolMetadata(name, title)` into the definition. The annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) are derived from the class, and a test fails on anything unclassified — see the [Tools Reference](docs/quickrefs/tools-reference.md#safety-annotations)
-5. Add the module's tools to `TOOLS` in `tools.js`, and return errors with `toolError()` from `utils/tool-error.js`
-6. Add tests in the `test/` directory
-7. Update `docs/quickrefs/tools-reference.md`
+4. Classify the tool, and each of its actions, in `utils/risk-classes.js` (`TOOL_RISK`) as `read`, `reversible`, `outward`, `destructive` or `persistent`, then spread `...toolMetadata(name, title)` into the definition. The annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) are derived from the class, and a test fails on anything unclassified — see the [Tools Reference](docs/quickrefs/tools-reference.md#safety-annotations). If an action returns a preview for `dryRun: true`, add it to `DRY_RUN_ACTIONS` in the same file
+5. Run `node scripts/sync-risk-map.js` to copy the classes into the plugin hook's `plugins/outlook-assistant/hooks/risk-map.json` and the skill's risk table (`--check` reports drift; a test fails while either is stale)
+6. For any new `outward`, `destructive` or `persistent` action, add a reason to `describe()` in `plugins/outlook-assistant/hooks/outlook-gate.js` that says exactly who is notified or what is lost (a test fails on the generic fallback)
+7. Update the skill reference for that surface under `plugins/outlook-assistant/skills/using-outlook-assistant/references/`; a new Microsoft surface gets its own reference file and a row in the `SKILL.md` routing table
+8. Add the module's tools to `TOOLS` in `tools.js`, and return errors with `toolError()` from `utils/tool-error.js`
+9. Add tests in the `test/` directory
+10. Update `docs/quickrefs/tools-reference.md`
+11. Run the checks: `npm test`, `npm run lint`, `npm run format:check` and `claude plugin validate --strict plugins/outlook-assistant`
+
+Optionally, `node scripts/skill-evals.js` runs the prompt-injection evals against the skill and hook. It needs a signed-in `claude` CLI and spends real model tokens.
+
+The full checklist for plugin, skill and hook changes is in [`.claude/rules/plugin-and-skill-maintenance.md`](.claude/rules/plugin-and-skill-maintenance.md).
 
 ## Commit Messages
 

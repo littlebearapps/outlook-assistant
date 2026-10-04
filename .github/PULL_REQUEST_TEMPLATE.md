@@ -22,6 +22,7 @@ Brief description of changes.
 - [ ] Rules
 - [ ] Advanced
 - [ ] Utils / Config
+- [ ] Plugin (skill, safety hook or manifests)
 - [ ] Documentation
 
 ## Checklist
@@ -31,7 +32,8 @@ Brief description of changes.
 - [ ] Formatting passes (`npm run format:check`)
 - [ ] Documentation updated if needed
 - [ ] `docs/quickrefs/tools-reference.md` updated (if tools changed)
-- [ ] New tools and actions classified in `utils/risk-classes.js` (if tools changed)
+- [ ] New tools and actions classified in `utils/risk-classes.js`, then `node scripts/sync-risk-map.js` run (if tools changed)
+- [ ] Plugin validates (`claude plugin validate --strict plugins/outlook-assistant`)
 - [ ] Follows code style guidelines
 
 ## Related Issues

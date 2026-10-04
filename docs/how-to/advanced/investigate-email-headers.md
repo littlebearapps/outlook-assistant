@@ -35,7 +35,7 @@ params:
   importantOnly: true
 ```
 
-Important headers include: From, To, Subject, Date, Message-ID, DKIM-Signature, Authentication-Results, Received (first and last), X-MS-Exchange-Organization-SCL.
+Important headers are the threading headers (Message-ID, In-Reply-To, References), authentication (Authentication-Results, DKIM-Signature, ARC-Authentication-Results, Received-SPF), every Received header, Microsoft spam and filtering headers (X-MS-Exchange-Organization-SCL, X-MS-Exchange-Organization-AuthSource, X-Forefront-Antispam-Report, X-Microsoft-Antispam), Content-Type, MIME-Version, X-Mailer, X-Originating-IP and X-Priority.
 
 ## Group Headers by Category
 
@@ -47,7 +47,7 @@ params:
   groupByType: true
 ```
 
-Headers are grouped into categories: routing, authentication, Microsoft Exchange, and other.
+Headers are grouped into categories: Threading, Authentication, Delivery, Spam/Security, Content and Other.
 
 ![Forensic headers output showing DKIM/SPF results and delivery chain](../../assets/screenshots/investigate-email-headers-01.png)
 

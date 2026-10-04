@@ -1,35 +1,49 @@
 # Plugin and skill maintenance
 
-The marketplace plugin (`plugins/outlook-assistant/`) ships the MCP server pinned to an exact npm version. v3.14.0 (milestone #6) adds an agent skill (`skills/using-outlook-assistant/`, #282) and a safety hook (#283): `hooks/hooks.json` for Claude Code and `com.github.copilot/hooks/hooks.json` for Copilot CLI (its tools are named `outlook-<tool>`, verified on Copilot CLI 1.0.91), both running `hooks/outlook-gate.js`. Copilot reads flat `permissionDecision`/`additionalContext`, so in Copilot mode the gate sends the flat and the nested Claude forms; it lets a call through when a hook times out, so keep `timeout` at 30. VS Code's Local agent reads the same file, ignores matchers and names tools `mcp_<server prefix>_<tool>` (e.g. `mcp_outlook-assis_send-email`). In Copilot mode the gate also fails closed on naming: any tool name containing "outlook" is treated as ours, and if it can't be placed in the risk map, the gate asks. Cursor: `.cursor-plugin/plugin.json` (no `mcpServers`, so Cursor uses `mcp.json`; without it Cursor loads `.claude-plugin` and leaves `${user_config.*}` unexpanded) points at `hooks/hooks-cursor.json`, which runs the gate with `cursor` (`beforeMCPExecution` with `failClosed: true`, `postToolUse` note; always print JSON). Keep its version in step via `scripts/sync-version.js`. They must stay in step with the server, or the safety guidance drifts from what the tools actually do.
+The marketplace plugin (`plugins/outlook-assistant/`) ships the MCP server pinned to an exact npm version, plus (from v3.14.0, milestone #6) an agent skill (#282) and a safety hook (#283). They must stay in step with the server, or the safety guidance drifts from what the tools actually do. File layout: `docs/architecture.md` (Plugin Layout).
 
-## Already in place (v3.13.0)
+## Current state (v3.13.0 released, v3.14.0 unreleased)
 
-- **Manifests:**
+- **Manifests, one per client:**
   - `plugins/outlook-assistant/.claude-plugin/plugin.json` (Claude Code: `userConfig` plus inline `mcpServers`)
-  - `plugins/outlook-assistant/plugin.json` + `mcp.json` (Agent Plugins 1.0: Copilot, VS Code, Cursor)
+  - `plugins/outlook-assistant/plugin.json` + `mcp.json` (Agent Plugins 1.0: Copilot CLI, VS Code)
+  - `plugins/outlook-assistant/.cursor-plugin/plugin.json` (Cursor, v3.14.0): no `mcpServers`, so Cursor uses `mcp.json`; points at `hooks/hooks-cursor.json`. Without it Cursor loads `.claude-plugin` and leaves `${user_config.*}` unexpanded (`test/plugin-manifests.test.js` checks it declares no servers).
   - `.claude-plugin/marketplace.json` (self-hosted Claude marketplace)
-- **Versions:** never hand-edit versions or the pinned `npx …@x.y.z` launchers. `npm version <patch|minor>` runs `scripts/sync-version.js`; `npm run version:check` reports drift; `test/plugin-manifests.test.js` fails on drift.
-- **`userConfig`:** every option needs a `default` and must not be `sensitive`, so Cowork can load the plugin. Never put a client secret in any manifest.
+- **Versions:** never hand-edit versions or the pinned `npx …@x.y.z` launchers. `npm version <patch|minor>` runs `scripts/sync-version.js` (`server.json`, all three plugin manifests, `mcp.json` and the skill's `metadata.version`); `npm run version:check` reports drift; `test/plugin-manifests.test.js` fails on drift.
+- **`userConfig`:** every option needs a `default` and must not be `sensitive`, so Cowork can load the plugin. Never put a client secret in any manifest. v3.14.0 adds `read_only` (maps to `OUTLOOK_READ_ONLY`, #271; the gate is `utils/read-only.js`, driven by the risk map) and `confirm_level` (read by the hook only, as `CLAUDE_PLUGIN_OPTION_CONFIRM_LEVEL`).
 - **The Agent Plugins `plugin.json` schema is closed:** only `$schema`, `name`, `version`, `description`, `author`, `homepage`, `repository`, `license`, `keywords` and `extensions` are allowed.
-- **Before committing plugin changes,** run both `claude plugin validate --strict plugins/outlook-assistant` and `claude plugin validate --strict .claude-plugin/marketplace.json`.
-
-## Added for v3.14.0 (in place, unreleased)
-
-- **`read_only` `userConfig`** (Claude manifest) maps to `OUTLOOK_READ_ONLY` (#271); the gate is `utils/read-only.js`, driven by the risk map.
 - **Server `instructions`** (`utils/server-instructions.js`, #271): the skill and hook must restate these hard rules, so change them together. The hard rules stay within the first 512 characters.
 - **`requiresUserInteraction`** in `utils/risk-classes.js` publishes `_meta["anthropic/requiresUserInteraction"]` (`riskMeta`); only single-purpose tools whose every call reaches other people (`send-email`, `create-event`) get it.
+- **Hook:** `hooks/outlook-gate.js`, run by `hooks/hooks.json` (Claude Code), `com.github.copilot/hooks/hooks.json` (Copilot CLI and VS Code, arg `copilot`) and `hooks/hooks-cursor.json` (Cursor, arg `cursor`). It classifies calls with the generated `hooks/risk-map.json` and fails closed: an unknown Outlook tool or action, unreadable input or an internal error asks. Confirmation level: `outward` (default) | `all-writes` | `off`, from `confirm_level` or the `OUTLOOK_CONFIRM_LEVEL` env var; an unknown value counts as `outward`. Keep every hook `timeout` at 30.
+
+### Per-client hook facts (verified 2026-10-04)
+
+| Client | Tool name the hook sees | Output the gate writes | When the hook fails or can't ask |
+|---|---|---|---|
+| Claude Code | `mcp__plugin_outlook-assistant_outlook__<tool>` | nested `hookSpecificOutput` (`permissionDecision: ask`, `additionalContext`) | `ask` overrides allow rules; in bypassPermissions mode Claude Code may auto-approve it (plugin README has an opt-in `permissions.ask` snippet); in `-p` an `ask` becomes a deny. `send-email`/`create-event` always ask via `requiresUserInteraction`, dry runs included |
+| Copilot CLI (1.0.91) | `outlook-<tool>` | flat `permissionDecision`/`additionalContext` **and** the nested form | timeout lets the call through (fail open), hence 30 s; in `-p` an `ask` becomes "Denied by preToolUse hook (unable to ask user …)"; Copilot cloud agent treats `ask` as deny |
+| VS Code (Local agent) | `mcp_<server prefix>_<tool>`, e.g. `mcp_outlook-assis_send-email`; matchers ignored | same file and output as Copilot CLI | per VS Code's source, shows the reason even for auto-approved tools; not checked by hand; timeout fails open |
+| Cursor (CLI 2026.10.01) | `beforeMCPExecution`: bare tool name + `mcp_server_name` (e.g. `plugin-outlook-assistant-outlook`), arguments as a JSON string; `postToolUse`: `MCP:<tool>` | `{permission, user_message, agent_message}`, `{additional_context}`, `{}` for no opinion; always print JSON (invalid JSON blocks) | `failClosed: true`: a crash or timeout blocks. Cursor shows its generic "Run this MCP tool?" prompt without the reason; an `Mcp(...)` allow rule, `--force` or Run Everything runs the call without asking. Desktop app not checked |
+
+In Copilot and Cursor modes the gate also fails closed on naming: any tool (or Cursor server) name containing "outlook" is treated as ours, and a call it can't place in the risk map asks. Clients without plugin settings (Copilot, VS Code, Cursor) take the level only from `OUTLOOK_CONFIRM_LEVEL` in the environment they start with. Results per client and model: `docs/cross-client-matrix.md`.
 
 ## When you add or change a tool or action
 
-1. **Classify it** in the risk-class map (`utils/risk-classes.js`, #270, in place) as `read`, `reversible`, `outward`, `destructive` or `persistent`, and spread `...toolMetadata(name, title)` into the definition. The `title` and all four annotation hints derive from it, and `test/utils/risk-classes.test.js` fails on any unclassified tool or action. `OUTLOOK_READ_ONLY` (#271) refuses every non-`read` call from it; if `action` is optional, set the map's `defaultAction` to the handler's default. Add any new `dryRun` preview to `DRY_RUN_ACTIONS` there too. The hook's `risk-map.json` and the skill's risk table are generated from it: run `node scripts/sync-risk-map.js`, and `test/plugin-hooks.test.js` fails while either is stale.
-2. **Update the skill reference for that surface** under `plugins/outlook-assistant/skills/using-outlook-assistant/references/` (#282). A new Microsoft surface (OneDrive, To Do, Teams) gets its own reference file plus a row in the SKILL.md routing table.
-3. **Add hook reason text** in `describe()` (`plugins/outlook-assistant/hooks/outlook-gate.js`, #283) for any new `outward`, `destructive` or `persistent` action. It must say exactly who is notified or what is lost; `test/plugin-hooks.test.js` fails on the generic fallback.
-4. **Keep the skill format portable:**
+1. **Classify it** in the risk-class map (`utils/risk-classes.js`, #270) as `read`, `reversible`, `outward`, `destructive` or `persistent`, and spread `...toolMetadata(name, title)` into the definition. The `title` and all four annotation hints derive from it, and `test/utils/risk-classes.test.js` fails on any unclassified tool or action. `OUTLOOK_READ_ONLY` (#271) refuses every non-`read` call from it; if `action` is optional, set the map's `defaultAction` to the handler's default. Set `untrustedContent` if results carry other people's content (the hook's note follows it).
+2. **Add any new `dryRun` preview to `DRY_RUN_ACTIONS`** in the same file, so the hook lets that preview through without asking.
+3. **Regenerate the plugin copies:** run `node scripts/sync-risk-map.js` (the hook's `risk-map.json` and the skill's risk table); `test/plugin-hooks.test.js` fails while either is stale.
+4. **Add hook reason text** in `describe()` (`plugins/outlook-assistant/hooks/outlook-gate.js`, #283) for any new `outward`, `destructive` or `persistent` action. It must say exactly who is notified or what is lost; `test/plugin-hooks.test.js` fails on the generic fallback.
+5. **Update the skill reference for that surface** under `plugins/outlook-assistant/skills/using-outlook-assistant/references/` (#282). A new Microsoft surface (OneDrive, To Do, Teams) gets its own reference file plus a row in the SKILL.md routing table. `test/plugin-skill.test.js` fails if the skill names a tool or action the server doesn't have.
+6. **Keep the skill format portable:**
    - only the 6 Agent Skills frontmatter fields (`name`, `description`, `license`, `compatibility`, `metadata` with string values, `allowed-tools` as a string);
    - `name` equals the folder name;
    - SKILL.md under 500 lines, with the hard rules in the first screen;
    - links only to files inside the skill folder.
    `vally lint` (awesome-copilot's gate) and VS Code reject violations, and VS Code rejects them silently.
+7. **Validate before committing plugin changes:**
+   - `claude plugin validate --strict plugins/outlook-assistant`
+   - `claude plugin validate --strict .claude-plugin/marketplace.json`
+   - `npx @microsoft/vally-cli lint --strict plugins/outlook-assistant/skills/using-outlook-assistant`
 
 ## Tool design rules (all clients, not just one)
 

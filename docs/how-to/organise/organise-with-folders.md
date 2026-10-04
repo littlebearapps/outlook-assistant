@@ -75,16 +75,9 @@ params:
   targetFolder: "Project Alpha"
 ```
 
-Email IDs are comma-separated. By default, emails are moved from the inbox. Specify `sourceFolder` if they're elsewhere:
+Email IDs are comma-separated. Each email is moved by its ID from whichever folder it's in, so you don't need to name the source folder (`sourceFolder` is accepted but not used).
 
-```
-tool: folders
-params:
-  action: "move"
-  emailIds: "AAMkAGR1..."
-  targetFolder: "Archive"
-  sourceFolder: "sentitems"
-```
+A moved email gets a new ID unless `OUTLOOK_IMMUTABLE_IDS=true` is set. The result's `_meta.moved` lists each old and new ID, so use the new one for any follow-up call.
 
 ### Move into a nested folder
 
@@ -119,7 +112,7 @@ params:
   folder: "inbox"
 ```
 
-This returns total items, unread count, and folder size — useful for planning pagination or understanding email volume.
+This returns the total and unread counts, plus how many pages a listing would take — useful for planning pagination or understanding email volume.
 
 `folder` accepts a well-known alias (`inbox`, `sent`, …), a nested path (e.g. `Clients/Acme`), or a bare folder name. To target a folder by its ID instead, pass `folderId`.
 
@@ -178,7 +171,6 @@ The preview counts up to 100 subfolders; beyond that it says "at least".
 | `emailIds` | Comma-separated email IDs | `move` |
 | `targetFolder` | Destination folder name or path | `move` |
 | `targetFolderId` | Destination folder ID (alternative to `targetFolder`) | `move` |
-| `sourceFolder` | Source folder (default: inbox) | `move` |
 | `folder` | Folder to get stats for (alias, path, or name) | `stats` |
 | `folderId` | Folder ID (stats or delete) | `stats`, `delete` |
 | `folderName` | Folder name or path to delete (resolved to ID) | `delete` |

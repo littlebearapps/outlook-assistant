@@ -10,7 +10,9 @@ Connect your Microsoft 365 or Outlook.com account so your AI assistant can searc
 
 ## Install Outlook Assistant
 
-Install the package globally:
+If you use the plugin in Claude Code, GitHub Copilot or Cursor (see [Install the Plugin](#install-the-plugin-claude-code-github-copilot-cursor)), skip this step: the plugin runs a pinned version of the server with `npx`.
+
+Otherwise, install the package globally:
 
 ```bash
 npm install -g @littlebearapps/outlook-assistant
@@ -54,6 +56,36 @@ Follow the full walkthrough in the [Azure Setup Guide](../../guides/azure-setup.
 > **Common mistake**: If you create a client secret, copy its **Value**, not the Secret ID. Using the wrong one causes `AADSTS7000215` errors.
 
 ## Add to Your AI Tool
+
+Which install suits you, and what each client supports, is summarised in [Supported Clients and Their Limits](supported-clients.md).
+
+### Install the Plugin (Claude Code, GitHub Copilot, Cursor)
+
+The plugin runs the server and adds two safety layers the server can't provide on its own: the `using-outlook-assistant` skill, which teaches your assistant the safety rules, and a hook that asks you before anything that reaches other people, deletes something or keeps acting.
+
+- **Claude Code:**
+
+  ```bash
+  claude plugin marketplace add littlebearapps/outlook-assistant
+  claude plugin install outlook-assistant@littlebearapps
+  ```
+
+  Claude Code asks for the plugin's settings when you enable it, including your client ID and the hook's **Confirmation level**.
+
+- **GitHub Copilot CLI:**
+
+  ```bash
+  copilot plugin marketplace add littlebearapps/outlook-assistant
+  copilot plugin install outlook-assistant@littlebearapps
+  ```
+
+  VS Code's Copilot agent reads the same plugin; that hasn't been checked by hand yet.
+
+- **Cursor** (v3.14.0 or later): Cursor loads `plugins/outlook-assistant` as a Cursor plugin. In Cursor CLI, pass it with `--plugin-dir`. The v3.13.0 plugin can't sign in from Cursor (`AADSTS900023`); use the manual `.cursor/mcp.json` from the [README](../../../README.md#3-configure-your-mcp-client) instead.
+
+Copilot and Cursor have no plugin settings, so give your client ID when you sign in (see [Clients That Can't Set Environment Variables](#clients-that-cant-set-environment-variables)), and set the hook's confirmation level with the `OUTLOOK_CONFIRM_LEVEL` environment variable.
+
+The sections below add the server by hand instead. That works in any MCP client, but you get the server's own checks without the plugin's hook.
 
 ### Claude Desktop
 
@@ -106,13 +138,15 @@ Or add to your `.mcp.json` or project settings:
 
 ### Other MCP Clients
 
-Any MCP-compatible client can use Outlook Assistant. Set the command to `npx -y @littlebearapps/outlook-assistant` and pass the environment variables in the client's `env` settings. The MCP server doesn't read a `.env` file.
+Any MCP-compatible client can use Outlook Assistant, including VS Code, Cursor, Windsurf, Codex CLI and Gemini CLI (the [README](../../../README.md#3-configure-your-mcp-client) has config snippets for several). Set the command to `npx -y @littlebearapps/outlook-assistant` and pass the environment variables in the client's `env` settings. The MCP server doesn't read a `.env` file.
+
+If your client supports Agent Skills, you can also copy the skill folder, `plugins/outlook-assistant/skills/using-outlook-assistant/`, to wherever it loads skills from.
 
 `OUTLOOK_CLIENT_SECRET` is only used by the [browser redirect flow](#browser-redirect-flow-alternative). With device code sign-in (the default) you can leave it out and set just `OUTLOOK_CLIENT_ID`.
 
 ### Clients That Can't Set Environment Variables
 
-Some clients, such as the GitHub Copilot and Cursor plugin marketplaces, install the server with a fixed configuration and give you nowhere to enter `OUTLOOK_CLIENT_ID`. In that case, give the client ID to your AI assistant when you sign in:
+Some clients, such as the GitHub Copilot and Cursor plugins, install the server with a fixed configuration and give you nowhere to enter `OUTLOOK_CLIENT_ID`. In that case, give the client ID to your AI assistant when you sign in:
 
 > "Connect to my Outlook account. My Azure Application (client) ID is 00000000-0000-0000-0000-000000000000"
 
@@ -127,7 +161,7 @@ Optional settings such as `OUTLOOK_AUTH_AUDIENCE`, `OUTLOOK_DEFAULT_TIMEZONE`, t
 
 ### Trying It Out Safely
 
-For your first sessions, consider adding `"OUTLOOK_READ_ONLY": "true"` to the `env` block. Your assistant can then search and read mail, calendar and contacts, but every call that would change something (sending, drafting, moving, flagging, deleting, rules, settings, saving attachments or exports) is refused before it runs, and nothing is changed. Signing in still works. `auth action=about` shows whether read-only mode is on. Remove the setting and restart the server when you're ready to let it act for you.
+For your first sessions, consider adding `"OUTLOOK_READ_ONLY": "true"` to the `env` block (in the Claude Code plugin, turn on **Read-only mode** instead). Your assistant can then search and read mail, calendar and contacts, but every call that would change something (sending, drafting, moving, flagging, deleting, rules, settings, saving attachments or exports) is refused before it runs, and nothing is changed. Signing in still works. `auth action=about` shows whether read-only mode is on. Remove the setting and restart the server when you're ready to let it act for you.
 
 ## Authenticate for the First Time
 
@@ -233,5 +267,6 @@ If you see your recent emails, everything is connected.
 
 - [Azure Setup Guide](../../guides/azure-setup.md) — full Azure walkthrough with screenshots
 - [Verify Your Connection](verify-your-connection.md) — check auth status and re-authenticate
+- [Supported Clients and Their Limits](supported-clients.md) — what the skill and safety hook do in each client
 - [Find Emails](../email/find-emails.md) — your first search after connecting
 - [Tools Reference](../../quickrefs/tools-reference.md) — all 22 tools with parameters

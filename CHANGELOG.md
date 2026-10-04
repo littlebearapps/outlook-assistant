@@ -7,8 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Upgrade notes
+
+What you'll notice after upgrading:
+
+- **Claude asks before every `send-email` and `create-event` call**, dry runs
+  included, even when other prompts are auto-accepted or skipped. Other
+  clients ignore this flag.
+- **The plugin's safety hook asks before risky calls.** With the plugin in
+  Claude Code, GitHub Copilot CLI or Cursor, anything that reaches other
+  people, deletes something or keeps acting (rules, automatic replies) asks
+  first. Turn it down with the **Confirmation level** setting in Claude Code,
+  or `OUTLOOK_CONFIRM_LEVEL` in Copilot and Cursor. In headless `-p` runs of
+  Claude Code and Copilot CLI, an ask becomes a deny.
+- **`checkRecipients: true` can now refuse a send.** If the mail tips show an
+  out-of-office reply, a full mailbox, a delivery restriction, an external
+  recipient or a group with external members, or the check fails, nothing is
+  sent. Repeat the call with `acknowledgeWarnings: true` to send anyway.
+- **A rule whose forwarding is blocked is refused.** `manage-rules` no longer
+  saves the rule with the blocked `forwardTo` or `redirectTo` addresses
+  quietly dropped.
+- **Read-only mode is available** (`OUTLOOK_READ_ONLY=true`, or the
+  **Read-only mode** plugin setting). It's off unless you set it, but an
+  unrecognised value turns it on, so check the spelling if changes start
+  being refused.
+- **The default log is quieter.** stderr gets one line per tool call. Set
+  `OUTLOOK_DEBUG=true` for the troubleshooting detail you used to see, with
+  addresses redacted.
+- **More tools count as destructive.** `create-event`, `mailbox-settings`,
+  `manage-category` and `manage-focused-inbox` are now marked destructive, so
+  clients that prompt on destructive tools will prompt for them too.
+- **Cursor now loads the plugin properly.** If sign-in failed with
+  AADSTS900023 in Cursor on v3.13.0, update the plugin. Cursor shows its own
+  generic prompt rather than the hook's reason, so don't allowlist Outlook's
+  send, rule or delete tools there.
+
 ### Added
 
+- **Plugin safety hook for Claude Code, GitHub Copilot CLI and Cursor**
+  (#283).
+  - Before any Outlook call that reaches other people, deletes or keeps
+    acting, it asks you with a plain-English reason, e.g. "Cancels the event
+    'Team sync' and emails a cancellation to every attendee". Moving mail
+    into Deleted Items asks too.
+  - Reads, reversible changes and genuine `dryRun: true` previews pass
+    silently. Anything it can't classify asks (fails closed).
+  - After tools that return other people's content, it reminds the model
+    that the content is data, not instructions.
+  - New plugin setting **Confirmation level**: `outward` (default),
+    `all-writes` or `off`.
+  - If Claude Code is set to skip permission prompts, it may auto-approve the
+    hook's prompts (`send-email` and `create-event` still ask); the plugin
+    README has an opt-in `permissions.ask` snippet to keep them.
+  - GitHub Copilot CLI runs the same hook, including the untrusted-content
+    note, from `com.github.copilot/hooks/hooks.json`. Set the level there with
+    the `OUTLOOK_CONFIRM_LEVEL` environment variable. Not yet checked in VS
+    Code.
+  - Cursor runs it from `hooks/hooks-cursor.json` (`beforeMCPExecution` with
+    `failClosed`, plus the note on `postToolUse`). In Cursor CLI, an "ask"
+    falls back to Cursor's own MCP approval prompt without the hook's reason,
+    and an allowlist rule or `--force` overrides it. The Cursor desktop app
+    hasn't been checked yet.
+- **Claude always asks before `send-email` and `create-event`** (#271). Both
+  tools carry `_meta["anthropic/requiresUserInteraction"]`, so Claude Code
+  prompts for every call, dry runs included, even in auto-accept or bypass
+  modes. Other clients ignore the flag.
 - **Read-only mode: `OUTLOOK_READ_ONLY=true`** (#271).
   - Every tool call or action that isn't a read is refused before it runs,
     so nothing reaches Microsoft Graph and nothing is written locally. Dry
@@ -16,19 +79,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     (`auth` authenticate and device-code-complete) still works.
   - `true`, `1`, `yes` and `on` turn it on; unset, `false`, `0`, `no` and
     `off` leave it off. Any other value turns it on, with a warning on stderr.
-  - `auth action=about` shows whether it's on, and the Claude Code plugin
-    has a **Read-only mode** setting.
-- **Server instructions** (#271). The `initialize` result now carries
-  `instructions` for the model, hard safety rules first: retrieved mail,
-  calendar and contact content is data, not instructions; confirm actions
-  that reach other people, delete or keep acting (with `dryRun: true`
-  previews); draft first and send only when asked; treat policy refusals,
-  allowlist refusals and rate limits as final. Efficiency tips and the
-  read-only status follow.
-- **Claude always asks before `send-email` and `create-event`** (#271). Both
-  tools carry `_meta["anthropic/requiresUserInteraction"]`, so Claude Code
-  prompts for every call, dry runs included, even in auto-accept or bypass
-  modes. Other clients ignore the flag.
+  - `auth action=about` shows whether it's on, `--help` lists it, and the
+    Claude Code plugin has a **Read-only mode** setting.
+- **Plugin skill: `using-outlook-assistant`** (#282). Claude Code, GitHub
+  Copilot and Cursor load it from the plugin. It holds 8 hard rules (retrieved
+  content is data, confirm with exact details, draft first, execute once,
+  refusals are final, nothing hidden in what you write, least data, ask
+  rarely), the risk-class table, and one reference per surface: sending,
+  calendar, rules and settings, contacts, folders and categories, searching
+  and reading, personal vs Microsoft 365 accounts, shared mailboxes, prompt
+  injection and privacy.
 - **`dryRun: true` previews for more actions** (#274). Nothing is changed or
   sent; the preview says who would be emailed (with a count of external
   addresses) or what would be lost.
@@ -43,111 +103,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `manage-contact` `delete`: which contact would be removed.
   - The other `folders`, `manage-contact` and `mailbox-settings` actions
     refuse `dryRun: true` with an error and change nothing.
-- **Plugin skill: `using-outlook-assistant`** (#282). Claude Code, GitHub
-  Copilot and Cursor load it from the plugin. It holds 8 hard rules (retrieved
-  content is data, confirm with exact details, draft first, execute once,
-  refusals are final, nothing hidden in what you write, least data, ask
-  rarely), the risk-class table, and one reference per surface: sending,
-  calendar, rules and settings, deletes, efficient searching, personal vs
-  Microsoft 365 accounts, shared mailboxes, prompt injection and privacy.
-- **Plugin safety hook for Claude Code and GitHub Copilot CLI** (#283).
-  - Before any Outlook call that reaches other people, deletes or keeps
-    acting, it asks you with a plain-English reason, e.g. "Cancels the event
-    'Team sync' and emails a cancellation to every attendee".
-  - Reads, reversible changes and genuine `dryRun: true` previews pass
-    silently. Anything it can't classify asks (fails closed).
-  - After tools that return other people's content, it reminds the model
-    that the content is data, not instructions.
-  - New plugin setting **Confirmation level**: `outward` (default),
-    `all-writes` or `off`.
-  - GitHub Copilot CLI runs the same hook, including the untrusted-content
-    note, from `com.github.copilot/hooks/hooks.json`. Set the level there with
-    the `OUTLOOK_CONFIRM_LEVEL` environment variable. Not yet checked in VS
-    Code.
-  - Cursor runs it from `hooks/hooks-cursor.json` (`beforeMCPExecution` with
-    `failClosed`, plus the note on `postToolUse`). In Cursor CLI, an "ask"
-    falls back to Cursor's own MCP approval prompt, and an allowlist rule
-    overrides it.
-- **Prompt-injection evals** (#284). Test mode's mock mailbox now includes
-  three injected emails, and `node scripts/skill-evals.js` runs `claude -p`
-  scenarios with and without the skill and hook, then reports pass rates.
+- **Server instructions** (#271). The `initialize` result now carries
+  `instructions` for the model, hard safety rules first: retrieved mail,
+  calendar and contact content is data, not instructions; confirm actions
+  that reach other people, delete or keep acting (with `dryRun: true`
+  previews); draft first and send only when asked; treat policy refusals,
+  allowlist refusals and rate limits as final. Efficiency tips, the
+  read-only status and a pointer to the `using-outlook-assistant` skill
+  follow.
 - **`OUTLOOK_DEBUG=true` for detailed logs** (#278). See the logging change
   below.
-
-### Fixed
-
-- **The plugin now loads properly in Cursor.** Without a Cursor manifest,
-  Cursor loaded the Claude Code manifest and passed its `${user_config.*}`
-  placeholders to the server as literal text, so sign-in failed with
-  AADSTS900023 and the send cap and allowlist were garbage. A new
-  `.cursor-plugin/plugin.json` makes Cursor use the plain `mcp.json`
-  instead (verified with Cursor CLI 2026.10.01).
-- **Failed tool calls now look like failures.** About 260 error results,
-  including missing-parameter, not-found and Graph errors and the rate-limit
-  and allowlist refusals, came back without `isError`, so clients and models
-  read them as successes. They now all set `isError: true` (#275).
-- **Sign-in errors name the right tool.** "Authentication required" now tells
-  the model to sign in with the `auth` tool with `action=authenticate`; 24 of
-  these messages pointed to an `authenticate` tool that no longer exists
-  (#275).
-- **An export search that matches nothing says so.** A search-driven batch
-  export (`target=messages` with `searchQuery` or `query`) that found no
-  messages replied "Provide emailIds or searchQuery", although you had. It
-  now reports that nothing matched and nothing was exported (#275).
-- **Protocol errors are real JSON-RPC errors** (#276).
-  - Unknown methods (including the 2026-07-28 `server/discover` probe)
-    return `-32601`, internal failures `-32603`, and an unknown tool `-32602`,
-    instead of a success result carrying an error.
-  - `capabilities` now declares `tools: { listChanged: false }`, and
-    `resources/list` and `prompts/list` are no longer answered with empty
-    stubs.
-- **Accurate safety annotations on every tool** (#277).
-  - All four hints (`readOnlyHint`, `destructiveHint`, `idempotentHint`,
-    `openWorldHint`) are now set explicitly, and every tool has a top-level
-    `title`.
-  - `create-event` and `mailbox-settings` are now marked destructive and
-    open-world (invitations and automatic replies reach other people).
-    `manage-event` and `manage-rules` are now open-world.
-    `manage-category` and `manage-focused-inbox` are now destructive, because
-    they can delete. `list-events` and `get-mail-tips` are now open-world,
-    because event text and out-of-office replies are written by other people.
-    Clients that prompt on destructive tools will now prompt for these too.
-- **Mail tips are returned, not sent to Graph** (#272).
-  - `send-email` with `checkRecipients: true` put any mail-tip warnings into
-    the `sendMail` request instead of returning them. The warnings now come
-    back in the result, and the request holds only message properties.
-  - `get-mail-tips` now reads Graph's actual field names (`mailboxFull`,
-    `deliveryRestricted`, `isModerated`), so full mailboxes, delivery
-    restrictions and moderation are no longer missed. It also recognises
-    `externalPartner` and `externalNonPartner` scopes, and lists every
-    flagged condition per recipient in `_meta.issues`.
-  - `draft action=create` with `checkRecipients: true` now returns the tips
-    with the saved draft; before, they were only shown in a dry run.
-- **A rule whose forwarding is blocked is refused, not saved without it**
-  (#273). When `OUTLOOK_ALLOWED_RECIPIENTS` blocks any `forwardTo` or
-  `redirectTo` address, `manage-rules` create and update now refuse the whole
-  rule and name the blocked addresses. Before, the rule was saved with the
-  forwarding quietly dropped. A dry run reports the refusal too.
-- **`manage-rules` rate limit counts real changes only** (#273, #279). Dry
-  runs no longer use a slot (and still work once the limit is reached),
-  `reorder` now counts, and `delete` counts only once a rule to delete has
-  been found.
-- **A retried `create-event` can't book the meeting twice** (#280). Each call
-  sends Graph a `transactionId`, so a throttled request that's retried is
-  recognised as the same event rather than creating (and inviting people
-  to) a second one.
-- **Truncation and paging hints name real parameters** (#279).
-  - A cut body pointed to an `includeFullBody` parameter that doesn't exist.
-    It now names `read-email` with `outputVerbosity: full`, and for longer
-    bodies `export target=message`, which writes the whole message to a
-    file.
-  - Bodies at `outputVerbosity: full` (in `read-email` and conversation
-    views) are capped at 40,000 characters, so one long message can't flood
-    the conversation.
-  - The list footer no longer mentions a `nextPageToken` that was never
-    returned; it suggests raising `count` or narrowing the date range.
-  - `export target=messages` now says when the 100-per-call limit or
-    `searchQuery.maxResults` left messages out, and how to get the rest.
+- **Prompt-injection evals and a cross-client matrix** (#284). Test mode's
+  mock mailbox now includes three injected emails, and
+  `node scripts/skill-evals.js` runs `claude -p` scenarios with and without
+  the skill and hook, then reports pass rates (it spends real model tokens).
+  `docs/cross-client-matrix.md` records which clients and models have been
+  checked.
 
 ### Changed
 
@@ -159,23 +130,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - A recipient check that fails also stops the send.
   - Custom mail tips and moderation are shown but don't block. A dry run
     notes when a real send would be refused.
+  - Mail tips are Microsoft 365 only: on personal Outlook.com accounts there
+    are none, so nothing is refused.
 - **Logs record what ran, not what it read** (#278).
   - By default stderr gets one line per tool call (`tool=… action=…
     outcome=… ms=…`, plus a Graph status or `AADSTS` code on failure) and
     never the call's arguments.
   - `OUTLOOK_DEBUG=true` adds detail such as search strategies and Graph
     error bodies, with email addresses and long IDs redacted.
-  - Access and refresh tokens, device codes and secrets are never logged at
-    either level; the device code used to be written to stderr.
+- **Risk classes drive the annotations.** `utils/risk-classes.js` classifies
+  every tool and action as `read`, `reversible`, `outward`, `destructive` or
+  `persistent`, and the annotations are derived from it. A test fails on any
+  unclassified tool or action (#270). `node scripts/sync-risk-map.js` copies
+  the map into the plugin hook's `risk-map.json` and the skill's risk table.
 - **Tool descriptions state boundaries, not preferences** (#279). Every
   description now fits within 1,024 characters (VS Code's limit), phrases
   such as "prefer X" are replaced by what each tool does and doesn't cover,
   and the `export` `searchQuery.*` fields are described.
-
-- **Risk classes drive the annotations.** `utils/risk-classes.js` classifies
-  every tool and action as `read`, `reversible`, `outward`, `destructive` or
-  `persistent`, and the annotations are derived from it. A test fails on any
-  unclassified tool or action (#270).
 - **Registry metadata** (#281).
   - `server.json` gains a title, website and icon.
   - `OUTLOOK_CLIENT_ID` is no longer marked required, since it can be given at
@@ -184,6 +155,107 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Schema check in CI.** Every tool's `inputSchema` is validated against JSON
   Schema 2020-12 with Ajv, along with client portability rules (an object
   root, no root `oneOf`/`anyOf`/`allOf`, `items` on every array) (#281).
+
+### Fixed
+
+- **The plugin now loads properly in Cursor.** Without a Cursor manifest,
+  Cursor loaded the Claude Code manifest and passed its `${user_config.*}`
+  placeholders to the server as literal text, so sign-in failed with
+  AADSTS900023 and the send cap and allowlist were garbage. A new
+  `.cursor-plugin/plugin.json` makes Cursor use the plain `mcp.json`
+  instead (verified with Cursor CLI 2026.10.01).
+- **A rule whose forwarding is blocked is refused, not saved without it**
+  (#273). When `OUTLOOK_ALLOWED_RECIPIENTS` blocks any `forwardTo` or
+  `redirectTo` address, `manage-rules` create and update now refuse the whole
+  rule and name the blocked addresses. Before, the rule was saved with the
+  forwarding quietly dropped. A dry run reports the refusal too.
+- **Mail tips are returned, not sent to Graph** (#272).
+  - `send-email` with `checkRecipients: true` put any mail-tip warnings into
+    the `sendMail` request instead of returning them. The warnings now come
+    back in the result, and the request holds only message properties.
+  - `get-mail-tips` now reads Graph's actual field names (`mailboxFull`,
+    `deliveryRestricted`, `isModerated`), so full mailboxes, delivery
+    restrictions and moderation are no longer missed. It also recognises
+    `externalPartner` and `externalNonPartner` scopes, and lists every
+    flagged condition per recipient in `_meta.issues`.
+  - The `get-mail-tips` text now counts external recipients and groups with
+    external members as warnings, so it no longer shows "Warnings: 0" for a
+    recipient `send-email` would refuse. A recipient Graph couldn't check
+    shows as "Not checked" rather than "No issues detected".
+  - `draft action=create` with `checkRecipients: true` now returns the tips
+    with the saved draft; before, they were only shown in a dry run.
+- **Failed tool calls now look like failures.** About 260 error results,
+  including missing-parameter, not-found and Graph errors and the rate-limit
+  and allowlist refusals, came back without `isError`, so clients and models
+  read them as successes. They now all set `isError: true` (#275).
+- **A retried `create-event` can't book the meeting twice** (#280). Each call
+  sends Graph a `transactionId`, so a throttled request that's retried is
+  recognised as the same event rather than creating (and inviting people
+  to) a second one.
+- **Accurate safety annotations on every tool** (#277).
+  - All four hints (`readOnlyHint`, `destructiveHint`, `idempotentHint`,
+    `openWorldHint`) are now set explicitly, and every tool has a top-level
+    `title`.
+  - `create-event` and `mailbox-settings` are now marked destructive and
+    open-world (invitations and automatic replies reach other people).
+    `manage-event` and `manage-rules` are now open-world.
+    `manage-category` and `manage-focused-inbox` are now destructive, because
+    they can delete. `list-events` and `get-mail-tips` are now open-world,
+    because event text and out-of-office replies are written by other people.
+    Clients that prompt on destructive tools will now prompt for these too.
+- **Protocol errors are real JSON-RPC errors** (#276).
+  - Unknown methods (including the 2026-07-28 `server/discover` probe)
+    return `-32601`, internal failures `-32603`, and an unknown tool `-32602`,
+    instead of a success result carrying an error.
+  - `capabilities` now declares `tools: { listChanged: false }`, and
+    `resources/list` and `prompts/list` are no longer answered with empty
+    stubs.
+- **Sign-in errors name the right tool.** "Authentication required" now tells
+  the model to sign in with the `auth` tool with `action=authenticate`; 24 of
+  these messages pointed to an `authenticate` tool that no longer exists
+  (#275).
+- **Truncation and paging hints name real parameters** (#279).
+  - A cut body pointed to an `includeFullBody` parameter that doesn't exist.
+    It now names `read-email` with `outputVerbosity: full`, and for longer
+    bodies `export target=message`, which writes the whole message to a
+    file.
+  - Bodies at `outputVerbosity: full` (in `read-email` and conversation
+    views) are capped at 40,000 characters, so one long message can't flood
+    the conversation.
+  - Email lists and searches cut off at `count` now say so: the "More emails
+    available" hint appears, and the header no longer reads "(25/25)" as if
+    that were the whole folder.
+  - The list footer no longer mentions a `nextPageToken` that was never
+    returned; it suggests raising `count` or narrowing the date range.
+  - `export target=messages` now says when the 100-per-call limit or
+    `searchQuery.maxResults` left messages out, and how to get the rest.
+- **`manage-rules` rate limit counts real changes only** (#273, #279). Dry
+  runs no longer use a slot (and still work once the limit is reached),
+  `reorder` now counts, and `delete` counts only once a rule to delete has
+  been found.
+- **An export search that matches nothing says so.** A search-driven batch
+  export (`target=messages` with `searchQuery` or `query`) that found no
+  messages replied "Provide emailIds or searchQuery", although you had. It
+  now reports that nothing matched and nothing was exported (#275).
+- **Dry-run previews read cleanly when Graph leaves fields out** (#274). An
+  event with no subject shows "(no subject)" instead of "undefined", and a
+  folder with no display name is named by its ID.
+
+### Security
+
+- **Sign-in codes, tokens and secrets stay out of logs** (#278).
+  - The device-code user code is no longer written to stderr; it reaches you
+    only through the tool result. Access and refresh tokens, device codes
+    and secrets are never logged, at either log level.
+  - Azure error descriptions, which can carry your address, are redacted,
+    and a failed sign-in or refresh shows only its `AADSTS` code by default.
+  - `debug-env.js` lists environment variable names and lengths, never
+    values (it printed the client secret).
+  - The browser auth server no longer prints the sign-in URL's CSRF `state`.
+  - Warnings about an unrecognised `OUTLOOK_SHARED_MAILBOX` or
+    `OUTLOOK_READ_ONLY` value redact any address in it.
+  - Address redaction now also catches non-ASCII addresses (such as
+    `josé@example.com`), and runs in linear time on long input.
 
 ## [3.13.0] - 2026-10-03
 

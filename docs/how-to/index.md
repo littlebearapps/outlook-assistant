@@ -13,7 +13,8 @@ Practical guides for managing your Microsoft 365 email, calendar, contacts, and 
 | Guide | What it covers |
 |-------|---------------|
 | [Connect Outlook to Your AI Assistant](getting-started/connect-outlook-to-claude.md) | Install, Azure app setup, MCP client config, first authentication |
-| [Verify Your Connection](getting-started/verify-your-connection.md) | Check auth status, re-authenticate, troubleshoot connection issues, FAQ |
+| [Verify Your Connection](getting-started/verify-your-connection.md) | Check auth status, re-authenticate, check the plugin's safety hook, troubleshoot connection issues, FAQ |
+| [Supported Clients and Their Limits](getting-started/supported-clients.md) | Install per client (plugin or manual config), what the skill and safety hook do in each, and known limits |
 
 ## Email
 

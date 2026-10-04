@@ -61,7 +61,8 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 - **File writes** (`attachments` download, `export` incl. conversations; all via `utils/safe-write.js`): server-chosen names are sanitised, written with exclusive create (no overwrite, no symlink following, `-1`, `-2`, … suffixes) and confined to `outputDir` (default system tmpdir); a write that fails part-way removes the partial file; only an explicit single-message `export` file path is written as given
 - **Logs** (`utils/logger.js`, #278): stderr only. By default one line per tool call (tool, action, outcome, ms; never arguments); `OUTLOOK_DEBUG` adds detail. `redact()` masks addresses, long IDs and credentials at every level. New logging goes through `log.info` (PII-free lines only) or `log.debug`, not `console.*`
 - **list-events**: invalid `startAfter`/`startBefore`/`subject` return `isError` before any Graph call
-- 7 read-only tools auto-approved by Claude Code; 10 destructive tools (`send-email`, `draft`, `create-event`, `manage-event`, `manage-rules`, `mailbox-settings`, `folders`, `manage-contact`, `manage-category`, `manage-focused-inbox`) prompt for confirmation
+- **Plugin skill and hook** (#282, #283; client-side, plugin installs only): the `using-outlook-assistant` skill restates the hard rules; `outlook-gate.js` asks with a plain-English reason before outward, destructive or persistent calls (level: Claude Code `confirm_level` setting, elsewhere `OUTLOOK_CONFIRM_LEVEL`) and marks retrieved content as untrusted. It runs in Claude Code, Copilot CLI / VS Code and Cursor, which differ in tool names, prompts and fail-open/closed: see [`docs/how-to/getting-started/supported-clients.md`](docs/how-to/getting-started/supported-clients.md), [`docs/cross-client-matrix.md`](docs/cross-client-matrix.md) and the maintenance rule
+- 7 tools are `readOnlyHint: true`; 10 are `destructiveHint: true` (`send-email`, `draft`, `create-event`, `manage-event`, `manage-rules`, `mailbox-settings`, `folders`, `manage-contact`, `manage-category`, `manage-focused-inbox`), so annotation-aware clients confirm them
 
 ## Key Files
 
@@ -72,8 +73,11 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 | `server.js` | `createServer()`: SDK `Server` with `tools: {listChanged: false}` and the dispatcher |
 | `request-handler.js` | MCP request dispatcher: `tools/list` (adds `riskMeta` `_meta`) and `tools/call` (coerce → read-only gate → handler → one log line). Protocol errors are thrown as JSON-RPC errors (-32601 unknown method, -32602 unknown tool, -32603 internal); tool failures return visible `isError` content |
 | `utils/risk-classes.js` | Risk-class map per tool/action and `DRY_RUN_ACTIONS`; derives every tool's annotations (`toolMetadata`), read-only mode and the plugin hook's `risk-map.json` |
-| `plugins/outlook-assistant/hooks/outlook-gate.js` | Plugin hook for Claude Code (`hooks/hooks.json`), Copilot CLI/VS Code (`com.github.copilot/hooks/hooks.json`, arg `copilot`) and Cursor (`hooks/hooks-cursor.json` via `.cursor-plugin/plugin.json`, arg `cursor`): PreToolUse `ask` with a plain-English reason before outward/destructive/persistent calls (fails closed), PostToolUse untrusted-content note |
-| `plugins/outlook-assistant/skills/using-outlook-assistant/` | Agent skill: SKILL.md hard rules + one `references/` file per surface; risk table and `metadata.version` are generated |
+| `plugins/outlook-assistant/` | Marketplace plugin: one manifest per client (`.claude-plugin/`, root `plugin.json` + `mcp.json`, `.cursor-plugin/`), the hook and the skill. Layout: [`docs/architecture.md`](docs/architecture.md); upkeep: [`.claude/rules/plugin-and-skill-maintenance.md`](.claude/rules/plugin-and-skill-maintenance.md) |
+| `plugins/outlook-assistant/hooks/outlook-gate.js` | Plugin hook for Claude Code (`hooks/hooks.json`), Copilot CLI/VS Code (`com.github.copilot/hooks/hooks.json`, arg `copilot`) and Cursor (`hooks/hooks-cursor.json` via `.cursor-plugin/plugin.json`, arg `cursor`): before outward/destructive/persistent calls, `ask` with a plain-English reason (`describe()`; unknown tool or action asks), after untrusted-content tools a note; classifies with the generated `hooks/risk-map.json` |
+| `plugins/outlook-assistant/skills/using-outlook-assistant/` | Agent skill: SKILL.md hard rules + one `references/` file per surface; risk table (`sync-risk-map.js`) and `metadata.version` (`sync-version.js`) are generated |
+| `scripts/sync-risk-map.js` | Copies `utils/risk-classes.js` into the hook's `risk-map.json` and the SKILL.md risk table; `--check` reports drift |
+| `scripts/skill-evals.js` | Prompt-injection evals: `claude -p` against test mode's mock mailbox, with skill + hook, hook only, or neither |
 | `utils/server-instructions.js` | Server `instructions` text (hard rules first); read-only note follows `config.READ_ONLY` |
 | `utils/read-only.js` | `OUTLOOK_READ_ONLY` gate: refusal for any non-`read` call (`auth` sign-in actions exempt) |
 | `utils/logger.js` | Stderr logger: `log.info`/`log.debug`, per-call notes, `redact()`, `isDebugEnabled()` (`OUTLOOK_DEBUG`) |
@@ -113,6 +117,7 @@ OUTLOOK_SHARED_MAILBOX=read                # Optional, opt-in: read|true (work/s
 OUTLOOK_SEARCH_SCAN_LIMIT=500              # Optional: client-side search fallback window (max 5000)
 OUTLOOK_REQUEST_TIMEOUT_MS=60000           # Optional: per-attempt Graph inactivity timeout (ms with no data; not an overall deadline)
 OUTLOOK_DEBUG=true                         # Optional: detailed stderr logs (utils/logger.js; addresses/IDs redacted). Default: one line per tool call, no arguments
+OUTLOOK_CONFIRM_LEVEL=outward              # Plugin hook only, not read by the server: outward|all-writes|off (unknown = outward). Claude Code uses the confirm_level setting instead
 ```
 
 > The server reads `OUTLOOK_CLIENT_ID`/`OUTLOOK_CLIENT_SECRET` from `config.js`.
@@ -144,13 +149,13 @@ Common errors (auth, device code, search, timezones) and fixes live in [`docs/tr
 ## Testing
 
 ```bash
-npm test                    # Jest unit tests (87 suites / 2305 tests at v3.14.0-dev)
+npm test                    # Jest unit tests (93 suites / 2607 tests at v3.14.0-dev)
 npm run lint                # ESLint (0 errors expected)
 npm run format:check        # Prettier (CI runs this)
 node scripts/e2e-stdio.js <tool> '<argsJson>'  # Fresh stdio server: initialize + one tools/call
 USE_TEST_MODE=true npm start # Mock data mode
-node scripts/sync-risk-map.js  # Regenerate the hook's risk-map.json + skill risk table after editing utils/risk-classes.js
-node scripts/skill-evals.js    # claude -p prompt-injection evals with/without skill and hook (spends tokens)
+node scripts/sync-risk-map.js  # After editing utils/risk-classes.js (--check to verify)
+node scripts/skill-evals.js    # Prompt-injection evals (needs a signed-in claude CLI; spends tokens)
 ```
 
 Mock data defined in `utils/mock-data.js` (includes three prompt-injection emails for the evals). Shared-mailbox suites switch the opt-in on via `test/helpers/shared-mailbox.js`.
@@ -188,9 +193,13 @@ Use `Edit` (not `Write`) to revise individual Q&A pairs — the `Write` guard is
 ## See Also
 
 - [`README.md`](README.md) - Full documentation, Azure setup, tool reference
-- [`ROADMAP.md`](ROADMAP.md) - Active milestones (v3.14.0 safety skill/hooks/MCP hardening, v3.15.0 structured outputs/paging, v4.0.0 MCP 2026-07-28, patch fix queue, v3.8.x carry-over, v3.16.0+) and recent releases
+- [`ROADMAP.md`](ROADMAP.md) - Active milestones and recent releases
+- [`CHANGELOG.md`](CHANGELOG.md) - Release notes, including `[Unreleased]` work
 - [`docs/architecture.md`](docs/architecture.md) - Module layout, file tree, tool-consolidation map, history
 - [`docs/troubleshooting.md`](docs/troubleshooting.md) - Common issues and fixes
+- [`docs/how-to/getting-started/supported-clients.md`](docs/how-to/getting-started/supported-clients.md) - What each client gets (plugin, skill, hook, server-side checks)
+- [`docs/cross-client-matrix.md`](docs/cross-client-matrix.md) - Per-client verification results
+- [`plugins/outlook-assistant/README.md`](plugins/outlook-assistant/README.md) - Plugin install, settings and hook behaviour
 - [`docs/quickrefs/tools-reference.md`](docs/quickrefs/tools-reference.md) - Tools quick reference
 - [`docs/faq/faq.md`](docs/faq/faq.md) - User-facing FAQ (feeds the help-centre `FAQPage` schema; see protection note above)
 - `.env.example` - Environment template

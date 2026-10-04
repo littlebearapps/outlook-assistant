@@ -8,7 +8,7 @@ For shipped work, see [`CHANGELOG.md`](CHANGELOG.md).
 
 This release gates the Claude directory and Cursor Marketplace submissions. The awesome-copilot listing (github/awesome-copilot#4455) will be moved to this tag. It has three layers: the server enforces, client hooks prompt, and the skill teaches. Every change must work across Claude Code and Desktop, GitHub Copilot (VS Code and CLI), Cursor, Codex/ChatGPT, Gemini CLI and local models.
 
-**Status:** the server-safety and protocol items are built and in review, unreleased: #270, #275–#277 and #281 (PR #294), then #271–#274 and #278–#280. The plugin items (#282–#284) come next.
+**Status:** #270–#284 are all implemented and in review, unreleased: #270, #275–#277 and #281 in PR #294; #271–#274 and #278–#280 in PR #295; the plugin items #282–#284 in PR #296. The cross-client matrix ([`docs/cross-client-matrix.md`](docs/cross-client-matrix.md)) is started: Claude Code, GitHub Copilot CLI, Cursor CLI and Codex CLI have been checked; VS Code and the Cursor desktop app still need checking by hand.
 
 **Server safety**
 - **#270** A risk-class map (`read` / `reversible` / `outward` / `destructive` / `persistent`) that annotations, hooks, the skill and read-only mode are all derived from. New tools must be classified on purpose.
@@ -28,8 +28,19 @@ This release gates the Claude directory and Cursor Marketplace submissions. The 
 
 **Plugin**
 - **#282** The `using-outlook-assistant` skill: hard rules first, then a reference file per surface (email, calendar, rules and settings, contacts and folders, search and efficient use, personal vs M365, shared mailboxes, prompt injection, privacy).
-- **#283** A Claude Code hook: PreToolUse `ask` with plain-English reasons, a PostToolUse note that retrieved content is untrusted, and a `confirm_level` setting. A Copilot hook spike. The Cursor hook is deferred.
+- **#283** A safety hook: PreToolUse `ask` with plain-English reasons, a PostToolUse note that retrieved content is untrusted, and a `confirm_level` setting (`OUTLOOK_CONFIRM_LEVEL` where a client has no plugin settings). It runs in Claude Code, GitHub Copilot CLI (`com.github.copilot/hooks/hooks.json`) and Cursor (`.cursor-plugin/plugin.json` with `hooks/hooks-cursor.json`), which also fixes Cursor loading the v3.13.0 plugin with unexpanded `${user_config.*}` placeholders.
 - **#284** Prompt-injection evals (with and without the skill) and a cross-client verification matrix.
+
+**Follow-ups from this work** (no issues yet)
+- Check the hook and skill by hand in VS Code with Copilot (Local agent). It reads the Copilot hook file, but so far that's known only from VS Code's source.
+- Check the Cursor desktop app; only Cursor CLI has been verified.
+- Cursor shows its own generic "Run this MCP tool?" prompt instead of the hook's reason, and an `Mcp(...)` allow rule or `--force` skips it. Revisit if Cursor starts showing hook reasons; until then the docs warn against allowlisting Outlook's send, rule and delete tools.
+- Fill in the rest of the cross-client matrix: Claude Desktop, Gemini CLI, MCP Inspector and a local model.
+- Tool descriptions that the docs sweep found out of step with the code:
+  - `folders`: `sourceFolder` says it defaults to the inbox, but `move` ignores it.
+  - `apply-category`: says it uses Graph `$batch`, but it sends one request per message.
+  - `folders` `stats`: its hint names a `list-emails-delta` tool that doesn't exist.
+  - `export` `format`: the description lists fewer batch formats than the code accepts.
 
 ## v3.15.0 — Structured outputs & paging
 

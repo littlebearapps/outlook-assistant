@@ -14,6 +14,14 @@ Outlook Assistant uses **your own** Azure app registration, so no third party ev
 
 Step-by-step guide with screenshots: [Connect Outlook to Claude](https://github.com/littlebearapps/outlook-assistant/blob/main/docs/how-to/getting-started/connect-outlook-to-claude.md).
 
+## Install
+
+- **Claude Code:** `claude plugin marketplace add littlebearapps/outlook-assistant`, then `claude plugin install outlook-assistant@littlebearapps`.
+- **GitHub Copilot CLI:** `copilot plugin marketplace add littlebearapps/outlook-assistant`, then `copilot plugin install outlook-assistant@littlebearapps`.
+- **Cursor** (v3.14.0 or later): Cursor loads this folder as a Cursor plugin (`.cursor-plugin/plugin.json`). In Cursor CLI, pass the folder with `--plugin-dir`.
+
+What the skill and hook can do differs by client. See [Supported clients and their limits](https://github.com/littlebearapps/outlook-assistant/blob/main/docs/how-to/getting-started/supported-clients.md).
+
 ## Sign in
 
 Ask your assistant to "connect to Outlook".
@@ -79,11 +87,15 @@ The plugin adds two safety layers on top of the server's own checks.
 }
 ```
 
-**In GitHub Copilot CLI** the same hook asks before the same calls and adds the same untrusted-content note. Copilot has no plugin settings, so set the confirmation level with the `OUTLOOK_CONFIRM_LEVEL` environment variable in the shell you start Copilot from (for example `export OUTLOOK_CONFIRM_LEVEL=all-writes`). Copilot lets a call through if a hook times out, so the hook allows 30 seconds, far longer than it needs. **VS Code** (the default Local agent) reads the same hook file. According to VS Code's source, it shows the hook's reason in its confirmation dialog, even for tools you've set to auto-approve, and passes the note to the model. This hasn't been checked by hand yet. VS Code has no plugin settings; `OUTLOOK_CONFIRM_LEVEL` applies if it's set in the environment VS Code starts with. **In Cursor** the plugin loads as a Cursor plugin (`.cursor-plugin/plugin.json`), and the hook runs from `hooks/hooks-cursor.json`:
+**Running Claude Code headless (`-p`)?** Nobody is there to answer, so the hook's prompts become denials.
+
+**In GitHub Copilot CLI** the same hook asks before the same calls and adds the same untrusted-content note. Copilot has no plugin settings, so set the confirmation level with the `OUTLOOK_CONFIRM_LEVEL` environment variable in the shell you start Copilot from (for example `export OUTLOOK_CONFIRM_LEVEL=all-writes`). Copilot lets a call through if a hook times out, so the hook allows 30 seconds, far longer than it needs. In `copilot -p` a prompt becomes a denial ("Denied by preToolUse hook (unable to ask user …)"), and the Copilot cloud agent treats every prompt as a denial. **VS Code** (the default Local agent) reads the same hook file. According to VS Code's source, it shows the hook's reason in its confirmation dialog, even for tools you've set to auto-approve, and passes the note to the model. This hasn't been checked by hand yet. VS Code has no plugin settings; `OUTLOOK_CONFIRM_LEVEL` applies if it's set in the environment VS Code starts with. **In Cursor** the plugin loads as a Cursor plugin (`.cursor-plugin/plugin.json`), and the hook runs from `hooks/hooks-cursor.json`:
 
 - It adds the untrusted-content note.
 - It blocks the call if it fails or times out.
-- **Limitation:** in Cursor CLI 2026.10.01, its "ask" falls back to Cursor's own "Run this MCP tool?" prompt, which doesn't show the hook's reason. An allowlist rule (`Mcp(...)`) or Run Everything mode runs the call without asking, so don't allowlist Outlook's sending, rule or delete tools in Cursor.
+- **Limitation:** in Cursor CLI 2026.10.01, its "ask" falls back to Cursor's own "Run this MCP tool?" prompt, which doesn't show the hook's reason. Cursor already asks before every MCP tool by default, but an allowlist rule (`Mcp(...)`) or `--force` / Run Everything mode runs the call without asking, so don't allowlist Outlook's sending, rule or delete tools in Cursor.
+- The Cursor desktop app hasn't been checked yet.
+- **The v3.13.0 plugin** had no Cursor manifest, so Cursor passed the Claude Code settings placeholders (`${user_config.…}`) to the server as text and sign-in failed with AADSTS900023. On v3.13.0, use a manual MCP configuration with `OUTLOOK_CLIENT_ID` set instead.
 
 ## Data and privacy
 
@@ -104,9 +116,9 @@ More detail is in the [security policy](https://github.com/littlebearapps/outloo
 | Send limit per session | `OUTLOOK_MAX_EMAILS_PER_SESSION` | `10` |
 | Allowed recipients | `OUTLOOK_ALLOWED_RECIPIENTS` | none (all allowed) |
 | Read-only mode | `OUTLOOK_READ_ONLY` | `false` |
-| Confirmation level (safety hook) | Claude Code plugin setting; `OUTLOOK_CONFIRM_LEVEL` in Copilot CLI | `outward` |
+| Confirmation level (safety hook) | Claude Code plugin setting; `OUTLOOK_CONFIRM_LEVEL` in Copilot CLI, VS Code and Cursor | `outward` |
 
-Claude Code shows these as plugin settings. Other environment variables, such as `OUTLOOK_SHARED_MAILBOX` and `OUTLOOK_IMMUTABLE_IDS`, are in the [main README](https://github.com/littlebearapps/outlook-assistant#configuration). Use a manual MCP configuration if you need them.
+Claude Code shows these as plugin settings. GitHub Copilot and Cursor have no plugin settings: their plugin config sets only the send limit (10), so give your client ID at sign-in. Other environment variables, such as `OUTLOOK_SHARED_MAILBOX` and `OUTLOOK_IMMUTABLE_IDS`, are in the [main README](https://github.com/littlebearapps/outlook-assistant#configuration). Use a manual MCP configuration if you need them.
 
 ## Support
 

@@ -83,18 +83,23 @@ Deletes contact 'John Smith' (john@example.com; Acme Corp).
 | `action` | `list`, `search`, `get`, `create`, `update`, `delete` | All |
 | `id` | Contact ID | `get`, `update`, `delete` |
 | `displayName` | Full name | `create`, `update` |
+| `firstName`, `lastName` | Given name and surname (combined into `displayName` when that's left out) | `create`, `update` |
 | `email` | Primary email address | `create`, `update` |
+| `emails` | Several email addresses; the first is primary | `create`, `update` |
 | `mobilePhone` | Mobile phone number | `create`, `update` |
 | `companyName` | Company name | `create`, `update` |
 | `jobTitle` | Job title | `create`, `update` |
 | `notes` | Personal notes | `create`, `update` |
 | `query` | Search text | `search` |
-| `count` | Number of results | `list`, `search` |
+| `count` | Number of results (default 50 for `list`, 25 for `search`) | `list`, `search` |
+| `skip` | Paging offset; use the value the previous page suggests | `list` |
+| `folder` | Contact folder ID | `list` |
+| `outputVerbosity` | `minimal`, `standard` (default) or `full` | `list`, `search` |
 | `dryRun` | Preview which contact would be deleted, without deleting it | `delete` |
 
 ## Tips
 
-- At least `displayName` or `email` is required when creating a contact
+- Creating a contact needs at least one of `displayName`, `firstName`/`lastName`, `email` or `emails`
 - Use `search-people` for broader searches (directory + recent contacts) — see [Find Contacts and People](find-contacts-and-people.md)
 - Contacts sync across Outlook desktop, web, and mobile
 

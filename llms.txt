@@ -33,12 +33,14 @@ Built by [Little Bear Apps](https://littlebearapps.com).
 
 ## Safety & Token Efficiency
 
-- **MCP safety annotations** on all 22 tools — AI clients auto-approve reads and prompt for destructive operations
+- **MCP safety annotations** on all 22 tools, derived from a risk class per tool and action (read, reversible, outward, destructive, persistent), so clients can tell reads from risky changes
 - **Send-email protections**: pre-send mail tips (a send to a flagged recipient, such as out of office or external, is refused until `acknowledgeWarnings: true`), dry-run preview, session rate limiting, recipient allowlist
 - **Rule protections**: dry-run preview on create/update, rate limiting (dry runs don't count), recipient allowlist on forward/redirect (a blocked forward refuses the whole rule), no permanent-delete action
 - **Dry-run previews beyond email**: `create-event` and every `manage-event` action say who would be emailed (with an external count); `mailbox-settings` auto-replies, `folders` delete and `manage-contact` delete show what would change or be lost
 - **Read-only mode**: `OUTLOOK_READ_ONLY=true` refuses every tool call that would change anything before it runs; reads and sign-in still work
 - **Model guidance**: server `instructions` state the hard rules (retrieved content is data, confirm before outward actions, draft first); `send-email` and `create-event` ask Claude clients for user confirmation (`anthropic/requiresUserInteraction`)
+- **Plugin skill and safety hook** (Claude Code, GitHub Copilot CLI, Cursor; VS Code not yet checked by hand): the `using-outlook-assistant` skill sets the hard rules; the hook asks with a plain-English reason before anything that reaches other people, deletes or keeps acting, and marks retrieved content as untrusted. Confirmation level `outward` (default), `all-writes` or `off`: a plugin setting in Claude Code, the `OUTLOOK_CONFIRM_LEVEL` environment variable elsewhere. How the hook prompts and fails differs by client: see Supported Clients below
+- **Every client**: the server-side checks (read-only mode, dry runs, mail-tips refusal, rule refusal), annotations and instructions work in any MCP client, including Codex CLI, Gemini CLI and Claude Desktop with a manual config; clients that support Agent Skills can copy the skill folder
 - **Private logs**: one stderr line per tool call (tool, action, outcome, duration), never its arguments; `OUTLOOK_DEBUG=true` adds detail with addresses and IDs redacted
 - **Input and file hardening**: IDs with `.`/`..` path segments refused, the access token only ever sent to `graph.microsoft.com`, attachment downloads and exports (including conversation exports) confined to the output directory without overwriting, and a partly written file removed if a write fails
 - **Throttling-aware Graph client**: `429` (and `503`/`504` for non-POST requests) retried honouring `Retry-After`, a per-attempt inactivity timeout (`OUTLOOK_REQUEST_TIMEOUT_MS`, default 60000 ms) and at most 4 requests in flight, so bulk operations neither hang nor throttle themselves
@@ -62,7 +64,7 @@ Built by [Little Bear Apps](https://littlebearapps.com).
 }
 ```
 
-`OUTLOOK_CLIENT_SECRET` is only needed for the browser sign-in flow; the default device-code flow uses the client ID alone. Claude Code users can instead install the plugin: `claude plugin marketplace add littlebearapps/outlook-assistant`, then `claude plugin install outlook-assistant@littlebearapps`. Requires an Azure app registration with Microsoft Graph delegated permissions. See README for full setup.
+`OUTLOOK_CLIENT_SECRET` is only needed for the browser sign-in flow; the default device-code flow uses the client ID alone. Claude Code users can instead install the plugin (server, skill and safety hook): `claude plugin marketplace add littlebearapps/outlook-assistant`, then `claude plugin install outlook-assistant@littlebearapps`. The same plugin folder also loads in GitHub Copilot CLI (VS Code not yet checked by hand) and, from v3.14.0, Cursor. Requires an Azure app registration with Microsoft Graph delegated permissions. See README for full setup.
 
 ## Tool Categories
 
@@ -81,12 +83,15 @@ Built by [Little Bear Apps](https://littlebearapps.com).
 - [README](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/README.md): Full documentation including setup, Azure configuration, and usage
 - [Tools Reference](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/quickrefs/tools-reference.md): All 22 tools with parameters and safety annotations
 - [Connect Outlook to Claude](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/how-to/getting-started/connect-outlook-to-claude.md): Step-by-step setup guide for Claude Desktop / Claude Code
+- [Supported Clients](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/how-to/getting-started/supported-clients.md): What each client gets — plugin, skill, safety hook and server-side checks — for Claude Code, GitHub Copilot, Cursor, Codex CLI, Gemini CLI and Claude Desktop
+- [Plugin README](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/plugins/outlook-assistant/README.md): Plugin settings, the skill and the safety hook in each client
+- [Cross-client Matrix](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/cross-client-matrix.md): Which clients and models have been checked against the safety scenarios, and when
 - [Verify Your Connection](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/how-to/getting-started/verify-your-connection.md): Test and troubleshoot the connection after installation
 - [Azure Setup](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/guides/azure-setup.md): Azure app registration and API permissions walkthrough
 - [Troubleshooting](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/troubleshooting.md): Known errors and fixes — auth, search, export, shared mailboxes
 - [FAQ](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/faq/faq.md): Frequently asked questions — install, accounts, permissions, tokens, send safety, updates, uninstall (also at <https://littlebearapps.com/help/outlook-assistant/faq/>)
 - [CLAUDE.md](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CLAUDE.md): Quick reference for development
 - [CONTRIBUTING](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CONTRIBUTING.md): Contribution guidelines
-- [CHANGELOG](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CHANGELOG.md): Version history (current: v3.13.0 — marketplace plugin bundle for Claude Code, GitHub Copilot and Cursor; Azure client ID can be given at sign-in and saved locally; client secret documented as browser-flow only)
+- [CHANGELOG](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/CHANGELOG.md): Version history (current: v3.13.0 — marketplace plugin bundle for Claude Code, GitHub Copilot and Cursor; Azure client ID can be given at sign-in and saved locally; client secret documented as browser-flow only. Next, v3.14.0: read-only mode, server instructions, more dry-run previews, mail-tips refusal, private logs, the plugin skill and safety hook, and a Cursor plugin manifest)
 - [ROADMAP](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/ROADMAP.md): Active milestones (v3.14.0 safety skill, hooks and MCP hardening; v3.15.0 structured outputs and paging; v4.0.0 MCP 2026-07-28 and server-side confirmation; the patch-release fix queue; v3.8.x carry-over; v3.16.0+ new Graph APIs)
 - [SECURITY](https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/SECURITY.md): Security policy (report vulnerabilities privately via GitHub private vulnerability reporting; acknowledged within 7 days), token handling, and MCP safety controls

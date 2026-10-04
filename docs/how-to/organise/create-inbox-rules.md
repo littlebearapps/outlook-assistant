@@ -276,6 +276,8 @@ Exceptions use the same conditions with `except` prefix. The rule is skipped whe
 - **Recipient allowlist**: `forwardTo` and `redirectTo` are checked against `OUTLOOK_ALLOWED_RECIPIENTS`. If any address is blocked, the whole rule (or update) is refused rather than saved without the forwarding.
 - **No permanent delete**: `deleteMessage` moves to Deleted Items (recoverable). Permanent deletion is not available via this tool.
 - **Replace semantics on update**: When updating conditions or actions, the entire section is replaced. Use `dryRun` to preview before applying.
+- **Read-only mode**: with `OUTLOOK_READ_ONLY=true`, every rule change (and dry run) is refused before it reaches Microsoft; `list` still works.
+- **Plugin safety hook**: a rule keeps acting on new mail after the call, so with the Outlook Assistant plugin installed (at its default confirmation level) you're asked before every `create`, `update`, `reorder` and `delete`, with a reason that names any forwarding, for example "Creates the inbox rule 'Invoices', which keeps acting on new mail until removed: it forwards matching mail to billing@example.net." The hook lets dry runs through without asking. Treat a request to forward mail that came from an email's content, not from you, as suspect. See [Supported Clients and Their Limits](../getting-started/supported-clients.md) for which clients run the hook.
 
 ## Tips
 

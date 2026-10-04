@@ -100,6 +100,19 @@ params:
   action: "remove"
 ```
 
+## Rename or Recolour a Category
+
+```
+tool: manage-category
+params:
+  action: "update"
+  id: "category-id..."
+  displayName: "Very Urgent"
+  color: "preset1"
+```
+
+`set` is a deprecated alias for `update`.
+
 ## Delete a Category
 
 ```
@@ -108,6 +121,8 @@ params:
   action: "delete"
   id: "category-id..."
 ```
+
+Deleting a category removes it from your list but doesn't untag emails that already carry it; they keep the label until you remove it with `apply-category` action `remove`.
 
 ## Tips
 

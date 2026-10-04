@@ -499,7 +499,7 @@ describe('reasons', () => {
   });
 
   test('long recipient lists are capped with a count', () => {
-    const to = Array.from({ length: 8 }, (_, i) => `p${i}@x.com`).join(';');
+    const to = Array.from({ length: 8 }, (_, i) => `p${i}@x.com`).join(',');
     expect(reason(pre('send-email', { to }))).toMatch(/p4@x\.com and 3 more/);
   });
 
@@ -573,6 +573,63 @@ describe('reasons', () => {
     ).toBe(
       'Outlook Assistant: Writes 2 emails to your temp folder on this computer.'
     );
+  });
+
+  describe('names what the server acts on when a call passes two identifiers', () => {
+    test('folder delete: folderId wins over folderName', () => {
+      expect(
+        reason(
+          pre('folders', {
+            action: 'delete',
+            folderId: 'AAMkX',
+            folderName: 'Temp',
+          })
+        )
+      ).toMatch(/Deletes the folder 'AAMkX'/);
+    });
+
+    test('rule update and delete: ruleId wins over ruleName', () => {
+      for (const action of ['update', 'delete']) {
+        expect(
+          reason(
+            pre('manage-rules', { action, ruleId: 'R1', ruleName: 'Safe' })
+          )
+        ).toMatch(/the inbox rule 'R1'/);
+      }
+    });
+
+    test('category delete: id, not displayName', () => {
+      expect(
+        reason(
+          pre('manage-category', {
+            action: 'delete',
+            id: 'C1',
+            displayName: 'Harmless',
+          })
+        )
+      ).toBe(
+        "Outlook Assistant: Deletes the category 'C1' from your category list."
+      );
+    });
+
+    test('folder move: targetFolderId wins over targetFolder', () => {
+      expect(
+        reason(
+          pre('folders', {
+            action: 'move',
+            emailIds: 'a',
+            targetFolderId: 'deleteditems',
+            targetFolder: 'Archive',
+          })
+        )
+      ).toMatch(/to 'deleteditems'/);
+    });
+
+    test('recipients split on commas only, like the server', () => {
+      expect(reason(pre('send-email', { to: 'a@x.com;b@y.com' }))).toMatch(
+        /to a@x\.com;b@y\.com,/
+      );
+    });
   });
 
   test('auto-replies name the external audience', () => {

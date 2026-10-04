@@ -162,10 +162,14 @@ function domainOf(address) {
   return at < 0 ? address.toLowerCase() : address.slice(at + 1).toLowerCase();
 }
 
-/** Addresses from a comma/semicolon-separated string or an array. */
+/**
+ * Addresses from a comma-separated string or an array, split exactly as the
+ * server splits them (email/send.js, utils/safety.js), so the prompt lists
+ * the recipients the server will use.
+ */
 function addresses(value) {
   if (value == null || value === '') return [];
-  const items = Array.isArray(value) ? value : String(value).split(/[,;]/);
+  const items = Array.isArray(value) ? value : String(value).split(',');
   return items
     .map((item) =>
       item && typeof item === 'object' ? (item.email ?? item.address) : item
@@ -222,8 +226,12 @@ function named(noun, input, fields) {
   return `the ${noun}`;
 }
 
-const EVENT_ID = ['eventId', 'id'];
-const RULE_ID = ['ruleName', 'ruleId'];
+// Identifier fields in the order the server prefers them, so a call that
+// passes two names the one that is acted on.
+const EVENT_ID = ['eventId', 'id']; // calendar/index.js: eventId, then id
+const RULE_ID = ['ruleId', 'ruleName']; // rules/update.js, rules/index.js
+const FOLDER_ID = ['folderId', 'folderName']; // folder/resolve.js: id first
+const CATEGORY_ID = ['id', 'categoryId']; // categories/index.js
 const RULE_NEW_NAME = ['name', 'displayName'];
 
 /** Tools whose `sharedMailbox` (alias `email`) picks the mailbox. */
@@ -298,7 +306,7 @@ function describe(tool, action, input) {
       return describeRule(action, input);
     }
     case 'manage-rules:reorder':
-      return `Moves ${named('inbox rule', input, RULE_ID)} to position ${clean(input.sequence ?? '?')}, which changes which rules act on new mail.`;
+      return `Moves ${named('inbox rule', input, ['ruleName'])} to position ${clean(input.sequence ?? '?')}, which changes which rules act on new mail.`;
     case 'manage-rules:delete':
       return `Deletes ${named('inbox rule', input, RULE_ID)}. It can't be restored.`;
     case 'mailbox-settings:set-auto-replies': {
@@ -307,13 +315,13 @@ function describe(tool, action, input) {
       return `Turns on automatic replies, sent to everyone who writes to you until switched off (external senders: ${clean(audience)}).`;
     }
     case 'folders:delete':
-      return `Deletes ${named('folder', input, ['folderName', 'folderId', 'folder'])}${mailbox(tool, input)} with every email and subfolder in it. Deleted folders may not be recoverable.`;
+      return `Deletes ${named('folder', input, FOLDER_ID)}${mailbox(tool, input)} with every email and subfolder in it. Deleted folders may not be recoverable.`;
     case 'folders:move':
-      return `Moves ${count(addresses(input.emailIds).length, 'email')} to ${quoted(input.targetFolder ?? input.targetFolderId, 'another folder')}${mailbox(tool, input)}.`;
+      return `Moves ${count(addresses(input.emailIds).length, 'email')} to ${quoted(input.targetFolderId || input.targetFolder, 'another folder')}${mailbox(tool, input)}.`;
     case 'manage-contact:delete':
       return `Deletes ${named('contact', input, ['id'])}.`;
     case 'manage-category:delete':
-      return `Deletes ${named('category', input, ['displayName', 'categoryId', 'id'])} from your category list.`;
+      return `Deletes ${named('category', input, CATEGORY_ID)} from your category list.`;
     case 'export:': {
       const target = input.target ?? 'message';
       let what;

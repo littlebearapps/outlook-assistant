@@ -19,7 +19,7 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 |------|-------------|--------|----------------|
 | `search-emails` | Search, list, delta sync, conversations | read-only | `query`, `from`, `to`, `folder` (name or nested path), `searchAllFolders`, `searchExpression`, `deltaMode`, `conversationId`, `groupByConversation`, `internetMessageId`, `sharedMailbox` (alias `email`), `maxResults` (delta page size) |
 | `read-email` | Read content or forensic headers | read-only | `id`, `outputVerbosity` (body up to 2,000 characters, or 40,000 at `full`), `headersMode`, `groupByType`, `importantOnly`, `sharedMailbox` (alias `email`) |
-| `send-email` | Send email with safety controls | **destructive** | `to`, `subject`, `body`, `dryRun`, `checkRecipients`, `acknowledgeWarnings`, `cc`, `bcc`, `importance` |
+| `send-email` | Send email with safety controls | **destructive** | `to`, `subject`, `body`, `dryRun`, `checkRecipients`, `acknowledgeWarnings`, `cc`, `bcc`, `importance`, `saveToSentItems` |
 | `draft` | Create, update, send, delete, reply, forward drafts | **destructive** | `action` (required), `id`, `to`, `subject`, `body`, `comment`, `dryRun`, `checkRecipients` |
 | `get-mail-tips` | Pre-send recipient validation | read-only | `recipients`, `tipTypes` |
 | `update-email` | Mark read/unread, flag/unflag/complete | idempotent | `action` (required), `id`, `ids`, `dueDateTime`, `startDateTime`, `sharedMailbox` (alias `email`) |
@@ -118,7 +118,7 @@ Flag dates: a `dueDateTime`/`startDateTime` with `Z` or a ±hh:mm offset is kept
 
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
-| `manage-contact` | Full CRUD: `list` (default), `search`, `get`, `create`, `update`, `delete` | **destructive** | `action`, `query`, `id`, `displayName`, `email`, `count`, `dryRun` (delete: preview which contact would be removed) |
+| `manage-contact` | Full CRUD: `list` (default), `search`, `get`, `create`, `update`, `delete` | **destructive** | `action`, `query`, `id`, `displayName`, `firstName`/`lastName`, `email`, `emails`, `count`, `skip` (list paging), `outputVerbosity`, `dryRun` (delete: preview which contact would be removed) |
 | `search-people` | Relevance-based search (People API) | read-only | `query`, `count` |
 
 ## Categories (3 tools)
@@ -127,7 +127,7 @@ Flag dates: a `dueDateTime`/`startDateTime` with `Z` or a ±hh:mm offset is kept
 |------|-------------|--------|----------------|
 | `manage-category` | CRUD: `list` (default), `create`, `update`/`set` (alias), `delete` | **destructive** (`delete`) | `action`, `displayName`, `color`, `id` (or deprecated alias `categoryId`) |
 | `apply-category` | Apply/add/remove categories on messages. With `sharedMailbox`, category names must already exist in that mailbox's master list (`manage-category` manages the signed-in account only) | idempotent | `messageId`/`messageIds`, `categories`, `action`, `sharedMailbox` (alias `email`) |
-| `manage-focused-inbox` | Focused Inbox overrides: `list` (default), `set`, `delete` | **destructive** (`delete`) | `action`, `emailAddress`, `classifyAs` |
+| `manage-focused-inbox` | Focused Inbox overrides: `list` (default), `set`, `delete` | **destructive** (`delete`) | `action`, `emailAddress`, `name`, `classifyAs`, `outputVerbosity` |
 
 ### Category colours
 
@@ -137,14 +137,14 @@ Flag dates: a `dueDateTime`/`startDateTime` with `Z` or a ±hh:mm offset is kept
 
 | Tool | Actions | Safety | Key Parameters |
 |------|---------|--------|----------------|
-| `mailbox-settings` | `get` (default), `set-auto-replies`, `set-working-hours` | **destructive** (auto-replies reach external senders), idempotent | `section`, `enabled`, `startDateTime`, `endDateTime`, `internalReplyMessage`, `externalReplyMessage`, `externalAudience`, `dryRun` (set-auto-replies: preview who would get replies, the schedule and message lengths), `startTime`, `endTime`, `daysOfWeek` |
+| `mailbox-settings` | `get` (default), `set-auto-replies`, `set-working-hours` | **destructive** (auto-replies reach external senders), idempotent | `section`, `enabled`, `startDateTime`, `endDateTime`, `internalReplyMessage`, `externalReplyMessage`, `externalAudience`, `dryRun` (set-auto-replies: preview who would get replies, the schedule and message lengths), `startTime`, `endTime`, `daysOfWeek`, `timeZone` |
 
 ## Advanced (2 tools)
 
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
 | `access-shared-mailbox` | Read shared mailbox (incl. custom subfolders) or enumerate its folder tree — no send/draft/reply/forward | read-only | `sharedMailbox` (or alias `email`), `folder` (name/path), `folderId`, `listFolders`, `count` (default 25, max 50), `outputVerbosity` |
-| `find-meeting-rooms` | Search meeting rooms | read-only | `query`, `building`, `floor`, `capacity` |
+| `find-meeting-rooms` | Search meeting rooms | read-only | `query`, `building`, `floor`, `capacity`, `outputVerbosity` |
 
 ## Safety Annotations
 
@@ -159,6 +159,10 @@ All four hints are set explicitly on every tool, and derived from the risk-class
 `idempotentHint: true` (repeating the call has no further effect) is set on every read-only tool and on `update-email`, `apply-category` and `mailbox-settings`.
 
 `send-email` and `create-event` also carry `_meta["anthropic/requiresUserInteraction"]`, so Claude Code asks before every call to them, dry runs included, even in auto-accept or bypass modes. Other clients ignore it.
+
+> **Errors**: every failed tool call returns `isError: true` with a message that says what went wrong and, usually, a "Next step". A call to a tool that doesn't exist is a JSON-RPC error (`-32602`), not a tool result. Signed out? The message names `auth` with `action=authenticate`.
+
+> **Plugin skill and safety hook**: the Outlook Assistant plugin adds the `using-outlook-assistant` skill and a hook that asks before calls that reach other people, delete something or keep acting (rules, forwarding, automatic replies), with a plain-English reason. See the [plugin README](../../plugins/outlook-assistant/README.md#skill-and-safety-hook) and [Supported Clients and Their Limits](../how-to/getting-started/supported-clients.md).
 
 > **Read-only mode**: with `OUTLOOK_READ_ONLY=true` the server refuses every tool call or action that isn't a read before it runs, whatever the client's approval settings. That includes `dryRun` previews, `export` and `attachments action=download`; `auth` sign-in still works. See the [README's environment variables](../../README.md#environment-variables).
 
@@ -187,7 +191,8 @@ Check recipients before sending — detects out-of-office, mailbox full, deliver
 | `moderationStatus` | Whether messages require approval |
 | `recipientScope` | Internal vs external recipient |
 | `maxMessageSize` | Maximum message size limit |
-| `totalMemberCount` | Group size (total and external members) |
+| `totalMemberCount` | Group size (total members) |
+| `externalMemberCount` | How many group members are external |
 
 These are the names you pass in `tipTypes`. Graph's response uses some different field names (`mailboxFull`, `deliveryRestricted`, `isModerated`), and both forms are recognised. `_meta.issues` lists each flagged condition per recipient as `{address, type}`, with `type` one of `outOfOffice`, `mailboxFull`, `customTip`, `deliveryRestricted`, `moderated`, `external` or `externalMembers`. Mail tips are Microsoft 365 only; personal accounts return none.
 

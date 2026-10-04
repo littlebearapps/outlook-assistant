@@ -170,7 +170,7 @@ Here's a complete example — setting up inbox automation for a new role:
 
 Ask your AI assistant: "Set up my inbox with folders for Projects, Finance, and Notifications. Create rules to sort GitHub and invoice emails. Add categories for Urgent, Waiting, and Reference."
 
-Your assistant will use all the tools above in sequence to build the complete setup.
+Your assistant will use all the tools above in sequence to build the complete setup. With the Outlook Assistant plugin's safety hook, you're asked to approve each rule as it's created, because rules keep acting on new mail; see [Create Inbox Rules](create-inbox-rules.md#safety).
 
 ## Tips
 

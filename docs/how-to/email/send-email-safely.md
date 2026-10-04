@@ -109,6 +109,8 @@ Options: `normal` (default), `high`, `low`.
 
 In Claude Code, `send-email` (and `create-event`) also carry the `anthropic/requiresUserInteraction` flag, so Claude Code asks before every call, dry runs included, even in auto-accept or bypass modes. Other clients ignore this flag. `draft` doesn't carry it, so `draft action=send` follows your normal permission settings.
 
+If you installed the Outlook Assistant plugin, its safety hook (unless its confirmation level is `off`) also asks before `send-email` and `draft action=send`, with a plain-English reason such as "Sends an email to sarah@company.com, subject 'Project Update'. It can't be unsent." Dry-run previews pass without a prompt from the hook. The plugin's `using-outlook-assistant` skill tells your assistant to draft first and send only when you ask. The hook runs in Claude Code, GitHub Copilot and (with limits) Cursor; see [Supported Clients and Their Limits](../getting-started/supported-clients.md) and the [plugin README](../../../plugins/outlook-assistant/README.md#skill-and-safety-hook).
+
 On the server side, `send-email` offers `dryRun` previews and enforces the session rate limit and the recipient allowlist below, whatever your client does.
 
 ### Read-Only Mode
@@ -167,7 +169,8 @@ params:
 | `bcc` | BCC addresses (comma-separated) | — |
 | `importance` | `normal`, `high`, or `low` | `normal` |
 | `dryRun` | Preview without sending | `false` |
-| `checkRecipients` | Check recipients for issues before sending | `false` |
+| `checkRecipients` | Check recipients for issues before sending; flagged sends are refused | `false` |
+| `acknowledgeWarnings` | Send anyway after `checkRecipients` flagged recipients (use only once you've seen the warnings) | `false` |
 | `saveToSentItems` | Save to Sent Items folder | `true` |
 
 ## Draft Before Sending

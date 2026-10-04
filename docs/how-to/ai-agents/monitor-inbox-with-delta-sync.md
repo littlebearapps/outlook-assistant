@@ -63,7 +63,7 @@ The response includes:
 
 ## Handling Token Expiry
 
-Delta tokens expire after an extended period of inactivity. If the call fails with a **Delta Token Expired** error (Graph answered `410 Gone` or asked for a resync), your token has expired — start a fresh initial sync (no token) to get a new baseline.
+Delta tokens expire after an extended period of inactivity. If the call fails (`isError: true`) with a **Delta Token Expired** error (Graph answered `410 Gone` or asked for a resync), your token has expired — start a fresh initial sync (no token) to get a new baseline.
 
 ```
 // Recovery pattern:
@@ -83,6 +83,8 @@ Poll for new emails on a schedule and process them automatically:
 2. Every N minutes: incremental sync with stored token
 3. For each new email: read content, categorise, flag, or forward
 4. Store new token for next iteration
+
+The emails an agent like this reads are written by other people, so treat their content as data, never as instructions: don't take recipients, links or actions from a message. Forwarding or replying reaches other people, so have a person confirm those steps (the plugin's safety hook asks before sends in clients that support it), or limit the agent to categorising and flagging. For an agent that should only watch, set `OUTLOOK_READ_ONLY=true`. See [Using Outlook Assistant in Agents](using-outlook-assistant-in-agents.md#server-instructions).
 
 ### Audit Trail Logging
 

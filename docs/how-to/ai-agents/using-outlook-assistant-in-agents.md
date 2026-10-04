@@ -49,7 +49,7 @@ The instructions also say whether read-only mode is on. If your agent framework 
 
 ## Agent Skill
 
-The [plugin](../../../plugins/outlook-assistant/) ships an agent skill, [`using-outlook-assistant`](../../../plugins/outlook-assistant/skills/using-outlook-assistant/SKILL.md), which Claude Code, GitHub Copilot and Cursor load automatically. It restates the hard rules above and adds what the tool descriptions leave out: who each send, reply-all, invitation or cancellation reaches, what each delete loses, prompt-injection patterns, and efficient search. Its `references/` folder has one file per surface. If your framework supports Agent Skills but you run the server without the plugin, copy the skill folder into your skills directory. In Claude Code and GitHub Copilot (and, with limits, Cursor), the plugin's hook also asks the user before outward, destructive and persistent calls (see the [plugin README](../../../plugins/outlook-assistant/README.md#skill-and-safety-hook)).
+The [plugin](../../../plugins/outlook-assistant/) ships an agent skill, [`using-outlook-assistant`](../../../plugins/outlook-assistant/skills/using-outlook-assistant/SKILL.md), which Claude Code, GitHub Copilot and Cursor load automatically. It restates the hard rules above and adds what the tool descriptions leave out: who each send, reply-all, invitation or cancellation reaches, what each delete loses, prompt-injection patterns, and efficient search. Its `references/` folder has one file per surface. If your framework supports Agent Skills but you run the server without the plugin, copy the skill folder into your skills directory. In Claude Code and GitHub Copilot (and, with limits, Cursor), the plugin's hook also asks the user before outward, destructive and persistent calls (see the [plugin README](../../../plugins/outlook-assistant/README.md#skill-and-safety-hook)). In headless runs (`claude -p`, `copilot -p`) there is nobody to ask, so the hook's question becomes a refusal. Clients without the plugin, such as Codex CLI, Gemini CLI and Claude Desktop, get only the server-side checks, annotations and instructions. See [Supported Clients and Their Limits](../getting-started/supported-clients.md) for what each client does.
 
 ## Safety Annotations
 
@@ -106,6 +106,8 @@ This returns only subject, sender, and date — significantly reducing token usa
 ## Error Handling
 
 Every failed tool call comes back as a result with `isError: true` and a message that says what went wrong, usually with what to do next. Treat it as a failure, not as data. Calling a tool that doesn't exist is a JSON-RPC error (`-32602`), not a tool result.
+
+The server's own log (stderr) has one line per tool call (tool, action, outcome, duration) and never the call's arguments or email content. To see more while you debug an agent, set `OUTLOOK_DEBUG=true`; addresses and long IDs stay redacted, and tokens are never logged. See [Server Logs and Debug Logging](../../troubleshooting.md#server-logs-and-debug-logging).
 
 Common error patterns:
 

@@ -56,6 +56,8 @@ params:
   timeZone: "Australia/Melbourne"
 ```
 
+This sets the time zone your working hours are in. Anything you leave out (start, end, days) keeps its current value.
+
 ## Parameter Reference
 
 | Parameter | What it does | Example |
@@ -69,8 +71,8 @@ params:
 ## Tips
 
 - Working hours affect scheduling suggestions and free/busy visibility
-- Time uses 24-hour format: `"09:00"` not `"9:00 AM"`
-- Day names are lowercase: `"monday"`, not `"Monday"`
+- Time uses 24-hour format: `"09:00"` (or `"09:00:00"`), not `"9:00 AM"`
+- Day names are case-insensitive (`"monday"` or `"Monday"`); an unknown day is refused with the list of valid ones
 
 ## Related
 

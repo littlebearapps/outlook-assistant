@@ -90,7 +90,7 @@ params:
   outputDir: "/tmp/finance-export/"
 ```
 
-A batch export takes at most 100 messages per call, and a search stops at `maxResults` (default 25, max 100). When a limit leaves messages out, the result says so: export the remaining IDs in another call, or export a search in date ranges with `receivedAfter`/`receivedBefore`.
+A batch export takes at most 100 messages per call, and a search stops at `maxResults` (default 25, max 100). When a limit leaves messages out, the result says so: export the remaining IDs in another call, or export a search in date ranges with `receivedAfter`/`receivedBefore`. A search that matches nothing says "No emails matched the search query; nothing was exported."
 
 ## Export as CSV (For Spreadsheets)
 
@@ -151,6 +151,8 @@ This needs the opt-in `OUTLOOK_SHARED_MAILBOX` setting on a work/school account 
 | `html` | Viewing in a browser with formatting | `.html` |
 | `csv` | Spreadsheet import, bulk metadata analysis | `.csv` |
 | `target: "mime"` | Raw email content, forensics | returned in the response, no file (`format: "mime"` is an alias for `eml`) |
+
+Not every target takes every format. `mbox` and `html` are for `conversation` exports only, and a single-message export refuses them. For a batch (`messages`), use `mime` (or `eml`), `markdown`, `json` or `csv`.
 
 ## Parameter Reference
 

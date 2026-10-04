@@ -193,6 +193,8 @@ params:
 | List (no query) | 25 | 50 |
 | Search | 10 | 50 |
 
+There is no page cursor. When the result says more emails are available, raise `count` (up to 50) or narrow the date range with `receivedAfter`/`receivedBefore`.
+
 ![Search results with email list](../../assets/screenshots/find-emails-01.png)
 
 ## Track Inbox Changes (Delta Sync)

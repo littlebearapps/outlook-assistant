@@ -136,7 +136,7 @@ The preview reads the event (nothing is written) and starts with `DRY RUN — no
 | `subject`, `start`, `end`, `attendees`, `body`, `location`, `isOnlineMeeting`, `sensitivity`, `showAs`, `importance`, `categories`, `reminderMinutesBeforeStart` | Event fields to change | No (update only — pass only what changes) |
 | `dryRun` | Preview any action without changing or sending anything: who would be emailed (decline/cancel/delete) or the PATCH body (update) | No |
 
-> **Note**: `manage-event` is marked as destructive at the tool level (because `decline`, `cancel`, and `delete` are destructive, and changes can notify attendees). Clients that honour MCP annotations ask for confirmation before any action — including `update`. Use `dryRun: true` to preview any action first.
+> **Note**: `manage-event` is marked as destructive and open-world at the tool level, because every action can email other people: a decline goes to the organiser, a cancel or delete to the attendees, and an organiser's update to the attendees. Clients that honour MCP annotations ask for confirmation before any action — including `update`. Use `dryRun: true` to preview any action first.
 
 ## Tips
 

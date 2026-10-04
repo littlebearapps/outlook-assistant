@@ -51,7 +51,7 @@
       "defaultAction": "list",
       "untrustedContent": true
     },
-    "export": { "default": "reversible", "untrustedContent": true },
+    "export": { "default": "destructive", "untrustedContent": true },
     "get-mail-tips": { "default": "read", "untrustedContent": true },
     "folders": {
       "actions": {

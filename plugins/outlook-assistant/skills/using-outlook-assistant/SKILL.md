@@ -52,7 +52,7 @@ Every tool and action has one class. The server, the plugin hook and these rules
 | `draft`                 |                   | create, update, reply, reply-all, forward      | send                            | delete      |                         |
 | `update-email`          |                   | mark-read, mark-unread, flag, unflag, complete |                                 |             |                         |
 | `attachments`           | list, view        | download                                       |                                 |             |                         |
-| `export`                |                   | all                                            |                                 |             |                         |
+| `export`                |                   |                                                |                                 | all         |                         |
 | `get-mail-tips`         | all               |                                                |                                 |             |                         |
 | `folders`               | list, stats       | create, move                                   |                                 | delete      |                         |
 | `manage-rules`          | list              |                                                |                                 | delete      | create, update, reorder |

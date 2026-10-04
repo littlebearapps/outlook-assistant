@@ -555,6 +555,26 @@ describe('reasons', () => {
     );
   });
 
+  test('export says where files go and whether one is replaced', () => {
+    expect(
+      reason(
+        pre('export', {
+          target: 'message',
+          id: 'AAMk1',
+          savePath: '~/Documents/note.md',
+          overwrite: true,
+        })
+      )
+    ).toBe(
+      "Outlook Assistant: Writes the email 'AAMk1' to '~/Documents/note.md' on this computer, replacing any file already there."
+    );
+    expect(
+      reason(pre('export', { target: 'messages', emailIds: ['a', 'b'] }))
+    ).toBe(
+      'Outlook Assistant: Writes 2 emails to your temp folder on this computer.'
+    );
+  });
+
   test('auto-replies name the external audience', () => {
     expect(
       reason(

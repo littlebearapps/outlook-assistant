@@ -314,6 +314,22 @@ function describe(tool, action, input) {
       return `Deletes ${named('contact', input, ['id'])}.`;
     case 'manage-category:delete':
       return `Deletes ${named('category', input, ['displayName', 'categoryId', 'id'])} from your category list.`;
+    case 'export:': {
+      const target = input.target ?? 'message';
+      let what;
+      if (target === 'messages') {
+        what = count(addresses(input.emailIds).length, 'email');
+      } else if (target === 'conversation') {
+        what = 'a conversation';
+      } else {
+        what = named('email', input, ['id']);
+      }
+      const where = input.savePath ?? input.outputDir;
+      const place = where ? ` to ${quoted(where)}` : ' to your temp folder';
+      const replace =
+        input.overwrite === true ? ', replacing any file already there' : '';
+      return `Writes ${what}${mailbox(tool, input)}${place} on this computer${replace}.`;
+    }
     case 'manage-focused-inbox:delete':
       return `Removes the Focused Inbox override for ${quoted(input.emailAddress, 'a sender')}.`;
     default: {

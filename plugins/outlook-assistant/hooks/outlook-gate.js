@@ -75,10 +75,26 @@ function loadRiskMap() {
  */
 function outlookTool(toolName, client = 'claude') {
   if (typeof toolName !== 'string') return null;
-  const prefix = Object.hasOwn(TOOL_PREFIXES, client)
-    ? TOOL_PREFIXES[client]
-    : TOOL_PREFIXES.claude;
-  return toolName.startsWith(prefix) ? toolName.slice(prefix.length) : null;
+  if (client !== 'copilot') {
+    const prefix = TOOL_PREFIXES.claude;
+    return toolName.startsWith(prefix) ? toolName.slice(prefix.length) : null;
+  }
+  const riskMap = loadRiskMap();
+  const direct = toolName.startsWith(TOOL_PREFIXES.copilot)
+    ? toolName.slice(TOOL_PREFIXES.copilot.length)
+    : null;
+  if (direct && Object.hasOwn(riskMap, direct)) return direct;
+  // Copilot clients don't all name MCP tools the same way (VS Code is
+  // unverified, and a marketplace install may add the plugin name), so any
+  // name mentioning Outlook is ours: a known tool at the end of it is
+  // classified, and anything else is unknown, which asks. Missing a call
+  // would let it run unchecked; asking about another Outlook server's tool
+  // only costs a prompt.
+  if (!/outlook/i.test(toolName)) return null;
+  const known = Object.keys(riskMap)
+    .filter((tool) => new RegExp(`[-_./:]${tool}$`).test(toolName))
+    .sort((a, b) => b.length - a.length);
+  return known[0] ?? toolName;
 }
 
 /** The action a call runs, falling back to the tool's default action. */
@@ -245,7 +261,7 @@ function mailbox(tool, input) {
 function describe(tool, action, input) {
   switch (`${tool}:${action ?? ''}`) {
     case 'send-email:': {
-      const to = recipients(input) ?? 'the recipients given';
+      const to = recipients(input) ?? 'to the recipients given';
       return `Sends an email ${to}, subject ${quoted(input.subject, '(none)')}. It can't be unsent.`;
     }
     case 'draft:send':
@@ -368,14 +384,27 @@ function confirmLevel(env) {
   return Object.hasOwn(CONFIRM_LEVELS, level) ? level : DEFAULT_CONFIRM_LEVEL;
 }
 
-function ask(reason) {
-  return {
+/**
+ * An `ask` decision. Claude Code reads hookSpecificOutput; Copilot CLI
+ * documents a flat permissionDecision for its own hooks, so Copilot gets
+ * both forms and can't miss the decision whichever it reads.
+ * @param {string} reason
+ * @param {string} [client]
+ */
+function ask(reason, client = 'claude') {
+  const text = `Outlook Assistant: ${reason}`;
+  const output = {
     hookSpecificOutput: {
       hookEventName: 'PreToolUse',
       permissionDecision: 'ask',
-      permissionDecisionReason: `Outlook Assistant: ${reason}`,
+      permissionDecisionReason: text,
     },
   };
+  if (client === 'copilot') {
+    output.permissionDecision = 'ask';
+    output.permissionDecisionReason = text;
+  }
+  return output;
 }
 
 /**
@@ -404,16 +433,17 @@ function preToolUse(payload, env = process.env, client = 'claude') {
       ? `${clean(tool)} action=${clean(action)}`
       : clean(tool);
     return ask(
-      `${call} isn't in this plugin's risk map, so it can't be checked. Allow it only if you know what it does.`
+      `${call} isn't in this plugin's risk map, so it can't be checked. Allow it only if you know what it does.`,
+      client
     );
   }
   if (riskClass === 'read') return null;
   if (isGenuineDryRun(riskMap, tool, input)) return null;
 
   const asks = CONFIRM_LEVELS[level];
-  if (asks.has(riskClass)) return ask(describe(tool, action, input));
+  if (asks.has(riskClass)) return ask(describe(tool, action, input), client);
   if (movesToDeletedItems(tool, action, input)) {
-    return ask(describe(tool, action, input));
+    return ask(describe(tool, action, input), client);
   }
   return null;
 }
@@ -463,7 +493,8 @@ function handle(raw, eventArg, env = process.env, client = 'claude') {
       };
     }
     return ask(
-      `the safety hook couldn't check this call (${clean(err.message)}). Review it before allowing.`
+      `the safety hook couldn't check this call (${clean(err.message)}). Review it before allowing.`,
+      client
     );
   }
 }

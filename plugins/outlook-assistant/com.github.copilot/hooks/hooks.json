@@ -3,7 +3,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "outlook-.*",
+        "matcher": ".*outlook.*",
         "hooks": [
           {
             "type": "command",

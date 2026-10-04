@@ -119,6 +119,7 @@ describe('Copilot hooks (com.github.copilot/hooks/hooks.json)', () => {
         expect(re.test(`outlook-${tool}`)).toBe(true);
       }
       expect(re.test('github-create_issue')).toBe(false);
+      expect(re.test('mcp_outlook_send-email')).toBe(true);
     }
   });
 
@@ -149,7 +150,44 @@ describe('Copilot hooks (com.github.copilot/hooks/hooks.json)', () => {
     ).toBe('ask');
     expect(copilot('outlook-search-emails', {})).toBeNull();
     expect(copilot('github-create_issue', {})).toBeNull();
-    expect(copilot(`${PREFIX}send-email`, {})).toBeNull();
+  });
+
+  test.each([
+    'mcp_outlook_send-email',
+    'outlook/send-email',
+    'outlook-assistant-outlook-send-email',
+    `${PREFIX}send-email`,
+  ])('copilot mode still recognises %s (fails closed on naming)', (name) => {
+    const out = handle(
+      JSON.stringify({ tool_name: name, tool_input: { to: 'a@x.com' } }),
+      'PreToolUse',
+      {},
+      'copilot'
+    );
+    expect(reason(out)).toMatch(/Sends an email to a@x\.com/);
+  });
+
+  test('an Outlook-named tool it can’t place asks', () => {
+    const out = handle(
+      JSON.stringify({ tool_name: 'outlook-mystery', tool_input: {} }),
+      'PreToolUse',
+      {},
+      'copilot'
+    );
+    expect(decision(out)).toBe('ask');
+  });
+
+  test('copilot asks carry the flat and the nested decision', () => {
+    const out = handle(
+      JSON.stringify({ tool_name: 'outlook-send-email', tool_input: {} }),
+      'PreToolUse',
+      {},
+      'copilot'
+    );
+    expect(out.permissionDecision).toBe('ask');
+    expect(out.permissionDecisionReason).toBe(reason(out));
+    // Claude Code gets only the nested form.
+    expect(pre('send-email', {}).permissionDecision).toBeUndefined();
   });
 });
 
@@ -163,7 +201,8 @@ describe('outlookTool', () => {
     // Copilot names only count in copilot mode, and vice versa.
     expect(outlookTool('outlook-send-email')).toBeNull();
     expect(outlookTool('outlook-send-email', 'copilot')).toBe('send-email');
-    expect(outlookTool(`${PREFIX}send-email`, 'copilot')).toBeNull();
+    expect(outlookTool(`${PREFIX}send-email`, 'copilot')).toBe('send-email');
+    expect(outlookTool('github-create_issue', 'copilot')).toBeNull();
     // An unknown client falls back to Claude names.
     expect(outlookTool(`${PREFIX}send-email`, 'nope')).toBe('send-email');
   });

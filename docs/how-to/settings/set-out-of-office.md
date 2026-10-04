@@ -64,6 +64,29 @@ params:
 
 If you omit `externalAudience`, the existing setting is preserved. If no external message is set, external senders receive no auto-reply.
 
+## Preview Before You Switch Them On
+
+Automatic replies go to other people, including senders outside your organisation, until they're switched off. Add `dryRun: true` to see what a call would do without changing anything:
+
+```
+tool: mailbox-settings
+params:
+  action: "set-auto-replies"
+  startDateTime: "2026-03-10T00:00:00Z"
+  endDateTime: "2026-03-15T23:59:59Z"
+  internalReplyMessage: "I'm on leave from 10–15 March."
+  externalAudience: "all"
+  dryRun: true
+```
+
+The preview starts with `DRY RUN — nothing was changed.` and shows:
+
+- the status (off, on with no end date, or the schedule in UTC)
+- who gets each reply: internal senders, and the external audience (`none`, `contactsOnly` or `all`)
+- each message's length in characters and its first 100 characters
+
+Anything the call doesn't set keeps its current value, so the preview reads the current setting first and marks those parts "unchanged".
+
 ## Disable Auto-Replies
 
 > "Turn off my out-of-office"
@@ -101,6 +124,7 @@ This shows whether auto-replies are enabled, the schedule, and the current messa
 | `internalReplyMessage` | Message for people in your organisation | `"On leave until Monday."` |
 | `externalReplyMessage` | Message for people outside your organisation | `"Out of office until 15 March."` |
 | `externalAudience` | Who gets the external reply: `none`, `contactsOnly`, `all` | `"all"` |
+| `dryRun` | Preview who would get replies, the schedule and message lengths without changing anything | `true` |
 
 ## Tips
 

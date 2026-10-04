@@ -8,6 +8,7 @@ const { callGraphAPIRaw } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { buildMailboxPrefix } = require('../utils/mailbox');
 const { toolError, authRequiredError } = require('../utils/tool-error');
+const { log } = require('../utils/logger');
 
 /**
  * Parse MIME headers from raw content
@@ -228,7 +229,7 @@ async function handleGetMimeContent(args) {
         },
       };
     } catch (error) {
-      console.error(`Error getting MIME content: ${error.message}`);
+      log.debug(`Error getting MIME content: ${error.message}`);
 
       if (error.message.includes("doesn't belong to the targeted mailbox")) {
         return toolError(

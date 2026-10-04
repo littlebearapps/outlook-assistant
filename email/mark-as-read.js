@@ -6,6 +6,7 @@ const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { buildMailboxPrefix } = require('../utils/mailbox');
 const { toolError, authRequiredError } = require('../utils/tool-error');
+const { log } = require('../utils/logger');
 
 /**
  * Mark email as read handler
@@ -50,7 +51,7 @@ async function handleMarkAsRead(args) {
         ],
       };
     } catch (error) {
-      console.error(
+      log.debug(
         `Error marking email as ${isRead ? 'read' : 'unread'}: ${error.message}`
       );
 

@@ -5,6 +5,8 @@
  * and reduce response size/token usage.
  */
 
+const { log } = require('./logger');
+
 /**
  * Field presets for different use cases
  */
@@ -255,7 +257,7 @@ const FOLDER_FIELDS = {
 function getEmailFields(preset = 'list') {
   const fields = FIELD_PRESETS[preset];
   if (!fields) {
-    console.error(`Unknown preset: ${preset}, falling back to 'list'`);
+    log.debug(`Unknown preset: ${preset}, falling back to 'list'`);
     return FIELD_PRESETS.list.join(',');
   }
   return fields.join(',');
@@ -269,7 +271,7 @@ function getEmailFields(preset = 'list') {
 function getFolderFields(preset = 'basic') {
   const fields = FOLDER_FIELDS[preset];
   if (!fields) {
-    console.error(`Unknown folder preset: ${preset}, falling back to 'basic'`);
+    log.debug(`Unknown folder preset: ${preset}, falling back to 'basic'`);
     return FOLDER_FIELDS.basic.join(',');
   }
   return fields.join(',');

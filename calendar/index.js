@@ -69,7 +69,7 @@ const calendarTools = [
   {
     name: 'create-event',
     description:
-      "Create a new calendar event on the signed-in user's default calendar. Returns the created event with its `id`, `webLink`, and (if attendees are present) an auto-generated online-meeting URL — attendees receive invitations on save. Times use the configured timezone (default Australia/Melbourne; override with `OUTLOOK_DEFAULT_TIMEZONE`); omit the `Z` suffix to send local time. Use `manage-event` action=`update` to modify an event after creation, or `manage-event` action=`cancel`/`delete` to remove it.",
+      "Create a new calendar event on the signed-in user's default calendar. Returns the created event with its `id`, `webLink`, and (if attendees are present) an auto-generated online-meeting URL — attendees receive invitations on save, so pass `dryRun: true` first to preview who would be invited (and how many are external) without creating anything. Times use the configured timezone (default Australia/Melbourne; override with `OUTLOOK_DEFAULT_TIMEZONE`); omit the `Z` suffix to send local time. Use `manage-event` action=`update` to modify an event after creation, or `manage-event` action=`cancel`/`delete` to remove it.",
     ...toolMetadata('create-event', 'Create Calendar Event'),
     inputSchema: {
       type: 'object',
@@ -96,6 +96,11 @@ const calendarTools = [
           type: 'string',
           description: 'Optional body content for the event',
         },
+        dryRun: {
+          type: 'boolean',
+          description:
+            'Preview only: nothing is created and no invitations are sent. Shows who would be invited and how many are external (default false).',
+        },
       },
       additionalProperties: false,
       required: ['subject', 'start', 'end'],
@@ -105,7 +110,7 @@ const calendarTools = [
   {
     name: 'manage-event',
     description:
-      "Manage an existing calendar event (destructive: covers update/decline/cancel/delete — use dryRun where supported to preview). action=`update` edits fields in place via PATCH (subject, start, end, attendees, body, location, isOnlineMeeting, sensitivity, showAs, importance, categories, reminderMinutesBeforeStart) — only fields you pass are changed; pass `dryRun: true` to preview the PATCH payload. action=`decline` declines an invitation (optional `comment`; `sendResponse: false` declines without notifying the organiser). action=`cancel` cancels an event you organised and notifies attendees. action=`delete` removes the event from your calendar (Graph doesn't document a guaranteed recovery path, so don't count on restoring it); deleting a meeting you organised that has attendees still emails them a cancellation, so use `cancel` (with an optional `comment`) when you want to control that message. Returns the updated event on update; status confirmation otherwise. Note: there is no `accept` action — accept invitations in the Outlook UI (Graph's accept verb is unreliable across personal/M365).",
+      "Manage an existing calendar event. `dryRun: true` previews any action without changing or sending anything: who would be emailed, with an external count (decline/cancel/delete), or the PATCH body (update). action=`update` edits fields via PATCH (subject, start, end, attendees, body, location, isOnlineMeeting, sensitivity, showAs, importance, categories, reminderMinutesBeforeStart); only fields you pass change. action=`decline` declines an invitation (optional `comment`; `sendResponse: false` declines without notifying the organiser). action=`cancel` cancels an event you organised and emails attendees. action=`delete` removes the event from your calendar (Graph documents no guaranteed recovery); deleting a meeting you organised that has attendees still emails them a cancellation, so use `cancel` with a `comment` to control that message. Returns the updated event on update; a confirmation otherwise. There is no `accept` action: accept invitations in the Outlook UI, as Graph's accept verb is unreliable.",
     ...toolMetadata('manage-event', 'Manage Calendar Event'),
     inputSchema: {
       type: 'object',
@@ -224,7 +229,7 @@ const calendarTools = [
         dryRun: {
           type: 'boolean',
           description:
-            'Preview the PATCH without applying it (action=update only). Returns the body that would be sent to Graph.',
+            'Preview only: nothing is changed or sent. Shows who would be emailed (decline/cancel/delete) or the PATCH body (update). Default false.',
         },
       },
       additionalProperties: false,

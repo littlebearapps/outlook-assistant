@@ -90,6 +90,8 @@ params:
   outputDir: "/tmp/finance-export/"
 ```
 
+A batch export takes at most 100 messages per call, and a search stops at `maxResults` (default 25, max 100). When a limit leaves messages out, the result says so: export the remaining IDs in another call, or export a search in date ranges with `receivedAfter`/`receivedBefore`.
+
 ## Export as CSV (For Spreadsheets)
 
 CSV exports email metadata (subject, from, to, dates) without body content — ideal for importing into Excel or Google Sheets:

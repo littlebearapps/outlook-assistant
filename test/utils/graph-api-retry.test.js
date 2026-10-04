@@ -349,6 +349,25 @@ describe('callGraphAPI POST is retried only on 429', () => {
     expect(bodies).toEqual(['{"message":{"a":1}}', '{"message":{"a":1}}']);
   });
 
+  it('re-sends the same create-event transactionId on a 429 retry (#280)', async () => {
+    script(
+      { status: 429, headers: { 'retry-after': '1' }, body: THROTTLED },
+      { status: 201, body: { id: 'evt-1' } }
+    );
+    const event = {
+      subject: 'Team sync',
+      transactionId: '1b4e28ba-2fa1-4d2b-883f-0016d3cca427',
+    };
+    const state = track(callGraphAPI('token', 'POST', 'me/events', event));
+    await jest.advanceTimersByTimeAsync(1000);
+
+    expect(state.value).toEqual({ id: 'evt-1' });
+    const ids = https.request.mock.results.map(
+      (r) => JSON.parse(r.value.write.mock.calls[0][0]).transactionId
+    );
+    expect(ids).toEqual([event.transactionId, event.transactionId]);
+  });
+
   it('still retries POST on 429 with a short Retry-After (2 s)', async () => {
     script(
       { status: 429, headers: { 'retry-after': '2' }, body: THROTTLED },

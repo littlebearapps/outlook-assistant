@@ -6,6 +6,7 @@ const { ensureAuthenticated } = require('../auth');
 const { resolveFolder, listChildFolders } = require('./resolve');
 const { buildMailboxPrefix } = require('../utils/mailbox');
 const { toolError, authRequiredError } = require('../utils/tool-error');
+const { log } = require('../utils/logger');
 
 /**
  * Create folder handler
@@ -133,7 +134,7 @@ async function createMailFolder(accessToken, folderName, parentSpec) {
       };
     }
   } catch (error) {
-    console.error(`Error creating folder "${folderName}": ${error.message}`);
+    log.debug(`Error creating folder "${folderName}": ${error.message}`);
     throw error;
   }
 }

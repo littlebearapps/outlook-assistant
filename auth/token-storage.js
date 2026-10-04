@@ -3,8 +3,9 @@ const fsSync = require('fs');
 const path = require('path');
 const https = require('https');
 const querystring = require('querystring');
-const { describeAuthError } = require('./auth-errors');
+const { describeAuthError, authErrorLogLabel } = require('./auth-errors');
 const { resolveClientId } = require('./client-config');
+const { log } = require('../utils/logger');
 
 /**
  * Decide which scopes a refresh request should use. Prefer the scopes that were
@@ -108,7 +109,8 @@ class TokenStorage {
       return this.tokens;
     } catch (error) {
       if (error.code !== 'ENOENT') {
-        console.error('Error loading token cache:', error.message);
+        log.note('auth', 'token-cache-unreadable');
+        log.debug('Error loading token cache:', error.message);
       }
       this.tokens = null;
       return null;
@@ -126,7 +128,8 @@ class TokenStorage {
         { mode: 0o600 }
       );
     } catch (error) {
-      console.error('Error saving token cache:', error.message);
+      log.note('auth', 'token-cache-save-failed');
+      log.debug('Error saving token cache:', error.message);
       throw error;
     }
   }
@@ -161,19 +164,20 @@ class TokenStorage {
     await this.getTokens(); // Ensure tokens are loaded
 
     if (!this.tokens || !this.tokens.access_token) {
-      console.error('No access token available.');
+      log.debug('No access token available.');
       return null;
     }
 
     if (this.isTokenExpired()) {
-      console.error(
+      log.debug(
         'Access token expired or nearing expiration. Attempting refresh.'
       );
       if (this.tokens.refresh_token) {
         try {
           return await this.refreshAccessToken();
         } catch (refreshError) {
-          console.error('Failed to refresh access token:', refreshError);
+          log.note('auth', authErrorLogLabel('refresh-failed', refreshError));
+          log.debug('Failed to refresh access token:', refreshError);
           // Drop the in-memory tokens so callers re-authenticate. The save
           // below is intentionally a no-op — `_saveTokensToFile` returns early
           // when `tokens` is null — which is the behaviour we want: a transient
@@ -184,9 +188,8 @@ class TokenStorage {
           return null;
         }
       } else {
-        console.warn(
-          'No refresh token available. Cannot refresh access token.'
-        );
+        log.note('auth', 'no-refresh-token');
+        log.debug('No refresh token available. Cannot refresh access token.');
         // Same as above: clears memory, leaves the file alone. (#72)
         this.tokens = null;
         await this._saveTokensToFile();
@@ -205,7 +208,7 @@ class TokenStorage {
 
     // Prevent multiple concurrent refresh attempts
     if (this._refreshPromise) {
-      console.error('Refresh already in progress, returning existing promise.');
+      log.debug('Refresh already in progress, returning existing promise.');
       return this._refreshPromise.then((tokens) => tokens.access_token);
     }
 
@@ -213,7 +216,7 @@ class TokenStorage {
     // in refresh requests for tokens obtained via device code.
     // Browser flow (confidential client) requires client_secret.
     const isDeviceCode = this.tokens.auth_method === 'device-code';
-    console.error(
+    log.debug(
       `Attempting to refresh access token (auth_method: ${this.tokens.auth_method || 'browser'})...`
     );
 
@@ -259,12 +262,10 @@ class TokenStorage {
                   Date.now() + responseBody.expires_in * 1000;
                 try {
                   await this._saveTokensToFile();
-                  console.error(
-                    'Access token refreshed and saved successfully.'
-                  );
+                  log.debug('Access token refreshed and saved successfully.');
                   resolve(this.tokens);
                 } catch (saveError) {
-                  console.error('Failed to save refreshed tokens:', saveError);
+                  log.debug('Failed to save refreshed tokens:', saveError);
                   // Even if save fails, tokens are updated in memory.
                   // Depending on desired strictness, could reject here.
                   // For now, resolve with in-memory tokens but log critical error.
@@ -276,7 +277,7 @@ class TokenStorage {
                   );
                 }
               } else {
-                console.error('Error refreshing token:', responseBody);
+                log.debug('Error refreshing token:', responseBody);
                 reject(
                   new Error(
                     describeAuthError(
@@ -288,7 +289,7 @@ class TokenStorage {
               }
             } catch (e) {
               // Catch any error during parsing or saving
-              console.error(
+              log.debug(
                 'Error processing refresh token response or saving tokens:',
                 e
               );
@@ -300,7 +301,7 @@ class TokenStorage {
         }
       );
       req.on('error', (error) => {
-        console.error('HTTP error during token refresh:', error);
+        log.debug('HTTP error during token refresh:', error);
         reject(error);
         this._refreshPromise = null; // Clear promise on error
       });
@@ -318,7 +319,7 @@ class TokenStorage {
         'Client ID or Client Secret is not configured. Cannot exchange code for tokens.'
       );
     }
-    console.error('Exchanging authorization code for tokens...');
+    log.debug('Exchanging authorization code for tokens...');
     const requestedScopes = this.config.scopes;
     const postData = querystring.stringify({
       client_id: clientId,
@@ -366,10 +367,10 @@ class TokenStorage {
                 };
                 try {
                   await this._saveTokensToFile();
-                  console.error('Tokens exchanged and saved successfully.');
+                  log.debug('Tokens exchanged and saved successfully.');
                   resolve(this.tokens);
                 } catch (saveError) {
-                  console.error('Failed to save exchanged tokens:', saveError);
+                  log.debug('Failed to save exchanged tokens:', saveError);
                   // Similar to refresh, tokens are in memory but not persisted.
                   // Rejecting to indicate the operation wasn't fully successful.
                   reject(
@@ -379,10 +380,7 @@ class TokenStorage {
                   );
                 }
               } else {
-                console.error(
-                  'Error exchanging code for tokens:',
-                  responseBody
-                );
+                log.debug('Error exchanging code for tokens:', responseBody);
                 reject(
                   new Error(
                     describeAuthError(
@@ -394,7 +392,7 @@ class TokenStorage {
               }
             } catch (e) {
               // Catch any error during parsing or saving
-              console.error(
+              log.debug(
                 'Error processing token exchange response or saving tokens:',
                 e,
                 'Raw data:',
@@ -410,7 +408,7 @@ class TokenStorage {
         }
       );
       req.on('error', (error) => {
-        console.error('HTTP error during code exchange:', error);
+        log.debug('HTTP error during code exchange:', error);
         reject(error);
       });
       req.write(postData);
@@ -423,12 +421,12 @@ class TokenStorage {
     this.tokens = null;
     try {
       await fs.unlink(this.config.tokenStorePath);
-      console.error('Token file deleted successfully.');
+      log.debug('Token file deleted successfully.');
     } catch (error) {
       if (error.code === 'ENOENT') {
-        console.error('Token file not found, nothing to delete.');
+        log.debug('Token file not found, nothing to delete.');
       } else {
-        console.error('Error deleting token file:', error);
+        log.debug('Error deleting token file:', error);
       }
     }
   }

@@ -3,6 +3,7 @@
  */
 const { resolveFolder, looksLikeFolderId } = require('../folder/resolve');
 const { buildMailboxPrefix } = require('../utils/mailbox');
+const { log } = require('../utils/logger');
 
 /**
  * Cache of folder information to reduce API calls
@@ -74,7 +75,7 @@ async function resolveFolderPath(accessToken, folderName, mailbox = null) {
   // Check if it's a well-known folder (case-insensitive)
   const lowerFolderName = folderName.toLowerCase();
   if (WELL_KNOWN_FOLDERS[lowerFolderName]) {
-    console.error(`Using well-known folder path for "${folderName}"`);
+    log.debug(`Using well-known folder path for "${folderName}"`);
     return scope(WELL_KNOWN_FOLDERS[lowerFolderName], prefix);
   }
 
@@ -93,7 +94,7 @@ async function resolveFolderPath(accessToken, folderName, mailbox = null) {
       mailbox,
     });
     const path = `${prefix}/mailFolders/${resolved.id}/messages`;
-    console.error(`Resolved folder "${folderName}" to path: ${path}`);
+    log.debug(`Resolved folder "${folderName}" to path: ${path}`);
     return path;
   } catch (error) {
     // Surface not-found / ambiguity messages verbatim; wrap anything else.

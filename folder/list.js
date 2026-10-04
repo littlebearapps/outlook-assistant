@@ -4,6 +4,7 @@
 const { ensureAuthenticated } = require('../auth');
 const { listChildFolders } = require('./resolve');
 const { toolError, authRequiredError } = require('../utils/tool-error');
+const { log } = require('../utils/logger');
 
 /**
  * List folders handler
@@ -120,7 +121,7 @@ async function getAllFoldersHierarchy(
           sharedMailbox
         );
       } catch (error) {
-        console.error(
+        log.debug(
           `Error getting child folders for "${folder.displayName}": ${error.message}`
         );
         warnings.push(

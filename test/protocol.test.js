@@ -12,6 +12,7 @@ const {
 } = require('@modelcontextprotocol/sdk/types.js');
 const config = require('../config');
 const { createServer } = require('../server');
+const { serverInstructions } = require('../utils/server-instructions');
 
 let client;
 let nextId;
@@ -89,6 +90,97 @@ describe('initialize', () => {
       name: config.SERVER_NAME,
       version: config.SERVER_VERSION,
     });
+  });
+
+  // #271
+  test('sends the server instructions', async () => {
+    const res = await initialize();
+    expect(res.result.instructions).toBe(
+      serverInstructions({ readOnly: false })
+    );
+  });
+
+  test('says so in the instructions when read-only mode is on', async () => {
+    const original = config.READ_ONLY;
+    config.READ_ONLY = true;
+    try {
+      await client.close();
+      await connect();
+      const res = await initialize();
+      expect(res.result.instructions).toBe(
+        serverInstructions({ readOnly: true })
+      );
+    } finally {
+      config.READ_ONLY = original;
+    }
+  });
+});
+
+// #271: the instructions and the dispatcher gate read the same config value,
+// so the text can never claim read-only mode while writes still run (or the
+// reverse).
+describe('instructions match the read-only gate', () => {
+  const sendArgs = { to: 'a@example.com', subject: 'Hi', body: 'Hello' };
+  let original;
+  let tokenSpy;
+
+  beforeEach(() => {
+    original = config.READ_ONLY;
+    const { tokenStorage } = require('../auth');
+    tokenSpy = jest
+      .spyOn(tokenStorage, 'getValidAccessToken')
+      .mockResolvedValue(null);
+  });
+
+  afterEach(() => {
+    config.READ_ONLY = original;
+    tokenSpy.mockRestore();
+  });
+
+  test.each([true, false])('READ_ONLY=%p', async (readOnly) => {
+    config.READ_ONLY = readOnly;
+    await client.close();
+    await connect();
+    const init = await initialize();
+    const res = await rpc('tools/call', {
+      name: 'send-email',
+      arguments: sendArgs,
+    });
+    const claimsReadOnly = /Read-only mode is on/.test(
+      init.result.instructions
+    );
+    const refusedByGate = /read-only mode \(OUTLOOK_READ_ONLY\)/.test(
+      res.result.content[0].text
+    );
+    expect(res.result.isError).toBe(true);
+    expect({ claimsReadOnly, refusedByGate }).toEqual({
+      claimsReadOnly: readOnly,
+      refusedByGate: readOnly,
+    });
+  });
+});
+
+describe('tools/list _meta (#271)', () => {
+  beforeEach(async () => {
+    await initialize();
+  });
+
+  test('only send-email and create-event require user interaction', async () => {
+    const res = await rpc('tools/list', {});
+    const flagged = res.result.tools
+      .filter((t) => t._meta?.['anthropic/requiresUserInteraction'] === true)
+      .map((t) => t.name)
+      .sort();
+    expect(flagged).toEqual(['create-event', 'send-email']);
+  });
+
+  test('no other tool carries _meta', async () => {
+    const res = await rpc('tools/list', {});
+    const withMeta = res.result.tools
+      .filter((t) => t._meta !== undefined)
+      .map((t) => t.name)
+      .sort();
+    expect(withMeta).toEqual(['create-event', 'send-email']);
   });
 });
 

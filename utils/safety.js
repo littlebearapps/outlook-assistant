@@ -219,9 +219,47 @@ function formatRuleDryRunPreview(rule) {
   return lines.join('\n');
 }
 
+/** First line of every dry-run preview, so it can't be read as a result (#274). */
+const DRY_RUN_LABEL = 'DRY RUN — nothing was changed.';
+
+/**
+ * A dry-run tool result: the labelled preview plus `_meta.dryRun`.
+ * @param {string|string[]} lines - What the call would do, line by line
+ * @param {object} [meta] - Extra `_meta` fields
+ * @returns {{content: Array<{type: 'text', text: string}>, _meta: object}}
+ */
+function dryRunResult(lines, meta = {}) {
+  const text = [DRY_RUN_LABEL, '', ...[].concat(lines)].join('\n');
+  return {
+    content: [{ type: 'text', text }],
+    _meta: { dryRun: true, ...meta },
+  };
+}
+
+/**
+ * The refusal for `dryRun: true` on an action with no preview (#274). Nothing
+ * runs, and the caller is told which action does preview.
+ * @param {string} toolName
+ * @param {string} action - the action that was asked for
+ * @param {string} previewAction - the tool's previewing action
+ * @returns {{content: Array<{type: 'text', text: string}>, isError: true}}
+ */
+function dryRunUnsupported(toolName, action, previewAction) {
+  return toolError(
+    `dryRun is only available for ${toolName} action=${previewAction}, not action=${action}; nothing was changed.`,
+    {
+      nextStep:
+        'Describe the change to the user, then call it without dryRun once they confirm.',
+    }
+  );
+}
+
 module.exports = {
   checkRateLimit,
   checkRecipientAllowlist,
   formatDryRunPreview,
   formatRuleDryRunPreview,
+  DRY_RUN_LABEL,
+  dryRunResult,
+  dryRunUnsupported,
 };

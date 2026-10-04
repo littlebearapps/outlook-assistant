@@ -13,6 +13,33 @@ const { handleGetMailTips } = require('./mail-tips');
 const { toolError, authRequiredError } = require('../utils/tool-error');
 
 /**
+ * Mail-tip issues that stop a send until the caller passes
+ * `acknowledgeWarnings: true` (#272). Custom tips and moderation are
+ * returned with the result but do not block.
+ */
+const BLOCKING_TIP_LABELS = {
+  outOfOffice: 'out of office',
+  mailboxFull: 'mailbox full',
+  deliveryRestricted: 'delivery restricted',
+  external: 'external recipient',
+  externalMembers: 'group with external members',
+};
+
+const DELIVERY_CAVEAT =
+  'Mail tips are M365-only: personal Outlook.com accounts return none, and no warnings is not proof the email will be delivered.';
+
+/**
+ * One line per blocking issue, e.g. "- a@b.com: mailbox full".
+ * @param {Array<{address: string, type: string}>} issues
+ * @returns {string}
+ */
+function formatBlockingIssues(issues) {
+  return issues
+    .map((issue) => `- ${issue.address}: ${BLOCKING_TIP_LABELS[issue.type]}`)
+    .join('\n');
+}
+
+/**
  * Send email handler
  * @param {object} args - Tool arguments
  * @returns {object} - MCP response
@@ -28,6 +55,7 @@ async function handleSendEmail(args) {
     saveToSentItems = true,
     dryRun = false,
     checkRecipients = false,
+    acknowledgeWarnings = false,
   } = args;
 
   // Validate required parameters
@@ -102,7 +130,9 @@ async function handleSendEmail(args) {
       saveToSentItems,
     };
 
-    // Pre-send mail tips check
+    // Pre-send mail tips check. The tips are kept out of emailObject: only
+    // Graph message properties may go in the sendMail payload (#272).
+    let mailTips = null;
     if (checkRecipients) {
       const allAddresses = allRecipients.map((r) => r.emailAddress.address);
       const tipsResult = await handleGetMailTips({
@@ -110,27 +140,52 @@ async function handleSendEmail(args) {
       });
 
       const tipsText = tipsResult.content[0]?.text || '';
+      const blocking = (tipsResult._meta?.issues || []).filter(
+        (issue) => BLOCKING_TIP_LABELS[issue.type]
+      );
 
       // In dry-run mode, always include mail tips in the preview
       if (dryRun) {
         const preview = formatDryRunPreview(emailObject);
+        const refusalNote =
+          blocking.length > 0 && !acknowledgeWarnings
+            ? `\n\nNote: a real send would be refused until acknowledgeWarnings: true is passed, because of:\n${formatBlockingIssues(blocking)}`
+            : '';
         return {
           content: [
             {
               type: 'text',
-              text: `${tipsText}\n\n---\n\n${preview.content[0].text}`,
+              text: `${tipsText}\n\n---\n\n${preview.content[0].text}${refusalNote}`,
             },
           ],
           _meta: { mailTips: tipsResult._meta },
         };
       }
 
-      // In send mode, warn if there are issues but proceed
-      if (tipsResult._meta?.warningCount > 0) {
-        // Store tips to prepend to send response
-        emailObject._mailTipsText = tipsText;
-        emailObject._mailTipsMeta = tipsResult._meta;
+      // The caller asked for a check, so a failed check stops the send.
+      if (tipsResult.isError) {
+        return toolError(
+          `Email not sent: the recipient check failed.\n\n${tipsText}`,
+          tipsText.includes('Next step:')
+            ? {}
+            : {
+                nextStep:
+                  'Retry the call, or call send-email without checkRecipients to send without the check.',
+              }
+        );
       }
+
+      if (blocking.length > 0 && !acknowledgeWarnings) {
+        return toolError(
+          `Email not sent: the recipient check flagged ${blocking.length} issue(s):\n${formatBlockingIssues(blocking)}\n\n${tipsText}`,
+          {
+            nextStep:
+              'Show these warnings to the user. If they still want to send, call send-email again with the same arguments plus acknowledgeWarnings: true; otherwise change the recipients.',
+          }
+        );
+      }
+
+      mailTips = { text: tipsText, meta: tipsResult._meta, blocking };
     }
 
     // Dry-run mode: return preview without sending
@@ -148,13 +203,26 @@ async function handleSendEmail(args) {
     // Make API call to send email
     await callGraphAPI(accessToken, 'POST', 'me/sendMail', emailObject);
 
+    const sentText = `Email sent successfully!\n\nSubject: ${subject}\nRecipients: ${toRecipients.length}${ccRecipients.length > 0 ? ` + ${ccRecipients.length} CC` : ''}${bccRecipients.length > 0 ? ` + ${bccRecipients.length} BCC` : ''}\nMessage Length: ${body.length} characters`;
+
+    if (!mailTips) {
+      return { content: [{ type: 'text', text: sentText }] };
+    }
+
+    // Empty tips already carry their own M365-only note; don't repeat it.
+    const caveat = mailTips.meta?.allEmpty ? '' : `\n\n${DELIVERY_CAVEAT}`;
+    const acknowledged =
+      mailTips.blocking.length > 0
+        ? `\n\nSent with ${mailTips.blocking.length} acknowledged warning(s):\n${formatBlockingIssues(mailTips.blocking)}`
+        : '';
     return {
       content: [
         {
           type: 'text',
-          text: `Email sent successfully!\n\nSubject: ${subject}\nRecipients: ${toRecipients.length}${ccRecipients.length > 0 ? ` + ${ccRecipients.length} CC` : ''}${bccRecipients.length > 0 ? ` + ${bccRecipients.length} BCC` : ''}\nMessage Length: ${body.length} characters`,
+          text: `${sentText}${acknowledged}\n\n---\n\n${mailTips.text}${caveat}`,
         },
       ],
+      _meta: { mailTips: mailTips.meta },
     };
   } catch (error) {
     if (error.message === 'Authentication required') {

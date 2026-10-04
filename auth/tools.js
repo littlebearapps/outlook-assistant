@@ -2,7 +2,7 @@
  * Authentication-related tools for the Outlook Assistant server
  */
 const config = require('../config');
-const { getAuthErrorHints } = require('./auth-errors');
+const { getAuthErrorHints, authErrorLogLabel } = require('./auth-errors');
 const fs = require('fs');
 const path = require('path');
 const tokenManager = require('./token-manager');
@@ -21,6 +21,7 @@ const {
 } = require('./device-code');
 const { toolMetadata } = require('../utils/risk-classes');
 const { toolError } = require('../utils/tool-error');
+const { log } = require('../utils/logger');
 
 // Path for persisting device code state across MCP server restarts
 const DEVICE_CODE_STATE_PATH = path.join(
@@ -244,6 +245,7 @@ async function handleAbout() {
     `| Test Mode | ${testMode} |`,
     `| Rate Limit | ${rateLimit} |`,
     `| Recipient Allowlist | ${allowlist} |`,
+    `| Read-only mode | ${config.READ_ONLY ? 'On (OUTLOOK_READ_ONLY): only read tools and actions run' : 'Off (set OUTLOOK_READ_ONLY=true and restart to refuse every change)'} |`,
     `| Scopes | ${scopes.length} configured |`,
     `| Shared mailboxes | ${describeSharedMailboxStatus(granted)} |`,
     ``,
@@ -372,7 +374,7 @@ function saveDeviceCodeState(state) {
       fs.unlinkSync(DEVICE_CODE_STATE_PATH);
     }
   } catch (error) {
-    console.error(
+    log.debug(
       `[AUTH] Failed to ${state ? 'save' : 'clean up'} device code state: ${error.message}`
     );
   }
@@ -390,13 +392,13 @@ function loadDeviceCodeState() {
     }
     const state = JSON.parse(fs.readFileSync(DEVICE_CODE_STATE_PATH, 'utf8'));
     if (Date.now() > state.expiresAt) {
-      console.error('[AUTH] Persisted device code has expired, cleaning up');
+      log.debug('[AUTH] Persisted device code has expired, cleaning up');
       saveDeviceCodeState(null);
       return null;
     }
     return state;
   } catch (error) {
-    console.error(`[AUTH] Failed to load device code state: ${error.message}`);
+    log.debug(`[AUTH] Failed to load device code state: ${error.message}`);
     return null;
   }
 }
@@ -414,7 +416,7 @@ async function handleDeviceCodeAuth(prefix) {
     return buildMissingClientIdResponse();
   }
 
-  console.error('[AUTH] Starting device code flow...');
+  log.debug('[AUTH] Starting device code flow...');
   // Attempt the configured scope set (base, plus `.Shared` when
   // OUTLOOK_SHARED_MAILBOX opts in). If the account can't consent to
   // `.Shared`, handleDeviceCodeComplete re-issues with base scopes.
@@ -451,7 +453,7 @@ async function initiateDeviceCode(scopes, scopesUsed, prefix) {
       !isConsentRequiredError(error) &&
       isScopeConsentError(error)
     ) {
-      console.error(
+      log.debug(
         '[AUTH] Shared-mailbox scopes rejected at device-code request; retrying with base scopes.'
       );
       return initiateDeviceCode(
@@ -475,8 +477,9 @@ async function initiateDeviceCode(scopes, scopesUsed, prefix) {
   };
   saveDeviceCodeState(pendingDeviceCode);
 
-  console.error(
-    `[AUTH] Device code (${scopesUsed} scopes): ${response.userCode}, expires in ${response.expiresIn}s`
+  // Never log the user code: it is for the user (via the tool result) only.
+  log.debug(
+    `[AUTH] Device code issued (${scopesUsed} scopes), expires in ${response.expiresIn}s`
   );
 
   const lines = [];
@@ -534,7 +537,8 @@ function buildDeviceCodeErrorResponse(error) {
     lines.push('', 'Suggested fixes:', ...hints.map((h) => `- ${h}`));
   }
 
-  console.error(`[AUTH] Device code initiation failed: ${msg}`);
+  log.note('auth', authErrorLogLabel('device-code-failed', error));
+  log.debug(`[AUTH] Device code initiation failed: ${msg}`);
 
   return {
     content: [{ type: 'text', text: lines.join('\n') }],
@@ -585,7 +589,7 @@ async function handleDeviceCodeComplete() {
       : config.AUTH_CONFIG.scopes;
 
   try {
-    console.error('[AUTH] Polling for device code completion...');
+    log.debug('[AUTH] Polling for device code completion...');
     const tokenResponse = await pollForToken(
       clientId,
       pendingDeviceCode.deviceCode,
@@ -625,7 +629,7 @@ async function handleDeviceCodeComplete() {
     };
     await tokenStorage._saveTokensToFile();
 
-    console.error('[AUTH] Device code flow completed successfully.');
+    log.debug('[AUTH] Device code flow completed successfully.');
 
     return {
       content: [
@@ -648,7 +652,7 @@ async function handleDeviceCodeComplete() {
       !isConsentRequiredError(error) &&
       isScopeConsentError(error)
     ) {
-      console.error(
+      log.debug(
         '[AUTH] Shared-mailbox scopes rejected; falling back to base scopes.'
       );
       // Do NOT clear pendingDeviceCode — initiateDeviceCode replaces it.
@@ -675,6 +679,8 @@ async function handleDeviceCodeComplete() {
 
     pendingDeviceCode = null;
     saveDeviceCodeState(null);
+    log.note('auth', authErrorLogLabel('device-code-complete-failed', error));
+    log.debug(`[AUTH] Device code completion failed: ${error.message}`);
 
     // Consent required (AADSTS65001) — remediable, so surface it instead of
     // silently downgrading to base scopes (which would strip shared-mailbox
@@ -702,7 +708,7 @@ async function handleDeviceCodeComplete() {
  * @returns {object} - MCP response
  */
 async function handleCheckAuthStatus() {
-  console.error('[CHECK-AUTH-STATUS] Starting authentication status check');
+  log.debug('[CHECK-AUTH-STATUS] Starting authentication status check');
 
   // Use TokenStorage for accurate status (includes refresh attempt)
   const TokenStorage = require('./token-storage');
@@ -717,7 +723,7 @@ async function handleCheckAuthStatus() {
   const accessToken = await tokenStorage.getValidAccessToken();
 
   if (!accessToken) {
-    console.error('[CHECK-AUTH-STATUS] No valid access token');
+    log.debug('[CHECK-AUTH-STATUS] No valid access token');
     const text =
       getClientIdSource() === 'none'
         ? `Not authenticated. No Azure Application (client) ID is configured yet: ask the user for the Application (client) ID of their Azure app registration, then call \`auth action=authenticate clientId=<id>\`. Setup guide: ${SETUP_GUIDE_URL}`
@@ -732,7 +738,7 @@ async function handleCheckAuthStatus() {
     ? Math.round((expiresAt - Date.now()) / 60000)
     : 'unknown';
 
-  console.error(
+  log.debug(
     `[CHECK-AUTH-STATUS] Authenticated, token expires in ~${expiresIn} min`
   );
 
@@ -751,7 +757,7 @@ const authTools = [
   {
     name: 'auth',
     description:
-      'Manage authentication with the Microsoft Graph API. action=`status` (default) returns the current auth state and auto-refreshes the access token if it\'s expired but the refresh token is still valid (~90-day window) — call this first to check before other tools. action=`authenticate` starts the OAuth flow: with `method: "device-code"` (default, works headlessly) it returns a code + URL for the user to visit; with `method: "browser"` it opens the local auth server on :3333 (run `npm run auth-server` first). Pass `force: true` to re-authenticate over an existing valid session. If sign-in reports that OUTLOOK_CLIENT_ID is not configured, ask the user for their Azure Application (client) ID and pass it as `clientId`. action=`device-code-complete` finishes device-code auth after the user enters the code in their browser — call this once authentication shows as successful in the browser. action=`about` returns server version, configured audience, scope list, and other diagnostic info. Tokens persist to `~/.outlook-assistant-tokens.json` and survive server restarts.',
+      'Manage authentication with the Microsoft Graph API. action=`status` (default) returns the current auth state, refreshing an expired access token while the refresh token is still valid (~90 days); call it first to check before other tools. action=`authenticate` starts sign-in: `method: "device-code"` (default, works headlessly) returns a code + URL for the user to visit; `method: "browser"` uses the local auth server on :3333 (run `npm run auth-server` first). `force: true` re-authenticates over an existing valid session. If sign-in reports that OUTLOOK_CLIENT_ID is not configured, ask the user for their Azure Application (client) ID and pass it as `clientId`. action=`device-code-complete` finishes device-code sign-in once the browser shows it succeeded. action=`about` returns server version, configured audience, scope list and other diagnostics. Tokens persist to `~/.outlook-assistant-tokens.json` and survive server restarts.',
     ...toolMetadata('auth', 'Authentication'),
     inputSchema: {
       type: 'object',

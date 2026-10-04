@@ -4,6 +4,7 @@ const {
   handleSetAutomaticReplies,
   handleGetWorkingHours,
   handleSetWorkingHours,
+  settingsTools,
 } = require('../../settings');
 const { callGraphAPI } = require('../../utils/graph-api');
 const { ensureAuthenticated } = require('../../auth');
@@ -574,5 +575,134 @@ describe('handleSetWorkingHours', () => {
     expect(result.content[0].text).toBe(
       'Error setting working hours: Update failed'
     );
+  });
+});
+
+// #274: set-auto-replies dryRun reads the current setting but never PATCHes,
+// and says who would get a reply, when, and how long each message is.
+describe('set-auto-replies dryRun', () => {
+  const CURRENT = {
+    status: 'disabled',
+    externalAudience: 'contactsOnly',
+    internalReplyMessage: 'Old internal message',
+    externalReplyMessage: '',
+  };
+
+  const writeCalls = () =>
+    callGraphAPI.mock.calls.filter(([, method]) => method !== 'GET');
+
+  beforeEach(() => {
+    callGraphAPI.mockResolvedValue(CURRENT);
+  });
+
+  it('previews a schedule with the audiences and message lengths', async () => {
+    const result = await handleSetAutomaticReplies({
+      startDateTime: '2026-12-20T00:00:00Z',
+      endDateTime: '2027-01-05T00:00:00Z',
+      internalReplyMessage: "I'm away until 5 January.",
+      externalReplyMessage: 'Thanks for your email. I am away until 5 January.',
+      externalAudience: 'all',
+      dryRun: true,
+    });
+
+    expect(writeCalls()).toEqual([]);
+    expect(callGraphAPI).toHaveBeenCalledWith(
+      mockAccessToken,
+      'GET',
+      'me/mailboxSettings/automaticRepliesSetting'
+    );
+    const text = result.content[0].text;
+    expect(text).toMatch(/^DRY RUN — nothing was changed\./);
+    expect(text).toContain(
+      'Status: scheduled, from 2026-12-20T00:00:00.000Z to 2027-01-05T00:00:00.000Z (UTC).'
+    );
+    expect(text).toContain(
+      'Internal senders (your organisation): get a 25-character reply: "I\'m away until 5 January."'
+    );
+    expect(text).toContain(
+      'External senders: all external senders (externalAudience=all) get a 49-character reply'
+    );
+    expect(result._meta).toMatchObject({ dryRun: true });
+    expect(result._meta.settings.externalAudience).toBe('all');
+  });
+
+  it('fills in unchanged fields from the current setting', async () => {
+    const result = await handleSetAutomaticReplies({
+      enabled: true,
+      dryRun: true,
+    });
+
+    const text = result.content[0].text;
+    expect(writeCalls()).toEqual([]);
+    expect(text).toContain('Status: on now, with no end date (alwaysEnabled).');
+    expect(text).toContain(
+      'get a 20-character reply (unchanged): "Old internal message"'
+    );
+    expect(text).toContain(
+      'External senders: only senders in your contacts (externalAudience=contactsOnly; unchanged) — no reply message is set (unchanged)'
+    );
+    expect(text).toMatch(
+      /Personal Outlook\.com accounts only support scheduled/
+    );
+  });
+
+  it('says nobody outside gets a reply when externalAudience is none', async () => {
+    const result = await handleSetAutomaticReplies({
+      enabled: true,
+      internalReplyMessage: 'Away',
+      externalAudience: 'none',
+      dryRun: true,
+    });
+
+    expect(result.content[0].text).toContain(
+      'External senders: nobody (externalAudience=none).'
+    );
+  });
+
+  it('previews switching replies off', async () => {
+    callGraphAPI.mockResolvedValue({ ...CURRENT, status: 'alwaysEnabled' });
+
+    const result = await handleSetAutomaticReplies({
+      enabled: false,
+      dryRun: true,
+    });
+
+    expect(writeCalls()).toEqual([]);
+    expect(result.content[0].text).toContain(
+      'Status: off (disabled). Nobody gets an automatic reply.'
+    );
+  });
+
+  it('still validates externalAudience on a dry run', async () => {
+    const result = await handleSetAutomaticReplies({
+      enabled: true,
+      externalAudience: 'everyone',
+      dryRun: true,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(callGraphAPI).not.toHaveBeenCalled();
+  });
+
+  it('still refuses a call with nothing to change', async () => {
+    const result = await handleSetAutomaticReplies({ dryRun: true });
+
+    expect(result.isError).toBe(true);
+    expect(callGraphAPI).not.toHaveBeenCalled();
+  });
+
+  it('dryRun reaches the handler through the tool and is described', async () => {
+    const tool = settingsTools.find((t) => t.name === 'mailbox-settings');
+    const { dryRun } = tool.inputSchema.properties;
+    expect(dryRun.type).toBe('boolean');
+    expect(dryRun.description).toMatch(/^Preview only/);
+
+    const result = await tool.handler({
+      action: 'set-auto-replies',
+      enabled: false,
+      dryRun: true,
+    });
+    expect(writeCalls()).toEqual([]);
+    expect(result.content[0].text).toMatch(/^DRY RUN/);
   });
 });

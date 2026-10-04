@@ -21,6 +21,7 @@ const {
   formatEmailsAsCSV,
   stripHtml,
   VERBOSITY,
+  DEFAULT_LIMITS,
 } = require('../utils/response-formatter');
 const { toolError, authRequiredError } = require('../utils/tool-error');
 // Note: buildFromFilter/buildToFilter from search.js use OData $filter which causes
@@ -254,8 +255,8 @@ const EXPORT_CONVERSATION_MESSAGE_LIMIT = 1000;
  * personal Microsoft accounts (400 InefficientFilter), so the query carries no
  * `$orderby`: the pages are fetched and the messages are sorted here. Paging
  * stops at the caller's `limit` or if Graph repeats a nextLink; either
- * way the result is marked truncated. (Not callGraphAPIPaginated: it can't
- * report truncation or catch a repeated nextLink.)
+ * way the result is marked truncated. (callGraphAPIPaginated stops the same
+ * way and reports `hasMore` since #279; this loop predates that.)
  * @param {string} accessToken - Access token
  * @param {string} prefix - Mailbox prefix (`me` or `users/{mailbox}`)
  * @param {string} conversationId - Conversation ID
@@ -390,7 +391,13 @@ async function handleGetConversation(args) {
 
     messages.forEach((msg, index) => {
       output.push(`## Message ${index + 1} of ${messages.length}`);
-      output.push(formatEmailContent(msg, verbosity, { includeHeaders }));
+      output.push(
+        formatEmailContent(msg, verbosity, {
+          includeHeaders,
+          sharedMailbox,
+          maxFullBodyChars: DEFAULT_LIMITS.maxFullBodyChars,
+        })
+      );
       output.push('\n---\n');
     });
 

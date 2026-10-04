@@ -34,6 +34,8 @@ params:
   checkRecipients: true
 ```
 
+Without `dryRun`, `checkRecipients: true` refuses to send when the tips show an out-of-office reply, a full mailbox, a delivery restriction, an external recipient or a group with external members. The error lists what was flagged; nothing is sent. Once you've seen the warnings, repeat the call with `acknowledgeWarnings: true` to send anyway. Personal Outlook.com accounts return no tips, and no warnings is not proof the email will be delivered. See [When send-email Refuses to Send](check-recipients-before-sending.md#when-send-email-refuses-to-send).
+
 ## Preview Before Sending (Dry Run)
 
 Always preview first to check the email looks right:
@@ -105,7 +107,19 @@ Options: `normal` (default), `high`, `low`.
 
 `send-email` carries the MCP `destructiveHint` annotation. Annotations are hints: the server sets them, and your MCP client decides what to do with them. Clients that honour them prompt before a destructive tool runs, but a client can also be configured to auto-approve the tool or to run in a mode that skips prompts, and then the email is sent without asking. Keep `send-email` and `draft` on "ask" in your client's permission settings if you want to approve every send.
 
+In Claude Code, `send-email` (and `create-event`) also carry the `anthropic/requiresUserInteraction` flag, so Claude Code asks before every call, dry runs included, even in auto-accept or bypass modes. Other clients ignore this flag. `draft` doesn't carry it, so `draft action=send` follows your normal permission settings.
+
 On the server side, `send-email` offers `dryRun` previews and enforces the session rate limit and the recipient allowlist below, whatever your client does.
+
+### Read-Only Mode
+
+To rule out sending altogether, set:
+
+```
+OUTLOOK_READ_ONLY=true
+```
+
+The server then refuses every call that would change something, including `send-email`, every `draft` action and `dryRun` previews, before anything reaches Microsoft. Reads still work. Remove it and restart the server to send again.
 
 ### Rate Limiting
 

@@ -3,13 +3,13 @@
  */
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
-const { checkRateLimit } = require('../utils/safety');
-const { formatRuleDryRunPreview } = require('../utils/safety');
+const { checkRateLimit, formatRuleDryRunPreview } = require('../utils/safety');
 const { getInboxRules } = require('./list');
 const {
   buildConditions,
   buildActions,
   buildExceptions,
+  checkRuleRecipients,
   hasAnyCondition,
   hasAnyAction,
 } = require('./rule-builder');
@@ -22,10 +22,6 @@ const { toolError, authRequiredError } = require('../utils/tool-error');
  */
 async function handleCreateRule(args) {
   const { name, isEnabled = true, sequence, dryRun } = args;
-
-  // Rate limit rule creation
-  const rateLimitError = checkRateLimit('manage-rules');
-  if (rateLimitError) return rateLimitError;
 
   // Validate sequence parameter
   if (sequence !== undefined && (isNaN(sequence) || sequence < 1)) {
@@ -47,6 +43,10 @@ async function handleCreateRule(args) {
       'At least one action is required. Available actions: moveToFolder, copyToFolder, markAsRead, markImportance, forwardTo, redirectTo, assignCategories, stopProcessingRules, deleteMessage.'
     );
   }
+
+  // Refuse the whole rule if the allowlist blocks any forwarding (#273)
+  const recipientError = checkRuleRecipients(args, { dryRun });
+  if (recipientError) return recipientError;
 
   try {
     const accessToken = await ensureAuthenticated();
@@ -112,6 +112,10 @@ async function handleCreateRule(args) {
         content: [{ type: 'text', text }],
       };
     }
+
+    // Rate limit only real writes, so a dry run never uses up a slot (#273)
+    const rateLimitError = checkRateLimit('manage-rules');
+    if (rateLimitError) return rateLimitError;
 
     // Create the rule
     const response = await callGraphAPI(

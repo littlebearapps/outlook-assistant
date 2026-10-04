@@ -194,10 +194,12 @@ async function handleCreateDraft(args) {
     if (allowlistError) return allowlistError;
   }
 
-  // Pre-save recipient validation via mail-tips
+  // Pre-save recipient validation via mail-tips. The tips are returned
+  // with the result, never added to the draft payload (#272).
+  let tipsResult = null;
   if (doCheckRecipients && allRecipients.length > 0) {
     const allAddresses = allRecipients.map((r) => r.emailAddress.address);
-    const tipsResult = await handleGetMailTips({ recipients: allAddresses });
+    tipsResult = await handleGetMailTips({ recipients: allAddresses });
     const tipsText = tipsResult.content[0]?.text || '';
 
     if (dryRun) {
@@ -245,7 +247,12 @@ async function handleCreateDraft(args) {
       'me/messages',
       message
     );
-    return formatDraftResponse(draft, 'created');
+    const response = formatDraftResponse(draft, 'created');
+    if (tipsResult) {
+      response.content[0].text += `\n---\n\n${tipsResult.content[0]?.text || ''}`;
+      response._meta.mailTips = tipsResult._meta;
+    }
+    return response;
   } catch (error) {
     return handleError('creating draft', error);
   }

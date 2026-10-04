@@ -120,6 +120,8 @@ params:
   stopProcessingRules: true
 ```
 
+If `OUTLOOK_ALLOWED_RECIPIENTS` is set and any `forwardTo` or `redirectTo` address isn't on it, the whole rule is refused with an error naming the blocked addresses. Nothing is created, and a rule is never saved with the blocked forwarding quietly dropped. The same applies to `update`, and a `dryRun` reports that the rule would be refused.
+
 ### Assign Categories
 
 ```
@@ -269,9 +271,9 @@ Exceptions use the same conditions with `except` prefix. The rule is skipped whe
 
 ## Safety
 
-- **`dryRun`**: Preview rules before creating or updating
-- **Rate limiting**: create, update and delete count towards a per-session cap, set with `OUTLOOK_MAX_MANAGE_RULES_PER_SESSION` (or `OUTLOOK_MAX_EMAILS_PER_SESSION` when that isn't set)
-- **Recipient allowlist**: `forwardTo` and `redirectTo` are checked against `OUTLOOK_ALLOWED_RECIPIENTS`
+- **`dryRun`**: Preview rules before creating or updating. A dry run doesn't count towards the rate limit, and still previews once the limit is reached.
+- **Rate limiting**: every change (create, update, reorder and delete) counts towards one per-session cap, set with `OUTLOOK_MAX_MANAGE_RULES_PER_SESSION` (or `OUTLOOK_MAX_EMAILS_PER_SESSION` when that isn't set). Once it's reached, further changes return a "Rate limit reached" error until the server restarts. `list` is never counted.
+- **Recipient allowlist**: `forwardTo` and `redirectTo` are checked against `OUTLOOK_ALLOWED_RECIPIENTS`. If any address is blocked, the whole rule (or update) is refused rather than saved without the forwarding.
 - **No permanent delete**: `deleteMessage` moves to Deleted Items (recoverable). Permanent deletion is not available via this tool.
 - **Replace semantics on update**: When updating conditions or actions, the entire section is replaced. Use `dryRun` to preview before applying.
 

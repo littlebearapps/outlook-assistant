@@ -8,6 +8,7 @@ const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
 const config = require('./config');
 const { createRequestHandler } = require('./request-handler');
 const { TOOLS } = require('./tools');
+const { serverInstructions } = require('./utils/server-instructions');
 
 /**
  * @param {Array<object>} [tools] - tool definitions (default: the registry)
@@ -21,6 +22,9 @@ function createServer(tools = TOOLS) {
       // (resources, prompts, logging) is declared, so those methods return
       // -32601 rather than empty stubs. (#276)
       capabilities: { tools: { listChanged: false } },
+      // Model-facing safety rules and usage tips, sent in the initialize
+      // result (#271).
+      instructions: serverInstructions({ readOnly: config.READ_ONLY }),
     }
   );
 

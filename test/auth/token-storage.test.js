@@ -89,16 +89,32 @@ describe('TokenStorage', () => {
     });
 
     it('should return null and log error for other read errors', async () => {
+      delete process.env.OUTLOOK_DEBUG;
       const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
       fs.readFile.mockRejectedValue(new Error('Read error'));
       const loaded = await tokenStorage._loadTokensFromFile();
       expect(loaded).toBeNull();
       expect(tokenStorage.tokens).toBeNull();
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Error loading token cache:',
-        'Read error'
-      );
+      // Default level: a short note only, never the error text (#278)
+      expect(consoleErrorSpy.mock.calls).toEqual([
+        ['auth=token-cache-unreadable'],
+      ]);
       consoleErrorSpy.mockRestore();
+    });
+
+    it('logs the read error detail only under OUTLOOK_DEBUG', async () => {
+      process.env.OUTLOOK_DEBUG = 'true';
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      fs.readFile.mockRejectedValue(new Error('Read error'));
+      try {
+        await tokenStorage._loadTokensFromFile();
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+          '[debug] Error loading token cache: Read error'
+        );
+      } finally {
+        delete process.env.OUTLOOK_DEBUG;
+        consoleErrorSpy.mockRestore();
+      }
     });
   });
 
@@ -611,16 +627,15 @@ describe('TokenStorage', () => {
       const saveSpy = jest
         .spyOn(tokenStorage, '_saveTokensToFile')
         .mockResolvedValue(true); // Assume save works for this path
-      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
 
       const token = await tokenStorage.getValidAccessToken();
       expect(token).toBeNull();
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        'No refresh token available. Cannot refresh access token.'
-      );
+      // Outside a tool call the note is its own stderr line (#278)
+      expect(consoleErrorSpy).toHaveBeenCalledWith('auth=no-refresh-token');
       expect(tokenStorage.tokens).toBeNull();
       expect(saveSpy).toHaveBeenCalled();
-      consoleWarnSpy.mockRestore();
+      consoleErrorSpy.mockRestore();
     });
 
     it('should propagate error if saving nulled token fails (no refresh token path)', async () => {
@@ -662,32 +677,56 @@ describe('TokenStorage', () => {
       expect(fs.unlink).toHaveBeenCalledWith(tokenStorePath);
     });
 
-    it('should log if token file does not exist during unlink', async () => {
-      fs.unlink.mockRejectedValue({ code: 'ENOENT' });
-      // stderr, never stdout: stdout carries the MCP stdio protocol stream
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-      const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
+    describe('debug logging (OUTLOOK_DEBUG)', () => {
+      beforeEach(() => {
+        process.env.OUTLOOK_DEBUG = 'true';
+      });
+      afterEach(() => {
+        delete process.env.OUTLOOK_DEBUG;
+      });
 
-      await tokenStorage.clearTokens();
+      it('should log if token file does not exist during unlink', async () => {
+        fs.unlink.mockRejectedValue({ code: 'ENOENT' });
+        // stderr, never stdout: stdout carries the MCP stdio protocol stream
+        const consoleErrorSpy = jest
+          .spyOn(console, 'error')
+          .mockImplementation();
+        const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Token file not found, nothing to delete.'
-      );
-      expect(consoleLogSpy).not.toHaveBeenCalled();
-      consoleErrorSpy.mockRestore();
-      consoleLogSpy.mockRestore();
+        await tokenStorage.clearTokens();
+
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+          '[debug] Token file not found, nothing to delete.'
+        );
+        expect(consoleLogSpy).not.toHaveBeenCalled();
+        consoleErrorSpy.mockRestore();
+        consoleLogSpy.mockRestore();
+      });
+
+      it('should log error for other unlink errors', async () => {
+        fs.unlink.mockRejectedValue(new Error('Deletion failed'));
+        const consoleErrorSpy = jest
+          .spyOn(console, 'error')
+          .mockImplementation();
+
+        await tokenStorage.clearTokens();
+
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+          expect.stringMatching(
+            /^\[debug\] Error deleting token file: Error: Deletion failed/
+          )
+        );
+        consoleErrorSpy.mockRestore();
+      });
     });
 
-    it('should log error for other unlink errors', async () => {
-      fs.unlink.mockRejectedValue(new Error('Deletion failed'));
+    it('logs nothing about clearing by default', async () => {
+      fs.unlink.mockRejectedValue({ code: 'ENOENT' });
       const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
 
       await tokenStorage.clearTokens();
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Error deleting token file:',
-        expect.any(Error)
-      );
+      expect(consoleErrorSpy).not.toHaveBeenCalled();
       consoleErrorSpy.mockRestore();
     });
   });

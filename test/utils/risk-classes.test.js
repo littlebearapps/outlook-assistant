@@ -13,6 +13,7 @@ const {
   TOOL_RISK,
   classify,
   riskAnnotations,
+  riskMeta,
 } = require('../../utils/risk-classes');
 
 const byName = Object.fromEntries(TOOLS.map((t) => [t.name, t]));
@@ -67,6 +68,82 @@ describe('classify', () => {
   test('returns undefined for an unknown tool or action', () => {
     expect(classify('no-such-tool')).toBeUndefined();
     expect(classify('draft', 'no-such-action')).toBeUndefined();
+  });
+
+  // #271: read-only mode classifies calls that leave `action` out.
+  test('uses the default action when the call leaves action out', () => {
+    expect(classify('auth')).toBe('read');
+    expect(classify('folders')).toBe('read');
+    expect(classify('mailbox-settings')).toBe('read');
+    expect(classify('apply-category')).toBe('reversible');
+  });
+
+  test('treats a null action like a missing one, as the handlers do', () => {
+    // Coercion lets `action: null` through; handlers then run their
+    // default (`args.action || 'list'`), so the gate must classify that.
+    expect(classify('folders', null)).toBe('read');
+    expect(classify('apply-category', null)).toBe('reversible');
+    expect(classify('draft', null)).toBeUndefined();
+  });
+
+  test('returns undefined when action is required but missing', () => {
+    expect(classify('draft')).toBeUndefined();
+    expect(classify('manage-event')).toBeUndefined();
+  });
+});
+
+describe('default actions match the tools (#271)', () => {
+  const actionTools = TOOLS.filter((t) => actionEnum(t));
+
+  test.each(actionTools.map((t) => t.name))(
+    '%s declares a default action only when action is optional',
+    (name) => {
+      const tool = byName[name];
+      const entry = TOOL_RISK[name];
+      const required = (tool.inputSchema.required || []).includes('action');
+      if (required) {
+        expect(entry.defaultAction).toBeUndefined();
+        return;
+      }
+      expect(actionEnum(tool)).toContain(entry.defaultAction);
+      // The schema documents the same default the handler uses.
+      const doc = tool.inputSchema.properties.action.description;
+      expect(doc).toMatch(
+        new RegExp(`default:? ${entry.defaultAction}\\b`, 'i')
+      );
+    }
+  );
+});
+
+describe('requiresUserInteraction (#271)', () => {
+  const flagged = Object.keys(TOOL_RISK).filter(
+    (name) => TOOL_RISK[name].requiresUserInteraction
+  );
+
+  test('only send-email and create-event are flagged', () => {
+    expect(flagged.sort()).toEqual(['create-event', 'send-email']);
+  });
+
+  test('never flags a tool that has a read action (decision D1)', () => {
+    for (const name of flagged) {
+      const entry = TOOL_RISK[name];
+      const classes = entry.actions
+        ? Object.values(entry.actions)
+        : [entry.default];
+      expect(classes).not.toContain('read');
+    }
+  });
+
+  test('riskMeta carries the Claude flag for flagged tools only', () => {
+    expect(riskMeta('send-email')).toEqual({
+      'anthropic/requiresUserInteraction': true,
+    });
+    expect(riskMeta('create-event')).toEqual({
+      'anthropic/requiresUserInteraction': true,
+    });
+    expect(riskMeta('draft')).toBeUndefined();
+    expect(riskMeta('search-emails')).toBeUndefined();
+    expect(riskMeta('no-such-tool')).toBeUndefined();
   });
 });
 

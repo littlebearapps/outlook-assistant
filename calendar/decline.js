@@ -4,6 +4,7 @@
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { toolError, authRequiredError } = require('../utils/tool-error');
+const { previewDeclineEvent } = require('./preview');
 
 /**
  * Decline event handler
@@ -11,7 +12,7 @@ const { toolError, authRequiredError } = require('../utils/tool-error');
  * @returns {object} - MCP response
  */
 async function handleDeclineEvent(args) {
-  const { eventId, comment, sendResponse } = args;
+  const { eventId, comment, sendResponse, dryRun = false } = args;
 
   if (!eventId) {
     return toolError('Event ID is required to decline an event.');
@@ -20,6 +21,10 @@ async function handleDeclineEvent(args) {
   try {
     // Get access token
     const accessToken = await ensureAuthenticated();
+
+    // dryRun: read the event and say whether the organiser would be
+    // emailed; send nothing.
+    if (dryRun) return await previewDeclineEvent(accessToken, args);
 
     // Build API endpoint
     const endpoint = `me/events/${eventId}/decline`;

@@ -151,6 +151,46 @@ describe('action=create', () => {
   });
 });
 
+describe('action=create with checkRecipients (#272)', () => {
+  it('returns the mail tips and keeps them out of the draft payload', async () => {
+    callGraphAPI.mockImplementation((_token, _method, path) =>
+      Promise.resolve(
+        path === 'me/getMailTips'
+          ? {
+              value: [
+                {
+                  emailAddress: { address: 'user@example.com' },
+                  automaticReplies: { message: 'Away until Monday' },
+                },
+              ],
+            }
+          : mockDraftResponse
+      )
+    );
+
+    const result = await handleDraft({
+      action: 'create',
+      to: 'user@example.com',
+      subject: 'Test Draft',
+      body: 'Hello draft',
+      checkRecipients: true,
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0].text).toContain('Draft created');
+    expect(result.content[0].text).toContain('Away until Monday');
+    expect(result._meta.draftId).toBe('draft-123');
+    expect(result._meta.mailTips.warningCount).toBe(1);
+
+    const createCall = callGraphAPI.mock.calls.find(
+      ([, , path]) => path === 'me/messages'
+    );
+    expect(
+      Object.keys(createCall[3]).filter((key) => key.startsWith('_'))
+    ).toEqual([]);
+  });
+});
+
 // ──────────────────────────────────────────────────
 // action=update
 // ──────────────────────────────────────────────────

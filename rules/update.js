@@ -9,6 +9,7 @@ const {
   buildConditions,
   buildActions,
   buildExceptions,
+  checkRuleRecipients,
 } = require('./rule-builder');
 const { toolError, authRequiredError } = require('../utils/tool-error');
 
@@ -21,10 +22,6 @@ const { toolError, authRequiredError } = require('../utils/tool-error');
 async function handleUpdateRule(args) {
   const { ruleName, ruleId, name, isEnabled, sequence, dryRun } = args;
 
-  // Rate limit
-  const rateLimitError = checkRateLimit('manage-rules');
-  if (rateLimitError) return rateLimitError;
-
   if (!ruleName && !ruleId) {
     return toolError(
       'Either ruleName or ruleId is required to identify the rule to update.'
@@ -34,6 +31,13 @@ async function handleUpdateRule(args) {
   if (sequence !== undefined && (isNaN(sequence) || sequence < 1)) {
     return toolError('Sequence must be a positive number greater than zero.');
   }
+
+  // Refuse the whole update if the allowlist blocks any forwarding (#273)
+  const recipientError = checkRuleRecipients(args, {
+    operation: 'update',
+    dryRun,
+  });
+  if (recipientError) return recipientError;
 
   try {
     const accessToken = await ensureAuthenticated();
@@ -124,6 +128,10 @@ async function handleUpdateRule(args) {
         content: [{ type: 'text', text }],
       };
     }
+
+    // Rate limit only real writes, so a dry run never uses up a slot (#273)
+    const rateLimitError = checkRateLimit('manage-rules');
+    if (rateLimitError) return rateLimitError;
 
     // Execute PATCH
     await callGraphAPI(

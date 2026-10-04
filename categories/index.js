@@ -716,7 +716,7 @@ const categoriesTools = [
   {
     name: 'apply-category',
     description:
-      "Tag or untag email messages with master categories (those created via `manage-category`). action=`set` (default) replaces the message's category set with the supplied `categories` array. action=`add` appends categories to whatever's already on the message. action=`remove` removes only the named categories, leaving the rest. Accepts either `messageId` (single) or `messageIds` (batch via Graph `$batch`). `categories` are matched by display name — names must already exist in the target mailbox's master list. For your own mailbox, create them via `manage-category` first; for a shared mailbox, the names must already exist there (`manage-category` only manages the signed-in account's master list). Pass `sharedMailbox` (or alias `email`) to categorise messages in a shared/delegated mailbox instead of the signed-in account (requires Mail.ReadWrite.Shared + delegate access). Returns per-message confirmation.",
+      "Tag or untag email messages with master categories (those created via `manage-category`). action=`set` (default) replaces the message's category set with the supplied `categories` array. action=`add` appends categories to whatever's already on the message. action=`remove` removes only the named categories, leaving the rest. Accepts either `messageId` (single) or `messageIds` (batch via Graph `$batch`). `categories` are matched by display name — names must already exist in the target mailbox's master list. For your own mailbox, create them via `manage-category` first; for a shared mailbox, the names must already exist there (`manage-category` only manages the signed-in account's master list). Pass `sharedMailbox` (or alias `email`) to categorise messages in a shared/delegated mailbox (default: the signed-in account; requires Mail.ReadWrite.Shared + delegate access). Returns per-message confirmation.",
     ...toolMetadata('apply-category', 'Apply Categories'),
     inputSchema: {
       type: 'object',
@@ -744,7 +744,7 @@ const categoriesTools = [
         sharedMailbox: {
           type: 'string',
           description:
-            'Email address of a shared/delegated mailbox whose messages to categorise instead of the signed-in account. Requires delegate access + Mail.ReadWrite.Shared. Work/school only; needs the server opt-in setting OUTLOOK_SHARED_MAILBOX (otherwise the call is refused with setup guidance).',
+            'Email address of the shared/delegated mailbox whose messages to categorise (default: the signed-in account). Requires delegate access + Mail.ReadWrite.Shared. Work/school only; needs the server opt-in setting OUTLOOK_SHARED_MAILBOX (otherwise the call is refused with setup guidance).',
         },
         email: {
           type: 'string',

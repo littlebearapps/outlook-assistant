@@ -8,13 +8,14 @@ const handleGetFolderStats = require('./stats');
 const handleDeleteFolder = require('./delete');
 const { toolMetadata } = require('../utils/risk-classes');
 const { toolError } = require('../utils/tool-error');
+const { dryRunUnsupported } = require('../utils/safety');
 
 // Consolidated folder tool definition
 const folderTools = [
   {
     name: 'folders',
     description:
-      "Manage mail folders (tool-level destructiveHint=true because `delete` removes a folder and its contents; `list` and `stats` are read-only sub-actions despite the annotation). Folders can be addressed by name, by a slash-separated PATH for nested folders (e.g. `Triage/Delete`, `Inbox/Clients/Acme`, case-insensitive), or by explicit ID; `list` output includes each folder's full path and `[id: …]`. A bare name resolves a unique top-level folder first, then searches nested folders (ambiguous names return the candidates — disambiguate with a path or ID). action=`list` (default) returns the folder tree (toggle `includeItemCounts` for unread/total, `includeChildren` for hierarchy). action=`create` makes a new folder under the root, or under `parentFolder` (name/path) / `parentFolderId`, and returns its id. action=`move` relocates emails (`emailIds`) into `targetFolder` (name/path) or `targetFolderId`. action=`stats` returns counts (totalItemCount/unreadItemCount) for `folder` (name/path) or `folderId`, suitable for pagination planning. action=`delete` removes a folder (by `folderName`/path or `folderId`) and its contents — it does not go to Deleted Items, and Graph doesn't document whether it can be restored (some accounts may offer Outlook's \"Recover deleted items\" for a limited time, but don't rely on it), so move out anything you might need first. Every action accepts `sharedMailbox` (alias `email`) to target a shared/delegated mailbox instead of the signed-in account — folder names, paths, and IDs are then resolved inside that mailbox. Protected folders cannot be deleted in any mailbox.",
+      "Manage mail folders. Address a folder by name, by slash-separated path for nested folders (e.g. `Inbox/Clients/Acme`, case-insensitive) or by ID; a bare name matches a unique top-level folder first, then nested ones (an ambiguous name returns the candidates). action=`list` (default) returns the tree with each folder's path and id (`includeItemCounts`, `includeChildren`). action=`create` makes `name` under the root or `parentFolder`/`parentFolderId`. action=`move` moves `emailIds` into `targetFolder`/`targetFolderId`. action=`stats` returns total/unread counts for `folder` or `folderId`. action=`delete` removes a folder (`folderName`/path or `folderId`) with everything in it, subfolders included. It skips Deleted Items and Graph documents no restore path, so pass `dryRun: true` first to see what would be lost. Protected folders (Inbox, Sent Items, etc.) can't be deleted. Every action accepts `sharedMailbox` (alias `email`) to work in a shared or delegated mailbox (default: your own).",
     ...toolMetadata('folders', 'Mail Folders'),
     inputSchema: {
       type: 'object',
@@ -37,7 +38,7 @@ const folderTools = [
         sharedMailbox: {
           type: 'string',
           description:
-            'Email address of a shared/delegated mailbox to target instead of the signed-in account (all actions). Requires delegate access + Mail.Read.Shared (list/stats) or Mail.ReadWrite.Shared (create/move/delete). Work/school only; needs the server opt-in setting OUTLOOK_SHARED_MAILBOX (otherwise the call is refused with setup guidance).',
+            'Email address of a shared/delegated mailbox to target (all actions; default: the signed-in account). Requires delegate access + Mail.Read.Shared (list/stats) or Mail.ReadWrite.Shared (create/move/delete). Work/school only; needs the server opt-in setting OUTLOOK_SHARED_MAILBOX (otherwise the call is refused with setup guidance).',
         },
         email: {
           type: 'string',
@@ -99,12 +100,20 @@ const folderTools = [
           description:
             'Folder name or path to delete — resolved to ID (action=delete). Cannot delete protected folders (Inbox, Drafts, Sent, etc.)',
         },
+        dryRun: {
+          type: 'boolean',
+          description:
+            'Preview only (action=delete): nothing is deleted. Shows the folder and how many items and subfolders would be lost. Other actions refuse dryRun and change nothing. Default false.',
+        },
       },
       additionalProperties: false,
       required: [],
     },
     handler: async (args) => {
       const action = args.action || 'list';
+      if (args.dryRun && action !== 'delete') {
+        return dryRunUnsupported('folders', action, 'delete');
+      }
       switch (action) {
         case 'create':
           return handleCreateFolder(args);

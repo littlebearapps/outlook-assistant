@@ -396,7 +396,7 @@ describe('PreToolUse at the default confirm level (outward)', () => {
       targetFolder: 'Deleted Items',
     });
     expect(reason(out)).toBe(
-      "Outlook Assistant: Moves 3 emails to 'Deleted Items'."
+      "Outlook Assistant: Moves 3 emails to the folder 'Deleted Items'."
     );
     expect(
       pre('folders', { action: 'move', emailIds: 'a', targetFolder: 'Archive' })
@@ -499,8 +499,10 @@ describe('reasons', () => {
   });
 
   test('long recipient lists are capped with a count', () => {
-    const to = Array.from({ length: 8 }, (_, i) => `p${i}@x.com`).join(',');
-    expect(reason(pre('send-email', { to }))).toMatch(/p4@x\.com and 3 more/);
+    const to = Array.from({ length: 14 }, (_, i) => `p${i}@x.com`).join(',');
+    expect(reason(pre('send-email', { to }))).toMatch(
+      /p9@x\.com and 4 more \(at x\.com\)/
+    );
   });
 
   test('create-event names attendees, from strings or objects', () => {
@@ -622,7 +624,7 @@ describe('reasons', () => {
             targetFolder: 'Archive',
           })
         )
-      ).toMatch(/to 'deleteditems'/);
+      ).toMatch(/to the folder 'deleteditems'/);
     });
 
     test('recipients split on commas only, like the server', () => {
@@ -630,6 +632,39 @@ describe('reasons', () => {
         /to a@x\.com;b@y\.com,/
       );
     });
+  });
+
+  test('long IDs are shown whole, so similar IDs stay distinguishable', () => {
+    const prefix = `AAMkAGI2${'x'.repeat(140)}`;
+    const a = reason(pre('draft', { action: 'send', id: `${prefix}AAA=` }));
+    const b = reason(pre('draft', { action: 'send', id: `${prefix}BBB=` }));
+    expect(a).toContain(`${prefix}AAA=`);
+    expect(a).not.toBe(b);
+  });
+
+  test('a blank identifier is skipped, as the server skips it', () => {
+    expect(
+      reason(
+        pre('folders', {
+          action: 'delete',
+          folderId: '   ',
+          folderName: 'Temp',
+        })
+      )
+    ).toMatch(/Deletes the folder 'Temp'/);
+  });
+
+  test('an empty sharedMailbox falls back to email, as the server does', () => {
+    expect(
+      reason(
+        pre('folders', {
+          action: 'delete',
+          folderName: 'X',
+          sharedMailbox: '',
+          email: 'team@x.com',
+        })
+      )
+    ).toMatch(/in the shared mailbox team@x\.com/);
   });
 
   test('auto-replies name the external audience', () => {
@@ -680,13 +715,14 @@ describe('reasons can’t hide or fake anything (review fixes)', () => {
   test('a long address keeps its whole domain', () => {
     const bcc = `${'jane.smith.finance.team.'.repeat(4)}verified@evil.example`;
     const text = reason(pre('send-email', { to: 'a@x.com', bcc }));
-    expect(text).toMatch(/\.\.\.verified@evil\.example|\.\.\.@evil\.example/);
+    // Addresses are shown whole, so nothing about the recipient is hidden.
+    expect(text).toContain(bcc);
     expect(text).toMatch(/@evil\.example/);
   });
 
   test('addresses beyond the first five are summarised by domain', () => {
     const to = [
-      ...Array.from({ length: 5 }, (_, i) => `p${i}@contoso.com`),
+      ...Array.from({ length: 10 }, (_, i) => `p${i}@contoso.com`),
       'leak@evil.example',
     ].join(',');
     expect(reason(pre('send-email', { to }))).toMatch(

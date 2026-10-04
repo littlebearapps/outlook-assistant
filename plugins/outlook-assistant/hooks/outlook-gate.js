@@ -58,7 +58,15 @@ const MAX_TEXT = 80;
 const HIDDEN_CHARS =
   /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g;
 /* eslint-enable no-control-regex */
-const MAX_LIST = 5;
+const MAX_LIST = 10;
+/**
+ * IDs and addresses are shown whole up to these lengths (Graph IDs often
+ * pass 150 characters and share long prefixes, so cutting one short could
+ * make two different targets look the same). Longer values keep their start
+ * and end.
+ */
+const MAX_ID = 512;
+const MAX_ADDRESS = 320;
 
 let riskMapCache;
 function loadRiskMap() {
@@ -149,11 +157,20 @@ function clean(value) {
  * so the domain (where the mail goes) is always shown in full.
  */
 function cleanAddress(value) {
+  return whole(value, MAX_ADDRESS);
+}
+
+/** One line of text shown whole, or its start and end if over `max`. */
+function whole(value, max) {
   const text = oneLine(value);
-  const at = text.lastIndexOf('@');
-  if (text.length <= MAX_TEXT || at < 0) return clean(text);
-  const local = text.slice(0, at);
-  return `${local.slice(0, 20)}...${text.slice(at)}`;
+  if (text.length <= max) return text;
+  const half = Math.floor((max - 3) / 2);
+  return `${text.slice(0, half)}...${text.slice(-half)}`;
+}
+
+/** A value the server would treat as set: not null and not blank. */
+function present(value) {
+  return value != null && String(value).trim() !== '';
 }
 
 /** The domain of a cleaned address, lower-cased. */
@@ -218,12 +235,9 @@ function quoted(value, fallback) {
  * the call sets.
  */
 function named(noun, input, fields) {
-  for (const field of fields) {
-    if (input[field] != null && input[field] !== '') {
-      return `the ${noun} ${quoted(input[field])}`;
-    }
-  }
-  return `the ${noun}`;
+  const field = fields.find((f) => present(input[f]));
+  if (!field) return `the ${noun}`;
+  return `the ${noun} '${whole(input[field], MAX_ID).replace(/'/g, '\u2019')}'`;
 }
 
 // Identifier fields in the order the server prefers them, so a call that
@@ -256,7 +270,8 @@ function count(n, noun) {
 
 function mailbox(tool, input) {
   if (!SHARED_MAILBOX_TOOLS.has(tool)) return '';
-  const shared = input.sharedMailbox ?? input.email;
+  // The server takes `sharedMailbox || email` (utils/mailbox.js callers).
+  const shared = input.sharedMailbox || input.email;
   return typeof shared === 'string' && shared.includes('@')
     ? ` in the shared mailbox ${clean(shared)}`
     : '';
@@ -317,7 +332,7 @@ function describe(tool, action, input) {
     case 'folders:delete':
       return `Deletes ${named('folder', input, FOLDER_ID)}${mailbox(tool, input)} with every email and subfolder in it. Deleted folders may not be recoverable.`;
     case 'folders:move':
-      return `Moves ${count(addresses(input.emailIds).length, 'email')} to ${quoted(input.targetFolderId || input.targetFolder, 'another folder')}${mailbox(tool, input)}.`;
+      return `Moves ${count(addresses(input.emailIds).length, 'email')} to ${named('folder', input, ['targetFolderId', 'targetFolder']).replace(/^the folder$/, 'another folder')}${mailbox(tool, input)}.`;
     case 'manage-contact:delete':
       return `Deletes ${named('contact', input, ['id'])}.`;
     case 'manage-category:delete':

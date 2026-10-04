@@ -77,6 +77,17 @@ This returns:
 
 It never shows the tokens themselves, so it's safe to paste into a bug report.
 
+## Check the Plugin's Safety Hook
+
+This applies only if you installed the plugin (Claude Code, GitHub Copilot or Cursor). The hook stays quiet for reads, so a working connection doesn't show whether it's running. To check it without changing anything:
+
+1. Ask your AI assistant to send a short test email to yourself.
+2. When the prompt appears, **decline it**.
+
+In Claude Code and Copilot CLI, the prompt includes the hook's reason, starting "Outlook Assistant:", for example "Outlook Assistant: Sends an email to you@example.com, subject 'Test'. It can't be unsent." Cursor shows its own "Run this MCP tool?" prompt without the reason. If the prompt has no "Outlook Assistant:" reason in Claude Code or Copilot, the hook isn't running: check that the plugin is enabled. Which client shows what is set out in [Supported Clients and Their Limits](supported-clients.md).
+
+If you use a manual MCP configuration rather than the plugin, there's no hook; your client's own approval prompts and the server's checks apply.
+
 ## Common Connection Problems
 
 | Symptom | Cause | Fix |
@@ -132,5 +143,6 @@ See [When Your Secret Expires](../../guides/azure-setup.md#when-your-secret-expi
 ## Related
 
 - [Connect Outlook to Your AI Assistant](connect-outlook-to-claude.md) — initial setup walkthrough
+- [Supported Clients and Their Limits](supported-clients.md) — what the skill and safety hook do in each client
 - [Azure Setup Guide](../../guides/azure-setup.md) — app registration and permissions
 - [Tools Reference — auth](../../quickrefs/tools-reference.md#authentication-1-tool) — full parameter reference

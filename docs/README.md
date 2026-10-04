@@ -5,12 +5,13 @@
 New to Outlook Assistant? Start here:
 
 - [Connect Outlook to Your AI Assistant](how-to/getting-started/connect-outlook-to-claude.md) — Install, configure, and authenticate
+- [Supported Clients and Their Limits](how-to/getting-started/supported-clients.md) — Claude Code, GitHub Copilot, Cursor and other clients: install, skill, safety hook and known limits
 - [Azure Setup Guide](guides/azure-setup.md) — Create an Azure app registration and connect your Microsoft account
 - [README](../README.md) — Full feature overview, quick start, and configuration
 
 ## How-To Guides
 
-29 practical guides for managing email, calendar, contacts, and settings: **[Browse all guides](how-to/index.md)**
+30 practical guides for managing email, calendar, contacts, and settings: **[Browse all guides](how-to/index.md)**
 
 Popular guides:
 
@@ -29,7 +30,8 @@ Popular guides:
 |----------|-------------|
 | [Tools Reference](quickrefs/tools-reference.md) | All 22 tools with parameters |
 | [FAQ](faq/faq.md) | Frequently asked questions — install, accounts, permissions, tokens, updates, uninstall |
-| [Troubleshooting](troubleshooting.md) | Known errors and fixes — auth, search, export, shared mailboxes |
+| [Troubleshooting](troubleshooting.md) | Known errors and fixes — auth, search, export, shared mailboxes, client-specific issues |
+| [Cross-Client Verification Matrix](cross-client-matrix.md) | Which clients and models have been tested, against which safety scenarios |
 | [Architecture](architecture.md) | Module layout and the v1 → v3 tool-consolidation map |
 | [Using Outlook Assistant in AI Agents](how-to/ai-agents/using-outlook-assistant-in-agents.md) | Tool selection, safety, and workflow patterns for AI agents |
 | [CLAUDE.md](../CLAUDE.md) | Quick reference for development |

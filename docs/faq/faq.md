@@ -1,6 +1,6 @@
 ---
 title: "Outlook Assistant — Frequently Asked Questions"
-description: "Common questions about Outlook Assistant: installation, supported accounts, Azure permissions, token storage, send safety controls, updates, and uninstall."
+description: "Common questions about Outlook Assistant: installation, supported clients and accounts, Azure permissions, token storage, send safety controls, updates, and uninstall."
 ---
 
 # Frequently Asked Questions
@@ -32,7 +32,21 @@ If you prefer a global install, `npm install -g @littlebearapps/outlook-assistan
 
 Configuration snippets for Claude Desktop, Claude Code, VS Code / GitHub Copilot, Cursor, and Windsurf are in the [README](../../README.md#3-configure-your-mcp-client). Any other MCP client works the same way: run `npx -y @littlebearapps/outlook-assistant` and pass the environment variables in the client's `env` settings (the server doesn't read a `.env` file). `OUTLOOK_CLIENT_SECRET` is only needed for the browser sign-in flow; the default device code flow uses just `OUTLOOK_CLIENT_ID`.
 
-If your client can't set environment variables at all (for example, the GitHub Copilot and Cursor plugin marketplaces), give your AI assistant your Azure Application (client) ID when you sign in. It calls `auth action=authenticate clientId=<id>`, which saves the ID to `~/.outlook-assistant-config.json` and starts device code sign-in. A client ID isn't a secret, and `OUTLOOK_CLIENT_ID` takes precedence whenever it's set. See [Clients That Can't Set Environment Variables](../how-to/getting-started/connect-outlook-to-claude.md#clients-that-cant-set-environment-variables).
+If your client can't set environment variables at all (for example, the GitHub Copilot and Cursor plugins), give your AI assistant your Azure Application (client) ID when you sign in. It calls `auth action=authenticate clientId=<id>`, which saves the ID to `~/.outlook-assistant-config.json` and starts device code sign-in. A client ID isn't a secret, and `OUTLOOK_CLIENT_ID` takes precedence whenever it's set. See [Clients That Can't Set Environment Variables](../how-to/getting-started/connect-outlook-to-claude.md#clients-that-cant-set-environment-variables).
+
+In Claude Code, GitHub Copilot CLI and Cursor you can install the plugin instead, which runs a pinned version of the server and adds the `using-outlook-assistant` skill and a safety hook. In Claude Code: `claude plugin marketplace add littlebearapps/outlook-assistant`, then `claude plugin install outlook-assistant@littlebearapps`. In Copilot CLI: `copilot plugin marketplace add littlebearapps/outlook-assistant`, then `copilot plugin install outlook-assistant@littlebearapps`. Cursor needs the v3.14.0 plugin or later. See [Supported Clients and Their Limits](../how-to/getting-started/supported-clients.md) for each client's steps.
+
+## Which AI clients does Outlook Assistant work with, and what are their limits?
+
+Any MCP client can run Outlook Assistant, and in every client the server enforces its own checks: read-only mode, the optional recipient allowlist and send cap, `dryRun` previews, the pre-send recipient check with `acknowledgeWarnings`, and MCP annotations and server instructions for the model. What varies is the plugin's extra layers:
+
+- **Claude Code:** the plugin installs the skill and a hook that asks you before anything that reaches other people, deletes something or keeps acting, with a plain-English reason. Set how often it asks with the **Confirmation level** setting. In bypass permissions mode Claude Code may auto-approve the hook's prompts (`send-email` and `create-event` always ask), and in headless `-p` runs a prompt becomes a denial.
+- **GitHub Copilot CLI:** the same skill and hook, with the reason shown. Set the level with the `OUTLOOK_CONFIRM_LEVEL` environment variable. A hook that times out lets the call through, and `-p` runs and the cloud agent turn a prompt into a denial.
+- **VS Code with GitHub Copilot:** reads the same hook file; according to VS Code's source it shows the reason, but this hasn't been checked by hand yet.
+- **Cursor** (v3.14.0 plugin or later): the skill loads and the hook runs, but Cursor's own "Run this MCP tool?" prompt doesn't show the hook's reason, and an `Mcp(...)` allow rule, or `--force` / Run Everything mode, runs the call without asking. Only Cursor CLI has been checked, not the desktop app. The v3.13.0 plugin fails to sign in from Cursor with `AADSTS900023`; use a manual MCP configuration with `OUTLOOK_CLIENT_ID` set instead.
+- **Codex CLI, Gemini CLI, Claude Desktop, Windsurf and other clients:** a manual MCP configuration with the server's checks, annotations and instructions, but no hook. Clients that support Agent Skills can use a copy of the skill folder.
+
+The full comparison is in [Supported Clients and Their Limits](../how-to/getting-started/supported-clients.md), and test results per client are in the [cross-client verification matrix](../cross-client-matrix.md).
 
 ## Does Outlook Assistant work with personal Outlook.com accounts?
 
@@ -102,7 +116,7 @@ Yes. Set **`OUTLOOK_READ_ONLY=true`** in your MCP client's `env` block (or turn 
 
 Read-only mode is enforced by the server, not by Microsoft. Sign-in still requests the full scope set on both the device-code and browser paths, and trimming your Azure app registration won't change that: its API-permissions list doesn't cap what you consent to (see the permissions question above). When you do allow changes, these controls make sure nothing happens without your approval:
 
-1. **Your MCP client's approval prompts.** Auto-approve only the tools marked `readOnlyHint` (see the annotations below) and leave every other tool on "ask" — or deny it outright — so a write, send or delete can't run until you approve that call. In Claude Code, `send-email` and `create-event` always ask, even in auto-accept or bypass modes, because they carry the `anthropic/requiresUserInteraction` flag. Many write tools also take `dryRun: true` to preview a change without making it: `send-email`, `draft` create, `create-event` and `manage-event` (who would be emailed, with a count of external addresses), `mailbox-settings` set-auto-replies, `manage-rules` create/update, and `folders` and `manage-contact` delete (what would be lost).
+1. **Your MCP client's approval prompts.** Auto-approve only the tools marked `readOnlyHint` (see the annotations below) and leave every other tool on "ask" — or deny it outright — so a write, send or delete can't run until you approve that call. In Claude Code, `send-email` and `create-event` always ask, even in auto-accept or bypass modes, because they carry the `anthropic/requiresUserInteraction` flag. With the plugin in Claude Code, GitHub Copilot or Cursor, a safety hook also asks before anything that reaches other people, deletes something or keeps acting; how well that works varies by client (see [Supported Clients and Their Limits](../how-to/getting-started/supported-clients.md)). Many write tools also take `dryRun: true` to preview a change without making it: `send-email`, `draft` create, `create-event` and `manage-event` (who would be emailed, with a count of external addresses), `mailbox-settings` set-auto-replies, `manage-rules` create/update, and `folders` and `manage-contact` delete (what would be lost).
 2. **Pre-send recipient checks.** With `checkRecipients: true`, `send-email` refuses to send when Microsoft 365 mail tips show an out-of-office reply, a full mailbox, a delivery restriction, an external recipient or a group with external members, and lists the warnings. It sends only when repeated with `acknowledgeWarnings: true`. Personal Outlook.com accounts return no mail tips, so the check can't catch anything there.
 3. **Send-safety belts.** Even with full permissions, you can configure `OUTLOOK_MAX_EMAILS_PER_SESSION` and `OUTLOOK_ALLOWED_RECIPIENTS` (allowlist of approved addresses or domains). `OUTLOOK_MAX_EMAILS_PER_SESSION` is the default per-session cap for every rate-limited tool — `send-email` (shared with `draft send`), `draft` create/update and `manage-rules` — each counted separately; override one tool with `OUTLOOK_MAX_<TOOL>_PER_SESSION` (e.g. `OUTLOOK_MAX_MANAGE_RULES_PER_SESSION`). `draft` update, send and delete also refuse any message that isn't an unsent draft, so they can't edit, re-send or delete received or sent mail. The allowlist also applies to inbox-rule forwarding: a rule that would forward or redirect to a blocked address is refused whole, never saved without the forwarding. `auth action=about` reports their state and prints a setup hint when unset. See the [Recommended setup snippet](../../README.md#safety--token-efficiency) in the README and [`.mcp.json.example`](../../.mcp.json.example) for the copy-paste template.
 4. **Shared mailboxes stay off unless you opt in.** Without `OUTLOOK_SHARED_MAILBOX`, the shared-mailbox scopes aren't requested and `sharedMailbox` calls are refused. `OUTLOOK_SHARED_MAILBOX=read` gives read-only shared access (`Mail.Read.Shared`); only `true` adds the organise scope. Sending from a shared mailbox is never supported.
@@ -133,7 +147,7 @@ Outlook Assistant is published to npm as **`@littlebearapps/outlook-assistant`**
 
 To check which version you currently have, run `outlook-assistant --version` (v3.11.0 and later). Earlier versions have no `--version` flag and will start the MCP server instead, so if the command appears to hang you are on an older build. You can also ask your AI assistant to call the `auth` tool with `action=about`, which reports the running server's version.
 
-If you installed globally, `npm update -g @littlebearapps/outlook-assistant` (or `npm install -g @littlebearapps/outlook-assistant@latest`). If you cloned from source, `git pull && npm install`. After updating, restart your MCP client so the running server picks up the new code — Node module caching means the previously-loaded source stays in memory until the server process is recycled.
+If you installed globally, `npm update -g @littlebearapps/outlook-assistant` (or `npm install -g @littlebearapps/outlook-assistant@latest`). If you cloned from source, `git pull && npm install`. The plugin pins an exact server version, so update the plugin itself: in Claude Code, `claude plugin marketplace update littlebearapps` then `claude plugin update outlook-assistant@littlebearapps`; in GitHub Copilot CLI, `copilot plugin update outlook-assistant@littlebearapps`. After updating, restart your MCP client so the running server picks up the new code — Node module caching means the previously-loaded source stays in memory until the server process is recycled.
 
 For a list of what's in each version, see [`CHANGELOG.md`](../../CHANGELOG.md). Active and upcoming work is in [`ROADMAP.md`](../../ROADMAP.md).
 
@@ -141,7 +155,7 @@ For a list of what's in each version, see [`CHANGELOG.md`](../../CHANGELOG.md). 
 
 Three steps, in any order:
 
-1. **Remove the entry from your MCP client config.** Delete the `"outlook"` block from `claude_desktop_config.json`, `.cursor/mcp.json`, `~/.codeium/windsurf/mcp_config.json`, or wherever it lives, and restart the client.
+1. **Remove the entry from your MCP client config.** Delete the `"outlook"` block from `claude_desktop_config.json`, `.cursor/mcp.json`, `~/.codeium/windsurf/mcp_config.json`, or wherever it lives, and restart the client. If you installed the plugin, uninstall it instead: `claude plugin uninstall outlook-assistant@littlebearapps` in Claude Code, or `copilot plugin uninstall` with the name `copilot plugin list` shows in GitHub Copilot CLI.
 2. **Delete local tokens and pending auth state**:
    ```bash
    rm -f ~/.outlook-assistant-tokens.json ~/.outlook-assistant-pending-auth.json
@@ -162,5 +176,5 @@ What your MCP client (Claude Desktop, Claude Code, Cursor, Windsurf, etc.) does 
 
 - **Bugs and feature requests** — open an issue at <https://github.com/littlebearapps/outlook-assistant/issues>. Include the version (`auth action=about`), the tool call that failed, and the exact error text.
 - **Security concerns** — see the [Security Policy](../../SECURITY.md). Don't open public issues for vulnerabilities.
-- **General usage questions** — the [How-To Guides](../how-to/index.md) cover 29 practical scenarios across email, calendar, contacts, settings, and AI agents.
+- **General usage questions** — the [How-To Guides](../how-to/index.md) cover 30 practical scenarios across email, calendar, contacts, settings, and AI agents.
 - **What's coming next** — [`ROADMAP.md`](../../ROADMAP.md) is the active milestone snapshot; the [GitHub milestones page](https://github.com/littlebearapps/outlook-assistant/milestones) is authoritative.

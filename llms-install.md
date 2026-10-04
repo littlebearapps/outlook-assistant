@@ -18,6 +18,16 @@ Add to your MCP client configuration:
 }
 ```
 
+## Plugin Install (Claude Code, GitHub Copilot CLI, Cursor)
+
+The plugin in `plugins/outlook-assistant/` runs a pinned server version and adds the `using-outlook-assistant` skill and a safety hook that asks the user before sends, deletes, rules and automatic replies.
+
+- Claude Code: `claude plugin marketplace add littlebearapps/outlook-assistant`, then `claude plugin install outlook-assistant@littlebearapps`. The plugin asks for its settings (client ID, read-only mode, confirmation level and others) when enabled.
+- GitHub Copilot CLI: `copilot plugin marketplace add littlebearapps/outlook-assistant`, then `copilot plugin install outlook-assistant@littlebearapps`. No plugin settings: the user gives the client ID at sign-in, and the hook's confirmation level comes from the `OUTLOOK_CONFIRM_LEVEL` environment variable (`outward`, `all-writes` or `off`).
+- Cursor (v3.14.0 plugin or later): loads the folder as a Cursor plugin (`.cursor-plugin/plugin.json`); in Cursor CLI, pass it with `--plugin-dir`. The v3.13.0 plugin fails sign-in in Cursor with `AADSTS900023`; use the manual config instead.
+
+Client limits (for example, Cursor's prompt doesn't show the hook's reason): `docs/how-to/getting-started/supported-clients.md`.
+
 ## Prerequisites
 
 1. **Node.js 18.18 or newer** must be installed
@@ -81,6 +91,8 @@ Add these to the same `env` block if needed:
 
 Run `npx @littlebearapps/outlook-assistant --help` for the full list of environment variables.
 
+`OUTLOOK_CONFIRM_LEVEL` is not a server variable: the plugin's safety hook reads it from the client's environment in GitHub Copilot, VS Code and Cursor. Don't put it in the server's `env` block.
+
 ## Configuration Files by Client
 
 ### Claude Desktop
@@ -88,8 +100,11 @@ File: `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) 
 
 ### Claude Code
 ```bash
-claude mcp add outlook -- npx @littlebearapps/outlook-assistant
+claude mcp add outlook -e OUTLOOK_CLIENT_ID=<user-must-provide> -- npx -y @littlebearapps/outlook-assistant
 ```
+
+### VS Code / GitHub Copilot
+File: `.vscode/mcp.json` in your project root, or the user `mcp.json` (Command Palette → **MCP: Open User Configuration**). VS Code uses a top-level `servers` key instead of `mcpServers`, with `"type": "stdio"` on the entry.
 
 ### Cursor
 File: `.cursor/mcp.json` in your project root

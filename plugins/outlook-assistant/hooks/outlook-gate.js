@@ -159,23 +159,29 @@ function clean(value) {
 function cleanAddress(value) {
   const text = oneLine(value);
   if (PLAIN_ADDRESS.test(text)) return whole(text, MAX_ADDRESS);
-  // Anything else could be text posing as the hook's own words, so it is
-  // capped, quoted and labelled rather than shown whole.
-  return `'${clean(text).replace(/['"]/g, '\u2019')}' (not a plain address)`;
+  // Anything else is quoted and labelled, so it can't pass as the hook's own
+  // words, but still shown whole, with every domain in it named, so no
+  // recipient can hide in a long string.
+  const shown = whole(text, MAX_ADDRESS).replace(/['"]/g, '\u2019');
+  const domains = [
+    ...new Set(
+      [...text.matchAll(/@([A-Za-z0-9.-]+)/g)].map((m) => m[1].toLowerCase())
+    ),
+  ];
+  const at = domains.length ? `; addresses at ${domains.join(', ')}` : '';
+  return `'${shown}' (not a plain address${at})`;
 }
 
 /** A plain email address: no spaces, quotes, angle brackets or separators. */
 const PLAIN_ADDRESS = /^[^\s@,;'"<>()]+@[A-Za-z0-9.-]+\.[A-Za-z0-9-]+$/;
-/** A Graph-style ID: base64/URL-safe characters only, no spaces. */
-const PLAIN_ID = /^[A-Za-z0-9+/=_.:-]+$/;
 
 /**
- * An identifier or name for the prompt: an ID-like value is shown whole (up
- * to MAX_ID), anything else is capped like other free text.
+ * An identifier or name for the prompt, shown whole (up to MAX_ID, then its
+ * start and end) so two long IDs or folder paths never look the same. It is
+ * always quoted by the caller, so it can't pass as the hook's own words.
  */
 function idText(value) {
-  const text = oneLine(value);
-  return PLAIN_ID.test(text) ? whole(text, MAX_ID) : clean(text);
+  return whole(value, MAX_ID);
 }
 
 /** One line of text shown whole, or its start and end if over `max`. */

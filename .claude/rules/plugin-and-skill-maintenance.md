@@ -1,6 +1,6 @@
 # Plugin and skill maintenance
 
-The marketplace plugin (`plugins/outlook-assistant/`) ships the MCP server pinned to an exact npm version. v3.14.0 (milestone #6) adds an agent skill (#282) and client hooks (#283); neither is built yet. Once they ship they must stay in step with the server, or the safety guidance drifts from what the tools actually do.
+The marketplace plugin (`plugins/outlook-assistant/`) ships the MCP server pinned to an exact npm version. v3.14.0 (milestone #6) adds an agent skill (`skills/using-outlook-assistant/`, #282) and a Claude Code hook (`hooks/`, #283; the Copilot hook is deferred until its tool names and plugin-root variable are verified). They must stay in step with the server, or the safety guidance drifts from what the tools actually do.
 
 ## Already in place (v3.13.0)
 
@@ -21,12 +21,9 @@ The marketplace plugin (`plugins/outlook-assistant/`) ships the MCP server pinne
 
 ## When you add or change a tool or action
 
-1. **Classify it** in the risk-class map (`utils/risk-classes.js`, #270, in place) as `read`, `reversible`, `outward`, `destructive` or `persistent`, and spread `...toolMetadata(name, title)` into the definition. The `title` and all four annotation hints derive from it, and `test/utils/risk-classes.test.js` fails on any unclassified tool or action. `OUTLOOK_READ_ONLY` (#271) refuses every non-`read` call from it; if `action` is optional, set the map's `defaultAction` to the handler's default. The hook's `risk-map.json` and the skill's risk table are to derive from it too.
-
-Once the skill and hooks exist:
-
+1. **Classify it** in the risk-class map (`utils/risk-classes.js`, #270, in place) as `read`, `reversible`, `outward`, `destructive` or `persistent`, and spread `...toolMetadata(name, title)` into the definition. The `title` and all four annotation hints derive from it, and `test/utils/risk-classes.test.js` fails on any unclassified tool or action. `OUTLOOK_READ_ONLY` (#271) refuses every non-`read` call from it; if `action` is optional, set the map's `defaultAction` to the handler's default. Add any new `dryRun` preview to `DRY_RUN_ACTIONS` there too. The hook's `risk-map.json` and the skill's risk table are generated from it: run `node scripts/sync-risk-map.js`, and `test/plugin-hooks.test.js` fails while either is stale.
 2. **Update the skill reference for that surface** under `plugins/outlook-assistant/skills/using-outlook-assistant/references/` (#282). A new Microsoft surface (OneDrive, To Do, Teams) gets its own reference file plus a row in the SKILL.md routing table.
-3. **Check the hook reason text** for any new `outward`, `destructive` or `persistent` action (#283). It must say exactly who is notified or what is lost.
+3. **Add hook reason text** in `describe()` (`plugins/outlook-assistant/hooks/outlook-gate.js`, #283) for any new `outward`, `destructive` or `persistent` action. It must say exactly who is notified or what is lost; `test/plugin-hooks.test.js` fails on the generic fallback.
 4. **Keep the skill format portable:**
    - only the 6 Agent Skills frontmatter fields (`name`, `description`, `license`, `compatibility`, `metadata` with string values, `allowed-tools` as a string);
    - `name` equals the folder name;

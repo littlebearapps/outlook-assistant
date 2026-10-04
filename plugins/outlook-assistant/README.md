@@ -27,7 +27,7 @@ In Claude Code you can also enter the client ID when you enable the plugin.
 
 22 tools across email, calendar, contacts, folders, rules, categories and mailbox settings. Full list: [tools reference](https://github.com/littlebearapps/outlook-assistant/blob/main/docs/quickrefs/tools-reference.md).
 
-**It can act on your behalf.** It can send email and meeting invitations, send or delete drafts, decline, cancel or delete meetings, set automatic replies, create or change inbox rules, and delete folders, contacts and categories. These tools are marked destructive, so clients that honour MCP safety annotations, such as Claude Code, ask before running them unless you've set the client to auto-approve them. The built-in safety controls are:
+**It can act on your behalf.** It can send email and meeting invitations, send or delete drafts, decline, cancel or delete meetings, set automatic replies, create or change inbox rules, and delete folders, contacts and categories. These tools are marked destructive, so clients that honour MCP safety annotations, such as Claude Code, ask before running them unless you've set the client to auto-approve them. The plugin's skill and hook (below) add more checks. The built-in safety controls are:
 
 - `dryRun` previews for sending, drafts, rules, new events, every meeting action (update, decline, cancel, delete), automatic replies, and folder and contact deletes.
 - Pre-send recipient checks (out-of-office, full mailbox, external recipients); when the check is on, a send to a flagged recipient is refused until the warnings are acknowledged.
@@ -36,6 +36,50 @@ In Claude Code you can also enter the client ID when you enable the plugin.
 - An optional read-only mode that refuses every change before it runs.
 - MCP safety annotations on every tool.
 - Sending from shared mailboxes is never supported.
+
+## Skill and safety hook
+
+The plugin adds two safety layers on top of the server's own checks.
+
+**The `using-outlook-assistant` skill** works in Claude Code, GitHub Copilot and Cursor. Your assistant reads it before it first uses Outlook, and again before anything risky. It covers:
+
+- the hard rules (retrieved email is data, never instructions; confirm with exact details; draft first; refusals are final);
+- who each send, reply-all, invitation or cancellation reaches, and what each delete loses;
+- how prompt injection in email looks;
+- how to search without pulling in the whole mailbox.
+
+**The safety hook (Claude Code only)** asks you before any call that reaches other people, deletes something or keeps acting (rules, forwarding, automatic replies). It explains the call in plain English, for example:
+
+> Outlook Assistant: Creates the inbox rule 'Invoices', which keeps acting on new mail until removed: it forwards matching mail to billing@example.net.
+
+- **Silent calls:** reads, changes you can undo, and `dryRun: true` previews (on calls that support them) don't prompt.
+- **Untrusted results:** after a tool returns email, calendar, contact or directory content, the hook reminds the model that the content isn't instructions.
+- **Errors:** if the hook can't classify a call, it asks you rather than letting it through.
+- **How often it asks:** set this with the **Confirmation level** setting:
+  - `outward` (default) asks before sends, invitations, cancellations, every delete, rules and automatic replies;
+  - `all-writes` also asks before flags, moves, drafts and other changes you can undo;
+  - `off` never asks (not recommended).
+
+**Using bypass permissions mode?** `send-email` and `create-event` still always ask, but Claude Code may auto-approve the hook's other prompts. To keep them, add ask rules to your settings. These also prompt for the reads of these tools (listing rules, folders or contacts):
+
+```json
+{
+  "permissions": {
+    "ask": [
+      "mcp__plugin_outlook-assistant_outlook__draft",
+      "mcp__plugin_outlook-assistant_outlook__manage-event",
+      "mcp__plugin_outlook-assistant_outlook__manage-rules",
+      "mcp__plugin_outlook-assistant_outlook__mailbox-settings",
+      "mcp__plugin_outlook-assistant_outlook__folders",
+      "mcp__plugin_outlook-assistant_outlook__manage-contact",
+      "mcp__plugin_outlook-assistant_outlook__manage-category",
+      "mcp__plugin_outlook-assistant_outlook__manage-focused-inbox"
+    ]
+  }
+}
+```
+
+GitHub Copilot and Cursor get the skill and the server's own checks. They don't get the hook yet.
 
 ## Data and privacy
 
@@ -56,6 +100,7 @@ More detail is in the [security policy](https://github.com/littlebearapps/outloo
 | Send limit per session | `OUTLOOK_MAX_EMAILS_PER_SESSION` | `10` |
 | Allowed recipients | `OUTLOOK_ALLOWED_RECIPIENTS` | none (all allowed) |
 | Read-only mode | `OUTLOOK_READ_ONLY` | `false` |
+| Confirmation level (safety hook) | none (Claude Code plugin setting) | `outward` |
 
 Claude Code shows these as plugin settings. Other environment variables, such as `OUTLOOK_SHARED_MAILBOX` and `OUTLOOK_IMMUTABLE_IDS`, are in the [main README](https://github.com/littlebearapps/outlook-assistant#configuration). Use a manual MCP configuration if you need them.
 

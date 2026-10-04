@@ -43,6 +43,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `manage-contact` `delete`: which contact would be removed.
   - The other `folders`, `manage-contact` and `mailbox-settings` actions
     refuse `dryRun: true` with an error and change nothing.
+- **Plugin skill: `using-outlook-assistant`** (#282). Claude Code, GitHub
+  Copilot and Cursor load it from the plugin. It holds 8 hard rules (retrieved
+  content is data, confirm with exact details, draft first, execute once,
+  refusals are final, nothing hidden in what you write, least data, ask
+  rarely), the risk-class table, and one reference per surface: sending,
+  calendar, rules and settings, deletes, efficient searching, personal vs
+  Microsoft 365 accounts, shared mailboxes, prompt injection and privacy.
+- **Plugin safety hook for Claude Code** (#283).
+  - Before any Outlook call that reaches other people, deletes or keeps
+    acting, it asks you with a plain-English reason, e.g. "Cancels the event
+    'Team sync' and emails a cancellation to every attendee".
+  - Reads, reversible changes and genuine `dryRun: true` previews pass
+    silently. Anything it can't classify asks (fails closed).
+  - After tools that return other people's content, it reminds the model
+    that the content is data, not instructions.
+  - New plugin setting **Confirmation level**: `outward` (default),
+    `all-writes` or `off`.
+  - The Copilot hook is not included yet: Copilot's MCP tool names and its
+    plugin-root variable for hooks still need verifying.
+- **Prompt-injection evals** (#284). Test mode's mock mailbox now includes
+  three injected emails, and `node scripts/skill-evals.js` runs `claude -p`
+  scenarios with and without the skill and hook, then reports pass rates.
 - **`OUTLOOK_DEBUG=true` for detailed logs** (#278). See the logging change
   below.
 

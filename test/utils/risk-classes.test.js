@@ -9,11 +9,13 @@
  */
 const { TOOLS } = require('../../tools');
 const {
+  DRY_RUN_ACTIONS,
   RISK_CLASSES,
   TOOL_RISK,
   classify,
   riskAnnotations,
   riskMeta,
+  supportsDryRun,
 } = require('../../utils/risk-classes');
 
 const byName = Object.fromEntries(TOOLS.map((t) => [t.name, t]));
@@ -223,4 +225,39 @@ describe('published tool metadata matches the map (#277)', () => {
       expect(tool.annotations.title).toBe(tool.title);
     }
   );
+});
+
+describe('dry-run map', () => {
+  const withDryRun = TOOLS.filter((t) => t.inputSchema?.properties?.dryRun);
+
+  test('names exactly the tools whose schema has dryRun', () => {
+    expect(Object.keys(DRY_RUN_ACTIONS).sort()).toEqual(
+      withDryRun.map((t) => t.name).sort()
+    );
+  });
+
+  test.each(Object.entries(DRY_RUN_ACTIONS))(
+    '%s lists only real actions, or is single-purpose',
+    (name, supported) => {
+      const actions = actionEnum(byName[name]);
+      if (supported === true) {
+        expect(actions).toBeUndefined();
+      } else {
+        expect(supported.length).toBeGreaterThan(0);
+        for (const action of supported) expect(actions).toContain(action);
+      }
+    }
+  );
+
+  test('supportsDryRun resolves listed actions, defaults and unknown tools', () => {
+    expect(supportsDryRun('send-email')).toBe(true);
+    expect(supportsDryRun('draft', 'create')).toBe(true);
+    expect(supportsDryRun('draft', 'send')).toBe(false);
+    expect(supportsDryRun('manage-rules', 'reorder')).toBe(false);
+    // folders defaults to list, which has nothing to preview.
+    expect(supportsDryRun('folders')).toBe(false);
+    expect(supportsDryRun('folders', null)).toBe(false);
+    expect(supportsDryRun('search-emails')).toBe(false);
+    expect(supportsDryRun('no-such-tool')).toBe(false);
+  });
 });

@@ -185,6 +185,24 @@ const TOOL_RISK = {
   'find-meeting-rooms': { default: 'read' },
 };
 
+/**
+ * Which calls return a preview for `dryRun: true` and change nothing: `true`
+ * for a single-purpose tool, or the list of its actions that preview. The
+ * plugin hook lets these previews run without asking; any other call with
+ * `dryRun: true` is treated as the real thing. A test checks this map against
+ * every tool whose schema has a `dryRun` property.
+ */
+const DRY_RUN_ACTIONS = {
+  'create-event': true,
+  'manage-event': ['update', 'decline', 'cancel', 'delete'],
+  'send-email': true,
+  draft: ['create'],
+  folders: ['delete'],
+  'manage-rules': ['create', 'update'],
+  'manage-contact': ['delete'],
+  'mailbox-settings': ['set-auto-replies'],
+};
+
 /** Classes that make a tool destructive and need a human's confirmation. */
 const HIGH_RISK = new Set(['outward', 'destructive', 'persistent']);
 /** Classes whose effects reach people outside the mailbox. */
@@ -211,10 +229,36 @@ function classify(toolName, action) {
   const entry = TOOL_RISK[toolName];
   if (!entry) return undefined;
   if (!entry.actions) return entry.default;
-  const effective = action ?? entry.defaultAction;
+  const effective = effectiveAction(toolName, action);
   return Object.hasOwn(entry.actions, effective)
     ? entry.actions[effective]
     : undefined;
+}
+
+/**
+ * The action a call runs: its `action` argument, or the tool's defaultAction
+ * when that is left out or null (handlers treat both alike).
+ * @param {string} toolName
+ * @param {string|null} [action]
+ * @returns {string|undefined}
+ */
+function effectiveAction(toolName, action) {
+  return action ?? TOOL_RISK[toolName]?.defaultAction;
+}
+
+/**
+ * Whether a call returns a preview for `dryRun: true` (see DRY_RUN_ACTIONS).
+ * Resolves a missing or null action to the tool's defaultAction, like
+ * classify().
+ * @param {string} toolName
+ * @param {string|null} [action]
+ * @returns {boolean}
+ */
+function supportsDryRun(toolName, action) {
+  const supported = DRY_RUN_ACTIONS[toolName];
+  if (supported === true) return true;
+  if (!Array.isArray(supported)) return false;
+  return supported.includes(effectiveAction(toolName, action));
 }
 
 /**
@@ -268,10 +312,12 @@ function riskMeta(toolName) {
 }
 
 module.exports = {
+  DRY_RUN_ACTIONS,
   RISK_CLASSES,
   TOOL_RISK,
   classify,
   riskAnnotations,
   riskMeta,
+  supportsDryRun,
   toolMetadata,
 };

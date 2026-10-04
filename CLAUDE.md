@@ -71,7 +71,9 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 | `tools.js` | Tool registry: every module's tools combined into `TOOLS` (tests import it) |
 | `server.js` | `createServer()`: SDK `Server` with `tools: {listChanged: false}` and the dispatcher |
 | `request-handler.js` | MCP request dispatcher: `tools/list` (adds `riskMeta` `_meta`) and `tools/call` (coerce → read-only gate → handler → one log line). Protocol errors are thrown as JSON-RPC errors (-32601 unknown method, -32602 unknown tool, -32603 internal); tool failures return visible `isError` content |
-| `utils/risk-classes.js` | Risk-class map per tool/action; derives every tool's annotations (`toolMetadata`) |
+| `utils/risk-classes.js` | Risk-class map per tool/action and `DRY_RUN_ACTIONS`; derives every tool's annotations (`toolMetadata`), read-only mode and the plugin hook's `risk-map.json` |
+| `plugins/outlook-assistant/hooks/outlook-gate.js` | Claude Code plugin hook: PreToolUse `ask` with a plain-English reason before outward/destructive/persistent calls (fails closed), PostToolUse untrusted-content note |
+| `plugins/outlook-assistant/skills/using-outlook-assistant/` | Agent skill: SKILL.md hard rules + one `references/` file per surface; risk table and `metadata.version` are generated |
 | `utils/server-instructions.js` | Server `instructions` text (hard rules first); read-only note follows `config.READ_ONLY` |
 | `utils/read-only.js` | `OUTLOOK_READ_ONLY` gate: refusal for any non-`read` call (`auth` sign-in actions exempt) |
 | `utils/logger.js` | Stderr logger: `log.info`/`log.debug`, per-call notes, `redact()`, `isDebugEnabled()` (`OUTLOOK_DEBUG`) |
@@ -130,7 +132,7 @@ OUTLOOK_DEBUG=true                         # Optional: detailed stderr logs (uti
 1. Create handler in module directory (e.g., `email/new-tool.js`); return errors with `toolError()` / `authRequiredError()` (`utils/tool-error.js`)
 2. Export from module `index.js`
 3. Add the module's tools to `TOOLS` in `tools.js`
-4. Classify the tool and each action in `utils/risk-classes.js`, and spread `...toolMetadata(name, title)` into the definition (never hand-write hints)
+4. Classify the tool and each action in `utils/risk-classes.js`, and spread `...toolMetadata(name, title)` into the definition (never hand-write hints); then run `node scripts/sync-risk-map.js`
 5. Description ≤ 1,024 characters, stating facts and boundaries without steering between tools (`test/tools-registry.test.js` enforces both)
 6. Add test in `test/[module]/`
 7. Keep the plugin in step: see [`.claude/rules/plugin-and-skill-maintenance.md`](.claude/rules/plugin-and-skill-maintenance.md) (risk class, skill reference, hook map)
@@ -147,9 +149,11 @@ npm run lint                # ESLint (0 errors expected)
 npm run format:check        # Prettier (CI runs this)
 node scripts/e2e-stdio.js <tool> '<argsJson>'  # Fresh stdio server: initialize + one tools/call
 USE_TEST_MODE=true npm start # Mock data mode
+node scripts/sync-risk-map.js  # Regenerate the hook's risk-map.json + skill risk table after editing utils/risk-classes.js
+node scripts/skill-evals.js    # claude -p prompt-injection evals with/without skill and hook (spends tokens)
 ```
 
-Mock data defined in `utils/mock-data.js`. Shared-mailbox suites switch the opt-in on via `test/helpers/shared-mailbox.js`.
+Mock data defined in `utils/mock-data.js` (includes three prompt-injection emails for the evals). Shared-mailbox suites switch the opt-in on via `test/helpers/shared-mailbox.js`.
 
 ## Graph API Notes
 

@@ -1,0 +1,129 @@
+{
+  "$comment": "Generated from utils/risk-classes.js by scripts/sync-risk-map.js. Do not edit by hand.",
+  "tools": {
+    "auth": {
+      "actions": {
+        "status": "read",
+        "authenticate": "reversible",
+        "device-code-complete": "reversible",
+        "about": "read"
+      },
+      "defaultAction": "status"
+    },
+    "list-events": { "default": "read", "untrustedContent": true },
+    "create-event": { "default": "outward", "dryRun": true },
+    "manage-event": {
+      "actions": {
+        "update": "outward",
+        "decline": "outward",
+        "cancel": "outward",
+        "delete": "outward"
+      },
+      "dryRun": ["update", "decline", "cancel", "delete"]
+    },
+    "search-emails": { "default": "read", "untrustedContent": true },
+    "read-email": { "default": "read", "untrustedContent": true },
+    "send-email": { "default": "outward", "dryRun": true },
+    "draft": {
+      "actions": {
+        "create": "reversible",
+        "update": "reversible",
+        "send": "outward",
+        "delete": "destructive",
+        "reply": "reversible",
+        "reply-all": "reversible",
+        "forward": "reversible"
+      },
+      "untrustedContent": true,
+      "dryRun": ["create"]
+    },
+    "update-email": {
+      "actions": {
+        "mark-read": "reversible",
+        "mark-unread": "reversible",
+        "flag": "reversible",
+        "unflag": "reversible",
+        "complete": "reversible"
+      }
+    },
+    "attachments": {
+      "actions": { "list": "read", "view": "read", "download": "reversible" },
+      "defaultAction": "list",
+      "untrustedContent": true
+    },
+    "export": { "default": "reversible", "untrustedContent": true },
+    "get-mail-tips": { "default": "read", "untrustedContent": true },
+    "folders": {
+      "actions": {
+        "list": "read",
+        "create": "reversible",
+        "move": "reversible",
+        "stats": "read",
+        "delete": "destructive"
+      },
+      "defaultAction": "list",
+      "dryRun": ["delete"]
+    },
+    "manage-rules": {
+      "actions": {
+        "list": "read",
+        "create": "persistent",
+        "update": "persistent",
+        "reorder": "persistent",
+        "delete": "destructive"
+      },
+      "defaultAction": "list",
+      "dryRun": ["create", "update"]
+    },
+    "manage-contact": {
+      "actions": {
+        "list": "read",
+        "search": "read",
+        "get": "read",
+        "create": "reversible",
+        "update": "reversible",
+        "delete": "destructive"
+      },
+      "defaultAction": "list",
+      "dryRun": ["delete"]
+    },
+    "search-people": { "default": "read", "untrustedContent": true },
+    "manage-category": {
+      "actions": {
+        "list": "read",
+        "create": "reversible",
+        "update": "reversible",
+        "set": "reversible",
+        "delete": "destructive"
+      },
+      "defaultAction": "list"
+    },
+    "apply-category": {
+      "actions": {
+        "set": "reversible",
+        "add": "reversible",
+        "remove": "reversible"
+      },
+      "defaultAction": "set"
+    },
+    "manage-focused-inbox": {
+      "actions": {
+        "list": "read",
+        "set": "reversible",
+        "delete": "destructive"
+      },
+      "defaultAction": "list"
+    },
+    "mailbox-settings": {
+      "actions": {
+        "get": "read",
+        "set-auto-replies": "persistent",
+        "set-working-hours": "reversible"
+      },
+      "defaultAction": "get",
+      "dryRun": ["set-auto-replies"]
+    },
+    "access-shared-mailbox": { "default": "read", "untrustedContent": true },
+    "find-meeting-rooms": { "default": "read" }
+  }
+}

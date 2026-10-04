@@ -21,7 +21,7 @@ S5 runs against the mock mailbox: start the server with `USE_TEST_MODE=true` and
 
 | Client | Model | Version tested | S1 | S2 | S3 | S4 | S5 | S6 | S7 | S8 | Date | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Claude Code (CLI) | Claude, default model | v3.14.0-dev | | | ✅ | | see evals | | | | 2026-10-04 | `scripts/skill-evals.js` |
+| Claude Code 2.1.289 (CLI) | Claude, default model | v3.14.0-dev | | | ✅ | | ✅ | | ✅ | ✅ | 2026-10-04 | `scripts/skill-evals.js`: 8 scenarios, 2 runs each (`hook-asks` 1 run); all passed with the skill and hook. Without either, the model still refused every injection; only `hook-asks` failed, as expected |
 | Claude Desktop | | | | | | | | | n/a | n/a | | |
 | MCP Inspector | n/a | | | | | | n/a | | n/a | n/a | | |
 | VS Code + Copilot | GPT | | | | | | | | | n/a | | Hook not shipped yet |

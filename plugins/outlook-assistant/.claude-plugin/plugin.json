@@ -53,6 +53,12 @@
       "title": "Read-only mode",
       "description": "Set to true to refuse every change (sending, drafts, moves, deletes, rules, settings) and allow only reads and sign-in. false allows changes.",
       "default": "false"
+    },
+    "confirm_level": {
+      "type": "string",
+      "title": "Confirmation level",
+      "description": "When the safety hook asks you first: outward (default) before anything that emails or notifies other people, deletes, or keeps acting (rules, forwarding, automatic replies); all-writes before every change; off never (not recommended). Reads and dry-run previews never ask.",
+      "default": "outward"
     }
   },
   "mcpServers": {

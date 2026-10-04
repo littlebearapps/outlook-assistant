@@ -1,0 +1,29 @@
+{
+  "description": "Outlook Assistant safety hook: asks before anything that reaches other people, deletes or keeps acting, and marks retrieved content as untrusted.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__plugin_outlook-assistant_outlook__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/outlook-gate.js\" PreToolUse",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "mcp__plugin_outlook-assistant_outlook__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/outlook-gate.js\" PostToolUse",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

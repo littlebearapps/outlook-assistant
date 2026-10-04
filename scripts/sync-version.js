@@ -9,6 +9,7 @@
  *     version and the pinned npx launcher
  *   - plugins/outlook-assistant/plugin.json + mcp.json (Agent Plugins:
  *     Copilot, VS Code, Cursor): version and the pinned npx launcher
+ *   - plugins/outlook-assistant/.cursor-plugin/plugin.json (Cursor): version
  *   - the plugin skill's SKILL.md: frontmatter `metadata.version`
  *
  * Plugin directories reject unpinned launchers, so the npx argument must
@@ -44,6 +45,9 @@ const updates = {
     pinLaunchers(json.mcpServers);
   },
   'plugins/outlook-assistant/plugin.json': (json) => {
+    json.version = version;
+  },
+  'plugins/outlook-assistant/.cursor-plugin/plugin.json': (json) => {
     json.version = version;
   },
   'plugins/outlook-assistant/mcp.json': (json) => {

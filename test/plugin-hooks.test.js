@@ -21,6 +21,8 @@ const {
 } = require('../plugins/outlook-assistant/hooks/outlook-gate');
 const hooksJson = require('../plugins/outlook-assistant/hooks/hooks.json');
 const copilotHooks = require('../plugins/outlook-assistant/com.github.copilot/hooks/hooks.json');
+const cursorHooks = require('../plugins/outlook-assistant/hooks/hooks-cursor.json');
+const cursorPlugin = require('../plugins/outlook-assistant/.cursor-plugin/plugin.json');
 const claudePlugin = require('../plugins/outlook-assistant/.claude-plugin/plugin.json');
 
 const execFileAsync = promisify(execFile);
@@ -234,6 +236,106 @@ describe('Copilot hooks (com.github.copilot/hooks/hooks.json)', () => {
     expect(out.permissionDecisionReason).toBe(reason(out));
     // Claude Code gets only the nested form.
     expect(pre('send-email', {}).permissionDecision).toBeUndefined();
+  });
+});
+
+describe('Cursor hooks (.cursor-plugin + hooks/hooks-cursor.json)', () => {
+  // Verified with Cursor CLI 2026.10.01: with .cursor-plugin/plugin.json the
+  // plugin loads as a Cursor Plugin (mcp.json, skills/, this hooks file)
+  // instead of through .claude-plugin, whose ${user_config.*} placeholders
+  // Cursor doesn't expand.
+  const cursor = (payload, event = payload.hook_event_name) =>
+    handle(JSON.stringify(payload), event, {}, 'cursor');
+  const mcp = (tool, input, server = 'plugin-outlook-assistant-outlook') => ({
+    hook_event_name: 'beforeMCPExecution',
+    tool_name: tool,
+    tool_input: JSON.stringify(input),
+    mcp_server_name: server,
+    command: 'npx -y @littlebearapps/outlook-assistant@x',
+  });
+
+  test('the Cursor manifest points at its own hooks file, not the Claude one', () => {
+    expect(cursorPlugin.name).toBe('outlook-assistant');
+    expect(cursorPlugin.hooks).toBe('./hooks/hooks-cursor.json');
+  });
+
+  test('beforeMCPExecution fails closed and runs the gate in cursor mode', () => {
+    const [hook] = cursorHooks.hooks.beforeMCPExecution;
+    expect(hook.failClosed).toBe(true);
+    expect(hook.timeout).toBe(30);
+    expect(hook.command).toBe(
+      'node "${CURSOR_PLUGIN_ROOT}/hooks/outlook-gate.js" beforeMCPExecution cursor'
+    );
+    const [post] = cursorHooks.hooks.postToolUse;
+    expect(post.matcher).toBe('MCP:.*');
+    expect(post.command).toMatch(/postToolUse cursor$/);
+  });
+
+  test('a risky call asks in Cursor’s format, with the reason for both', () => {
+    const out = cursor(
+      mcp('manage-rules', {
+        action: 'create',
+        name: 'X',
+        forwardTo: 'x@evil.example',
+      })
+    );
+    expect(out.permission).toBe('ask');
+    expect(out.user_message).toMatch(
+      /forwards matching mail to x@evil\.example/
+    );
+    expect(out.agent_message).toBe(out.user_message);
+  });
+
+  test('reads, genuine dry runs and other servers get {} (valid JSON)', () => {
+    expect(cursor(mcp('search-emails', {}))).toEqual({});
+    expect(cursor(mcp('send-email', { to: 'a@x.com', dryRun: true }))).toEqual(
+      {}
+    );
+    expect(cursor(mcp('create_issue', {}, 'github'))).toEqual({});
+  });
+
+  test('an unknown tool on an Outlook server asks', () => {
+    expect(cursor(mcp('purge-mailbox', {})).permission).toBe('ask');
+    expect(
+      cursor(
+        mcp('send-email', { to: 'a@x.com' }, 'plugin-Outlook Assistant-outlook')
+      ).permission
+    ).toBe('ask');
+  });
+
+  test('unparseable input or arguments ask', () => {
+    expect(
+      handle('garbage', 'beforeMCPExecution', {}, 'cursor').permission
+    ).toBe('ask');
+    expect(
+      cursor({ ...mcp('send-email', {}), tool_input: '{not json' }).permission
+    ).toBe('ask');
+  });
+
+  test('postToolUse adds additional_context after untrusted MCP tools only', () => {
+    expect(
+      cursor({ hook_event_name: 'postToolUse', tool_name: 'MCP:read-email' })
+    ).toEqual({ additional_context: UNTRUSTED_NOTE });
+    expect(
+      cursor({ hook_event_name: 'postToolUse', tool_name: 'MCP:update-email' })
+    ).toEqual({});
+    expect(
+      cursor({ hook_event_name: 'postToolUse', tool_name: 'Shell' })
+    ).toEqual({});
+  });
+
+  test('as a process, it always prints JSON (Cursor blocks on empty output)', () => {
+    const result = spawnSync(
+      process.execPath,
+      [GATE, 'beforeMCPExecution', 'cursor'],
+      {
+        input: JSON.stringify(mcp('search-emails', {})),
+        env: { PATH: process.env.PATH },
+        encoding: 'utf8',
+      }
+    );
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({});
   });
 });
 

@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 /**
- * Outlook Assistant safety hook (#283), for Claude Code (hooks/hooks.json)
- * and GitHub Copilot CLI (com.github.copilot/hooks/hooks.json, which passes
- * `copilot` as the second argument so Copilot's tool names are recognised).
+ * Outlook Assistant safety hook (#283), for Claude Code (hooks/hooks.json),
+ * GitHub Copilot CLI and VS Code (com.github.copilot/hooks/hooks.json, with
+ * `copilot` as the second argument) and Cursor (hooks/hooks-cursor.json via
+ * .cursor-plugin/plugin.json, with `cursor`): the second argument picks how
+ * tool names are read and how the answer is written.
  *
  * PreToolUse: classifies each Outlook Assistant tool call with risk-map.json
  * (generated from the server's utils/risk-classes.js) and asks the user before
@@ -481,19 +483,81 @@ function untrustedNote(client = 'claude') {
   return output;
 }
 
+/** Cursor's `ask`, built from the Claude-style output. */
+function cursorAsk(output) {
+  const reason = output.hookSpecificOutput.permissionDecisionReason;
+  return { permission: 'ask', user_message: reason, agent_message: reason };
+}
+
+/**
+ * Handle one Cursor hook call (hooks/hooks-cursor.json; verified with
+ * Cursor CLI 2026.10.01). Cursor blocks a call when a hook prints invalid
+ * JSON, so this always returns an object, `{}` for no opinion.
+ *
+ * - beforeMCPExecution gives the bare tool name, the server as
+ *   `mcp_server_name` (e.g. `plugin-outlook-assistant-outlook`) and the
+ *   arguments as a JSON string. Any server whose name mentions Outlook is
+ *   ours, and its calls go through the copilot-mode checks, so an unknown
+ *   tool asks.
+ * - postToolUse names MCP tools `MCP:<tool>` with no server, so the note is
+ *   added after any MCP tool that shares a name with one of ours that
+ *   returns other people's content.
+ * @param {object} payload
+ * @param {string} event
+ * @param {object} env
+ * @returns {object}
+ */
+function handleCursor(payload, event, env) {
+  if (event === 'postToolUse') {
+    const name = String(payload.tool_name ?? '');
+    if (!name.startsWith('MCP:')) return {};
+    const note = postToolUse(
+      { tool_name: `outlook-${name.slice(4)}` },
+      'copilot'
+    );
+    return note ? { additional_context: UNTRUSTED_NOTE } : {};
+  }
+  if (!/outlook/i.test(String(payload.mcp_server_name ?? ''))) return {};
+  const input =
+    typeof payload.tool_input === 'string'
+      ? JSON.parse(payload.tool_input || '{}')
+      : payload.tool_input;
+  const output = preToolUse(
+    { tool_name: `outlook-${payload.tool_name}`, tool_input: input },
+    env,
+    'copilot'
+  );
+  return output ? cursorAsk(output) : {};
+}
+
 /**
  * Handle one hook call. Never throws: on any error a PreToolUse call gets
  * `ask` and a PostToolUse call gets the untrusted-content note.
  * @param {string} raw - stdin
  * @param {string} [eventArg] - event name from the command line
  * @param {object} [env]
- * @param {string} [client] - `claude` (default) or `copilot`, from the
- *   command line
+ * @param {string} [client] - `claude` (default), `copilot` or `cursor`,
+ *   from the command line
  * @returns {object|null}
  */
 function handle(raw, eventArg, env = process.env, client = 'claude') {
   let payload;
   let event = eventArg;
+  if (client === 'cursor') {
+    try {
+      payload = JSON.parse(raw);
+      return handleCursor(payload, payload.hook_event_name ?? eventArg, env);
+    } catch (err) {
+      if (eventArg === 'postToolUse') {
+        return { additional_context: UNTRUSTED_NOTE };
+      }
+      return cursorAsk(
+        ask(
+          `the safety hook couldn't check this call (${clean(err.message)}). Review it before allowing.`
+        )
+      );
+    }
+  }
   try {
     payload = JSON.parse(raw);
     event = payload.hook_event_name ?? eventArg;

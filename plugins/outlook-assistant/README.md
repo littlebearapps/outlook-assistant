@@ -48,7 +48,7 @@ The plugin adds two safety layers on top of the server's own checks.
 - how prompt injection in email looks;
 - how to search without pulling in the whole mailbox.
 
-**The safety hook (Claude Code and GitHub Copilot CLI)** asks you before any call that reaches other people, deletes something or keeps acting (rules, forwarding, automatic replies). It explains the call in plain English, for example:
+**The safety hook (Claude Code, GitHub Copilot and Cursor)** asks you before any call that reaches other people, deletes something or keeps acting (rules, forwarding, automatic replies). It explains the call in plain English, for example:
 
 > Outlook Assistant: Creates the inbox rule 'Invoices', which keeps acting on new mail until removed: it forwards matching mail to billing@example.net.
 
@@ -79,7 +79,11 @@ The plugin adds two safety layers on top of the server's own checks.
 }
 ```
 
-**In GitHub Copilot CLI** the same hook asks before the same calls and adds the same untrusted-content note. Copilot has no plugin settings, so set the confirmation level with the `OUTLOOK_CONFIRM_LEVEL` environment variable in the shell you start Copilot from (for example `export OUTLOOK_CONFIRM_LEVEL=all-writes`). Copilot lets a call through if a hook times out, so the hook allows 30 seconds, far longer than it needs. **VS Code** (the default Local agent) reads the same hook file. According to VS Code's source, it shows the hook's reason in its confirmation dialog, even for tools you've set to auto-approve, and passes the note to the model. This hasn't been checked by hand yet. VS Code has no plugin settings; `OUTLOOK_CONFIRM_LEVEL` applies if it's set in the environment VS Code starts with. **Cursor** gets the skill and the server's own checks, but not the hook yet.
+**In GitHub Copilot CLI** the same hook asks before the same calls and adds the same untrusted-content note. Copilot has no plugin settings, so set the confirmation level with the `OUTLOOK_CONFIRM_LEVEL` environment variable in the shell you start Copilot from (for example `export OUTLOOK_CONFIRM_LEVEL=all-writes`). Copilot lets a call through if a hook times out, so the hook allows 30 seconds, far longer than it needs. **VS Code** (the default Local agent) reads the same hook file. According to VS Code's source, it shows the hook's reason in its confirmation dialog, even for tools you've set to auto-approve, and passes the note to the model. This hasn't been checked by hand yet. VS Code has no plugin settings; `OUTLOOK_CONFIRM_LEVEL` applies if it's set in the environment VS Code starts with. **In Cursor** the plugin loads as a Cursor plugin (`.cursor-plugin/plugin.json`), and the hook runs from `hooks/hooks-cursor.json`:
+
+- It adds the untrusted-content note.
+- It blocks the call if it fails or times out.
+- **Limitation:** in Cursor CLI 2026.10.01, its "ask" falls back to Cursor's own "Run this MCP tool?" prompt, which doesn't show the hook's reason. An allowlist rule (`Mcp(...)`) or Run Everything mode runs the call without asking, so don't allowlist Outlook's sending, rule or delete tools in Cursor.
 
 ## Data and privacy
 

@@ -63,7 +63,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - GitHub Copilot CLI runs the same hook, including the untrusted-content
     note, from `com.github.copilot/hooks/hooks.json`. Set the level there with
     the `OUTLOOK_CONFIRM_LEVEL` environment variable. Not yet checked in VS
-    Code; the Cursor hook is deferred.
+    Code.
+  - Cursor runs it from `hooks/hooks-cursor.json` (`beforeMCPExecution` with
+    `failClosed`, plus the note on `postToolUse`). In Cursor CLI, an "ask"
+    falls back to Cursor's own MCP approval prompt, and an allowlist rule
+    overrides it.
 - **Prompt-injection evals** (#284). Test mode's mock mailbox now includes
   three injected emails, and `node scripts/skill-evals.js` runs `claude -p`
   scenarios with and without the skill and hook, then reports pass rates.
@@ -72,6 +76,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The plugin now loads properly in Cursor.** Without a Cursor manifest,
+  Cursor loaded the Claude Code manifest and passed its `${user_config.*}`
+  placeholders to the server as literal text, so sign-in failed with
+  AADSTS900023 and the send cap and allowlist were garbage. A new
+  `.cursor-plugin/plugin.json` makes Cursor use the plain `mcp.json`
+  instead (verified with Cursor CLI 2026.10.01).
 - **Failed tool calls now look like failures.** About 260 error results,
   including missing-parameter, not-found and Graph errors and the rate-limit
   and allowlist refusals, came back without `isError`, so clients and models

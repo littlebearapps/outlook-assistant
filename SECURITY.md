@@ -4,8 +4,8 @@
 
 | Version  | Supported          |
 | -------- | ------------------ |
-| 3.13.x   | :white_check_mark: |
-| < 3.13.0 | :x:                |
+| 3.14.x   | :white_check_mark: |
+| < 3.14.0 | :x:                |
 
 Security fixes ship in the latest release only. v3.11.2 and v3.12.0 both
 contain security fixes (see [`CHANGELOG.md`](CHANGELOG.md)), so upgrade rather

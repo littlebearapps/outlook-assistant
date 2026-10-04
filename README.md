@@ -180,7 +180,7 @@ npx @littlebearapps/outlook-assistant
 To check which version you have, or to see the available options:
 
 ```bash
-outlook-assistant --version     # prints e.g. 3.13.0
+outlook-assistant --version     # prints e.g. 3.14.0
 outlook-assistant --help        # usage, options and key environment variables
 ```
 

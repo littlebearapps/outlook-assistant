@@ -35,7 +35,7 @@ params:
 
 ## Download an Attachment
 
-> "Download the PDF from that email to /tmp"
+> "Download the PDF from that email to my Downloads folder"
 
 ```
 tool: attachments
@@ -43,7 +43,7 @@ params:
   messageId: "AAMkAGR..."
   action: "download"
   attachmentId: "AAMkAGR-att1..."
-  outputDir: "/tmp/attachments/"
+  outputDir: "~/Downloads/attachments/"
 ```
 
 The directory is created if it doesn't exist. Leave out `outputDir` and the file goes to your system's temp directory. The response tells you the exact path it was saved to.
@@ -56,7 +56,7 @@ The filename comes from the sender, so it's reduced to a safe name before saving
 
 List the attachments first, then download each one:
 
-> "Download all attachments from that email to /tmp/attachments/"
+> "Download all attachments from that email to ~/Downloads/attachments/"
 
 The attachments will be listed, then downloaded sequentially.
 

@@ -28,7 +28,7 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 
 > **`sharedMailbox` is opt-in (work/school only).** Set `OUTLOOK_SHARED_MAILBOX=read` (read: `Mail.Read.Shared`) or `=true` (read and organise: adds `Mail.ReadWrite.Shared`), restart, then run `auth action=authenticate force=true`. While it's unset, `sharedMailbox` calls are refused with these steps, and `access-shared-mailbox` reads only well-known folder names or folder IDs, as before (`listFolders` and custom/nested names need the setting).
 >
-> **Downloads and exports stay in allowed folders.** Every output path must be absolute (a leading `~` means the home directory; relative paths are refused) and resolve to somewhere inside the system temp directory (the default), `~/Downloads`, `~/Documents` or `OUTLOOK_EXPORT_DIR`, with no dot-prefixed name below them; anything else is refused. Server-chosen filenames are sanitised, written with exclusive create (an existing file or symlink is never overwritten or followed; a clash gets a numbered suffix) and confined to `outputDir`. An explicit `savePath` file is never replaced unless `overwrite: true` is passed, and never if it is a symlink (to anything), a dotfile or inside a dot-directory below the allowed folder. Files are created with mode `0600` and new folders `0700`; a replaced file keeps its mode. IDs containing `.` or `..` path segments are refused before any Graph request.
+> **Downloads and exports stay in allowed folders.** Every output path must be absolute (a leading `~` means the home directory; relative paths are refused) and resolve to somewhere inside the system temp directory (the default), `~/Downloads`, `~/Documents` or `OUTLOOK_EXPORT_DIR`, with no dot-prefixed name below them; anything else is refused. Server-chosen filenames are sanitised, written with exclusive create (an existing file or symlink is never overwritten or followed; a clash gets a numbered suffix) and confined to the chosen folder. An explicit `savePath` file is never replaced unless `overwrite: true` is passed, and never if it is a symlink, has other hard links, or is a dotfile or inside a dot-directory below the allowed folder. Files are created with mode `0600` and new folders `0700`; a replaced file keeps its mode. IDs containing `.` or `..` path segments are refused before any Graph request.
 >
 > **`sharedMailbox` is read/organise only.** `send-email` and `draft` (create/update/send/delete, reply, reply-all, forward) deliberately take no `sharedMailbox` parameter — they always act on the signed-in user's own mailbox, and `Mail.Send.Shared` is not requested.
 
@@ -166,6 +166,8 @@ All four hints are set explicitly on every tool, and derived from the risk-class
 
 > **Read-only mode**: with `OUTLOOK_READ_ONLY=true` the server refuses every tool call or action that isn't a read before it runs, whatever the client's approval settings. That includes `dryRun` previews, `export` and `attachments action=download`; `auth` sign-in still works. See the [README's environment variables](../../README.md#environment-variables).
 
+> **`dryRun` only where it previews**: `send-email`, `draft` create, `create-event`, every `manage-event` action, `manage-rules` create/update, `mailbox-settings` set-auto-replies, and `folders` and `manage-contact` delete. `dryRun: true` on any other call is refused before it runs (`dryRun is not supported for …; nothing was changed.`), so a preview never makes the change for real.
+
 > **`openWorldHint: true`** is set on tools that return content authored by external/untrusted parties (`search-emails`, `read-email`, `list-events`, `get-mail-tips`, `search-people`, `access-shared-mailbox`, `attachments`, `export`, `draft`) or that reach other people (`send-email`, `draft`, `create-event`, `manage-event`, `manage-rules`, `mailbox-settings`), signalling MCP clients to apply appropriate caution (e.g. prompt-injection defences).
 
 ## send-email Safety Controls
@@ -175,7 +177,7 @@ All four hints are set explicitly on every tool, and derived from the risk-class
 | Pre-send mail tips | `checkRecipients: true` param. Out-of-office, mailbox full, delivery restricted or external recipients refuse the send | Disabled |
 | Send despite mail-tip warnings | `acknowledgeWarnings: true` param (with `checkRecipients`) | `false` |
 | Dry-run preview | `dryRun: true` param | Disabled |
-| Session rate limit | `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION` (shared with `draft action=send`) | Unlimited (0) |
+| Session rate limit | `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION` (shared with `draft action=send`) | Unlimited (unset or `0`) |
 | Recipient allowlist | `OUTLOOK_ALLOWED_RECIPIENTS` env. Also covers `draft`, rule forwards, `create-event` attendees and `manage-event` update attendees; not cancel/decline messages or `mailbox-settings` automatic replies. Anything that isn't a single plain address is refused while it's set | Allow all |
 
 ### get-mail-tips
@@ -208,11 +210,11 @@ These are the names you pass in `tipTypes`. Graph's response uses some different
 
 | Control | Config | Default |
 |---------|--------|---------|
-| Dry-run preview | `dryRun: true` param (create only) | Disabled |
+| Dry-run preview | `dryRun: true` param (create only; refused on other actions) | Disabled |
 | Pre-save mail tips | `checkRecipients: true` param (create only; the tips are returned with the saved draft and never stop it) | Disabled |
-| Session rate limit (create/update/reply/reply-all/forward) | `OUTLOOK_MAX_DRAFT_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION` | Unlimited (0) |
-| Session rate limit (send) | Counts towards the `send-email` limit (`OUTLOOK_MAX_SEND_EMAIL_PER_SESSION`, else `OUTLOOK_MAX_EMAILS_PER_SESSION`) | Unlimited (0) |
-| Recipient allowlist | `OUTLOOK_ALLOWED_RECIPIENTS` env | Allow all |
+| Session rate limit (create/update/reply/reply-all/forward) | `OUTLOOK_MAX_DRAFT_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION` | Unlimited (unset or `0`) |
+| Session rate limit (send) | Counts towards the `send-email` limit (`OUTLOOK_MAX_SEND_EMAIL_PER_SESSION`, else `OUTLOOK_MAX_EMAILS_PER_SESSION`) | Unlimited (unset or `0`) |
+| Recipient allowlist | `OUTLOOK_ALLOWED_RECIPIENTS` env: create, update, forward, reply and reply-all (a refused reply draft is deleted); send re-checks the draft's current to/cc/bcc | Allow all |
 | Drafts-only guard (update/send/delete) | Always on | Non-drafts refused |
 
 ## Common Patterns
@@ -253,7 +255,7 @@ send-email(to: "...", subject: "...", body: "...", dryRun: true)
 read-email(id: "...", headersMode: true, importantOnly: true)
 
 // Export conversation to markdown
-export(target: "conversation", conversationId: "...", format: "markdown", outputDir: "/tmp")
+export(target: "conversation", conversationId: "...", format: "markdown", outputDir: "~/Downloads")
 
 // Upcoming events (default)
 list-events(count: 10)

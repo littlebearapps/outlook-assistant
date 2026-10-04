@@ -127,7 +127,7 @@ Set `OUTLOOK_READ_ONLY=true` (or turn on **Read-only mode** in the Claude Code p
 
 ### Dry-Run Previews
 
-`dryRun: true` shows what a call would do without changing or sending anything. It covers `send-email`, `draft` create, `create-event`, `manage-event` (update, decline, cancel, delete), `mailbox-settings` set-auto-replies, `manage-rules` create/update, `folders` delete and `manage-contact` delete. Previews that email other people say who, with a count of external addresses; delete previews say what would be lost.
+`dryRun: true` shows what a call would do without changing or sending anything. It covers `send-email`, `draft` create, `create-event`, `manage-event` (update, decline, cancel, delete), `mailbox-settings` set-auto-replies, `manage-rules` create/update, `folders` delete and `manage-contact` delete. Previews that email other people say who, with a count of external addresses; delete previews say what would be lost. Any other call with `dryRun: true` is refused before it runs, so a preview can never send, delete or change anything for real.
 
 ### Send-Email Protections
 
@@ -137,7 +137,7 @@ The `send-email` tool includes additional server-side controls:
 |---------|---------------------|---------|-------------|
 | Pre-send mail tips | — (use `checkRecipients: true` param) | Disabled | Refuses to send when Microsoft 365 mail tips show an out-of-office reply, a full mailbox, a delivery restriction, an external recipient or a group with external members, or when the check fails. Send anyway with `acknowledgeWarnings: true` |
 | Dry-run mode | — (use `dryRun: true` param) | Disabled | Preview composed email without sending |
-| Session rate limit | `OUTLOOK_MAX_EMAILS_PER_SESSION` | Unlimited | Default per-session cap for `send-email`, `draft`, `manage-rules` and `create-event`; override one tool with `OUTLOOK_MAX_<TOOL>_PER_SESSION` |
+| Session rate limit | `OUTLOOK_MAX_EMAILS_PER_SESSION` | Unlimited | Default per-session cap, counted separately per tool, for `send-email` (including `draft` send), `draft` create/update/reply/reply-all/forward, `manage-rules` writes and `create-event`; dry runs don't count. Override one tool with `OUTLOOK_MAX_<TOOL>_PER_SESSION` |
 | Recipient allowlist | `OUTLOOK_ALLOWED_RECIPIENTS` | Allow all | Comma-separated domains/addresses for outgoing mail, rule forwards and event attendees (scope below) |
 
 Example configuration:
@@ -155,9 +155,13 @@ OUTLOOK_ALLOWED_RECIPIENTS=mycompany.com,partner@example.com
 - Continuation links (`deltaToken`, `nextLink`) must be `https` URLs on
   `graph.microsoft.com`; the access token is never sent anywhere else.
 - Attachment downloads and exports (including conversation exports) write
-  sanitised filenames with exclusive create (no overwriting, no following
-  symlinks) and stay inside the chosen output directory. A write that fails
-  part-way removes the partly written file.
+  the files they name with sanitised filenames and exclusive create (no
+  overwriting, no following symlinks; a clash gets a `-1`, `-2`, … suffix)
+  and stay inside the chosen output directory. A single-message `export` to
+  a `savePath` file is also created new, and an existing file is replaced
+  only with `overwrite: true`, never if it is a symlink, has other hard links
+  or is a dotfile. A write that fails part-way removes the partly written
+  file.
 - Output paths must be absolute (a leading `~` means your home directory);
   relative paths are refused. Files are only written inside the system temp
   directory, `~/Downloads`, `~/Documents` or `OUTLOOK_EXPORT_DIR`, never to a

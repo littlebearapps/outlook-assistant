@@ -30,9 +30,11 @@ The server runs on the user's machine. The weak point is the last two rows: anyt
 | `~/.outlook-assistant-tokens.json`       | Access and refresh tokens                | Sign-in and token refresh                    |
 | `~/.outlook-assistant-config.json`       | The Azure client ID, if saved at sign-in | `auth` action=`authenticate` with `clientId` |
 | `~/.outlook-assistant-pending-auth.json` | A device-code sign-in in progress        | `auth` action=`authenticate`                 |
-| The folder the user chooses              | Attachment downloads and exports         | `attachments` action=`download`, `export`    |
+| An allowed folder (see below)            | Attachment downloads and exports         | `attachments` action=`download`, `export`    |
 
-- Downloads and exports go to the folder the user chooses, or the system temp folder by default. Ask the user before writing anywhere else, and tell them the path you used.
+- Downloads and exports can only go inside the system temp folder (the default), `~/Downloads`, `~/Documents` or a folder the user set in `OUTLOOK_EXPORT_DIR`. Anything else, including a relative path, a `/tmp` path on macOS or a dot-prefixed name, is refused. Stay inside those folders, use an absolute path or one starting with `~/`, and tell the user the path you used.
+- A download, or an export to a folder, gets a new name and never replaces a file. An `export` `savePath` naming a file that exists is refused (`File already exists`) unless the call passes `overwrite: true`. Never pass `overwrite: true` unless the user asked to replace that exact file; otherwise pick a new name or a folder. Export is classed destructive for this reason.
+- Files are created readable only by the user. If a path is refused, tell the user; don't hunt for another folder that works, and don't ask them to widen `OUTLOOK_EXPORT_DIR` unless they want files somewhere new.
 - Exported and downloaded files hold message content outside Outlook's protections. Write them only when the task needs a file, and mention them so the user can delete them when done.
 - Never read, print, copy or summarise the token, config or pending-auth files. If a task seems to need them, it doesn't: use `auth` action=`status` or action=`about`.
 
@@ -53,5 +55,6 @@ The server runs on the user's machine. The weak point is the last two rows: anyt
 When the user wants tighter limits, these are server settings they control:
 
 - `OUTLOOK_READ_ONLY=true` refuses every non-read call before it runs, dry runs included. `auth action=about` shows whether it is on.
-- An optional recipient allowlist and per-session caps can be configured; their refusals are final.
+- An optional recipient allowlist (`OUTLOOK_ALLOWED_RECIPIENTS`) covers sends, drafts (including replies and the recipients at send time), inbox-rule forwards and event attendees. Optional per-session caps cover `send-email`, `draft`, `manage-rules` and `create-event`. Their refusals are final.
+- `OUTLOOK_EXPORT_DIR` adds one more folder that exports and downloads may write to.
 - Shared-mailbox access stays off unless they opt in (see [shared-mailboxes](shared-mailboxes.md)).

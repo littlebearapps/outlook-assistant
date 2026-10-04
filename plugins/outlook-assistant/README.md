@@ -35,12 +35,12 @@ In Claude Code you can also enter the client ID when you enable the plugin.
 
 22 tools across email, calendar, contacts, folders, rules, categories and mailbox settings. Full list: [tools reference](https://github.com/littlebearapps/outlook-assistant/blob/main/docs/quickrefs/tools-reference.md).
 
-**It can act on your behalf.** It can send email and meeting invitations, send or delete drafts, decline, cancel or delete meetings, set automatic replies, create or change inbox rules, and delete folders, contacts and categories. These tools are marked destructive, so clients that honour MCP safety annotations, such as Claude Code, ask before running them unless you've set the client to auto-approve them. The plugin's skill and hook (below) add more checks. The built-in safety controls are:
+**It can act on your behalf.** It can send email and meeting invitations, send or delete drafts, decline, cancel or delete meetings, set automatic replies, create or change inbox rules, delete folders, contacts and categories, and replace a local file with an export when asked to. These tools are marked destructive, so clients that honour MCP safety annotations, such as Claude Code, ask before running them unless you've set the client to auto-approve them. The plugin's skill and hook (below) add more checks. The built-in safety controls are:
 
-- `dryRun` previews for sending, drafts, rules, new events, every meeting action (update, decline, cancel, delete), automatic replies, and folder and contact deletes.
+- `dryRun` previews for sending, drafts, rules, new events, every meeting action (update, decline, cancel, delete), automatic replies, and folder and contact deletes. Other calls refuse `dryRun`, so a preview never runs for real.
 - Pre-send recipient checks (out-of-office, full mailbox, external recipients); when the check is on, a send to a flagged recipient is refused until the warnings are acknowledged.
-- A per-session limit on sends, drafts and rule changes (10 each by default in this plugin).
-- An optional recipient allowlist.
+- A per-session limit on sends, drafts, rule changes and new events (10 each by default in this plugin).
+- An optional recipient allowlist for sends, drafts (including replies), rule forwards and meeting attendees.
 - An optional read-only mode that refuses every change before it runs.
 - MCP safety annotations on every tool.
 - Sending from shared mailboxes is never supported.
@@ -103,7 +103,7 @@ The plugin adds two safety layers on top of the server's own checks.
 - Your OAuth tokens are stored locally in `~/.outlook-assistant-tokens.json`. The client ID you enter is saved locally in `~/.outlook-assistant-config.json`.
 - Email content the tools return goes to the AI model you're using, under that client's own data policy.
 - By default the server's own log (stderr) has one line per tool call (tool, action, outcome, duration), never its arguments or email content. `OUTLOOK_DEBUG=true` adds detail for troubleshooting, with addresses and IDs redacted.
-- Attachments and exports are written only when you ask, and only to the folder you choose (your system temp folder by default).
+- Attachments and exports are written only when you ask, and only inside your system temp folder (the default), `~/Downloads`, `~/Documents` or a folder you set in `OUTLOOK_EXPORT_DIR`. Files are readable only by you, and an existing file is replaced only if you ask for it (`overwrite: true`).
 
 More detail is in the [security policy](https://github.com/littlebearapps/outlook-assistant/blob/main/SECURITY.md) and the [privacy policy](https://littlebearapps.com/privacy/).
 

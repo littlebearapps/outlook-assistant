@@ -8,7 +8,7 @@ tags: [outlook-assistant, email, how-to]
 
 Save individual emails, batches, or entire conversation threads to disk in various formats for archiving, analysis, or migration.
 
-Without `outputDir` (or `savePath` for a single message), files go to your system's temp directory.
+Without `outputDir` (or `savePath` for a single message), single-message and conversation exports go to your system's temp directory. A batch export (`target: "messages"`) needs an `outputDir`.
 
 Exports can only be written inside your system's temp directory, `~/Downloads`, `~/Documents`, or a folder you name in `OUTLOOK_EXPORT_DIR` (see [Where exports can be written](#where-exports-can-be-written)).
 
@@ -22,7 +22,7 @@ params:
   target: "message"
   id: "AAMkAGR..."
   format: "markdown"
-  savePath: "/tmp/email-export.md"
+  savePath: "~/Downloads/email-export.md"
 ```
 
 ## Export as EML (For Archiving)
@@ -35,7 +35,7 @@ params:
   target: "message"
   id: "AAMkAGR..."
   format: "eml"
-  savePath: "/tmp/email.eml"
+  savePath: "~/Downloads/email.eml"
 ```
 
 ## Export a Full Conversation Thread
@@ -48,7 +48,7 @@ params:
   target: "conversation"
   conversationId: "AAQkAGR..."
   format: "markdown"
-  outputDir: "/tmp/contract-thread/"
+  outputDir: "~/Downloads/contract-thread/"
 ```
 
 Control message order:
@@ -59,7 +59,7 @@ params:
   target: "conversation"
   conversationId: "AAQkAGR..."
   format: "mbox"
-  outputDir: "/tmp/contract-thread/"
+  outputDir: "~/Downloads/contract-thread/"
   order: "chronological"
 ```
 
@@ -75,7 +75,7 @@ params:
   target: "messages"
   emailIds: ["AAMkAGR1...", "AAMkAGR2...", "AAMkAGR3..."]
   format: "markdown"
-  outputDir: "/tmp/batch-export/"
+  outputDir: "~/Downloads/batch-export/"
 ```
 
 Or export emails matching a search query (or pass `query: "budget"` as a shortcut for a subject search):
@@ -89,7 +89,7 @@ params:
     receivedAfter: "2026-01-01"
     maxResults: 50
   format: "json"
-  outputDir: "/tmp/finance-export/"
+  outputDir: "~/Documents/finance-export/"
 ```
 
 A batch export takes at most 100 messages per call, and a search stops at `maxResults` (default 25, max 100). When a limit leaves messages out, the result says so: export the remaining IDs in another call, or export a search in date ranges with `receivedAfter`/`receivedBefore`. A search that matches nothing says "No emails matched the search query; nothing was exported."
@@ -106,7 +106,7 @@ params:
     from: "finance@company.com"
     receivedAfter: "2026-01-01"
   format: "csv"
-  outputDir: "/tmp/finance-audit/"
+  outputDir: "~/Documents/finance-audit/"
 ```
 
 Batch CSV exports produce a single aggregated file with one row per email. CSV values are protected against formula injection (OWASP mitigation).
@@ -137,7 +137,7 @@ params:
     folder: "Inbox/Escalated"
     receivedAfter: "2026-09-01"
   format: "markdown"
-  outputDir: "/tmp/support-export/"
+  outputDir: "~/Downloads/support-export/"
 ```
 
 This needs the opt-in `OUTLOOK_SHARED_MAILBOX` setting on a work/school account — see [Access Shared Mailboxes](../advanced/access-shared-mailboxes.md).
@@ -196,12 +196,12 @@ Two guarantees now hold:
   the directory:
 
   ```json
-  { "emailId": "AAMk...", "filePath": "/tmp/export/2023-06-15T01-26-00_Another_transfer.json" }
+  { "emailId": "AAMk...", "filePath": "/Users/you/Downloads/export/2023-06-15T01-26-00_Another_transfer.json" }
   ```
 
 Attachment files are named the same way and carry the same guarantee.
 
-- **Files stay in the output directory.** Every name the exporter chooses is built from sanitised parts and written with exclusive create, so it can't escape `outputDir`, overwrite an existing file or follow a planted symlink (v3.12.0).
+- **Files stay in the output directory.** Every name the exporter chooses is built from sanitised parts and written with exclusive create, so it can't escape the output directory, overwrite an existing file or follow a planted symlink (v3.12.0).
 - **An explicit file path is never replaced unless you ask.** If you pass a file path as `savePath` for a single message, that exact path is used for a new file. If a file is already there, the export is refused and the file is left alone; pass `overwrite: true` to replace it. Even with `overwrite: true`, a symlink (wherever it points), a file with other hard links, a dotfile or a file inside a dot-directory below the allowed folder is never replaced. A replaced file keeps its previous permissions.
 - **Exported files are private.** New files are created readable and writable only by you (mode `0600`), and folders the export creates are `0700`, whatever your umask. Folders that already existed keep their permissions.
 
@@ -209,7 +209,7 @@ Attachment files are named the same way and carry the same guarantee.
 
 Every export path (`savePath`, `outputDir`, and the `attachments` tool's `outputDir`) must be absolute, or start with `~/` for your home directory (for example `~/Downloads/report.md`). A relative path such as `report.md` is refused, because it would land in whatever folder the server happens to run from; leave the path out to use the temp directory. The path must be inside one of:
 
-- your system's temp directory (the default)
+- your system's temp directory (the default; on macOS this is a per-user folder under `/var/folders`, not `/tmp`, so a `/tmp/…` path is refused there)
 - `~/Downloads`
 - `~/Documents`
 - the folder named in `OUTLOOK_EXPORT_DIR`, if you set it

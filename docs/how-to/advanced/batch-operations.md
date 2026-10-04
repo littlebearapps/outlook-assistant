@@ -68,7 +68,7 @@ params:
   target: "messages"
   emailIds: ["AAMkAGR1...", "AAMkAGR2...", "AAMkAGR3..."]
   format: "markdown"
-  outputDir: "/tmp/export/"
+  outputDir: "~/Downloads/export/"
 ```
 
 Or export by search criteria:
@@ -82,7 +82,7 @@ params:
     receivedAfter: "2026-01-01"
     maxResults: 50
   format: "json"
-  outputDir: "/tmp/finance-export/"
+  outputDir: "~/Documents/finance-export/"
 ```
 
 A batch export takes at most 100 messages per call, and a search stops at `searchQuery.maxResults` (default 25, max 100). When either limit leaves messages out, the result says so; export the rest in another call, or split a search into date ranges with `receivedAfter`/`receivedBefore`.

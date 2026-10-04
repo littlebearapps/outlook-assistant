@@ -22,6 +22,12 @@ All of these are outward. Get the user's go-ahead with exact details (hard rules
 - "External" means an address whose domain differs from the signed-in user's.
 - Previews also warn when Graph would refuse, such as cancelling a meeting you didn't organise.
 
+## Allowlist and caps
+
+- With a recipient allowlist set, every `create-event` attendee (rooms included), and every address on the list you pass to `manage-event` `update`, must be allowed. One blocked address refuses the whole call (`Event refused` or `Event update refused`), and a dry run reports the same refusal. Tell the user; don't drop the attendee and retry unless they ask.
+- The allowlist doesn't cover cancellations, declines, or updates sent to attendees already on the event, so confirm those as usual.
+- `create-event` can count towards a per-session cap. `Rate limit reached` is final until the server restarts.
+
 ## Choosing the action
 
 - Attending someone else's meeting and can't go: `decline`. Add a `comment` if the user wants one; nothing is added on their behalf.

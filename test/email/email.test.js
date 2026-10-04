@@ -149,7 +149,8 @@ describe('handleMarkAsRead', () => {
     callGraphAPI.mockRejectedValue(new Error('UNAUTHORIZED'));
 
     const result = await handleMarkAsRead({ id: 'msg-1' });
-    expect(result.content[0].text).toContain('re-authenticate');
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('action=authenticate');
   });
 
   it('should handle auth error', async () => {

@@ -1,6 +1,6 @@
 # Plugin and skill maintenance
 
-The marketplace plugin (`plugins/outlook-assistant/`) ships the MCP server pinned to an exact npm version. From v3.14.0 it also ships an agent skill and client hooks. These must stay in step with the server, or the safety guidance drifts from what the tools actually do.
+The marketplace plugin (`plugins/outlook-assistant/`) ships the MCP server pinned to an exact npm version. v3.14.0 (milestone #6) adds an agent skill (#282) and client hooks (#283); neither is built yet. Once they ship they must stay in step with the server, or the safety guidance drifts from what the tools actually do.
 
 ## Already in place (v3.13.0)
 
@@ -13,9 +13,12 @@ The marketplace plugin (`plugins/outlook-assistant/`) ships the MCP server pinne
 - **The Agent Plugins `plugin.json` schema is closed:** only `$schema`, `name`, `version`, `description`, `author`, `homepage`, `repository`, `license`, `keywords` and `extensions` are allowed.
 - **Before committing plugin changes,** run both `claude plugin validate --strict plugins/outlook-assistant` and `claude plugin validate --strict .claude-plugin/marketplace.json`.
 
-## When you add or change a tool or action (from v3.14.0, milestone #6)
+## When you add or change a tool or action
 
-1. **Classify it** in the risk-class map (`utils/risk-classes.js`, #270) as `read`, `reversible`, `outward`, `destructive` or `persistent`. Annotations, the hook's `risk-map.json`, `OUTLOOK_READ_ONLY` and the skill's risk table all derive from it, and a test fails on anything unclassified.
+1. **Classify it** in the risk-class map (`utils/risk-classes.js`, #270, in place) as `read`, `reversible`, `outward`, `destructive` or `persistent`, and spread `...toolMetadata(name, title)` into the definition. The `title` and all four annotation hints derive from it, and `test/utils/risk-classes.test.js` fails on any unclassified tool or action. The planned `OUTLOOK_READ_ONLY` mode (#271), the hook's `risk-map.json` and the skill's risk table are to derive from it too.
+
+Once the skill and hooks exist:
+
 2. **Update the skill reference for that surface** under `plugins/outlook-assistant/skills/using-outlook-assistant/references/` (#282). A new Microsoft surface (OneDrive, To Do, Teams) gets its own reference file plus a row in the SKILL.md routing table.
 3. **Check the hook reason text** for any new `outward`, `destructive` or `persistent` action (#283). It must say exactly who is notified or what is lost.
 4. **Keep the skill format portable:**
@@ -27,10 +30,10 @@ The marketplace plugin (`plugins/outlook-assistant/`) ships the MCP server pinne
 
 ## Tool design rules (all clients, not just one)
 
-- Set all four annotation hints explicitly, and accurately for **every** action. A tool with any delete action is `destructiveHint: true`. Anything that notifies or sends to other people is `openWorldHint: true`.
+- Never hand-write annotation hints; get the risk class right for **every** action and `toolMetadata` derives them: `destructiveHint` = any `outward`, `destructive` or `persistent` action; `openWorldHint` = `untrustedContent` or any `outward`/`persistent` action; `idempotentHint` = read-only or the tool's `idempotent` flag.
 - Keep descriptions to 1,024 characters or less, with the key fact first. VS Code truncates at 1,024 and Claude Code at 2,048.
-- Every array has `items`. Never put `oneOf`/`anyOf`/`allOf` at the root of an `inputSchema`.
-- Errors return `isError: true` and say what to do next. Unknown methods are JSON-RPC errors, not results.
+- Every array has `items`. Never put `oneOf`/`anyOf`/`allOf` at the root of an `inputSchema`. `test/schemas.test.js` enforces both and compiles every schema as JSON Schema 2020-12 (Ajv).
+- Tool errors return `isError: true` via `toolError(message, { nextStep })` or `authRequiredError()` (`utils/tool-error.js`) and say what to do next. Protocol errors are thrown as `McpError` (JSON-RPC -32601 unknown method, -32602 unknown tool), never returned as results.
 - From v3.15.0 (#285): `structuredContent` and the text block must each stand alone, because clients differ in which one the model sees.
 
 ## After a release

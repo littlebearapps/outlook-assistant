@@ -3,6 +3,7 @@
  */
 const { ensureAuthenticated } = require('../auth');
 const { listChildFolders } = require('./resolve');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 /**
  * List folders handler
@@ -52,24 +53,10 @@ async function handleListFolders(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'authenticate' tool first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error listing folders: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error listing folders: ${error.message}`);
   }
 }
 

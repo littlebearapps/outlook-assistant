@@ -44,18 +44,47 @@ describe('createRequestHandler — tools/call error shaping (#213)', () => {
     );
   });
 
-  test('unknown tool yields visible isError content, not empty { error }', async () => {
+  // #276: an unknown tool is a protocol error (-32602), not a tool result.
+  // The SDK turns the thrown McpError into a JSON-RPC error response.
+  test('unknown tool throws a -32602 protocol error', async () => {
     const handler = createRequestHandler([]);
 
-    const result = await handler({
-      method: 'tools/call',
-      params: { name: 'nope', arguments: {} },
-      id: 2,
+    await expect(
+      handler({
+        method: 'tools/call',
+        params: { name: 'nope', arguments: {} },
+        id: 2,
+      })
+    ).rejects.toMatchObject({
+      code: -32602,
+      message: expect.stringMatching(/nope/),
     });
+  });
 
-    expect(result.error).toBeUndefined();
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toMatch(/Tool not found: nope/);
+  test('an internal dispatcher failure throws a -32603 protocol error', async () => {
+    const broken = {
+      get name() {
+        throw new Error('registry broke');
+      },
+    };
+    const handler = createRequestHandler([broken]);
+
+    await expect(
+      handler({ method: 'tools/list', id: 4 })
+    ).rejects.toMatchObject({
+      code: -32603,
+      message: expect.stringMatching(/registry broke/),
+    });
+  });
+
+  test('an unknown method throws a -32601 protocol error', async () => {
+    const handler = createRequestHandler([]);
+
+    await expect(
+      handler({ method: 'server/discover', id: 5 })
+    ).rejects.toMatchObject({
+      code: -32601,
+    });
   });
 
   test('a successful tool handler result is passed through unchanged', async () => {

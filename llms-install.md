@@ -111,5 +111,5 @@ After authentication, test with:
 | Device code "invalid_client" | Enable "Allow public client flows" in Azure → Authentication → Advanced settings |
 | "Shared-mailbox support is turned off" | Set `OUTLOOK_SHARED_MAILBOX`, restart, and re-authenticate with `force=true` (work/school accounts only) |
 | "EADDRINUSE :3333" | Run `npx kill-port 3333` then restart auth server |
-| Empty API responses | Run `auth` tool with `action=status` to check token |
+| "Authentication required." | Sign in with `auth` `action=authenticate`; `action=status` shows whether a token is saved |
 | Search returns no results (personal account) | Use `from`, `subject`, `to` filters instead of `query` |

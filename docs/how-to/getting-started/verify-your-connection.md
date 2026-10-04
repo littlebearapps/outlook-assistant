@@ -81,15 +81,15 @@ It never shows the tokens themselves, so it's safe to paste into a bug report.
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| "Not authenticated" | No token file exists | Run through the [initial setup](connect-outlook-to-claude.md) |
-| "Token expired" with auto-refresh failure | Refresh token revoked or client secret changed | Re-authenticate with `force: true` |
+| `auth action=status` says "Not authenticated" | No saved tokens, or they can't be refreshed | Run through the [initial setup](connect-outlook-to-claude.md), or re-authenticate with `force: true` |
+| A tool returns "Authentication required." | Signed out, or the token expired and couldn't be refreshed (refresh token revoked or expired; on the browser flow, a changed client secret) | Follow the "Next step" in the message: sign in with `auth` `action: authenticate` (add `force: true` if a session exists), then retry |
 | Auth succeeds but API calls fail with 403 | Insufficient permissions | Add missing permissions in [Azure Portal](https://portal.azure.com), then re-authenticate with `force: true` to pick up new scopes. `auth action=about` lists what was granted |
 | "Shared-mailbox support is turned off" | `OUTLOOK_SHARED_MAILBOX` isn't set | Set it, restart, and re-authenticate with `force: true` — see [Access Shared Mailboxes](../advanced/access-shared-mailboxes.md) (work/school accounts only) |
 | "AADSTS700082" | Refresh token expired (>90 days inactive) | Re-authenticate with `force: true` |
 | "AADSTS7000215" | Client secret is wrong (using Secret ID instead of Value) or has expired | Check [Azure Setup Guide — Client Secret](../../guides/azure-setup.md#4-create-a-client-secret) |
 | "Need admin approval" during OAuth | Organisation requires admin consent | Ask your IT admin to grant consent — see [Admin Consent](../../guides/azure-setup.md#for-workschool-accounts-admin-consent) |
 | Token file exists but auth reports failure | Corrupted token file | Delete `~/.outlook-assistant-tokens.json` and re-authenticate |
-| Auth server says "missing client ID" | Auth server does not have env vars | Create a `.env` file in the directory you start it from, or export `OUTLOOK_CLIENT_ID`/`OUTLOOK_CLIENT_SECRET` in your shell — see [Connect guide](connect-outlook-to-claude.md#authenticate-for-the-first-time) |
+| Auth server says "Microsoft Graph API credentials are not set" (a "Configuration Error" page) | Auth server does not have env vars | Create a `.env` file in the directory you start it from, or export `OUTLOOK_CLIENT_ID`/`OUTLOOK_CLIENT_SECRET` in your shell — see [Connect guide](connect-outlook-to-claude.md#authenticate-for-the-first-time) |
 | Device code "invalid_client" | Public client flows not enabled | Enable "Allow public client flows" in Azure Portal > App registrations > Authentication > Advanced settings |
 | "No pending device code flow" | Called `device-code-complete` before `authenticate`, or server restarted (pre-v3.7.2) | Call `auth` with `action: authenticate` first. In v3.7.2+, device code state persists across server restarts. |
 | "wrongplace" page after device code sign-in | Normal — means sign-in completed but Microsoft doesn't know where to redirect | Close the browser tab. The device code flow completed successfully. Call `device-code-complete` to finish. |

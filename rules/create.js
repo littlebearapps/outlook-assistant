@@ -13,6 +13,7 @@ const {
   hasAnyCondition,
   hasAnyAction,
 } = require('./rule-builder');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 /**
  * Create rule handler
@@ -28,47 +29,23 @@ async function handleCreateRule(args) {
 
   // Validate sequence parameter
   if (sequence !== undefined && (isNaN(sequence) || sequence < 1)) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Sequence must be a positive number greater than zero.',
-        },
-      ],
-    };
+    return toolError('Sequence must be a positive number greater than zero.');
   }
 
   if (!name) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Rule name is required.',
-        },
-      ],
-    };
+    return toolError('Rule name is required.');
   }
 
   if (!hasAnyCondition(args)) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'At least one condition is required. Available conditions: fromAddresses, containsSubject, bodyContains, bodyOrSubjectContains, senderContains, recipientContains, sentToAddresses, hasAttachments, importance, sensitivity, sentToMe, sentOnlyToMe, sentCcMe, isAutomaticReply.',
-        },
-      ],
-    };
+    return toolError(
+      'At least one condition is required. Available conditions: fromAddresses, containsSubject, bodyContains, bodyOrSubjectContains, senderContains, recipientContains, sentToAddresses, hasAttachments, importance, sensitivity, sentToMe, sentOnlyToMe, sentCcMe, isAutomaticReply.'
+    );
   }
 
   if (!hasAnyAction(args)) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'At least one action is required. Available actions: moveToFolder, copyToFolder, markAsRead, markImportance, forwardTo, redirectTo, assignCategories, stopProcessingRules, deleteMessage.',
-        },
-      ],
-    };
+    return toolError(
+      'At least one action is required. Available actions: moveToFolder, copyToFolder, markAsRead, markImportance, forwardTo, redirectTo, assignCategories, stopProcessingRules, deleteMessage.'
+    );
   }
 
   try {
@@ -87,14 +64,9 @@ async function handleCreateRule(args) {
     // Check for fatal warnings (folder not found = no valid action)
     const folderNotFound = actWarnings.some((w) => w.includes('not found'));
     if (folderNotFound && Object.keys(actions).length === 0) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: actWarnings.filter((w) => w.includes('not found')).join('\n'),
-          },
-        ],
-      };
+      return toolError(
+        actWarnings.filter((w) => w.includes('not found')).join('\n')
+      );
     }
 
     // Determine sequence
@@ -167,34 +139,15 @@ async function handleCreateRule(args) {
       };
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: "Failed to create rule. The server didn't return a rule ID.",
-        },
-      ],
-    };
+    return toolError(
+      "Failed to create rule. The server didn't return a rule ID."
+    );
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error creating rule: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error creating rule: ${error.message}`);
   }
 }
 

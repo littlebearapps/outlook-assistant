@@ -65,7 +65,7 @@ params:
   body: "Hi Sarah,\n\nJust confirming our meeting tomorrow at 10am.\n\nCheers"
 ```
 
-Because `send-email` is marked as destructive, your AI assistant will always ask for your confirmation before sending — even without dry run.
+`send-email` is marked as destructive, so clients that honour MCP annotations (such as Claude Code with its default permissions) ask for your confirmation before sending, even without dry run. Whether you're asked depends on your client and its permission settings — see [Confirmation Prompt](#confirmation-prompt) below.
 
 ## Send to Multiple Recipients
 
@@ -103,7 +103,9 @@ Options: `normal` (default), `high`, `low`.
 
 ### Confirmation Prompt
 
-Every send triggers a confirmation prompt in your AI assistant. You must explicitly approve before the email leaves your outbox. This is enforced by the MCP `destructiveHint` annotation — it cannot be bypassed.
+`send-email` carries the MCP `destructiveHint` annotation. Annotations are hints: the server sets them, and your MCP client decides what to do with them. Clients that honour them prompt before a destructive tool runs, but a client can also be configured to auto-approve the tool or to run in a mode that skips prompts, and then the email is sent without asking. Keep `send-email` and `draft` on "ask" in your client's permission settings if you want to approve every send.
+
+On the server side, `send-email` offers `dryRun` previews and enforces the session rate limit and the recipient allowlist below, whatever your client does.
 
 ### Rate Limiting
 
@@ -113,7 +115,7 @@ Set a per-session send limit to prevent runaway sends:
 OUTLOOK_MAX_EMAILS_PER_SESSION=10
 ```
 
-Add this to your MCP server environment variables. Once the limit is reached, further sends are blocked until the session restarts.
+Add this to your MCP server environment variables. Once the limit is reached, further sends are refused with a "Rate limit reached" error until the server restarts. Sending a draft (`draft action=send`) counts towards the same limit. The value is also the default cap for `draft` create/update and `manage-rules`, each counted separately; set `OUTLOOK_MAX_<TOOL>_PER_SESSION` (for example `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION`) to override one tool.
 
 ### Recipient Allowlist
 

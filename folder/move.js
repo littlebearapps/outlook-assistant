@@ -5,6 +5,7 @@ const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { resolveFolder } = require('./resolve');
 const { buildMailboxPrefix } = require('../utils/mailbox');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 /**
  * Move emails handler
@@ -19,25 +20,15 @@ async function handleMoveEmails(args) {
   const sharedMailbox = args.sharedMailbox || args.email || null;
 
   if (!emailIds) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Email IDs are required. Please provide a comma-separated list of email IDs to move.',
-        },
-      ],
-    };
+    return toolError(
+      'Email IDs are required. Please provide a comma-separated list of email IDs to move.'
+    );
   }
 
   if (!targetFolder && !targetFolderId) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Target folder is required — pass `targetFolder` (name or "Parent/Child" path) or `targetFolderId`.',
-        },
-      ],
-    };
+    return toolError(
+      'Target folder is required — pass `targetFolder` (name or "Parent/Child" path) or `targetFolderId`.'
+    );
   }
 
   try {
@@ -51,14 +42,7 @@ async function handleMoveEmails(args) {
       .filter((id) => id);
 
     if (ids.length === 0) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: 'No valid email IDs provided.',
-          },
-        ],
-      };
+      return toolError('No valid email IDs provided.');
     }
 
     // Move emails
@@ -85,24 +69,10 @@ async function handleMoveEmails(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'authenticate' tool first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error moving emails: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error moving emails: ${error.message}`);
   }
 }
 

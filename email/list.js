@@ -16,6 +16,7 @@ const {
   DEFAULT_LIMITS,
 } = require('../utils/response-formatter');
 const { getEmailFields } = require('../utils/field-presets');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 /**
  * Maps verbosity level to field preset
@@ -124,24 +125,10 @@ async function handleListEmails(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'authenticate' tool first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error listing emails: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error listing emails: ${error.message}`);
   }
 }
 

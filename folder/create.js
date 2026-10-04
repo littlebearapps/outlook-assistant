@@ -5,6 +5,7 @@ const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { resolveFolder, listChildFolders } = require('./resolve');
 const { buildMailboxPrefix } = require('../utils/mailbox');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 /**
  * Create folder handler
@@ -18,14 +19,7 @@ async function handleCreateFolder(args) {
   const sharedMailbox = args.sharedMailbox || args.email || null;
 
   if (!folderName) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Folder name is required.',
-        },
-      ],
-    };
+    return toolError('Folder name is required.');
   }
 
   try {
@@ -52,24 +46,10 @@ async function handleCreateFolder(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'authenticate' tool first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error creating folder: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error creating folder: ${error.message}`);
   }
 }
 

@@ -1,7 +1,16 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.littlebearapps/outlook-assistant",
+  "title": "Outlook Assistant",
   "description": "Microsoft Outlook MCP server — 22 tools for email, calendar, contacts, and mailbox management.",
+  "websiteUrl": "https://littlebearapps.com/builds/outlook-assistant",
+  "icons": [
+    {
+      "src": "https://raw.githubusercontent.com/littlebearapps/outlook-assistant/main/docs/assets/outlook-assistant-logo-icon.png",
+      "mimeType": "image/png",
+      "sizes": ["1000x1000"]
+    }
+  ],
   "repository": {
     "url": "https://github.com/littlebearapps/outlook-assistant",
     "source": "github"
@@ -17,8 +26,8 @@
       },
       "environmentVariables": [
         {
-          "description": "Azure AD application client ID",
-          "isRequired": true,
+          "description": "Azure AD application (client) ID. Optional: if it is not set here, supply it at sign-in with the auth tool (action=authenticate clientId=<id>)",
+          "isRequired": false,
           "format": "string",
           "isSecret": false,
           "name": "OUTLOOK_CLIENT_ID"

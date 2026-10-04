@@ -270,7 +270,7 @@ Exceptions use the same conditions with `except` prefix. The rule is skipped whe
 ## Safety
 
 - **`dryRun`**: Preview rules before creating or updating
-- **Rate limiting**: Configure via `OUTLOOK_MAX_MANAGE_RULES_PER_SESSION`
+- **Rate limiting**: create, update and delete count towards a per-session cap, set with `OUTLOOK_MAX_MANAGE_RULES_PER_SESSION` (or `OUTLOOK_MAX_EMAILS_PER_SESSION` when that isn't set)
 - **Recipient allowlist**: `forwardTo` and `redirectTo` are checked against `OUTLOOK_ALLOWED_RECIPIENTS`
 - **No permanent delete**: `deleteMessage` moves to Deleted Items (recoverable). Permanent deletion is not available via this tool.
 - **Replace semantics on update**: When updating conditions or actions, the entire section is replaced. Use `dryRun` to preview before applying.

@@ -5,19 +5,17 @@ startCommand:
     properties:
       OUTLOOK_CLIENT_ID:
         type: 'string'
-        description: 'Azure AD application client ID'
+        description: 'Azure AD application (client) ID. Optional: you can supply it at sign-in instead (auth action=authenticate clientId=<id>)'
       OUTLOOK_CLIENT_SECRET:
         type: 'string'
-        description: 'Azure AD application client secret'
-    required:
-      - OUTLOOK_CLIENT_ID
-      - OUTLOOK_CLIENT_SECRET
+        description: 'Azure AD client secret value. Only needed for the browser sign-in flow; the default device-code flow does not use it'
   commandFunction: |
     (config) => ({
       command: "npx",
       args: ["-y", "@littlebearapps/outlook-assistant"],
-      env: {
-        OUTLOOK_CLIENT_ID: config.OUTLOOK_CLIENT_ID,
-        OUTLOOK_CLIENT_SECRET: config.OUTLOOK_CLIENT_SECRET
-      }
+      env: Object.fromEntries(
+        ["OUTLOOK_CLIENT_ID", "OUTLOOK_CLIENT_SECRET"]
+          .filter((key) => config[key])
+          .map((key) => [key, config[key]])
+      )
     })

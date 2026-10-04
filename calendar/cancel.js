@@ -3,6 +3,7 @@
  */
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 /**
  * Cancel event handler
@@ -13,14 +14,7 @@ async function handleCancelEvent(args) {
   const { eventId, comment } = args;
 
   if (!eventId) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Event ID is required to cancel an event.',
-        },
-      ],
-    };
+    return toolError('Event ID is required to cancel an event.');
   }
 
   try {
@@ -49,24 +43,10 @@ async function handleCancelEvent(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'authenticate' tool first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error cancelling event: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error cancelling event: ${error.message}`);
   }
 }
 

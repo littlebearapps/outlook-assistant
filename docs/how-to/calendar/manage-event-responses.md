@@ -114,7 +114,7 @@ Microsoft Graph doesn't document a guaranteed recovery path for a deleted event,
 | `subject`, `start`, `end`, `attendees`, `body`, `location`, `isOnlineMeeting`, `sensitivity`, `showAs`, `importance`, `categories`, `reminderMinutesBeforeStart` | Event fields to change | No (update only — pass only what changes) |
 | `dryRun` | Preview update without applying | No (update only) |
 
-> **Note**: `manage-event` is marked as destructive at the tool level (because `decline`, `cancel`, and `delete` are destructive). Your AI assistant will ask for confirmation before any action — including `update`. Use `dryRun: true` on `update` to preview the change first.
+> **Note**: `manage-event` is marked as destructive at the tool level (because `decline`, `cancel`, and `delete` are destructive, and changes can notify attendees). Clients that honour MCP annotations ask for confirmation before any action — including `update`. Use `dryRun: true` on `update` to preview the change first.
 
 ## Tips
 

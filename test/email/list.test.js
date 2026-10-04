@@ -1,4 +1,5 @@
 const handleListEmails = require('../../email/list');
+const { authRequiredError } = require('../../utils/tool-error');
 const { callGraphAPIPaginated } = require('../../utils/graph-api');
 const { ensureAuthenticated } = require('../../auth');
 const { resolveFolderPath } = require('../../email/folder-utils');
@@ -218,9 +219,7 @@ describe('handleListEmails', () => {
 
       const result = await handleListEmails({});
 
-      expect(result.content[0].text).toBe(
-        "Authentication required. Please use the 'authenticate' tool first."
-      );
+      expect(result.content[0].text).toBe(authRequiredError().content[0].text);
       expect(callGraphAPIPaginated).not.toHaveBeenCalled();
     });
 

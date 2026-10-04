@@ -19,6 +19,8 @@ const {
   isScopeConsentError,
   isConsentRequiredError,
 } = require('./device-code');
+const { toolMetadata } = require('../utils/risk-classes');
+const { toolError } = require('../utils/tool-error');
 
 // Path for persisting device code state across MCP server restarts
 const DEVICE_CODE_STATE_PATH = path.join(
@@ -552,27 +554,17 @@ async function handleDeviceCodeComplete() {
   }
 
   if (!pendingDeviceCode) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'No pending device code flow. Call authenticate with method=device-code first.',
-        },
-      ],
-    };
+    return toolError('No pending device code flow.', {
+      nextStep: 'Start one with the `auth` tool with action=authenticate.',
+    });
   }
 
   if (Date.now() > pendingDeviceCode.expiresAt) {
     pendingDeviceCode = null;
     saveDeviceCodeState(null);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Device code has expired. Please start a new authentication with action=authenticate.',
-        },
-      ],
-    };
+    return toolError(
+      'Device code has expired. Please start a new authentication with action=authenticate.'
+    );
   }
 
   // Poll with the client ID the code was issued to (older state files don't
@@ -677,14 +669,7 @@ async function handleDeviceCodeComplete() {
       } catch (reissueError) {
         pendingDeviceCode = null;
         saveDeviceCodeState(null);
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Authentication failed: ${reissueError.message}`,
-            },
-          ],
-        };
+        return toolError(`Authentication failed: ${reissueError.message}`);
       }
     }
 
@@ -697,30 +682,18 @@ async function handleDeviceCodeComplete() {
     // Only when the shared scopes were requested — otherwise the generic
     // path below (with its AADSTS hint table) is unchanged.
     if (config.SHARED_SCOPES.length > 0 && isConsentRequiredError(error)) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: [
-              'Authentication failed: consent was not granted (AADSTS65001).',
-              '',
-              `An administrator may need to grant consent for the shared-mailbox scopes (${config.SHARED_SCOPES.join(', ')}), or re-run \`auth action=authenticate\` and approve every requested permission.`,
-              'If your organisation will not consent to them, unset OUTLOOK_SHARED_MAILBOX and restart the server to sign in with the standard scopes.',
-              'No scopes were changed — your configured capability is unchanged.',
-            ].join('\n'),
-          },
-        ],
-      };
+      return toolError(
+        [
+          'Authentication failed: consent was not granted (AADSTS65001).',
+          '',
+          `An administrator may need to grant consent for the shared-mailbox scopes (${config.SHARED_SCOPES.join(', ')}), or re-run \`auth action=authenticate\` and approve every requested permission.`,
+          'If your organisation will not consent to them, unset OUTLOOK_SHARED_MAILBOX and restart the server to sign in with the standard scopes.',
+          'No scopes were changed — your configured capability is unchanged.',
+        ].join('\n')
+      );
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Authentication failed: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Authentication failed: ${error.message}`);
   }
 }
 
@@ -779,12 +752,7 @@ const authTools = [
     name: 'auth',
     description:
       'Manage authentication with the Microsoft Graph API. action=`status` (default) returns the current auth state and auto-refreshes the access token if it\'s expired but the refresh token is still valid (~90-day window) — call this first to check before other tools. action=`authenticate` starts the OAuth flow: with `method: "device-code"` (default, works headlessly) it returns a code + URL for the user to visit; with `method: "browser"` it opens the local auth server on :3333 (run `npm run auth-server` first). Pass `force: true` to re-authenticate over an existing valid session. If sign-in reports that OUTLOOK_CLIENT_ID is not configured, ask the user for their Azure Application (client) ID and pass it as `clientId`. action=`device-code-complete` finishes device-code auth after the user enters the code in their browser — call this once authentication shows as successful in the browser. action=`about` returns server version, configured audience, scope list, and other diagnostic info. Tokens persist to `~/.outlook-assistant-tokens.json` and survive server restarts.',
-    annotations: {
-      title: 'Authentication',
-      readOnlyHint: false,
-      destructiveHint: false,
-      openWorldHint: false,
-    },
+    ...toolMetadata('auth', 'Authentication'),
     inputSchema: {
       type: 'object',
       properties: {
@@ -825,14 +793,9 @@ const authTools = [
         case 'status':
           return handleCheckAuthStatus();
         default:
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Unknown action '${action}'. Valid actions: status, authenticate, device-code-complete, about.`,
-              },
-            ],
-          };
+          return toolError(
+            `Unknown action '${action}'. Valid actions: status, authenticate, device-code-complete, about.`
+          );
       }
     },
   },

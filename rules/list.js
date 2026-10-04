@@ -3,6 +3,7 @@
  */
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
+const { toolError, authRequiredError } = require('../utils/tool-error');
 
 /**
  * List rules handler
@@ -27,24 +28,10 @@ async function handleListRules(args) {
     };
   } catch (error) {
     if (error.message === 'Authentication required') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: "Authentication required. Please use the 'auth' tool with action=authenticate first.",
-          },
-        ],
-      };
+      return authRequiredError();
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error listing rules: ${error.message}`,
-        },
-      ],
-    };
+    return toolError(`Error listing rules: ${error.message}`);
   }
 }
 

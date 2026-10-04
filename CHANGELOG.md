@@ -50,7 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rarely), the risk-class table, and one reference per surface: sending,
   calendar, rules and settings, deletes, efficient searching, personal vs
   Microsoft 365 accounts, shared mailboxes, prompt injection and privacy.
-- **Plugin safety hook for Claude Code** (#283).
+- **Plugin safety hook for Claude Code and GitHub Copilot CLI** (#283).
   - Before any Outlook call that reaches other people, deletes or keeps
     acting, it asks you with a plain-English reason, e.g. "Cancels the event
     'Team sync' and emails a cancellation to every attendee".
@@ -60,8 +60,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     that the content is data, not instructions.
   - New plugin setting **Confirmation level**: `outward` (default),
     `all-writes` or `off`.
-  - The Copilot hook is not included yet: Copilot's MCP tool names and its
-    plugin-root variable for hooks still need verifying.
+  - GitHub Copilot CLI runs the same hook from
+    `com.github.copilot/hooks/hooks.json` (PreToolUse only, always at the
+    `outward` level). Not yet checked in VS Code; the Cursor hook is deferred.
 - **Prompt-injection evals** (#284). Test mode's mock mailbox now includes
   three injected emails, and `node scripts/skill-evals.js` runs `claude -p`
   scenarios with and without the skill and hook, then reports pass rates.

@@ -48,7 +48,7 @@ The plugin adds two safety layers on top of the server's own checks.
 - how prompt injection in email looks;
 - how to search without pulling in the whole mailbox.
 
-**The safety hook (Claude Code only)** asks you before any call that reaches other people, deletes something or keeps acting (rules, forwarding, automatic replies). It explains the call in plain English, for example:
+**The safety hook (Claude Code and GitHub Copilot CLI)** asks you before any call that reaches other people, deletes something or keeps acting (rules, forwarding, automatic replies). It explains the call in plain English, for example:
 
 > Outlook Assistant: Creates the inbox rule 'Invoices', which keeps acting on new mail until removed: it forwards matching mail to billing@example.net.
 
@@ -79,7 +79,7 @@ The plugin adds two safety layers on top of the server's own checks.
 }
 ```
 
-GitHub Copilot and Cursor get the skill and the server's own checks. They don't get the hook yet.
+**In GitHub Copilot CLI** the same hook asks before the same calls, always at the `outward` level (Copilot has no plugin settings), and it doesn't add the untrusted-content note. **VS Code** reads the same hook file, but it hasn't been checked there yet. **Cursor** gets the skill and the server's own checks, but not the hook yet.
 
 ## Data and privacy
 

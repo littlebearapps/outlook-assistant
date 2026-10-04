@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 /**
- * Outlook Assistant safety hook (#283).
+ * Outlook Assistant safety hook (#283), for Claude Code (hooks/hooks.json)
+ * and GitHub Copilot CLI (com.github.copilot/hooks/hooks.json, which passes
+ * `copilot` as the second argument so Copilot's tool names are recognised).
  *
  * PreToolUse: classifies each Outlook Assistant tool call with risk-map.json
  * (generated from the server's utils/risk-classes.js) and asks the user before
@@ -26,8 +28,15 @@
 const fs = require('fs');
 const path = require('path');
 
-/** Tool-name prefixes this plugin's MCP server gets in each client. */
-const TOOL_PREFIXES = ['mcp__plugin_outlook-assistant_outlook__'];
+/**
+ * The prefix each client gives this plugin's MCP server tools, chosen by the
+ * client argument hooks.json passes. Copilot CLI names them
+ * `<server>-<tool>` (verified with Copilot CLI 1.0.91).
+ */
+const TOOL_PREFIXES = {
+  claude: 'mcp__plugin_outlook-assistant_outlook__',
+  copilot: 'outlook-',
+};
 
 const CONFIRM_LEVELS = {
   outward: new Set(['outward', 'destructive', 'persistent']),
@@ -61,12 +70,15 @@ function loadRiskMap() {
  * The Outlook Assistant tool a client tool name refers to, or null if the
  * call belongs to some other tool or server.
  * @param {string} toolName
+ * @param {string} [client] - `claude` (default) or `copilot`
  * @returns {string|null}
  */
-function outlookTool(toolName) {
+function outlookTool(toolName, client = 'claude') {
   if (typeof toolName !== 'string') return null;
-  const prefix = TOOL_PREFIXES.find((p) => toolName.startsWith(p));
-  return prefix ? toolName.slice(prefix.length) : null;
+  const prefix = Object.hasOwn(TOOL_PREFIXES, client)
+    ? TOOL_PREFIXES[client]
+    : TOOL_PREFIXES.claude;
+  return toolName.startsWith(prefix) ? toolName.slice(prefix.length) : null;
 }
 
 /** The action a call runs, falling back to the tool's default action. */
@@ -370,10 +382,11 @@ function ask(reason) {
  * The hook's output for one PreToolUse call, or null to stay silent.
  * @param {object} payload - hook input (tool_name, tool_input)
  * @param {object} [env]
+ * @param {string} [client] - `claude` (default) or `copilot`
  * @returns {object|null}
  */
-function preToolUse(payload, env = process.env) {
-  const tool = outlookTool(payload?.tool_name);
+function preToolUse(payload, env = process.env, client = 'claude') {
+  const tool = outlookTool(payload?.tool_name, client);
   if (!tool) return null;
   const input =
     payload.tool_input && typeof payload.tool_input === 'object'
@@ -408,10 +421,11 @@ function preToolUse(payload, env = process.env) {
 /**
  * The hook's output for one PostToolUse call, or null to stay silent.
  * @param {object} payload
+ * @param {string} [client] - `claude` (default) or `copilot`
  * @returns {object|null}
  */
-function postToolUse(payload) {
-  const tool = outlookTool(payload?.tool_name);
+function postToolUse(payload, client = 'claude') {
+  const tool = outlookTool(payload?.tool_name, client);
   if (!tool || !loadRiskMap()[tool]?.untrustedContent) return null;
   return {
     hookSpecificOutput: {
@@ -427,16 +441,18 @@ function postToolUse(payload) {
  * @param {string} raw - stdin
  * @param {string} [eventArg] - event name from the command line
  * @param {object} [env]
+ * @param {string} [client] - `claude` (default) or `copilot`, from the
+ *   command line
  * @returns {object|null}
  */
-function handle(raw, eventArg, env = process.env) {
+function handle(raw, eventArg, env = process.env, client = 'claude') {
   let payload;
   let event = eventArg;
   try {
     payload = JSON.parse(raw);
     event = payload.hook_event_name ?? eventArg;
-    if (event === 'PostToolUse') return postToolUse(payload);
-    return preToolUse(payload, env);
+    if (event === 'PostToolUse') return postToolUse(payload, client);
+    return preToolUse(payload, env, client);
   } catch (err) {
     if (event === 'PostToolUse') {
       return {
@@ -458,7 +474,9 @@ if (require.main === module) {
   process.stdin.on('end', () => {
     const output = handle(
       Buffer.concat(chunks).toString('utf8'),
-      process.argv[2]
+      process.argv[2],
+      process.env,
+      process.argv[3]
     );
     // Let stdout drain (pipes can be asynchronous) before the process ends.
     if (output) process.stdout.write(JSON.stringify(output));

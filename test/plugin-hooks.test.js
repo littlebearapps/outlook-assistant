@@ -20,6 +20,7 @@ const {
   preToolUse,
 } = require('../plugins/outlook-assistant/hooks/outlook-gate');
 const hooksJson = require('../plugins/outlook-assistant/hooks/hooks.json');
+const copilotHooks = require('../plugins/outlook-assistant/com.github.copilot/hooks/hooks.json');
 const claudePlugin = require('../plugins/outlook-assistant/.claude-plugin/plugin.json');
 
 const execFileAsync = promisify(execFile);
@@ -100,6 +101,58 @@ describe('hooks.json', () => {
   });
 });
 
+describe('Copilot hooks (com.github.copilot/hooks/hooks.json)', () => {
+  // Copilot CLI 1.0.91 reads this file for Agent Plugins, names MCP tools
+  // `<server>-<tool>`, expands ${PLUGIN_ROOT} and sends PascalCase events the
+  // Claude-style payload (tool_name, tool_input).
+  const groups = copilotHooks.hooks.PreToolUse;
+
+  test('is a version 1 file with only PreToolUse', () => {
+    expect(copilotHooks.version).toBe(1);
+    expect(Object.keys(copilotHooks.hooks)).toEqual(['PreToolUse']);
+  });
+
+  test('matches every Outlook tool under its Copilot name', () => {
+    for (const { matcher } of groups) {
+      const re = new RegExp(`^(?:${matcher})$`);
+      for (const tool of Object.keys(TOOL_RISK)) {
+        expect(re.test(`outlook-${tool}`)).toBe(true);
+      }
+      expect(re.test('github-create_issue')).toBe(false);
+    }
+  });
+
+  test('runs the same gate from the plugin root in copilot mode', () => {
+    for (const group of groups) {
+      for (const hook of group.hooks) {
+        expect(hook.command).toBe(
+          'node "${PLUGIN_ROOT}/hooks/outlook-gate.js" PreToolUse copilot'
+        );
+      }
+    }
+  });
+
+  test('copilot mode asks before risky calls and ignores other tools', () => {
+    const copilot = (name, input) =>
+      handle(
+        JSON.stringify({
+          hook_event_name: 'PreToolUse',
+          tool_name: name,
+          tool_input: input,
+        }),
+        'PreToolUse',
+        {},
+        'copilot'
+      );
+    expect(
+      decision(copilot('outlook-manage-rules', { action: 'create', name: 'X' }))
+    ).toBe('ask');
+    expect(copilot('outlook-search-emails', {})).toBeNull();
+    expect(copilot('github-create_issue', {})).toBeNull();
+    expect(copilot(`${PREFIX}send-email`, {})).toBeNull();
+  });
+});
+
 describe('outlookTool', () => {
   test('strips this plugin’s prefix and ignores other tools', () => {
     expect(outlookTool(`${PREFIX}send-email`)).toBe('send-email');
@@ -107,6 +160,12 @@ describe('outlookTool', () => {
     expect(outlookTool('mcp__plugin_other_outlook__send-email')).toBeNull();
     expect(outlookTool('Bash')).toBeNull();
     expect(outlookTool(undefined)).toBeNull();
+    // Copilot names only count in copilot mode, and vice versa.
+    expect(outlookTool('outlook-send-email')).toBeNull();
+    expect(outlookTool('outlook-send-email', 'copilot')).toBe('send-email');
+    expect(outlookTool(`${PREFIX}send-email`, 'copilot')).toBeNull();
+    // An unknown client falls back to Claude names.
+    expect(outlookTool(`${PREFIX}send-email`, 'nope')).toBe('send-email');
   });
 });
 

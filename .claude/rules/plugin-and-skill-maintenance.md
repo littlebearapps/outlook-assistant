@@ -1,6 +1,6 @@
 # Plugin and skill maintenance
 
-The marketplace plugin (`plugins/outlook-assistant/`) ships the MCP server pinned to an exact npm version. v3.14.0 (milestone #6) adds an agent skill (`skills/using-outlook-assistant/`, #282) and a Claude Code hook (`hooks/`, #283; the Copilot hook is deferred until its tool names and plugin-root variable are verified). They must stay in step with the server, or the safety guidance drifts from what the tools actually do.
+The marketplace plugin (`plugins/outlook-assistant/`) ships the MCP server pinned to an exact npm version. v3.14.0 (milestone #6) adds an agent skill (`skills/using-outlook-assistant/`, #282) and a safety hook (#283): `hooks/hooks.json` for Claude Code and `com.github.copilot/hooks/hooks.json` for Copilot CLI (its tools are named `outlook-<tool>`, verified on Copilot CLI 1.0.91), both running `hooks/outlook-gate.js`. The Cursor hook is deferred. They must stay in step with the server, or the safety guidance drifts from what the tools actually do.
 
 ## Already in place (v3.13.0)
 

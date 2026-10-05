@@ -35,6 +35,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (invited) or removes (sent a cancellation), and plainly when nobody is
   emailed (no attendees, not the organiser, or only your own reminder,
   categories or show-as changed). The PATCH body still follows.
+- **Automatic-reply schedules show the real time** (#304). `mailbox-settings`
+  printed the scheduled start and end as a bare UTC time in US date order
+  with no zone (`10/5/2026, 1:45:00 AM` for 5 Oct, 12:45 pm in Melbourne).
+  `get`, `set-auto-replies` and its dry run now show the UTC instant plus a
+  labelled local time in the display timezone, as `list-events` does.
 
 ### Changed
 

@@ -305,7 +305,7 @@ function formatRuleDryRunPreview(rule) {
       `Sent to: ${cond.sentToAddresses.map((a) => a.emailAddress?.address).join(', ')}`
     );
   }
-  if (cond.hasAttachment === true) condParts.push('Has attachment');
+  if (cond.hasAttachments === true) condParts.push('Has attachment');
   if (cond.importance) condParts.push(`Importance: ${cond.importance}`);
   if (cond.sensitivity) condParts.push(`Sensitivity: ${cond.sensitivity}`);
   if (cond.sentToMe === true) condParts.push('Sent to me');
@@ -361,7 +361,7 @@ function formatRuleDryRunPreview(rule) {
   if (exc.bodyContains?.length > 0) {
     excParts.push(`Body contains: "${exc.bodyContains.join('", "')}"`);
   }
-  if (exc.hasAttachment === true) excParts.push('Has attachment');
+  if (exc.hasAttachments === true) excParts.push('Has attachment');
   if (excParts.length > 0) {
     lines.push(`Exceptions (rule skipped when): ${excParts.join('; ')}`);
   }

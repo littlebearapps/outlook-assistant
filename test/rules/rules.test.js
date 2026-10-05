@@ -49,7 +49,7 @@ const mockRuleWithExceptions = {
   isEnabled: true,
   sequence: 3,
   conditions: {
-    hasAttachment: true,
+    hasAttachments: true,
     subjectContains: ['invoice', 'receipt', 'payment'],
   },
   actions: {
@@ -216,7 +216,7 @@ describe('handleCreateRule', () => {
       'receipt',
       'payment',
     ]);
-    expect(ruleBody.conditions.hasAttachment).toBe(true);
+    expect(ruleBody.conditions.hasAttachments).toBe(true);
   });
 
   it('should create a rule with bodyContains', async () => {
@@ -510,7 +510,7 @@ describe('handleUpdateRule', () => {
       'invoice',
       'receipt',
     ]);
-    expect(patchCall[3].conditions.hasAttachment).toBe(true);
+    expect(patchCall[3].conditions.hasAttachments).toBe(true);
     // fromAddresses should NOT be in patch (not provided in update)
     expect(patchCall[3].conditions.fromAddresses).toBeUndefined();
   });

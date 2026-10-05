@@ -16,6 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   empty. `0` now refuses every real send, draft write, invitation or rule
   change it covers.
 
+### Fixed
+
+- **Inbox rules with "has attachments" can be created again** (#300).
+  `manage-rules` sent `hasAttachment`, but Graph's rule property is
+  `hasAttachments`, so any rule using `hasAttachments` or
+  `exceptHasAttachments` failed with a 400 (`UnableToDeserializePostBody`).
+  Listing and dry-run previews read the same wrong name, so they missed the
+  condition on rules made in Outlook. A test now checks every rule key against
+  Graph's property list.
+
 ### Changed
 
 - **Session limits fail closed** (#302). Unset or empty still means no

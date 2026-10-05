@@ -73,15 +73,15 @@ scripts/
 
 ## Plugin Layout
 
-The marketplace plugin ships the server pinned to an exact npm version, plus an agent skill and a safety hook. Each client reads its own manifest; all of them share `mcp.json`, `skills/` and `hooks/outlook-gate.js`.
+The marketplace plugin ships the server pinned to an exact npm version, plus an agent skill and a safety hook. Each client reads its own manifest; all of them share `mcp.json`, `skills/` and `hooks/outlook-gate.js`. Hermes Agent (v3.15.0) loads the Agent Plugins files but no hook file, so a second, native plugin, `outlook-assistant-guard`, runs the same gate there: a `plugin.yaml` beside `plugin.json` would hide `mcp.json` and the skill, and native plugins can't start MCP servers.
 
 ```
 .claude-plugin/marketplace.json   # Self-hosted Claude Code marketplace (repo root)
 
 plugins/outlook-assistant/
   ├── .claude-plugin/plugin.json  # Claude Code: userConfig settings + inline mcpServers (${user_config.*})
-  ├── plugin.json                 # Agent Plugins 1.0 manifest (GitHub Copilot CLI, VS Code); closed schema
-  ├── mcp.json                    # Plain MCP launcher (pinned npx); Copilot, VS Code and Cursor read it
+  ├── plugin.json                 # Agent Plugins 1.0 manifest (GitHub Copilot CLI, VS Code, Hermes Agent); closed schema
+  ├── mcp.json                    # Plain MCP launcher (pinned npx); Copilot, VS Code, Cursor and Hermes read it
   ├── .cursor-plugin/plugin.json  # Cursor (v3.14.0): no mcpServers, so Cursor uses mcp.json; points at hooks/hooks-cursor.json
   ├── com.github.copilot/hooks/hooks.json  # Copilot CLI / VS Code: PreToolUse + PostToolUse, runs the gate with `copilot`
   ├── hooks/
@@ -92,6 +92,14 @@ plugins/outlook-assistant/
   └── skills/using-outlook-assistant/
       ├── SKILL.md                # Hard rules first; generated risk table and metadata.version
       └── references/             # One file per surface (sending, calendar, rules and settings, search, ...)
+
+plugins/outlook-assistant-guard/  # Hermes Agent native plugin (v3.15.0), installed beside the one above
+  ├── plugin.yaml                 # name, version (synced), requires_hermes, provides_hooks, confirm_level setting
+  ├── __init__.py                 # register(): pre_tool_call, transform_tool_result, system-prompt section; raises if a file is missing
+  ├── gate.py                     # Runs hooks/outlook-gate.js with `hermes`; any failure asks ("couldn't check")
+  ├── hooks/outlook-gate.js       # Generated copy of the gate (scripts/sync-risk-map.js); a subdir install can't reach the sibling
+  ├── hooks/risk-map.json         # Generated copy of the risk map
+  └── system-prompt.md            # Generated: the server's hard rules plus a pointer to the skill
 ```
 
 ## Risk Classes

@@ -17,7 +17,7 @@
   <a href="https://glama.ai/mcp/servers/littlebearapps/outlook-assistant"><img src="https://glama.ai/mcp/servers/littlebearapps/outlook-assistant/badges/score.svg" alt="Glama score" /></a>
 </p>
 
-Outlook Assistant connects AI assistants to your Microsoft Outlook account through the [Model Context Protocol](https://modelcontextprotocol.io/). Ask your AI assistant to search your inbox, send emails, schedule meetings, manage contacts, and configure mailbox settings — without leaving the conversation. Works with Claude, GitHub Copilot, Cursor, Windsurf, and any MCP-compatible client.
+Outlook Assistant connects AI assistants to your Microsoft Outlook account through the [Model Context Protocol](https://modelcontextprotocol.io/). Ask your AI assistant to search your inbox, send emails, schedule meetings, manage contacts, and configure mailbox settings — without leaving the conversation. Works with Claude, GitHub Copilot, Cursor, Hermes Agent, Windsurf, and any MCP-compatible client.
 
 **Works with personal Outlook.com and work/school Microsoft 365 accounts.**
 
@@ -133,6 +133,7 @@ Outlook Assistant is designed with safety-first principles for AI-driven email a
 - **Claude Code:** asks with the reason, even for tools you've allowed; set the level with the plugin's **Confirmation level** setting. In bypass permissions mode Claude Code may auto-approve these prompts (the [plugin README](plugins/outlook-assistant/README.md#skill-and-safety-hook) has ask rules to keep them).
 - **GitHub Copilot CLI:** asks with the reason; set the level with `OUTLOOK_CONFIRM_LEVEL`. A hook that times out lets the call through. VS Code reads the same hook file (not yet checked by hand).
 - **Cursor:** the hook blocks the call if it fails or times out, but Cursor's own "Run this MCP tool?" prompt doesn't show the reason, and an `Mcp(...)` allow rule, or `--force` / Run Everything mode, runs the call without asking.
+- **Hermes Agent:** Hermes doesn't run plugin hooks, so a second plugin, [`outlook-assistant-guard`](plugins/outlook-assistant-guard/), asks through Hermes's own approval gate with the same reason (a terminal prompt, or `/approve` in the messaging gateway), refuses these calls when nobody can answer (cron, `-q`), and puts the hard rules in the system prompt. `--yolo` skips the prompt unless its `confirm_level` is `block`.
 - **Other clients:** no hook; the server's checks, annotations and instructions still apply.
 
 See [Supported Clients and Their Limits](docs/how-to/getting-started/supported-clients.md) for the details.
@@ -201,9 +202,9 @@ You need a Microsoft Azure app registration to authenticate. See the **[Azure Se
 
 ### 3. Configure Your MCP Client
 
-**Client support.** Every MCP client gets the server's own checks. The plugin adds the `using-outlook-assistant` skill and a safety hook in Claude Code, GitHub Copilot and Cursor, with different limits in each. See [Supported Clients and Their Limits](docs/how-to/getting-started/supported-clients.md).
+**Client support.** Every MCP client gets the server's own checks. The plugin adds the `using-outlook-assistant` skill and a safety hook in Claude Code, GitHub Copilot and Cursor, and in Hermes Agent with the separate guard plugin, with different limits in each. See [Supported Clients and Their Limits](docs/how-to/getting-started/supported-clients.md).
 
-**Plugin install.** The plugin ([`plugins/outlook-assistant`](plugins/outlook-assistant/)) bundles the server pinned to an exact version, the skill and the safety hook. It follows both the Claude Code plugin format and the [Agent Plugins](https://agent-plugins.org/) format used by GitHub Copilot, plus a Cursor manifest (`.cursor-plugin/`).
+**Plugin install.** The plugin ([`plugins/outlook-assistant`](plugins/outlook-assistant/)) bundles the server pinned to an exact version, the skill and the safety hook. It follows both the Claude Code plugin format and the [Agent Plugins](https://agent-plugins.org/) format used by GitHub Copilot and Hermes Agent, plus a Cursor manifest (`.cursor-plugin/`).
 
 - **Claude Code.** The plugin asks for your settings when you enable it (client ID, sign-in audience, send limit per session, allowed recipients, read-only mode and confirmation level):
 
@@ -222,6 +223,25 @@ You need a Microsoft Azure app registration to authenticate. See the **[Azure Se
   VS Code's Copilot agent reads the same plugin and hook file; that hasn't been checked by hand yet.
 
 - **Cursor** (v3.14.0 or later). Cursor loads the folder as a Cursor plugin (`.cursor-plugin/plugin.json`). In Cursor CLI, load it from a clone of this repository with `cursor-agent --plugin-dir outlook-assistant/plugins/outlook-assistant`. Give your client ID when you first sign in. The v3.13.0 plugin can't sign in from Cursor (`AADSTS900023`); use the manual config below instead.
+
+- **Hermes Agent** (0.21.5 or later). Install the plugin and its guard, which adds the safety checks Hermes doesn't take from the plugin, then start a new session. Give your client ID when you first sign in:
+
+  ```bash
+  hermes plugins install littlebearapps/outlook-assistant/plugins/outlook-assistant --enable
+  hermes plugins install littlebearapps/outlook-assistant/plugins/outlook-assistant-guard --enable
+  ```
+
+  Once they're in the Hermes plugin catalog, `hermes plugins install outlook-assistant --enable` works too. Hermes doesn't pass your `.env` values to a plugin's server, so for read-only mode, the allowlist or other settings, add your own `outlook` server to `~/.hermes/config.yaml`; it replaces the plugin's server, and the skill and guard still apply:
+
+  ```yaml
+  mcp_servers:
+    outlook:
+      command: npx
+      args: ['-y', '@littlebearapps/outlook-assistant']
+      env:
+        OUTLOOK_READ_ONLY: 'true'
+        OUTLOOK_ALLOWED_RECIPIENTS: 'example.com'
+  ```
 
 **Manual config.** Use this for Claude Desktop, Codex CLI, Gemini CLI, Windsurf and other MCP clients, or in place of a plugin (you then get no hook). Add to your MCP client config. Only `OUTLOOK_CLIENT_ID` is needed for the default device-code sign-in; add `OUTLOOK_CLIENT_SECRET` only if you use the [browser flow](#browser-redirect-flow-alternative). You can also leave the client ID out and give it to your assistant when you first connect (`auth action=authenticate clientId=…`), which saves it to `~/.outlook-assistant-config.json`. An `OUTLOOK_CLIENT_ID` in the environment always takes precedence.
 
@@ -443,7 +463,7 @@ USE_TEST_MODE=false
 | `OUTLOOK_DEBUG` | Detailed stderr logs: `true` (or `1`/`yes`/`on`) adds search strategies, subjects, folder names and Graph error bodies, with email addresses and long IDs redacted. Off, each tool call logs one line (tool, action, outcome, duration) and never its arguments. Tokens, device codes and secrets are never logged. See [Server Logs and Debug Logging](docs/troubleshooting.md#server-logs-and-debug-logging). | off |
 | `OUTLOOK_EXPORT_DIR` | Extra folder that `export` and `attachments` downloads may write into. Without it, files can only go to the system temp directory, `~/Downloads` or `~/Documents`; other paths are refused. Absolute path (a leading `~` is expanded). | unset |
 
-`OUTLOOK_CONFIRM_LEVEL` (`outward`, `all-writes` or `off`; default `outward`) isn't a server setting: the plugin's safety hook reads it, in clients with no plugin settings (GitHub Copilot, VS Code, Cursor). Set it in the environment the client starts from, not in the server's `env` block. In Claude Code, use the plugin's **Confirmation level** setting instead. See [Supported Clients and Their Limits](docs/how-to/getting-started/supported-clients.md).
+`OUTLOOK_CONFIRM_LEVEL` (`outward`, `all-writes` or `off`; default `outward`) isn't a server setting: the plugin's safety hook reads it, in clients with no plugin settings (GitHub Copilot, VS Code, Cursor) and as a fallback for the Hermes guard. Set it in the environment the client starts from, not in the server's `env` block. In Claude Code, use the plugin's **Confirmation level** setting instead. See [Supported Clients and Their Limits](docs/how-to/getting-started/supported-clients.md).
 
 ### MCP Client Configuration
 

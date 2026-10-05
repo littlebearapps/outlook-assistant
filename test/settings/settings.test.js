@@ -14,6 +14,12 @@ jest.mock('../../auth');
 
 const mockAccessToken = 'test_token';
 
+// Schedule times render in the configured display timezone (#304), so build
+// the expected local text the same way rather than hard-coding Melbourne.
+const { DEFAULT_TIMEZONE } = require('../../config');
+const { formatLocal } = require('../../calendar/list');
+const local = (utc) => `${utc} (${formatLocal(utc, DEFAULT_TIMEZONE)})`;
+
 beforeEach(() => {
   jest.resetAllMocks();
   jest.spyOn(console, 'error').mockImplementation();
@@ -614,7 +620,7 @@ describe('set-auto-replies dryRun', () => {
     const text = result.content[0].text;
     expect(text).toMatch(/^DRY RUN — nothing was changed\./);
     expect(text).toContain(
-      'Status: scheduled, from 2026-12-20T00:00:00.000Z (20 Dec 2026, 11:00 am GMT+11:00) to 2027-01-05T00:00:00.000Z (5 Jan 2027, 11:00 am GMT+11:00).'
+      `Status: scheduled, from ${local('2026-12-20T00:00:00.000Z')} to ${local('2027-01-05T00:00:00.000Z')}.`
     );
     expect(text).toContain(
       'Internal senders (your organisation): get a 25-character reply: "I\'m away until 5 January."'
@@ -730,10 +736,10 @@ describe('scheduled auto-reply times (#304)', () => {
     const text = result.content[0].text;
 
     expect(text).toContain(
-      '**Scheduled Start**: 2026-10-05T01:45:00.000Z (5 Oct 2026, 12:45 pm GMT+11:00)'
+      `**Scheduled Start**: ${local('2026-10-05T01:45:00.000Z')}`
     );
     expect(text).toContain(
-      '**Scheduled End**: 2026-10-05T02:00:00.000Z (5 Oct 2026, 1:00 pm GMT+11:00)'
+      `**Scheduled End**: ${local('2026-10-05T02:00:00.000Z')}`
     );
     expect(text).not.toMatch(/10\/5\/2026/);
   });

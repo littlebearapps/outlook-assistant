@@ -157,7 +157,7 @@ The `draft` tool inherits the same safety controls as `send-email`:
 | Send rate limiting | `send` | Shared with `send-email`: `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION`; `0` blocks every send, unset = no limit |
 | Drafts-only guard | `update`, `send`, `delete` | Always on (non-drafts are refused) |
 
-With an allowlist set, `send` checks the draft's to, cc and bcc as they are at send time, so a recipient added later (including in Outlook) is caught before anything goes out. `reply` and `reply-all` check the recipients Graph fills in from the original message; if any isn't allowed, the new draft is deleted and the call is refused. A refused reply, or one whose draft couldn't be created, doesn't count towards the rate limit (since v3.14.1). Dry runs don't count towards the rate limit.
+With an allowlist set, `send` checks the draft's to, cc and bcc as they are at send time, so a recipient added later (including in Outlook) is caught before anything goes out. `reply` and `reply-all` check the recipients Graph fills in from the original message; if any isn't allowed, the new draft is deleted and the call is refused. Since v3.14.1 a refused reply doesn't count towards the rate limit once its draft has been deleted, and neither does one Graph rejects outright (a 4xx other than 408). A timeout, a server error (5xx), a 408 or a failed delete keeps the slot used, because a draft may have been left behind. Dry runs don't count towards the rate limit.
 
 ## Tips
 

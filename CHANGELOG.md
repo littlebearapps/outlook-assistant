@@ -25,7 +25,8 @@ Read the upgrade note if you set a session limit to `0`.
 
 - **Session limits fail closed** (#302). Unset or empty still means no
   limit. `0` refuses every real call to the tool it covers, and so does any
-  value that isn't a whole number (such as `-1`, `1.5` or `unlimited`). A
+  value that isn't a whole number (such as `-1`, `1.5` or `unlimited`), or is
+  too large to count, also blocks it. A
   tool's own `OUTLOOK_MAX_<TOOL>_PER_SESSION` still wins over
   `OUTLOOK_MAX_EMAILS_PER_SESSION`, so `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION=0`
   with `OUTLOOK_MAX_DRAFT_PER_SESSION=20` lets the AI draft but never send.
@@ -59,7 +60,9 @@ Read the upgrade note if you set a session limit to `0`.
   update reaches (with the external count), who an `attendees` change adds
   (invited) or removes (sent a cancellation), and plainly when nobody is
   emailed (no attendees, not the organiser, or only your own reminder,
-  categories or show-as changed). The PATCH body still follows.
+  categories or show-as changed). An `attendees`-only change says that only
+  the people added or removed are emailed, as Graph does, and rooms and
+  resources count as recipients. The PATCH body still follows.
 - **Automatic-reply schedules show the real time** (#304). `mailbox-settings`
   printed the scheduled start and end as a bare UTC time in US date order
   with no zone (`10/5/2026, 1:45:00 AM` for 5 Oct, 12:45 pm in Melbourne).
@@ -72,7 +75,8 @@ Read the upgrade note if you set a session limit to `0`.
   attachment points to `attachments` action=`download` (not the old
   `download-attachment` tool); `manage-category` action=`set` says it is a
   deprecated alias for `update`; and `export` target=`mime` with
-  `headersOnly` keeps the headers within `maxSize`.
+  `headersOnly` keeps the headers within `maxSize`, cut at a character
+  boundary.
 - **Delta sync labels every page correctly** (#262). Pages after the first
   of an initial `search-emails` `deltaMode` sync were labelled incremental
   and their emails counted as Created/Updated. The server now remembers which
@@ -82,7 +86,8 @@ Read the upgrade note if you set a session limit to `0`.
   guessed. The email list heading also names the folder ("Emails in Legal")
   instead of the verbosity ("Emails in standard", #306).
 - **Smaller gaps from the live test** (#307): `manage-rules` reorder now
-  lists the resulting rule order, since Exchange can renumber the other
+  lists the resulting rule order and names any rule Exchange renumbered (old
+  → new), since Exchange can renumber the other
   rules and deleting a rule later doesn't shift them back.
   `access-shared-mailbox` adds the "enable shared-mailbox scopes" hint to a
   404 as well as a 403 while `OUTLOOK_SHARED_MAILBOX` is off. An empty
@@ -93,8 +98,9 @@ Read the upgrade note if you set a session limit to `0`.
   that Graph rejects outright (a 4xx), no longer uses up a session-limit
   slot; a timeout, server error or failed delete keeps the slot used, since
   a draft may be left behind; the
-  `folders` `stats` hints name `search-emails` with `deltaMode: true`, not a
-  `list-emails-delta` or `list-emails` tool that doesn't exist; and the `folders`
+  `folders` `stats` hints name `search-emails` with `deltaMode: true` for
+  folders over 50 messages (list mode stops at 50), not a `list-emails-delta`
+  or `list-emails` tool that doesn't exist; and the `folders`
   `sourceFolder`, `apply-category` batch and `export` batch-format
   descriptions now match what the code does (`sourceFolder` is ignored; one
   request per message; batch export also takes mime/eml).

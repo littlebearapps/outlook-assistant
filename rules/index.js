@@ -111,10 +111,18 @@ async function handleEditRuleSequence(args) {
     let order = '';
     try {
       const after = await getInboxRules(accessToken);
+      const before = new Map(rules.map((r) => [r.id, r.sequence]));
       const lines = [...after]
         .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0))
         .map((r) => `${r.sequence}: ${r.displayName}`);
-      order = `\n\nRule order now (sequence: name). Other rules may have been renumbered; note it if you need to restore it:\n${lines.join('\n')}`;
+      const moved = after.filter(
+        (r) => r.id !== rule.id && before.get(r.id) !== r.sequence
+      );
+      const movedNote =
+        moved.length > 0
+          ? `\n\nRenumbered by Exchange: ${moved.map((r) => `"${r.displayName}" ${before.get(r.id)} → ${r.sequence}`).join('; ')}. Tell the user; deleting a rule later doesn't shift them back.`
+          : '\n\nNo other rule was renumbered.';
+      order = `\n\nRule order now (sequence: name):\n${lines.join('\n')}${movedNote}`;
     } catch (_error) {
       // The reorder succeeded; the order listing is a courtesy.
     }

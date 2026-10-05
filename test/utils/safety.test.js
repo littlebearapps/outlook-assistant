@@ -230,3 +230,17 @@ describe('findBlockedRecipients address validation', () => {
     ).toBeNull();
   });
 });
+
+test('a limit too large to count safely fails closed (CodeRabbit on #308)', () => {
+  const saved = process.env.OUTLOOK_MAX_EMAILS_PER_SESSION;
+  process.env.OUTLOOK_MAX_EMAILS_PER_SESSION = '9'.repeat(400);
+  try {
+    expect(resolveSessionLimit('limit-test')).toMatchObject({
+      limit: 0,
+      invalid: true,
+    });
+  } finally {
+    if (saved === undefined) delete process.env.OUTLOOK_MAX_EMAILS_PER_SESSION;
+    else process.env.OUTLOOK_MAX_EMAILS_PER_SESSION = saved;
+  }
+});

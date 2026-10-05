@@ -47,9 +47,12 @@ function resolveSessionLimit(toolName) {
     const raw = process.env[key];
     if (raw === undefined || raw.trim() === '') continue;
     const value = raw.trim();
-    if (/^\d+$/.test(value)) {
+    const parsed = /^\d+$/.test(value) ? Number(value) : NaN;
+    // A huge digit string parses to an unsafe number (even Infinity), which
+    // the counter would never reach: fail closed like any other bad value.
+    if (Number.isSafeInteger(parsed)) {
       return {
-        limit: parseInt(value, 10),
+        limit: parsed,
         envKey: key,
         raw: value,
         invalid: false,

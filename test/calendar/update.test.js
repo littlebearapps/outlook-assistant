@@ -671,3 +671,73 @@ test('update dryRun stays a preview when the event cannot be read (#303)', async
   expect(result.content[0].text).toMatch(/^DRY RUN — nothing was changed\./);
   expect(result.content[0].text).toMatch(/Couldn't read the event/);
 });
+
+// CodeRabbit review on #308: attendee-only updates email only who changed;
+// a room-only meeting still notifies its room.
+describe('handleUpdateEvent dryRun recipients, review follow-ups', () => {
+  const base = {
+    subject: 'Planning',
+    start: { dateTime: '2026-10-06T00:00:00.0000000', timeZone: 'UTC' },
+    isOrganizer: true,
+    organizer: { emailAddress: { address: 'me@corp.com' } },
+  };
+  const mockEvent = (attendees) =>
+    callGraphAPI.mockImplementation((_t, method, path) =>
+      path === 'me'
+        ? Promise.resolve({ mail: 'me@corp.com' })
+        : Promise.resolve({ ...base, attendees })
+    );
+
+  beforeEach(() => {
+    callGraphAPI.mockReset();
+    ensureAuthenticated.mockReset();
+    ensureAuthenticated.mockResolvedValue('token');
+  });
+
+  test('an attendee-only change emails only the people added or removed', async () => {
+    mockEvent([
+      { emailAddress: { address: 'keep@corp.com' }, type: 'required' },
+      { emailAddress: { address: 'gone@gmail.com' }, type: 'required' },
+    ]);
+    const result = await handleUpdateEvent({
+      eventId: 'evt_1',
+      attendees: ['keep@corp.com', 'new@corp.com'],
+      dryRun: true,
+    });
+    const text = result.content[0].text;
+    expect(text).toMatch(/Only the people added or removed are emailed/);
+    expect(text).toMatch(/Added \(sent an invitation\): new@corp\.com/);
+    expect(text).toMatch(/Removed \(sent a cancellation\): gone@gmail\.com/);
+    expect(text).not.toMatch(/keep@corp\.com \(/);
+    expect(result._meta).toMatchObject({ notified: 2, external: 1 });
+  });
+
+  test('an attendee list that does not change emails nobody', async () => {
+    mockEvent([
+      { emailAddress: { address: 'keep@corp.com' }, type: 'required' },
+    ]);
+    const result = await handleUpdateEvent({
+      eventId: 'evt_1',
+      attendees: ['keep@corp.com'],
+      dryRun: true,
+    });
+    expect(result.content[0].text).toMatch(/No attendee is added or removed/);
+    expect(result._meta.notified).toBe(0);
+  });
+
+  test('a room-only meeting is not reported as emailing nobody', async () => {
+    mockEvent([
+      { emailAddress: { address: 'room1@corp.com' }, type: 'resource' },
+    ]);
+    const result = await handleUpdateEvent({
+      eventId: 'evt_1',
+      start: '2026-10-06T12:00:00',
+      dryRun: true,
+    });
+    const text = result.content[0].text;
+    expect(text).not.toMatch(/nobody is emailed/);
+    expect(text).toMatch(/rooms or resources are sent the update/);
+    expect(text).toMatch(/room1@corp\.com/);
+    expect(result._meta.notified).toBe(1);
+  });
+});

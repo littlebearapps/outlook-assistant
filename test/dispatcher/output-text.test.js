@@ -146,3 +146,13 @@ test('attachments view names the real download action', async () => {
   expect(text).toMatch(/Use `attachments` action=`download`/);
   expect(text).not.toMatch(/download-attachment/);
 });
+
+test('the MIME header cut never splits a UTF-8 character', () => {
+  const { utf8Prefix } = require('../../email/mime');
+  // "é" is 2 bytes: cutting at 2 would split the second one.
+  expect(utf8Prefix('aéé', 2)).toBe('a');
+  expect(utf8Prefix('aéé', 3)).toBe('aé');
+  expect(utf8Prefix('abc', 10)).toBe('abc');
+  expect(utf8Prefix('a😀', 4)).toBe('a');
+  expect(utf8Prefix('aéé', 4)).not.toMatch(/�/);
+});

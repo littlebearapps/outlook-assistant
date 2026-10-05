@@ -180,7 +180,9 @@ function formatFolderStats(folder, dateRange, verbosity) {
       text += `| Date Range | ${oldest} to ${newest} |\n`;
     }
 
-    if (totalItems > 100) {
+    // List mode returns at most 50 with no page cursor, so anything bigger
+    // needs delta sync to read in full.
+    if (totalItems > 50) {
       text += `\n_Hint: Use \`search-emails\` with \`deltaMode: true\` for efficient incremental sync of large folders._`;
     }
 
@@ -210,7 +212,10 @@ function formatFolderStats(folder, dateRange, verbosity) {
   text += `|---------|-------|\n`;
   text += `| Page Size | ${pageSize} emails |\n`;
   text += `| Total Pages | ${totalPages} |\n`;
-  text += `| Estimated API Calls | ${totalPages} (search-emails list mode) |\n`;
+  text +=
+    totalItems > 50
+      ? `| Estimated API Calls | ${Math.ceil(totalItems / 100)} (\`search-emails\` \`deltaMode: true\`, 100 per page; list mode stops at 50) |\n`
+      : `| Estimated API Calls | 1 (\`search-emails\` list mode, \`count\` up to 50) |\n`;
 
   if (dateRange) {
     const newestDate = new Date(dateRange.newest);
@@ -235,7 +240,7 @@ function formatFolderStats(folder, dateRange, verbosity) {
   if (totalItems > 1000) {
     text += `- **Large folder**: Use \`search-emails\` with \`deltaMode: true\` for incremental sync\n`;
     text += `- **Use date filters**: \`receivedAfter\` and \`receivedBefore\` to narrow scope\n`;
-  } else if (totalItems > 100) {
+  } else if (totalItems > 50) {
     text += `- **Medium folder**: Consider \`search-emails\` with \`deltaMode: true\` for efficient updates\n`;
   } else {
     text += `- **Small folder**: \`search-emails\` in list mode (raise \`count\` up to 50) is enough\n`;

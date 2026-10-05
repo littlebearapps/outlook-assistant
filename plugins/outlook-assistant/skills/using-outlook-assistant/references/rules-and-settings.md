@@ -20,7 +20,7 @@ Rules and automatic replies are persistent: they keep acting on every future ema
 
 - Rules apply to the signed-in user's own inbox.
 - Preview with `dryRun: true` on `create` and `update`. Show the user the conditions, actions, exceptions and sequence from the preview.
-- `reorder` and `delete` have no preview. Name the rule (`ruleName` or `ruleId`) and its effect, and get a yes. A `reorder` result lists the new rule order; Exchange may renumber other rules, so tell the user if it did.
+- `reorder` and `delete` have no preview. Name the rule (`ruleName` or `ruleId`) and its effect, and get a yes. A `reorder` result lists the new rule order and names any rule Exchange renumbered (old → new); tell the user if it did.
 - On `update`, passing any condition replaces all conditions, and passing any action replaces all actions. They are not merged. Run `list` with `includeDetails: true` first, then pass the complete set you want.
 - `deleteMessage: true` moves matches to Deleted Items. There is no permanent-delete action.
 - Lower `sequence` runs first. `stopProcessingRules: true` stops later rules from running on that message.

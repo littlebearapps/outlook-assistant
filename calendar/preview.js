@@ -385,37 +385,67 @@ async function describeUpdateRecipients(accessToken, { eventId, patch }) {
     return { lines, notified: 0, external: 0 };
   }
 
-  if (after.people.length === 0 && before.people.length === 0) {
+  const empty = (summary) =>
+    summary.people.length === 0 && summary.resources.length === 0;
+  if (empty(before) && empty(after)) {
     lines.push(`Updates ${title}. It has no attendees, so nobody is emailed.`);
     return { lines, notified: 0, external: 0 };
   }
 
-  lines.push(
-    after.people.length > 0
-      ? `Updates ${title} and emails an update to ${countPhrase(after)}.`
-      : `Updates ${title} and removes every attendee.`
-  );
-  if (patch.attendees) {
-    const key = (p) => p.address.toLowerCase();
-    const beforeSet = new Set(before.people.map(key));
-    const afterSet = new Set(after.people.map(key));
-    const added = after.people.filter((p) => !beforeSet.has(key(p)));
-    const removed = before.people.filter((p) => !afterSet.has(key(p)));
-    if (added.length > 0) {
-      lines.push(
-        `Added (sent an invitation): ${added.map((p) => p.address).join(', ')}`
-      );
-    }
-    if (removed.length > 0) {
-      lines.push(
-        `Removed (sent a cancellation): ${removed.map((p) => p.address).join(', ')}`
-      );
-    }
+  const key = (address) => address.toLowerCase();
+  const beforeSet = new Set(before.people.map((p) => key(p.address)));
+  const afterSet = new Set(after.people.map((p) => key(p.address)));
+  const added = after.people.filter((p) => !beforeSet.has(key(p.address)));
+  const removed = before.people.filter((p) => !afterSet.has(key(p.address)));
+  const changeLines = [];
+  if (added.length > 0) {
+    changeLines.push(
+      `Added (sent an invitation): ${added.map((p) => p.address).join(', ')}`
+    );
   }
-  lines.push(...recipientLines(after));
+  if (removed.length > 0) {
+    changeLines.push(
+      `Removed (sent a cancellation): ${removed.map((p) => p.address).join(', ')}`
+    );
+  }
+
+  // Graph emails only the attendees whose status changed when the PATCH
+  // carries nothing but `attendees` (except removing a distribution-list
+  // member, which updates everyone): event-update docs.
+  if (fields.length === 1 && fields[0] === 'attendees') {
+    const changed = [...added, ...removed];
+    if (changed.length === 0) {
+      lines.push(
+        `Updates ${title}. No attendee is added or removed, so nobody is emailed.`
+      );
+      return { lines, notified: 0, external: 0 };
+    }
+    lines.push(
+      `Updates the attendees of ${title}. Only the people added or removed are emailed; the others aren't (unless a removed address is a distribution list, when Graph emails every attendee).`,
+      ...changeLines
+    );
+    const external =
+      after.external === null && before.external === null
+        ? null
+        : changed.filter((p) => p.external).length;
+    return { lines, notified: changed.length, external };
+  }
+
+  if (after.people.length > 0) {
+    lines.push(
+      `Updates ${title} and emails an update to ${countPhrase(after)}.`
+    );
+  } else if (after.resources.length > 0) {
+    lines.push(
+      `Updates ${title}. It has no people attendees; its rooms or resources are sent the update.`
+    );
+  } else {
+    lines.push(`Updates ${title} and removes every attendee.`);
+  }
+  lines.push(...changeLines, ...recipientLines(after));
   return {
     lines,
-    notified: after.people.length,
+    notified: after.people.length + after.resources.length,
     external: after.external,
   };
 }

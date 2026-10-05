@@ -51,8 +51,64 @@ test('manage-rules reorder lists the resulting order, sorted', async () => {
   );
 
   expect(text).toMatch(/to 1\./);
-  expect(text).toMatch(/Other rules may have been renumbered/);
   expect(text).toMatch(/1: Test rule\n2: JMK\n3: Paperless/);
+  expect(text).toMatch(/No other rule was renumbered/);
+});
+
+test('manage-rules reorder names each rule Exchange renumbered, old to new', async () => {
+  let reads = 0;
+  graph.callGraphAPI.mockImplementation((_t, method) => {
+    if (method !== 'GET') return Promise.resolve({});
+    reads++;
+    return Promise.resolve({
+      value:
+        reads === 1
+          ? [
+              { id: 'a', displayName: 'First', sequence: 1 },
+              { id: 'b', displayName: 'New', sequence: 5 },
+            ]
+          : [
+              { id: 'b', displayName: 'New', sequence: 1 },
+              { id: 'a', displayName: 'First', sequence: 2 },
+            ],
+    });
+  });
+
+  const text = textOf(
+    await run('manage-rules', {
+      action: 'reorder',
+      ruleName: 'New',
+      sequence: 1,
+    })
+  );
+
+  expect(text).toMatch(/Renumbered by Exchange: "First" 1 → 2/);
+  expect(text).not.toMatch(/"New" 5/);
+});
+
+test('folders stats points folders over 50 items at delta sync', async () => {
+  graph.callGraphAPI.mockImplementation((_t, _m, path) =>
+    Promise.resolve(
+      /messages/.test(path)
+        ? { value: [] }
+        : {
+            id: 'f1',
+            displayName: 'Inbox',
+            totalItemCount: 80,
+            unreadItemCount: 0,
+          }
+    )
+  );
+  const text = textOf(
+    await run('folders', {
+      action: 'stats',
+      folder: 'inbox',
+      outputVerbosity: 'full',
+    })
+  );
+  expect(text).toMatch(/Medium folder/);
+  expect(text).toMatch(/deltaMode: true`, 100 per page; list mode stops at 50/);
+  expect(text).not.toMatch(/Small folder/);
 });
 
 test('access-shared-mailbox 404 adds the enable hint while the opt-in is off', async () => {

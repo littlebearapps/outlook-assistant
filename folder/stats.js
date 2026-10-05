@@ -181,7 +181,7 @@ function formatFolderStats(folder, dateRange, verbosity) {
     }
 
     if (totalItems > 100) {
-      text += `\n_Hint: Use list-emails-delta for efficient incremental sync of large folders._`;
+      text += `\n_Hint: Use \`search-emails\` with \`deltaMode: true\` for efficient incremental sync of large folders._`;
     }
 
     return { text, meta };
@@ -233,10 +233,10 @@ function formatFolderStats(folder, dateRange, verbosity) {
   text += `\n## Recommendations\n\n`;
 
   if (totalItems > 1000) {
-    text += `- **Large folder**: Use \`list-emails-delta\` for incremental sync\n`;
+    text += `- **Large folder**: Use \`search-emails\` with \`deltaMode: true\` for incremental sync\n`;
     text += `- **Use date filters**: \`receivedAfter\` and \`receivedBefore\` to narrow scope\n`;
   } else if (totalItems > 100) {
-    text += `- **Medium folder**: Consider using \`list-emails-delta\` for efficient updates\n`;
+    text += `- **Medium folder**: Consider \`search-emails\` with \`deltaMode: true\` for efficient updates\n`;
   } else {
     text += `- **Small folder**: \`list-emails\` with default pagination is efficient\n`;
   }

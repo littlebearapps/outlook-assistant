@@ -8,6 +8,7 @@ const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const {
   checkRateLimit,
+  releaseRateLimit,
   checkRecipientAllowlist,
   findBlockedRecipients,
   getRecipientAllowlist,
@@ -426,14 +427,16 @@ async function handleReplyDraft(args, endpoint) {
 
   const actionName = endpoint === 'createReplyAll' ? 'reply-all' : 'reply';
 
-  // Counted before the draft is created: a reply that the allowlist refuses
-  // below has still written (and removed) a draft.
+  // Taken before the draft is created, and given back if nothing is left
+  // behind: the create fails, or the allowlist refuses the reply and its
+  // draft is deleted again (#299).
   const rateLimitError = checkRateLimit('draft');
   if (rateLimitError) return rateLimitError;
 
+  let draft;
   try {
     const accessToken = await ensureAuthenticated();
-    const draft = await callGraphAPI(
+    draft = await callGraphAPI(
       accessToken,
       'POST',
       `me/messages/${id}/${endpoint}`,
@@ -443,13 +446,17 @@ async function handleReplyDraft(args, endpoint) {
     // Graph fills in the recipients from the original message, so they can
     // only be checked once the draft exists.
     const refusal = await refuseBlockedReply(accessToken, draft, actionName);
-    if (refusal) return refusal;
+    if (refusal) {
+      releaseRateLimit('draft');
+      return refusal;
+    }
 
     return formatDraftResponse(
       draft,
       `${actionName.charAt(0).toUpperCase()}${actionName.slice(1)} draft created`
     );
   } catch (error) {
+    if (!draft) releaseRateLimit('draft');
     return handleError(`creating ${actionName} draft`, error);
   }
 }

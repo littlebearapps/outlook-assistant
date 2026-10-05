@@ -355,6 +355,48 @@ describe('draft rate limit covers reply, reply-all and forward', () => {
     expect(allowed.isError).toBeUndefined();
   });
 
+  // #299: the slot was taken before the reply draft existed and kept even
+  // when the allowlist refused it and the draft was deleted again.
+  test('a reply refused by the allowlist gives its draft slot back', async () => {
+    process.env.OUTLOOK_ALLOWED_RECIPIENTS = 'example.com';
+    process.env.OUTLOOK_MAX_DRAFT_PER_SESSION = '1';
+    callGraphAPI.mockImplementation((_t, method) => {
+      if (method === 'DELETE') return Promise.resolve({});
+      return Promise.resolve({
+        id: 'd1',
+        toRecipients: [recipient('eve@outside.test')],
+        ccRecipients: [],
+        bccRecipients: [],
+      });
+    });
+
+    const refused = await handleDraft({ action: 'reply', id: 'msg-1' });
+    expect(refused.isError).toBe(true);
+    expect(refused.content[0].text).not.toMatch(/Rate limit reached/);
+
+    callGraphAPI.mockResolvedValue({
+      id: 'd2',
+      toRecipients: [recipient('alice@example.com')],
+      ccRecipients: [],
+      bccRecipients: [],
+    });
+    const allowed = await handleDraft({ action: 'reply', id: 'msg-2' });
+    expect(allowed.isError).toBeUndefined();
+  });
+
+  test('a reply whose draft could not be created gives its slot back', async () => {
+    process.env.OUTLOOK_MAX_DRAFT_PER_SESSION = '1';
+    callGraphAPI.mockRejectedValueOnce(
+      new Error('API call failed with status 404')
+    );
+    const failed = await handleDraft({ action: 'reply', id: 'missing' });
+    expect(failed.isError).toBe(true);
+
+    callGraphAPI.mockResolvedValue({ id: 'd3' });
+    const next = await handleDraft({ action: 'reply', id: 'msg-1' });
+    expect(next.isError).toBeUndefined();
+  });
+
   test('without a limit configured, reply is unlimited', async () => {
     callGraphAPI.mockResolvedValue({ id: 'd1' });
     for (let i = 0; i < 15; i++) {

@@ -540,7 +540,7 @@ const emailTools = [
   {
     name: 'export',
     description:
-      'Export emails to files. target=`message` (default) exports one email by `id` (mime/eml/markdown/json/csv) to `savePath`: a directory (or a path ending in `/`, created if missing) gets a new, unique file name; a file path is created new and an existing file is replaced only with `overwrite: true`. target=`messages` batch-exports `emailIds`, or matches for `searchQuery`/`query`, into `outputDir` (markdown/json/csv), at most 100 messages per call. target=`conversation` exports a thread (up to 1000 messages) by `conversationId` into `outputDir` (eml/mbox/markdown/json/html/csv; `order: "reverse"` for newest first). target=`mime` returns raw RFC-822 MIME for `id` (`headersOnly`, `base64`, `maxSize`, default 1MB). Files are written only inside the system temp directory (the default), ~/Downloads, ~/Documents or OUTLOOK_EXPORT_DIR, never to dot-prefixed names. Pass `sharedMailbox` (alias `email`) when the ids come from a shared mailbox. `includeAttachments` defaults to true for one message, false for batch.',
+      'Export emails to files. target=`message` (default) exports one email by `id` (mime/eml/markdown/json/csv) to `savePath`: a directory (or a path ending in `/`, created if missing) gets a new, unique file name; a file path is created new and an existing file is replaced only with `overwrite: true`. target=`messages` batch-exports `emailIds`, or matches for `searchQuery`/`query`, into `outputDir`, at most 100 messages per call. target=`conversation` exports a thread (up to 1000 messages) by `conversationId` into `outputDir` (eml/mbox/markdown/json/html/csv; `order: "reverse"` for newest first). target=`mime` returns raw RFC-822 MIME for `id` (`headersOnly`, `base64`, `maxSize`, default 1MB). Files are written only inside the system temp directory (the default), ~/Downloads, ~/Documents or OUTLOOK_EXPORT_DIR, never to dot-prefixed names. Pass `sharedMailbox` (alias `email`) when the ids come from a shared mailbox. `includeAttachments` defaults to true for one message, false for batch.',
     ...toolMetadata('export', 'Export Emails'),
     inputSchema: {
       type: 'object',
@@ -559,7 +559,7 @@ const emailTools = [
           type: 'string',
           enum: ['mime', 'eml', 'markdown', 'json', 'mbox', 'html', 'csv'],
           description:
-            'Export format. Valid values vary by target: target=message accepts mime/eml/markdown/json/csv (mbox and html are conversation-only). target=conversation accepts eml/mbox/markdown/json/html/csv. target=messages (batch) accepts markdown/json/csv. mime is an alias for eml (same RFC822 bytes, .eml extension on disk).',
+            'Export format. Valid values vary by target: target=message accepts mime/eml/markdown/json/csv (mbox and html are conversation-only). target=conversation accepts eml/mbox/markdown/json/html/csv. target=messages (batch) accepts mime/eml/markdown/json (one file per message) or csv (one file). mime is an alias for eml (same RFC822 bytes, .eml extension on disk).',
         },
         savePath: {
           type: 'string',

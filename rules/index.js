@@ -111,12 +111,10 @@ async function handleEditRuleSequence(args) {
     let order = '';
     try {
       const after = await getInboxRules(accessToken);
-      order =
-        '\n\nRule order now (sequence: name). Other rules may have been renumbered; note it if you need to restore it:\n' +
-        [...after]
-          .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0))
-          .map((r) => `${r.sequence}: ${r.displayName}`)
-          .join('\n');
+      const lines = [...after]
+        .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0))
+        .map((r) => `${r.sequence}: ${r.displayName}`);
+      order = `\n\nRule order now (sequence: name). Other rules may have been renumbered; note it if you need to restore it:\n${lines.join('\n')}`;
     } catch (_error) {
       // The reorder succeeded; the order listing is a courtesy.
     }

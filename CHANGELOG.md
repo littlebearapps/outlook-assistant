@@ -63,6 +63,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   404 as well as a 403 while `OUTLOOK_SHARED_MAILBOX` is off. An empty
   folder-scoped search now suggests Junk Email, where mail from a new sender
   often lands.
+- **Small fixes from the v3.14.0 docs sweep** (#299): a `draft` reply or
+  reply-all that the allowlist refuses (its draft deleted again), or whose
+  draft couldn't be created, no longer uses up a session-limit slot; the
+  `folders` `stats` hints name `search-emails` with `deltaMode: true`, not a
+  `list-emails-delta` tool that doesn't exist; and the `folders`
+  `sourceFolder`, `apply-category` batch and `export` batch-format
+  descriptions now match what the code does (`sourceFolder` is ignored; one
+  request per message; batch export also takes mime/eml).
 
 ### Changed
 

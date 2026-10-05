@@ -138,6 +138,16 @@ function checkRateLimit(toolName, limit) {
 }
 
 /**
+ * Give back a slot taken by checkRateLimit when the call turned out to
+ * leave nothing behind (e.g. a reply draft the allowlist refused and that
+ * was deleted again, #299).
+ * @param {string} toolName
+ */
+function releaseRateLimit(toolName) {
+  if (sessionCounters[toolName] > 0) sessionCounters[toolName]--;
+}
+
+/**
  * The configured recipient allowlist (OUTLOOK_ALLOWED_RECIPIENTS), lower-cased.
  * @returns {string[]|null} - Exact addresses and bare domains, or null if none
  */
@@ -409,6 +419,7 @@ function dryRunUnsupported(toolName, action, previewAction) {
 
 module.exports = {
   checkRateLimit,
+  releaseRateLimit,
   resolveSessionLimit,
   describeSessionLimits,
   blockedTools,

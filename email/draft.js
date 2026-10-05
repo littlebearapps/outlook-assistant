@@ -427,9 +427,10 @@ async function handleReplyDraft(args, endpoint) {
 
   const actionName = endpoint === 'createReplyAll' ? 'reply-all' : 'reply';
 
-  // Taken before the draft is created, and given back if nothing is left
-  // behind: the create fails, or the allowlist refuses the reply and its
-  // draft is deleted again (#299).
+  // Taken before the draft is created, and given back only when nothing is
+  // definitely left behind (#299): Graph rejected the create with a 4xx, or
+  // the allowlist refused the reply and its draft was deleted again. A
+  // timeout, 5xx or failed delete may leave a draft, so the slot stays used.
   const rateLimitError = checkRateLimit('draft');
   if (rateLimitError) return rateLimitError;
 
@@ -447,8 +448,8 @@ async function handleReplyDraft(args, endpoint) {
     // only be checked once the draft exists.
     const refusal = await refuseBlockedReply(accessToken, draft, actionName);
     if (refusal) {
-      releaseRateLimit('draft');
-      return refusal;
+      if (refusal.draftDeleted) releaseRateLimit('draft');
+      return refusal.error;
     }
 
     return formatDraftResponse(
@@ -456,7 +457,9 @@ async function handleReplyDraft(args, endpoint) {
       `${actionName.charAt(0).toUpperCase()}${actionName.slice(1)} draft created`
     );
   } catch (error) {
-    if (!draft) releaseRateLimit('draft');
+    if (!draft && /status 4\d\d\b/.test(error.message || '')) {
+      releaseRateLimit('draft');
+    }
     return handleError(`creating ${actionName} draft`, error);
   }
 }
@@ -468,7 +471,8 @@ async function handleReplyDraft(args, endpoint) {
  * @param {string} accessToken - Graph access token
  * @param {object} draft - The draft Graph returned from createReply/createReplyAll
  * @param {string} actionName - 'reply' or 'reply-all'
- * @returns {Promise<object|null>} A tool error, or null to keep the draft
+ * @returns {Promise<{error: object, draftDeleted: boolean}|null>} The
+ *   refusal and whether its draft was deleted, or null to keep the draft
  */
 async function refuseBlockedReply(accessToken, draft, actionName) {
   if (!getRecipientAllowlist()) return null;
@@ -500,18 +504,22 @@ async function refuseBlockedReply(accessToken, draft, actionName) {
   try {
     await callGraphAPI(accessToken, 'DELETE', `me/messages/${draft.id}`);
   } catch (error) {
-    return toolError(
+    const stillThere = toolError(
       `${reason} The draft Graph created could not be deleted (${error.message}), so it is still in Drafts with ID \`${draft.id}\`. Do not send it.`,
       {
         nextStep: `Delete it with draft action=delete id=${draft.id} (or in Outlook). ${nextStep}`,
       }
     );
+    return { error: stillThere, draftDeleted: false };
   }
 
-  return toolError(
-    `${reason} The draft Graph created was deleted, so nothing was kept.`,
-    { nextStep }
-  );
+  return {
+    error: toolError(
+      `${reason} The draft Graph created was deleted, so nothing was kept.`,
+      { nextStep }
+    ),
+    draftDeleted: true,
+  };
 }
 
 /**

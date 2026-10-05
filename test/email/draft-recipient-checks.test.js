@@ -397,6 +397,47 @@ describe('draft rate limit covers reply, reply-all and forward', () => {
     expect(next.isError).toBeUndefined();
   });
 
+  // The slot stays used whenever a draft may have been left behind, so a
+  // failing call can't be used to create drafts past the limit.
+  test.each([
+    ['a timeout', new Error('Request timed out after 60000 ms')],
+    ['a 5xx', new Error('API call failed with status 503: unavailable')],
+  ])('a reply that failed with %s keeps its slot', async (_label, error) => {
+    process.env.OUTLOOK_MAX_DRAFT_PER_SESSION = '1';
+    callGraphAPI.mockRejectedValueOnce(error);
+    const failed = await handleDraft({ action: 'reply', id: 'msg-1' });
+    expect(failed.isError).toBe(true);
+
+    callGraphAPI.mockResolvedValue({ id: 'd4' });
+    const next = await handleDraft({ action: 'reply', id: 'msg-1' });
+    expect(next.content[0].text).toMatch(/Rate limit reached/);
+  });
+
+  test('a refused reply whose draft could not be deleted keeps its slot', async () => {
+    process.env.OUTLOOK_ALLOWED_RECIPIENTS = 'example.com';
+    process.env.OUTLOOK_MAX_DRAFT_PER_SESSION = '1';
+    callGraphAPI.mockImplementation((_t, method) => {
+      if (method === 'DELETE') {
+        return Promise.reject(new Error('API call failed with status 500'));
+      }
+      return Promise.resolve({
+        id: 'd5',
+        toRecipients: [recipient('eve@outside.test')],
+        ccRecipients: [],
+        bccRecipients: [],
+      });
+    });
+    const refused = await handleDraft({ action: 'reply', id: 'msg-1' });
+    expect(refused.content[0].text).toMatch(/could not be deleted/);
+
+    const next = await handleDraft({
+      action: 'create',
+      to: 'a@example.com',
+      subject: 'x',
+    });
+    expect(next.content[0].text).toMatch(/Rate limit reached/);
+  });
+
   test('without a limit configured, reply is unlimited', async () => {
     callGraphAPI.mockResolvedValue({ id: 'd1' });
     for (let i = 0; i < 15; i++) {

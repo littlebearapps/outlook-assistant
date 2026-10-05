@@ -210,7 +210,7 @@ function formatFolderStats(folder, dateRange, verbosity) {
   text += `|---------|-------|\n`;
   text += `| Page Size | ${pageSize} emails |\n`;
   text += `| Total Pages | ${totalPages} |\n`;
-  text += `| Estimated API Calls | ${totalPages} (list-emails) |\n`;
+  text += `| Estimated API Calls | ${totalPages} (search-emails list mode) |\n`;
 
   if (dateRange) {
     const newestDate = new Date(dateRange.newest);
@@ -238,7 +238,7 @@ function formatFolderStats(folder, dateRange, verbosity) {
   } else if (totalItems > 100) {
     text += `- **Medium folder**: Consider \`search-emails\` with \`deltaMode: true\` for efficient updates\n`;
   } else {
-    text += `- **Small folder**: \`list-emails\` with default pagination is efficient\n`;
+    text += `- **Small folder**: \`search-emails\` in list mode (raise \`count\` up to 50) is enough\n`;
   }
 
   if (unreadItems > 50) {

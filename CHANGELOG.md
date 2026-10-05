@@ -56,6 +56,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   continuation token from before a restart is labelled as such rather than
   guessed. The email list heading also names the folder ("Emails in Legal")
   instead of the verbosity ("Emails in standard", #306).
+- **Smaller gaps from the live test** (#307): `manage-rules` reorder now
+  lists the resulting rule order, since Exchange can renumber the other
+  rules and deleting a rule later doesn't shift them back.
+  `access-shared-mailbox` adds the "enable shared-mailbox scopes" hint to a
+  404 as well as a 403 while `OUTLOOK_SHARED_MAILBOX` is off. An empty
+  folder-scoped search now suggests Junk Email, where mail from a new sender
+  often lands.
 
 ### Changed
 

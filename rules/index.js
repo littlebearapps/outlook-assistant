@@ -106,11 +106,26 @@ async function handleEditRuleSequence(args) {
       { sequence }
     );
 
+    // Exchange may renumber other rules to make room, and deleting a rule
+    // later doesn't shift them back (#307), so show the resulting order.
+    let order = '';
+    try {
+      const after = await getInboxRules(accessToken);
+      order =
+        '\n\nRule order now (sequence: name). Other rules may have been renumbered; note it if you need to restore it:\n' +
+        [...after]
+          .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0))
+          .map((r) => `${r.sequence}: ${r.displayName}`)
+          .join('\n');
+    } catch (_error) {
+      // The reorder succeeded; the order listing is a courtesy.
+    }
+
     return {
       content: [
         {
           type: 'text',
-          text: `Successfully updated the sequence of rule "${ruleName}" to ${sequence}.`,
+          text: `Successfully updated the sequence of rule "${ruleName}" to ${sequence}.${order}`,
         },
       ],
     };

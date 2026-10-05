@@ -67,8 +67,8 @@ async function handleExportEmail(args) {
   }
 
   // Where to write, checked before anything is fetched. F-27: `outputDir`
-  // is always a directory. `savePath` names a directory if one exists
-  // there, otherwise the file to write. With no path, the system temp
+  // is always a directory. `savePath` names a directory if it ends in a
+  // separator or one exists there, otherwise the file to write. With no path, the system temp
   // directory is used. Writes go to the resolved path, never the raw one.
   let explicitFile = null;
   let requestedFile = null; // savePath as given, for messages
@@ -77,6 +77,10 @@ async function handleExportEmail(args) {
   try {
     if (args.outputDir) {
       targetDir = confineOutputPath(args.outputDir);
+    } else if (args.savePath && /[\\/]$/.test(args.savePath)) {
+      // A trailing separator names a directory even when it doesn't exist
+      // yet; resolving the path drops it, so decide here (#301).
+      targetDir = confineOutputPath(args.savePath);
     } else if (args.savePath) {
       const target = confineOutputTarget(args.savePath);
       const resolved = target.path;

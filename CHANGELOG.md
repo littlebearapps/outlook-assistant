@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Listing and dry-run previews read the same wrong name, so they missed the
   condition on rules made in Outlook. A test now checks every rule key against
   Graph's property list.
+- **`export` with a `savePath` ending in `/` creates that folder** (#301).
+  Before, a folder that didn't exist yet became an extensionless file of that
+  name. It now gets a new folder (0700) with a uniquely named file inside,
+  as `outputDir` does.
 
 ### Changed
 

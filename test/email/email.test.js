@@ -740,3 +740,59 @@ describe('handleSearchByMessageId', () => {
     );
   });
 });
+
+// #262: pages after the first of an initial sync were labelled incremental
+// and their items counted as Created/Updated.
+describe('handleListEmailsDelta sync phase across pages (#262)', () => {
+  const page = (n, next) => ({
+    value: [{ id: `m${n}`, subject: `S${n}`, receivedDateTime: '2026-10-05' }],
+    ...next,
+  });
+  const skip = (n) =>
+    `https://graph.microsoft.com/v1.0/me/mailFolders('f')/messages/delta?$skiptoken=page${n}`;
+  const delta =
+    "https://graph.microsoft.com/v1.0/me/mailFolders('f')/messages/delta?$deltatoken=done";
+  // Delta pages come off this queue; any other call (folder lookup) gets a
+  // folder.
+  let pages;
+  beforeEach(() => {
+    pages = [];
+    callGraphAPI.mockImplementation((_t, _m, path) =>
+      Promise.resolve(/delta/.test(path) ? pages.shift() : { id: 'f' })
+    );
+  });
+
+  it('labels every page of an initial sync as initial', async () => {
+    pages.push(page(1, { '@odata.nextLink': skip(2) }));
+    const first = await handleListEmailsDelta({ maxResults: 1 });
+    expect(first._meta.syncType).toBe('initial');
+
+    pages.push(page(2, { '@odata.deltaLink': delta }));
+    const last = await handleListEmailsDelta({
+      deltaToken: skip(2),
+      maxResults: 1,
+    });
+    expect(last._meta.syncType).toBe('initial');
+    expect(last._meta.changesSummary).toMatchObject({ created: 1, updated: 0 });
+    expect(last.content[0].text).toContain('Delta Sync (Initial)');
+    expect(last.content[0].text).not.toMatch(/Emails in standard/);
+  });
+
+  it('labels the continuation of an incremental sync as incremental', async () => {
+    pages.push(page(3, { '@odata.nextLink': skip(4) }));
+    const first = await handleListEmailsDelta({ deltaToken: delta });
+    expect(first._meta.syncType).toBe('incremental');
+
+    pages.push(page(4, { '@odata.deltaLink': delta }));
+    const next = await handleListEmailsDelta({ deltaToken: skip(4) });
+    expect(next._meta.syncType).toBe('incremental');
+    expect(next._meta.changesSummary.updated).toBe(1);
+  });
+
+  it('says so when a continuation token was not issued by this server', async () => {
+    pages.push(page(5, { '@odata.deltaLink': delta }));
+    const result = await handleListEmailsDelta({ deltaToken: skip(99) });
+    expect(result._meta.syncType).toBe('unknown');
+    expect(result.content[0].text).toMatch(/initial or incremental unknown/);
+  });
+});

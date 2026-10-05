@@ -48,6 +48,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `download-attachment` tool); `manage-category` action=`set` says it is a
   deprecated alias for `update`; and `export` target=`mime` with
   `headersOnly` keeps the headers within `maxSize`.
+- **Delta sync labels every page correctly** (#262). Pages after the first
+  of an initial `search-emails` `deltaMode` sync were labelled incremental
+  and their emails counted as Created/Updated. The server now remembers which
+  sync each continuation token belongs to, so every page of an initial sync
+  says Initial and an incremental sync's later pages stay Incremental. A
+  continuation token from before a restart is labelled as such rather than
+  guessed. The email list heading also names the folder ("Emails in Legal")
+  instead of the verbosity ("Emails in standard", #306).
 
 ### Changed
 

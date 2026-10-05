@@ -84,6 +84,47 @@ function clampPageSize(value) {
 }
 
 /**
+ * Sync phase of each continuation token this server issued (#262). A
+ * `$skiptoken` page belongs to whichever sync produced it, initial or
+ * incremental, and its URL doesn't say which, so remember it. Bounded; a
+ * continuation token not in here (e.g. after a restart) has phase 'unknown'.
+ */
+const CONTINUATION_PHASES = new Map();
+const MAX_TRACKED_CONTINUATIONS = 200;
+
+function rememberPhase(token, phase) {
+  CONTINUATION_PHASES.delete(token);
+  CONTINUATION_PHASES.set(token, phase);
+  if (CONTINUATION_PHASES.size > MAX_TRACKED_CONTINUATIONS) {
+    CONTINUATION_PHASES.delete(CONTINUATION_PHASES.keys().next().value);
+  }
+}
+
+/**
+ * 'initial' (no token, or a continuation of an initial sync), 'incremental'
+ * (a delta token, or a continuation of one) or 'unknown' (a continuation
+ * token this server didn't issue).
+ * @param {string} [deltaToken]
+ * @returns {'initial'|'incremental'|'unknown'}
+ */
+function syncPhase(deltaToken) {
+  if (!deltaToken) return 'initial';
+  if (CONTINUATION_PHASES.has(deltaToken)) {
+    return CONTINUATION_PHASES.get(deltaToken);
+  }
+  // A continuation token this server didn't issue (e.g. from before a
+  // restart) can't be placed; any other token is a delta token.
+  if (/[?&](\$|%24)skiptoken=/i.test(deltaToken)) return 'unknown';
+  return 'incremental';
+}
+
+const PHASE_LABEL = {
+  initial: 'Initial',
+  incremental: 'Incremental',
+  unknown: 'Continuation (initial or incremental unknown)',
+};
+
+/**
  * List emails delta handler - incremental sync
  * @param {object} args - Tool arguments
  * @param {string} [args.folder] - Folder to sync (default: inbox)
@@ -154,6 +195,7 @@ async function handleListEmailsDelta(args) {
     );
 
     // Process results
+    const phase = syncPhase(deltaToken);
     const emails = response.value || [];
     const nextLink = response['@odata.nextLink'];
     const deltaLink = response['@odata.deltaLink'];
@@ -175,20 +217,20 @@ async function handleListEmailsDelta(args) {
           removed: true,
           reason: email['@removed'].reason || 'deleted',
         });
-      } else if (deltaToken) {
-        // With deltaToken, all non-removed items are changes
-        // We can't reliably distinguish created vs updated via delta
-        changesSummary.updated++;
+      } else if (phase === 'initial') {
+        // Initial sync (any page) - all items are "created" for our purposes
+        changesSummary.created++;
         processedEmails.push(email);
       } else {
-        // Initial sync - all items are "created" for our purposes
-        changesSummary.created++;
+        // Incremental (or unknown) - every non-removed item is a change; Graph
+        // doesn't say whether it was created or updated
+        changesSummary.updated++;
         processedEmails.push(email);
       }
     }
 
     // Build response
-    const isInitialSync = !deltaToken;
+    const isInitialSync = phase === 'initial';
     const hasMoreChanges = Boolean(nextLink);
     const newDeltaToken = deltaLink || nextLink;
     // F-15: nextLink is a continuation token (more pages of the same
@@ -196,6 +238,7 @@ async function handleListEmailsDelta(args) {
     // the initial sync finishes paging. Distinguish them in output so
     // callers know what they're storing.
     const tokenIsContinuation = !deltaLink && Boolean(nextLink);
+    if (tokenIsContinuation) rememberPhase(nextLink, phase);
 
     // Format output based on verbosity
     let resultText;
@@ -204,7 +247,7 @@ async function handleListEmailsDelta(args) {
       resultText += `| Metric | Value |\n`;
       resultText += `|--------|-------|\n`;
       resultText += `| Items | ${processedEmails.length} |\n`;
-      resultText += `| Type | ${isInitialSync ? 'Initial' : 'Incremental'} |\n`;
+      resultText += `| Type | ${PHASE_LABEL[phase]} |\n`;
       resultText += `| More | ${hasMoreChanges ? 'Yes' : 'No'} |\n`;
       if (newDeltaToken) {
         const label = tokenIsContinuation
@@ -213,7 +256,7 @@ async function handleListEmailsDelta(args) {
         resultText += `\n**${label}**:\n\`\`\`\n${newDeltaToken}\n\`\`\`\n`;
       }
     } else {
-      resultText = `## Delta Sync ${isInitialSync ? '(Initial)' : '(Incremental)'}\n\n`;
+      resultText = `## Delta Sync (${PHASE_LABEL[phase]})\n\n`;
 
       // Changes summary
       resultText += `### Changes Summary\n\n`;
@@ -231,8 +274,11 @@ async function handleListEmailsDelta(args) {
       const activeEmails = processedEmails.filter((e) => !e.removed);
       if (activeEmails.length > 0) {
         resultText += `\n### Emails\n\n`;
+        // formatEmailList takes (emails, folder, verbosity): the verbosity
+        // used to land in the folder slot ("Emails in standard", #306).
         resultText += formatEmailList(
           activeEmails,
+          deltaToken ? 'this sync page' : folder,
           verbosity === 'full' ? VERBOSITY.FULL : VERBOSITY.STANDARD
         );
       }
@@ -275,12 +321,12 @@ async function handleListEmailsDelta(args) {
         },
       ],
       _meta: {
-        syncType: isInitialSync ? 'initial' : 'incremental',
+        syncType: phase,
         mailbox: sharedMailbox || 'me',
         // With a token the folder comes from the token, not the `folder` arg
         // (which is ignored) — don't echo a value we didn't use.
-        folder: isInitialSync ? folder : null,
-        folderSource: isInitialSync ? 'argument' : 'deltaToken',
+        folder: deltaToken ? null : folder,
+        folderSource: deltaToken ? 'deltaToken' : 'argument',
         itemCount: processedEmails.length,
         hasMoreChanges: hasMoreChanges,
         changesSummary: changesSummary,
@@ -308,3 +354,4 @@ async function handleListEmailsDelta(args) {
 }
 
 module.exports = handleListEmailsDelta;
+module.exports.syncPhase = syncPhase;

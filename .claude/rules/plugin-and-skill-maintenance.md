@@ -2,7 +2,7 @@
 
 The marketplace plugin (`plugins/outlook-assistant/`) ships the MCP server pinned to an exact npm version, plus (from v3.14.0, milestone #6) an agent skill (#282) and a safety hook (#283). They must stay in step with the server, or the safety guidance drifts from what the tools actually do. File layout: `docs/architecture.md` (Plugin Layout).
 
-## Current state (v3.13.0 released, v3.14.0 unreleased)
+## Current state (v3.14.1 released)
 
 - **Manifests, one per client:**
   - `plugins/outlook-assistant/.claude-plugin/plugin.json` (Claude Code: `userConfig` plus inline `mcpServers`)

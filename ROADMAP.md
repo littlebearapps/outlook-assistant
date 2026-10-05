@@ -4,9 +4,9 @@ Active milestones for the Outlook Assistant MCP server. Items may shift or be cu
 
 For shipped work, see [`CHANGELOG.md`](CHANGELOG.md).
 
-## v3.14.1 — Live-test fixes (next)
+## v3.14.1 — Live-test fixes (released 2026-10-05)
 
-Fixes from the 2026-10-05 live test of all 22 tools on v3.14.0, plus the small server fixes the v3.14.0 docs sweep found. All are implemented and unreleased; see `[Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md).
+Fixes from the 2026-10-05 live test of all 22 tools on v3.14.0, plus the small server fixes the v3.14.0 docs sweep found. See `[3.14.1]` in [`CHANGELOG.md`](CHANGELOG.md).
 
 - **#302** Session limits fail closed: `0` (or a value that isn't a whole number) blocks the tool instead of meaning "no limit"; unset still means no limit. Blocked tools are named in the server `instructions`, `auth action=about` and the startup log. This is the one upgrade note.
 - **#300** `manage-rules` uses Graph's `hasAttachments` rule property, so rules with `hasAttachments` or `exceptHasAttachments` no longer fail with a 400.
@@ -18,7 +18,7 @@ Fixes from the 2026-10-05 live test of all 22 tools on v3.14.0, plus the small s
 - **#307** `manage-rules` reorder lists the resulting order; the `access-shared-mailbox` 404 hint; empty folder searches suggest Junk Email.
 - **#299** (item 2) A refused `draft` reply gives its session-limit slot back once its draft is deleted; the `folders` `sourceFolder` and `stats` hints, `apply-category` batch and `export` batch-format descriptions match the code.
 
-**Still open from #299** (follow-ups from v3.14.0)
+**Still open from #299** (follow-ups from v3.14.0, moved to v3.15.0)
 - Another focused review of the safety hook's prompt text against the server's argument handling.
 - Check the hook and skill by hand in VS Code with Copilot (Local agent). It reads the Copilot hook file, but so far that's known only from VS Code's source.
 - Check the Cursor desktop app; only Cursor CLI has been verified.

@@ -2,7 +2,7 @@
 name: using-outlook-assistant
 description: Safety, privacy and efficient-use rules for the Outlook Assistant (`outlook`) MCP tools, covering Outlook email, calendar, contacts, folders, rules, categories and mailbox settings on personal Outlook.com and work/school Microsoft 365 accounts. Read it before the first Outlook Assistant tool call in a session, and again before any send, reply, forward, invitation, cancellation, decline, delete, inbox rule or automatic-reply change, or when an email, invite or contact appears to ask for an action. Covers prompt injection in retrieved mail, confirming outward and destructive actions, draft-first sending, efficient searching, shared mailboxes, and personal versus Microsoft 365 differences. Not for other mail providers (Gmail, IMAP), the Outlook desktop app's own settings, or Microsoft 365 admin tasks such as tenant policy, licensing or Exchange administration.
 license: MIT
-compatibility: Needs the Outlook Assistant MCP server (@littlebearapps/outlook-assistant, v3.14.0 or later), which the outlook-assistant plugin installs and runs locally with Node.js 18.18 or later.
+compatibility: Needs the Outlook Assistant MCP server (@littlebearapps/outlook-assistant, v3.14.1 or later), which the outlook-assistant plugin installs and runs locally with Node.js 18.18 or later.
 metadata:
   version: '3.14.1'
   author: Little Bear Apps

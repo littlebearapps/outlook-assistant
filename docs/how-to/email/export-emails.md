@@ -38,6 +38,8 @@ params:
   savePath: "~/Downloads/email.eml"
 ```
 
+To let the server name the file, give a folder as `savePath`: an existing directory, or any path ending in `/` (such as `~/Downloads/contracts/`), which is created (`0700`) if it doesn't exist yet. The file inside gets a new, unique name.
+
 ## Export a Full Conversation Thread
 
 > "Export the entire thread about the contract review"
@@ -122,7 +124,7 @@ params:
   id: "AAMkAGR..."
 ```
 
-This returns the raw RFC 822 content rather than writing a file. Add `headersOnly: true` for just the headers, `base64: true` for encoded output, or `maxSize` to change the 1 MB cap.
+This returns the raw RFC 822 content rather than writing a file. Add `headersOnly: true` for just the headers, `base64: true` for encoded output, or `maxSize` to change the 1 MB cap. A message over `maxSize` is refused, except with `headersOnly: true`, which returns its headers (cut at `maxSize` if the header block alone is longer).
 
 ## Export from a Shared Mailbox
 
@@ -163,7 +165,7 @@ Not every target takes every format. `mbox` and `html` are for `conversation` ex
 | `target` | `message`, `messages`, `conversation`, or `mime` | All |
 | `id` | Email ID | `message`, `mime` |
 | `format` | Output format (see table above) | `message`, `messages`, `conversation` |
-| `savePath` | File path or directory for a single export | `message` |
+| `savePath` | File path, or a folder (an existing directory, or a path ending in `/`, created if missing) for a single export | `message` |
 | `overwrite` | Replace an existing file at `savePath` (default: false) | `message` |
 | `outputDir` | Directory for the export (also accepted for `message`, where it is always treated as a directory) | `message`, `messages`, `conversation` |
 | `emailIds` | Array of email IDs | `messages` |

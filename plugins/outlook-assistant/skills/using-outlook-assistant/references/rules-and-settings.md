@@ -20,7 +20,7 @@ Rules and automatic replies are persistent: they keep acting on every future ema
 
 - Rules apply to the signed-in user's own inbox.
 - Preview with `dryRun: true` on `create` and `update`. Show the user the conditions, actions, exceptions and sequence from the preview.
-- `reorder` and `delete` have no preview. Name the rule (`ruleName` or `ruleId`) and its effect, and get a yes.
+- `reorder` and `delete` have no preview. Name the rule (`ruleName` or `ruleId`) and its effect, and get a yes. A `reorder` result lists the new rule order; Exchange may renumber other rules, so tell the user if it did.
 - On `update`, passing any condition replaces all conditions, and passing any action replaces all actions. They are not merged. Run `list` with `includeDetails: true` first, then pass the complete set you want.
 - `deleteMessage: true` moves matches to Deleted Items. There is no permanent-delete action.
 - Lower `sequence` runs first. `stopProcessingRules: true` stops later rules from running on that message.
@@ -41,7 +41,7 @@ If the user reports odd mail behaviour (missing messages, replies they didn't se
 
 ## Automatic replies
 
-- Preview with `mailbox-settings` action=`set-auto-replies` and `dryRun: true`. It shows the status and schedule, who gets each reply and each message's length, and marks unchanged parts.
+- Preview with `mailbox-settings` action=`set-auto-replies` and `dryRun: true`. It shows the status and schedule, who gets each reply and each message's length, and marks unchanged parts. Scheduled times show the UTC instant and a labelled local time; give the user the local time.
 - An automatic reply tells every matching sender that the user is away, and until when. External replies reach people outside the organisation, including spammers and attackers.
 
 | `externalAudience` | External senders who get the reply  |

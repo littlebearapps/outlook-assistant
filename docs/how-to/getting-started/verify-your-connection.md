@@ -71,7 +71,7 @@ This returns:
 
 - the server version and tool count
 - the connected **mailbox** (display name and address)
-- timezone, test mode, the send safety belts (rate limit, recipient allowlist) with a setup hint if they're off, and whether read-only mode (`OUTLOOK_READ_ONLY`) is on
+- timezone, test mode, the safety belts with a setup hint if they're off, and whether read-only mode (`OUTLOOK_READ_ONLY`) is on. The **Session limits** row lists each rate-limited tool (`send-email`, `draft`, `create-event`, `manage-rules`) with its limit and how many calls it has used, or BLOCKED when its limit is `0` (or not a whole number); the **Recipient Allowlist** row shows `OUTLOOK_ALLOWED_RECIPIENTS`
 - the **configured** and **granted** scopes
 - **shared-mailbox** status: whether `OUTLOOK_SHARED_MAILBOX` is on and whether each `.Shared` scope was actually granted
 

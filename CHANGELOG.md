@@ -16,6 +16,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   empty. `0` now refuses every real send, draft write, invitation or rule
   change it covers.
 
+### Changed
+
+- **Session limits fail closed** (#302). Unset or empty still means no
+  limit. `0` refuses every real call to the tool it covers, and so does any
+  value that isn't a whole number (such as `-1`, `1.5` or `unlimited`). A
+  tool's own `OUTLOOK_MAX_<TOOL>_PER_SESSION` still wins over
+  `OUTLOOK_MAX_EMAILS_PER_SESSION`, so `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION=0`
+  with `OUTLOOK_MAX_DRAFT_PER_SESSION=20` lets the AI draft but never send.
+  Dry runs still preview.
+- The refusal says which setting blocked the tool and that nothing was sent,
+  and its next step tells the AI not to retry or get round it another way.
+  The server `instructions` name every blocked tool, and hard rule 4 now
+  reads "rate limits (0 = off)".
+- `auth action=about` shows a **Session limits** row with each rate-limited
+  tool's limit (or BLOCKED) and how many calls it has used. The startup log
+  names blocked tools.
+- The `send-email`, `draft`, `create-event` and `manage-rules` descriptions,
+  the plugin skill, the plugin setting, the README, SECURITY.md, the FAQ, the
+  how-to guides and the troubleshooting guide all say that `0` blocks.
+
 ### Fixed
 
 - **Inbox rules with "has attachments" can be created again** (#300).
@@ -64,33 +84,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   folder-scoped search now suggests Junk Email, where mail from a new sender
   often lands.
 - **Small fixes from the v3.14.0 docs sweep** (#299): a `draft` reply or
-  reply-all that the allowlist refuses (its draft deleted again), or whose
-  draft couldn't be created, no longer uses up a session-limit slot; the
+  reply-all that the allowlist refuses (once its draft is deleted again), or
+  that Graph rejects outright (a 4xx), no longer uses up a session-limit
+  slot; a timeout, server error or failed delete keeps the slot used, since
+  a draft may be left behind; the
   `folders` `stats` hints name `search-emails` with `deltaMode: true`, not a
-  `list-emails-delta` tool that doesn't exist; and the `folders`
+  `list-emails-delta` or `list-emails` tool that doesn't exist; and the `folders`
   `sourceFolder`, `apply-category` batch and `export` batch-format
   descriptions now match what the code does (`sourceFolder` is ignored; one
   request per message; batch export also takes mime/eml).
-
-### Changed
-
-- **Session limits fail closed** (#302). Unset or empty still means no
-  limit. `0` refuses every real call to the tool it covers, and so does any
-  value that isn't a whole number (such as `-1`, `1.5` or `unlimited`). A
-  tool's own `OUTLOOK_MAX_<TOOL>_PER_SESSION` still wins over
-  `OUTLOOK_MAX_EMAILS_PER_SESSION`, so `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION=0`
-  with `OUTLOOK_MAX_DRAFT_PER_SESSION=20` lets the AI draft but never send.
-  Dry runs still preview.
-- The refusal says which setting blocked the tool and that nothing was sent,
-  and its next step tells the AI not to retry or get round it another way.
-  The server `instructions` name every blocked tool, and hard rule 4 now
-  reads "rate limits (0 = off)".
-- `auth action=about` shows a **Session limits** row with each rate-limited
-  tool's limit (or BLOCKED) and how many calls it has used. The startup log
-  names blocked tools.
-- The `send-email`, `draft`, `create-event` and `manage-rules` descriptions,
-  the plugin skill, the plugin setting, the README, SECURITY.md, the FAQ, the
-  how-to guides and the troubleshooting guide all say that `0` blocks.
 
 ## [3.14.0] - 2026-10-04
 

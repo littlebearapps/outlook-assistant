@@ -36,7 +36,7 @@ params:
   internalReplyMessage: "I'm on leave from 10–15 March. Back Monday 16th."
 ```
 
-Scheduled mode automatically activates and deactivates at the specified times.
+Scheduled mode automatically activates and deactivates at the specified times. The result, `get` and the dry run show each scheduled time as the UTC instant followed by a labelled local time in your display timezone (`OUTLOOK_DEFAULT_TIMEZONE`, default Australia/Melbourne), for example `2026-03-10T00:00:00.000Z (10 Mar 2026, 11:00 am GMT+11:00)`.
 
 ## Set Separate Messages for Internal and External Senders
 
@@ -81,7 +81,7 @@ params:
 
 The preview starts with `DRY RUN — nothing was changed.` and shows:
 
-- the status (off, on with no end date, or the schedule in UTC)
+- the status (off, on with no end date, or the schedule as UTC plus labelled local times)
 - who gets each reply: internal senders, and the external audience (`none`, `contactsOnly` or `all`)
 - each message's length in characters and its first 100 characters
 
@@ -109,7 +109,7 @@ params:
   section: "automaticRepliesSetting"
 ```
 
-This shows whether auto-replies are enabled, the schedule, and the current messages.
+This shows whether auto-replies are enabled, the schedule (UTC plus a labelled local time), and the current messages.
 
 ![Mailbox settings output showing active auto-reply with dates](../../assets/screenshots/set-out-of-office-01.png)
 

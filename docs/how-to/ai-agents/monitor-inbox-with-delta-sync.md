@@ -33,6 +33,8 @@ The response includes:
 
 If the folder holds more messages than one page, the response returns a **continuation token** instead (`_meta.tokenType: "continuation"`, `hasMoreChanges: true`). Pass it back as `deltaToken`, with the same `maxResults`, and keep paging until a page returns a **delta token** (`_meta.tokenType: "delta"`). Only that final delta token is worth saving.
 
+Every page of an initial sync is labelled **Initial** (`_meta.syncType: "initial"`), and every page of an incremental sync **Incremental**. The server remembers which sync each continuation token it issued belongs to; a continuation token it doesn't know, for example one from before a server restart, is labelled "Continuation (initial or incremental unknown)" (`syncType: "unknown"`) rather than guessed.
+
 ```
 tool: search-emails
 params:

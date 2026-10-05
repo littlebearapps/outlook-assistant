@@ -39,7 +39,7 @@ In Claude Code you can also enter the client ID when you enable the plugin.
 
 - `dryRun` previews for sending, drafts, rules, new events, every meeting action (update, decline, cancel, delete), automatic replies, and folder and contact deletes. Other calls refuse `dryRun`, so a preview never runs for real.
 - Pre-send recipient checks (out-of-office, full mailbox, external recipients); when the check is on, a send to a flagged recipient is refused until the warnings are acknowledged.
-- A per-session limit on sends, drafts, rule changes and new events (10 each by default in this plugin).
+- A per-session limit on sends, drafts, rule changes and new events (10 each by default in this plugin; `0` blocks them, empty means no limit).
 - An optional recipient allowlist for sends, drafts (including replies), rule forwards and meeting attendees.
 - An optional read-only mode that refuses every change before it runs.
 - MCP safety annotations on every tool.

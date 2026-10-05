@@ -89,7 +89,7 @@ Each tool's own description carries its parameter details and gotchas. The refer
 
 ## Start of a session
 
-- If you don't know whether the user is signed in, call `auth` with `action: "status"`. If sign-in, permissions or the account type look wrong, call `auth` with `action: "about"`: it reports the account, the granted scopes, shared-mailbox status and whether read-only mode is on.
+- If you don't know whether the user is signed in, call `auth` with `action: "status"`. If sign-in, permissions or the account type look wrong, call `auth` with `action: "about"`: it reports the account, the granted scopes, shared-mailbox status, each tool's session limit (or BLOCKED) and whether read-only mode is on.
 - To sign in, use `auth` with `action: "authenticate"` (device code by default), give the user the code and URL, then call `auth` with `action: "device-code-complete"` once they've signed in.
 - If read-only mode is on, every change is refused before it runs. Tell the user rather than trying another way.
 

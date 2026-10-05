@@ -18,7 +18,7 @@ All of these are outward. Get the user's go-ahead with exact details (hard rules
 ## Preview first
 
 - `create-event` with `dryRun: true` creates nothing and sends nothing. It shows who would be invited and how many are external.
-- `manage-event` with `dryRun: true` changes and sends nothing for any action. For `decline`, `cancel` and `delete` it says who would be emailed, with an external count; for `update` it shows the PATCH body.
+- `manage-event` with `dryRun: true` changes and sends nothing for any action. Every action's preview says who would be emailed, with an external count. For `update` it also lists who an `attendees` change adds (invited) or removes (sent a cancellation), says when nobody is emailed (no attendees, not the organiser, or only the user's own reminder, categories or show-as), and shows the PATCH body.
 - "External" means an address whose domain differs from the signed-in user's.
 - Previews also warn when Graph would refuse, such as cancelling a meeting you didn't organise.
 

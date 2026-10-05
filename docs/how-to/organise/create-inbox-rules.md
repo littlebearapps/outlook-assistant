@@ -197,6 +197,8 @@ params:
   sequence: 1
 ```
 
+The result lists every rule in its new order. Exchange may renumber other rules to make room, and deleting a rule later doesn't shift them back, so note the order if you might want to restore it.
+
 ## Delete a Rule
 
 ```

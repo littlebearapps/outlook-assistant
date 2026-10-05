@@ -133,6 +133,8 @@ OUTLOOK_MAX_EMAILS_PER_SESSION=10
 
 Add this to your MCP server environment variables. Once the limit is reached, further sends are refused with a "Rate limit reached" error until the server restarts. Sending a draft (`draft action=send`) counts towards the same limit. The value is also the default cap for `draft` create/update/reply/reply-all/forward, `manage-rules` and `create-event`, each counted separately (dry runs don't count); set `OUTLOOK_MAX_<TOOL>_PER_SESSION` (for example `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION`) to override one tool.
 
+> **`0` means blocked, not unlimited.** Leave the setting unset for no limit. Since v3.14.1, `0` refuses every real call to that tool (dry runs still preview), and so does any value that isn't a whole number. Before v3.14.1, `0` meant no limit. To let the AI write drafts but never send, set `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION=0` and `OUTLOOK_MAX_DRAFT_PER_SESSION=20`. `auth action=about` lists each tool's limit, and blocked tools are named in the instructions the server gives the AI.
+
 ### Recipient Allowlist
 
 Restrict who your AI assistant can send to:
@@ -205,7 +207,7 @@ Then send when ready: `draft(action: "send", id: "draft-id")`. See [Create and M
 - Use `checkRecipients: true` with `dryRun: true` for a complete pre-send review
 - For emails that need careful review, use the `draft` tool instead — it saves a real draft in Outlook
 - Always use `dryRun: true` for important emails to review before sending
-- Set `OUTLOOK_MAX_EMAILS_PER_SESSION` to prevent accidental bulk sends
+- Set `OUTLOOK_MAX_EMAILS_PER_SESSION` to prevent accidental bulk sends (`0` blocks sending entirely; unset means no limit)
 - Use `OUTLOOK_ALLOWED_RECIPIENTS` in shared or automated environments
 - HTML is supported in the body — use it for formatted emails
 

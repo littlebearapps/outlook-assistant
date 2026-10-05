@@ -137,7 +137,7 @@ The `send-email` tool includes additional server-side controls:
 |---------|---------------------|---------|-------------|
 | Pre-send mail tips | — (use `checkRecipients: true` param) | Disabled | Refuses to send when Microsoft 365 mail tips show an out-of-office reply, a full mailbox, a delivery restriction, an external recipient or a group with external members, or when the check fails. Send anyway with `acknowledgeWarnings: true` |
 | Dry-run mode | — (use `dryRun: true` param) | Disabled | Preview composed email without sending |
-| Session rate limit | `OUTLOOK_MAX_EMAILS_PER_SESSION` | Unlimited | Default per-session cap, counted separately per tool, for `send-email` (including `draft` send), `draft` create/update/reply/reply-all/forward, `manage-rules` writes and `create-event`; dry runs don't count. Override one tool with `OUTLOOK_MAX_<TOOL>_PER_SESSION` |
+| Session rate limit | `OUTLOOK_MAX_EMAILS_PER_SESSION` | No limit (unset) | Default per-session cap, counted separately per tool, for `send-email` (including `draft` send), `draft` create/update/reply/reply-all/forward, `manage-rules` writes and `create-event`; dry runs don't count. Override one tool with `OUTLOOK_MAX_<TOOL>_PER_SESSION`. Unset or empty means no limit; **`0` blocks the tool** (before v3.14.1, `0` meant no limit), and so does any value that isn't a whole number. |
 | Recipient allowlist | `OUTLOOK_ALLOWED_RECIPIENTS` | Allow all | Comma-separated domains/addresses for outgoing mail, rule forwards and event attendees (scope below) |
 
 Example configuration:

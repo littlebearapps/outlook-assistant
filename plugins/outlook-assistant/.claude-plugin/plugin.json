@@ -39,7 +39,7 @@
     "max_emails_per_session": {
       "type": "string",
       "title": "Send limit per session",
-      "description": "Maximum emails, drafts sent and rule changes per session. 0 means no limit.",
+      "description": "Maximum sends, draft writes, invitations and rule changes per session (each counted separately). Leave empty for no limit. 0 BLOCKS them all.",
       "default": "10"
     },
     "allowed_recipients": {

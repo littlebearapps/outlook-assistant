@@ -26,7 +26,7 @@ All of these are outward. Get the user's go-ahead with exact details (hard rules
 
 - With a recipient allowlist set, every `create-event` attendee (rooms included), and every address on the list you pass to `manage-event` `update`, must be allowed. One blocked address refuses the whole call (`Event refused` or `Event update refused`), and a dry run reports the same refusal. Tell the user; don't drop the attendee and retry unless they ask.
 - The allowlist doesn't cover cancellations, declines, or updates sent to attendees already on the event, so confirm those as usual.
-- `create-event` can count towards a per-session cap. `Rate limit reached` is final until the server restarts.
+- `create-event` can count towards a per-session cap. `Rate limit reached` is final until the server restarts. A limit of 0 (`create-event is blocked`) means the user has switched invitations off: don't try to invite people another way.
 
 ## Choosing the action
 

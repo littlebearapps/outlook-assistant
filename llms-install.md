@@ -81,7 +81,7 @@ Add these to the same `env` block if needed:
 |----------|---------|
 | `OUTLOOK_AUTH_AUDIENCE` | `consumers` for Azure apps registered as personal-accounts-only (fixes `AADSTS9002331`); `organizations` or a tenant GUID for work-only apps. Default `common` |
 | `OUTLOOK_DEFAULT_TIMEZONE` | IANA timezone for calendar times (default `Australia/Melbourne`) |
-| `OUTLOOK_MAX_EMAILS_PER_SESSION` | Default per-session cap, counted separately per tool, for `send-email` (including `draft` send), `draft` create/update/reply/reply-all/forward, `manage-rules` and `create-event` (override one tool with `OUTLOOK_MAX_<TOOL>_PER_SESSION`, e.g. `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION`) |
+| `OUTLOOK_MAX_EMAILS_PER_SESSION` | Default per-session cap, counted separately per tool, for `send-email` (including `draft` send), `draft` create/update/reply/reply-all/forward, `manage-rules` and `create-event` (override one tool with `OUTLOOK_MAX_<TOOL>_PER_SESSION`, e.g. `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION`). Unset = no limit; `0` blocks the tool |
 | `OUTLOOK_ALLOWED_RECIPIENTS` | Comma-separated allowlist of recipient domains/addresses for sends, drafts, rule forwards and event attendees |
 | `OUTLOOK_READ_ONLY` | `true` refuses every tool call that would change something (sending, drafts, moves, deletes, rules, settings, file writes), dry runs included; reads and sign-in still work |
 | `OUTLOOK_SHARED_MAILBOX` | Opt-in shared-mailbox support, work/school accounts only: `read` or `true` (read and organise). Also add `Mail.Read.Shared` (and `Mail.ReadWrite.Shared` for `true`) in Azure, restart, then run `auth` with `action=authenticate` and `force=true` |

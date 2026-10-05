@@ -64,6 +64,27 @@ describe.each(modes)('serverInstructions (%s)', (_label, options) => {
   });
 });
 
+describe('blocked-tools note (#302)', () => {
+  const all = ['send-email', 'draft', 'create-event', 'manage-rules'];
+
+  test('names every tool a session limit of 0 blocks', () => {
+    const text = serverInstructions({ blockedTools: all });
+    expect(text).toMatch(
+      /Session limits block send-email, draft, create-event, manage-rules/
+    );
+    expect(text).toMatch(/never use another tool or action to get around it/);
+    expect(text.length).toBeLessThan(MAX_LENGTH);
+  });
+
+  test('is left out when nothing is blocked', () => {
+    expect(serverInstructions()).not.toMatch(/Session limits block/);
+  });
+
+  test('hard rule 4 says a limit of 0 means off', () => {
+    expect(HARD_RULES).toMatch(/rate limits \(0 = off\)/);
+  });
+});
+
 describe('read-only note', () => {
   test('says read-only mode is on when it is', () => {
     expect(serverInstructions({ readOnly: true })).toMatch(

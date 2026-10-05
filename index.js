@@ -42,9 +42,12 @@ Key environment variables:
                                     send or delete anything (reads and sign-in still work)
   OUTLOOK_ALLOWED_RECIPIENTS        Comma-separated recipient allowlist
   OUTLOOK_MAX_EMAILS_PER_SESSION    Default cap per session for every rate-limited tool
-                                    (send-email, draft, manage-rules); 0 or unset = no cap
+                                    (send-email, draft, create-event, manage-rules).
+                                    Unset or empty = no cap. 0 BLOCKS those tools; so does
+                                    any value that isn't a whole number (fails closed)
   OUTLOOK_MAX_<TOOL>_PER_SESSION    Per-tool cap overriding the default, tool name in upper
                                     case with _ for -, e.g. OUTLOOK_MAX_SEND_EMAIL_PER_SESSION
+                                    (also covers draft action=send); 0 blocks that tool
   OUTLOOK_DEFAULT_TIMEZONE          IANA timezone for event times (default Australia/Melbourne)
   OUTLOOK_IMMUTABLE_IDS             Set to "true" for message IDs that survive folder moves
   OUTLOOK_SEARCH_SCAN_LIMIT         Local search fallback window (default 500, max 5000)
@@ -88,6 +91,11 @@ const { createServer } = require('./server');
 const { setToolCount } = require('./auth');
 const { TOOLS } = require('./tools');
 const { isDebugEnabled } = require('./utils/logger');
+const {
+  blockedTools,
+  resolveSessionLimit,
+  RATE_LIMITED_TOOLS,
+} = require('./utils/safety');
 
 // Log startup information
 console.error(
@@ -103,13 +111,23 @@ if (isDebugEnabled()) {
 // F-1 / F-48: warn at startup when safety belts are unset. Mirrors the
 // warning surfaced by `auth action=about`. Visible to operators reading
 // stderr; AI clients reading the JSON-RPC stream are unaffected.
+const sessionLimitSet = Object.keys(RATE_LIMITED_TOOLS).some(
+  (tool) => resolveSessionLimit(tool).limit !== null
+);
 if (
-  !process.env.OUTLOOK_MAX_EMAILS_PER_SESSION &&
+  !sessionLimitSet &&
   !process.env.OUTLOOK_ALLOWED_RECIPIENTS &&
   !config.USE_TEST_MODE
 ) {
   console.error(
     '⚠ Safety belts not configured. Consider setting OUTLOOK_MAX_EMAILS_PER_SESSION and OUTLOOK_ALLOWED_RECIPIENTS in your .mcp.json env block for safer AI-assisted sending. See `auth action=about` for details.'
+  );
+}
+// #302: say plainly when a session limit of 0 switches a tool off.
+const blocked = blockedTools();
+if (blocked.length > 0) {
+  console.error(
+    `Session limits block ${blocked.join(', ')} (0 or an unreadable value). Unset the setting for no limit. See \`auth action=about\`.`
   );
 }
 

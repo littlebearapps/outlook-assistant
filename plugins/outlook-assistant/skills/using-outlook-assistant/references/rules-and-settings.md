@@ -24,7 +24,7 @@ Rules and automatic replies are persistent: they keep acting on every future ema
 - On `update`, passing any condition replaces all conditions, and passing any action replaces all actions. They are not merged. Run `list` with `includeDetails: true` first, then pass the complete set you want.
 - `deleteMessage: true` moves matches to Deleted Items. There is no permanent-delete action.
 - Lower `sequence` runs first. `stopProcessingRules: true` stops later rules from running on that message.
-- Changes may count towards a per-session cap. A `Rate limit reached` refusal is final until the server restarts.
+- Changes may count towards a per-session cap. A `Rate limit reached` refusal is final until the server restarts. A limit of 0 (`manage-rules is blocked`) means rule changes are switched off.
 
 ### Forwarding and redirecting
 

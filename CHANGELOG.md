@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Upgrade notes
+
+- **A session limit of `0` now blocks the tool instead of meaning "no
+  limit"** (#302). If you set `OUTLOOK_MAX_EMAILS_PER_SESSION=0` (or any
+  `OUTLOOK_MAX_<TOOL>_PER_SESSION=0`, or `0` in the Claude Code plugin's
+  *Send limit per session* setting) to mean unlimited, remove it or leave it
+  empty. `0` now refuses every real send, draft write, invitation or rule
+  change it covers.
+
+### Changed
+
+- **Session limits fail closed** (#302). Unset or empty still means no
+  limit. `0` refuses every real call to the tool it covers, and so does any
+  value that isn't a whole number (such as `-1`, `1.5` or `unlimited`). A
+  tool's own `OUTLOOK_MAX_<TOOL>_PER_SESSION` still wins over
+  `OUTLOOK_MAX_EMAILS_PER_SESSION`, so `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION=0`
+  with `OUTLOOK_MAX_DRAFT_PER_SESSION=20` lets the AI draft but never send.
+  Dry runs still preview.
+- The refusal says which setting blocked the tool and that nothing was sent,
+  and its next step tells the AI not to retry or get round it another way.
+  The server `instructions` name every blocked tool, and hard rule 4 now
+  reads "rate limits (0 = off)".
+- `auth action=about` shows a **Session limits** row with each rate-limited
+  tool's limit (or BLOCKED) and how many calls it has used. The startup log
+  names blocked tools.
+- The `send-email`, `draft`, `create-event` and `manage-rules` descriptions,
+  the plugin skill, the plugin setting, the README, SECURITY.md, the FAQ, the
+  how-to guides and the troubleshooting guide all say that `0` blocks.
+
 ## [3.14.0] - 2026-10-04
 
 Security and safety release. Upgrading is recommended for everyone on 3.13.0

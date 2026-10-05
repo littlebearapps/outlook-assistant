@@ -118,6 +118,7 @@ Common error patterns:
 | `API call failed with status 404` | Invalid ID | Re-search for the item |
 | `API call failed with status 429` | Graph throttling, still failing after the automatic retries | Wait a minute, then retry with a smaller batch |
 | `Rate limit reached: …` | The session cap (`OUTLOOK_MAX_EMAILS_PER_SESSION` or `OUTLOOK_MAX_<TOOL>_PER_SESSION`) was hit | Inform the user; no more calls of that kind until the server restarts |
+| `<tool> is blocked: …=0 …` | The user set that tool's session limit to `0`, which switches it off | Inform the user; never reach the same people another way (draft send, rule, invitation) |
 | `Recipient not allowed: …` | A recipient isn't in `OUTLOOK_ALLOWED_RECIPIENTS` | Inform the user; don't work around it |
 | `Rule refused` or `Rule update refused: OUTLOOK_ALLOWED_RECIPIENTS does not allow …` (`manage-rules`) | A `forwardTo`/`redirectTo` address isn't on the allowlist, so the whole rule was refused | Inform the user; remove the blocked address only if they ask |
 | `Event refused` / `Event update refused: OUTLOOK_ALLOWED_RECIPIENTS does not allow attendee …` | An attendee isn't on the allowlist, so nothing was created or changed | Inform the user; remove the attendee only if they ask |

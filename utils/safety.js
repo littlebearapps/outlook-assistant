@@ -9,29 +9,127 @@ const { toolError } = require('./tool-error');
 // Per-tool session counters for rate limiting
 const sessionCounters = {};
 
+/** Default cap for every rate-limited tool without its own setting. */
+const DEFAULT_LIMIT_ENV = 'OUTLOOK_MAX_EMAILS_PER_SESSION';
+
 /**
- * Check rate limit for a tool. Returns null if OK, or an error response if exceeded.
+ * Rate-limit buckets and what each counts. `draft` action=send counts
+ * against `send-email`, so blocking `send-email` blocks every send.
+ */
+const RATE_LIMITED_TOOLS = {
+  'send-email': 'sends (send-email and draft action=send)',
+  draft: 'draft writes (create, update, reply, reply-all, forward)',
+  'create-event': 'calendar invitations (create-event)',
+  'manage-rules': 'inbox rule changes (create, update, reorder, delete)',
+};
+
+/**
+ * The per-tool setting for a rate-limited tool, e.g.
+ * OUTLOOK_MAX_SEND_EMAIL_PER_SESSION for send-email.
+ * @param {string} toolName
+ * @returns {string}
+ */
+function sessionLimitEnvKey(toolName) {
+  return `OUTLOOK_MAX_${toolName.toUpperCase().replace(/-/g, '_')}_PER_SESSION`;
+}
+
+/**
+ * Resolve the per-session cap for a tool (#302). The tool's own setting
+ * wins over OUTLOOK_MAX_EMAILS_PER_SESSION. Unset or empty = no cap. A whole
+ * number is the cap, and 0 refuses every call. Anything else (negative,
+ * decimal, text) also refuses every call: a safety setting that can't be
+ * read fails closed.
+ * @param {string} toolName
+ * @returns {{limit: number|null, envKey: string|null, raw: string|null, invalid: boolean}}
+ */
+function resolveSessionLimit(toolName) {
+  for (const key of [sessionLimitEnvKey(toolName), DEFAULT_LIMIT_ENV]) {
+    const raw = process.env[key];
+    if (raw === undefined || raw.trim() === '') continue;
+    const value = raw.trim();
+    if (/^\d+$/.test(value)) {
+      return {
+        limit: parseInt(value, 10),
+        envKey: key,
+        raw: value,
+        invalid: false,
+      };
+    }
+    return { limit: 0, envKey: key, raw: value, invalid: true };
+  }
+  return { limit: null, envKey: null, raw: null, invalid: false };
+}
+
+/**
+ * One line per rate-limited tool describing its cap, for `auth action=about`
+ * and the startup log.
+ * @returns {string[]}
+ */
+function describeSessionLimits() {
+  return Object.entries(RATE_LIMITED_TOOLS).map(([tool, counts]) => {
+    const { limit, envKey, raw, invalid } = resolveSessionLimit(tool);
+    if (limit === null) return `${tool}: no limit (not set)`;
+    if (invalid) {
+      return `${tool}: BLOCKED (${envKey}="${raw}" is not a whole number, so it fails closed)`;
+    }
+    if (limit === 0) {
+      return `${tool}: BLOCKED (${envKey}=0 allows no ${counts})`;
+    }
+    const used = sessionCounters[tool] || 0;
+    return `${tool}: ${limit} per session, ${used} used (${envKey})`;
+  });
+}
+
+/**
+ * Rate-limited tools the current settings block outright (cap 0 or
+ * unreadable), for the server instructions.
+ * @returns {string[]}
+ */
+function blockedTools() {
+  return Object.keys(RATE_LIMITED_TOOLS).filter(
+    (tool) => resolveSessionLimit(tool).limit === 0
+  );
+}
+
+/**
+ * Check rate limit for a tool. Returns null if OK, or an error response if
+ * the tool is blocked (cap 0) or its cap is used up.
  * @param {string} toolName - The tool name to rate-limit
- * @param {number} [limit] - Override limit (default: from env or 10)
- * @returns {object|null} - MCP error response if limit exceeded, null if OK
+ * @param {number} [limit] - Override limit (tests); default from the env
+ * @returns {object|null} - MCP error response if refused, null if OK
  */
 function checkRateLimit(toolName, limit) {
-  const envKey = `OUTLOOK_MAX_${toolName.toUpperCase().replace(/-/g, '_')}_PER_SESSION`;
-  const maxPerSession =
-    limit ||
-    parseInt(
-      process.env[envKey] || process.env.OUTLOOK_MAX_EMAILS_PER_SESSION || '0',
-      10
-    );
+  const resolved =
+    limit === undefined
+      ? resolveSessionLimit(toolName)
+      : { limit, envKey: sessionLimitEnvKey(toolName), invalid: false };
+  const envKey = resolved.envKey;
 
-  // 0 means unlimited (disabled)
-  if (maxPerSession <= 0) return null;
+  if (resolved.limit === null) return null;
+
+  const nextStep = (change) =>
+    `Tell the user it was refused by their session limit. Do not retry, and do not use another tool or action to get around it. To allow it, the user can ${change} and restart the server.`;
+
+  if (resolved.limit === 0) {
+    const why = resolved.invalid
+      ? `${envKey} is set to "${resolved.raw}", which is not a whole number, so ${toolName} is blocked (an unreadable limit fails closed)`
+      : `${envKey}=0 turns off ${RATE_LIMITED_TOOLS[toolName] || toolName}`;
+    return toolError(
+      `${toolName} is blocked: ${why}. Nothing was sent or changed.`,
+      {
+        nextStep: nextStep(
+          `set ${envKey} to a whole number above 0, or unset it for no limit,`
+        ),
+      }
+    );
+  }
 
   if (!sessionCounters[toolName]) sessionCounters[toolName] = 0;
 
-  if (sessionCounters[toolName] >= maxPerSession) {
+  if (sessionCounters[toolName] >= resolved.limit) {
     return toolError(
-      `Rate limit reached: ${maxPerSession} ${toolName} operations per session. Restart the server to reset. Configure via ${envKey} environment variable.`
+      `Rate limit reached: ${resolved.limit} ${toolName} operations per session (${envKey}). Nothing was sent or changed.`,
+      { nextStep: nextStep(`raise ${envKey}`) }
     );
   }
 
@@ -308,6 +406,12 @@ function dryRunUnsupported(toolName, action, previewAction) {
 
 module.exports = {
   checkRateLimit,
+  resolveSessionLimit,
+  describeSessionLimits,
+  blockedTools,
+  sessionLimitEnvKey,
+  RATE_LIMITED_TOOLS,
+  DEFAULT_LIMIT_ENV,
   checkRecipientAllowlist,
   findBlockedRecipients,
   getRecipientAllowlist,

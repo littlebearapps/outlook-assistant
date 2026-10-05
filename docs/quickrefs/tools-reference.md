@@ -177,7 +177,7 @@ All four hints are set explicitly on every tool, and derived from the risk-class
 | Pre-send mail tips | `checkRecipients: true` param. Out-of-office, mailbox full, delivery restricted or external recipients refuse the send | Disabled |
 | Send despite mail-tip warnings | `acknowledgeWarnings: true` param (with `checkRecipients`) | `false` |
 | Dry-run preview | `dryRun: true` param | Disabled |
-| Session rate limit | `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION` (shared with `draft action=send`) | Unlimited (unset or `0`) |
+| Session rate limit | `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION` (shared with `draft action=send`) | No limit when unset; `0` blocks |
 | Recipient allowlist | `OUTLOOK_ALLOWED_RECIPIENTS` env. Also covers `draft`, rule forwards, `create-event` attendees and `manage-event` update attendees; not cancel/decline messages or `mailbox-settings` automatic replies. Anything that isn't a single plain address is refused while it's set | Allow all |
 
 ### get-mail-tips
@@ -212,8 +212,8 @@ These are the names you pass in `tipTypes`. Graph's response uses some different
 |---------|--------|---------|
 | Dry-run preview | `dryRun: true` param (create only; refused on other actions) | Disabled |
 | Pre-save mail tips | `checkRecipients: true` param (create only; the tips are returned with the saved draft and never stop it) | Disabled |
-| Session rate limit (create/update/reply/reply-all/forward) | `OUTLOOK_MAX_DRAFT_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION` | Unlimited (unset or `0`) |
-| Session rate limit (send) | Counts towards the `send-email` limit (`OUTLOOK_MAX_SEND_EMAIL_PER_SESSION`, else `OUTLOOK_MAX_EMAILS_PER_SESSION`) | Unlimited (unset or `0`) |
+| Session rate limit (create/update/reply/reply-all/forward) | `OUTLOOK_MAX_DRAFT_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION` | No limit when unset; `0` blocks |
+| Session rate limit (send) | Counts towards the `send-email` limit (`OUTLOOK_MAX_SEND_EMAIL_PER_SESSION`, else `OUTLOOK_MAX_EMAILS_PER_SESSION`) | No limit when unset; `0` blocks |
 | Recipient allowlist | `OUTLOOK_ALLOWED_RECIPIENTS` env: create, update, forward, reply and reply-all (a refused reply draft is deleted); send re-checks the draft's current to/cc/bcc | Allow all |
 | Drafts-only guard (update/send/delete) | Always on | Non-drafts refused |
 

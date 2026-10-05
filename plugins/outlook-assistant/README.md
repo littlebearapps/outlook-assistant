@@ -114,7 +114,7 @@ More detail is in the [security policy](https://github.com/littlebearapps/outloo
 |---|---|---|
 | Azure application (client) ID | `OUTLOOK_CLIENT_ID` | asked for at sign-in |
 | Sign-in audience | `OUTLOOK_AUTH_AUDIENCE` | `common` |
-| Send limit per session | `OUTLOOK_MAX_EMAILS_PER_SESSION` | `10` |
+| Send limit per session | `OUTLOOK_MAX_EMAILS_PER_SESSION` | `10` (empty = no limit; `0` blocks sending, drafts, invitations and rule changes) |
 | Allowed recipients | `OUTLOOK_ALLOWED_RECIPIENTS` | none (all allowed) |
 | Read-only mode | `OUTLOOK_READ_ONLY` | `false` |
 | Confirmation level (safety hook) | Claude Code plugin setting; `OUTLOOK_CONFIRM_LEVEL` in Copilot CLI, VS Code and Cursor | `outward` |

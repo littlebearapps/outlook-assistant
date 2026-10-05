@@ -325,9 +325,105 @@ async function previewDeleteEvent(accessToken, { eventId }) {
   );
 }
 
+/**
+ * Fields that are the signed-in user's own view of the event. Changing
+ * only these doesn't send attendees a meeting update.
+ */
+const PERSONAL_FIELDS = new Set([
+  'categories',
+  'reminderMinutesBeforeStart',
+  'showAs',
+]);
+
+/**
+ * Who a manage-event update would email (#303): the attendees of an event
+ * you organise, plus who is added or removed when `attendees` is replaced.
+ * @param {string} accessToken
+ * @param {{eventId: string, patch: object}} options - the PATCH body
+ * @returns {Promise<{lines: string[], notified: number, external: (number|null)}>}
+ */
+async function describeUpdateRecipients(accessToken, { eventId, patch }) {
+  let event = null;
+  try {
+    event = await fetchEvent(accessToken, eventId);
+  } catch (_error) {
+    // Fall through to the cautious wording below.
+  }
+  if (!event || typeof event !== 'object') {
+    return {
+      lines: [
+        "Couldn't read the event to check who would be emailed. If you organise it and it has attendees, saving this emails them an update.",
+      ],
+      notified: null,
+      external: null,
+    };
+  }
+  const title = eventTitle(event);
+  const fields = Object.keys(patch);
+
+  if (!event.isOrganizer) {
+    return {
+      lines: [
+        `Updates ${title}. You aren't the organiser, so this changes only your copy and nobody is emailed.`,
+      ],
+      notified: 0,
+      external: 0,
+    };
+  }
+
+  const own = await ownAddressFor(accessToken, event);
+  const before = summariseAttendees(event.attendees, own);
+  const after = patch.attendees
+    ? summariseAttendees(patch.attendees, own)
+    : before;
+
+  const lines = [];
+  if (fields.every((field) => PERSONAL_FIELDS.has(field))) {
+    lines.push(
+      `Updates ${title}. Only your own settings change (${fields.join(', ')}), so attendees aren't sent an update.`
+    );
+    return { lines, notified: 0, external: 0 };
+  }
+
+  if (after.people.length === 0 && before.people.length === 0) {
+    lines.push(`Updates ${title}. It has no attendees, so nobody is emailed.`);
+    return { lines, notified: 0, external: 0 };
+  }
+
+  lines.push(
+    after.people.length > 0
+      ? `Updates ${title} and emails an update to ${countPhrase(after)}.`
+      : `Updates ${title} and removes every attendee.`
+  );
+  if (patch.attendees) {
+    const key = (p) => p.address.toLowerCase();
+    const beforeSet = new Set(before.people.map(key));
+    const afterSet = new Set(after.people.map(key));
+    const added = after.people.filter((p) => !beforeSet.has(key(p)));
+    const removed = before.people.filter((p) => !afterSet.has(key(p)));
+    if (added.length > 0) {
+      lines.push(
+        `Added (sent an invitation): ${added.map((p) => p.address).join(', ')}`
+      );
+    }
+    if (removed.length > 0) {
+      lines.push(
+        `Removed (sent a cancellation): ${removed.map((p) => p.address).join(', ')}`
+      );
+    }
+  }
+  lines.push(...recipientLines(after));
+  return {
+    lines,
+    notified: after.people.length,
+    external: after.external,
+  };
+}
+
 module.exports = {
   emailDomain,
   summariseAttendees,
+  describeUpdateRecipients,
   previewCreateEvent,
   previewCancelEvent,
   previewDeclineEvent,

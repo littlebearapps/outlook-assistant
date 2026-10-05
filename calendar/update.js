@@ -37,6 +37,7 @@ const {
 } = require('./attendees');
 const { toolError, authRequiredError } = require('../utils/tool-error');
 const { dryRunResult } = require('../utils/safety');
+const { describeUpdateRecipients } = require('./preview');
 
 const SENSITIVITY_VALUES = new Set([
   'normal',
@@ -208,8 +209,17 @@ async function handleUpdateEvent(args) {
 
     // dryRun: show the caller what would be sent without changing anything.
     if (dryRun) {
+      // Say who would be emailed, as the cancel/decline/delete previews do
+      // (#303); the PATCH body follows.
+      accessToken = accessToken || (await ensureAuthenticated());
+      const recipients = await describeUpdateRecipients(accessToken, {
+        eventId,
+        patch,
+      });
       return dryRunResult(
         [
+          ...recipients.lines,
+          '',
           `Would PATCH \`me/events/${eventId}\` with:`,
           '',
           '```json',
@@ -218,7 +228,13 @@ async function handleUpdateEvent(args) {
           '',
           `Fields that would change: ${Object.keys(patch).join(', ')}`,
         ],
-        { eventId, patch, fieldsChanged: Object.keys(patch) }
+        {
+          eventId,
+          patch,
+          fieldsChanged: Object.keys(patch),
+          notified: recipients.notified,
+          external: recipients.external,
+        }
       );
     }
 

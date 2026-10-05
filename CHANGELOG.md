@@ -29,6 +29,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Before, a folder that didn't exist yet became an extensionless file of that
   name. It now gets a new folder (0700) with a uniquely named file inside,
   as `outputDir` does.
+- **`manage-event` update previews say who would be emailed** (#303), like
+  the cancel, decline and delete previews: the attendees an organiser's
+  update reaches (with the external count), who an `attendees` change adds
+  (invited) or removes (sent a cancellation), and plainly when nobody is
+  emailed (no attendees, not the organiser, or only your own reminder,
+  categories or show-as changed). The PATCH body still follows.
 
 ### Changed
 

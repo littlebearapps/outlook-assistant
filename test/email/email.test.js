@@ -329,7 +329,7 @@ describe('handleGetAttachmentContent', () => {
     });
 
     expect(result.content[0].text).toContain('photo.jpg');
-    expect(result.content[0].text).toContain('download-attachment');
+    expect(result.content[0].text).toContain('action=`download`');
   });
 
   it('should require both IDs', async () => {

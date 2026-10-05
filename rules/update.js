@@ -118,7 +118,7 @@ async function handleUpdateRule(args) {
       const currentPreview = formatRuleDryRunPreview(currentRule);
       const updatedPreview = formatRuleDryRunPreview(updatedRule);
 
-      let text = `DRY RUN — Update preview for "${currentRule.displayName}" (not applied):\n\n`;
+      let text = `Update preview for "${currentRule.displayName}" (not applied):\n\n`;
       text += `CURRENT:\n${currentPreview}\n\n`;
       text += `AFTER UPDATE:\n${updatedPreview}`;
       if (allWarnings.length > 0) {

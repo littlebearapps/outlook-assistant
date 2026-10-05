@@ -176,7 +176,7 @@ describe('manage-rules rate limit', () => {
       markAsRead: true,
       dryRun: true,
     });
-    expect(preview.content[0].text).toContain('DRY RUN');
+    expect(preview.content[0].text).toMatch(/\(not (created|applied)\)/);
 
     callGraphAPI
       .mockResolvedValueOnce({ value: [] })
@@ -197,7 +197,7 @@ describe('manage-rules rate limit', () => {
       isEnabled: false,
       dryRun: true,
     });
-    expect(preview.content[0].text).toContain('DRY RUN');
+    expect(preview.content[0].text).toMatch(/\(not (created|applied)\)/);
 
     callGraphAPI
       .mockResolvedValueOnce({ value: mockRules })
@@ -229,7 +229,7 @@ describe('manage-rules rate limit', () => {
       dryRun: true,
     });
     expect(preview.isError).toBeUndefined();
-    expect(preview.content[0].text).toContain('DRY RUN');
+    expect(preview.content[0].text).toMatch(/\(not (created|applied)\)/);
   });
 
   it('returns isError once the limit is reached on create', async () => {

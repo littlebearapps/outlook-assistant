@@ -699,7 +699,15 @@ const categoriesTools = [
       switch (action) {
         case 'create':
           return handleCreateCategory(args);
-        case 'set': // deprecated alias
+        case 'set': {
+          // Deprecated alias: works, but say so (#306).
+          const result = await handleUpdateCategory(args);
+          if (!result.isError && result.content?.[0]?.text) {
+            result.content[0].text +=
+              '\n\nNote: action=`set` is a deprecated alias for `update`; use `update`.';
+          }
+          return result;
+        }
         case 'update':
           return handleUpdateCategory(args);
         case 'delete':

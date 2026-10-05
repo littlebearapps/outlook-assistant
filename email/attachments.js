@@ -303,7 +303,7 @@ async function handleGetAttachmentContent(args) {
         content: [
           {
             type: 'text',
-            text: `Attachment: ${filename}\nType: ${contentType}\nSize: ${sizeKB} KB\n\nThis is a binary file. Use 'download-attachment' to save it to disk.`,
+            text: `Attachment: ${filename}\nType: ${contentType}\nSize: ${sizeKB} KB\n\nThis is a binary file. Use \`attachments\` action=\`download\` to save it to disk.`,
           },
         ],
       };

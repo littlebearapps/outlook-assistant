@@ -242,14 +242,17 @@ function formatDryRunPreview(emailObject) {
     .map((r) => r.emailAddress?.address)
     .join(', ');
 
-  let preview = `DRY RUN — Email NOT sent.\n\n`;
+  let preview = `Email NOT sent.\n\n`;
   preview += `To: ${to}\n`;
   if (cc) preview += `CC: ${cc}\n`;
   if (bcc) preview += `BCC: ${bcc}\n`;
   preview += `Subject: ${msg.subject}\n`;
   preview += `Importance: ${msg.importance || 'normal'}\n`;
   preview += `Content-Type: ${msg.body?.contentType || 'text'}\n`;
-  preview += `Save to Sent: ${emailObject.saveToSentItems !== false}\n`;
+  // A draft is never "saved to Sent", so its preview leaves this out.
+  if (!emailObject.isDraft) {
+    preview += `Save to Sent: ${emailObject.saveToSentItems !== false}\n`;
+  }
   preview += `\n--- Body ---\n${msg.body?.content || '(empty)'}\n--- End Body ---`;
 
   return {

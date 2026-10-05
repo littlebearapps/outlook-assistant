@@ -270,7 +270,7 @@ describe('handleCreateRule', () => {
       dryRun: true,
     });
 
-    expect(result.content[0].text).toContain('DRY RUN');
+    expect(result.content[0].text).toMatch(/\(not (created|applied)\)/);
     expect(result.content[0].text).toContain('Dry Run Rule');
     // Should only have the getInboxRules call, no POST
     expect(callGraphAPI).toHaveBeenCalledTimes(1);
@@ -553,7 +553,7 @@ describe('handleUpdateRule', () => {
       dryRun: true,
     });
 
-    expect(result.content[0].text).toContain('DRY RUN');
+    expect(result.content[0].text).toMatch(/\(not (created|applied)\)/);
     expect(result.content[0].text).toContain('CURRENT:');
     expect(result.content[0].text).toContain('AFTER UPDATE:');
     // Should only have the getInboxRules call, no PATCH

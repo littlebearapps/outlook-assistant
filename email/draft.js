@@ -86,7 +86,7 @@ function buildMessageObject(args) {
 /**
  * Format a draft response with key details
  * @param {object} draft - Graph API message response
- * @param {string} actionLabel - Human-readable action (e.g. "created", "updated")
+ * @param {string} actionLabel - Heading, e.g. "Draft created" or "Reply draft created"
  * @returns {object} - MCP response
  */
 function formatDraftResponse(draft, actionLabel) {
@@ -94,7 +94,7 @@ function formatDraftResponse(draft, actionLabel) {
     .map((r) => r.emailAddress?.address)
     .join(', ');
 
-  let text = `Draft ${actionLabel}.\n\n`;
+  let text = `${actionLabel}.\n\n`;
   text += `**ID**: \`${draft.id}\`\n`;
   if (draft.subject) text += `**Subject**: ${draft.subject}\n`;
   if (to) text += `**To**: ${to}\n`;
@@ -220,7 +220,7 @@ async function handleCreateDraft(args) {
     const tipsText = tipsResult.content[0]?.text || '';
 
     if (dryRun) {
-      const preview = formatDryRunPreview({ message, saveToSentItems: true });
+      const preview = formatDryRunPreview({ message, isDraft: true });
       return {
         content: [
           {
@@ -238,7 +238,7 @@ async function handleCreateDraft(args) {
 
   // Dry-run mode: preview without saving
   if (dryRun) {
-    const preview = formatDryRunPreview({ message, saveToSentItems: true });
+    const preview = formatDryRunPreview({ message, isDraft: true });
     return {
       content: [
         {
@@ -264,7 +264,7 @@ async function handleCreateDraft(args) {
       'me/messages',
       message
     );
-    const response = formatDraftResponse(draft, 'created');
+    const response = formatDraftResponse(draft, 'Draft created');
     if (tipsResult) {
       response.content[0].text += `\n---\n\n${tipsResult.content[0]?.text || ''}`;
       response._meta.mailTips = tipsResult._meta;
@@ -312,7 +312,7 @@ async function handleUpdateDraft(args) {
       `me/messages/${id}`,
       message
     );
-    return formatDraftResponse(draft, 'updated');
+    return formatDraftResponse(draft, 'Draft updated');
   } catch (error) {
     return handleError('updating draft', error);
   }
@@ -445,7 +445,10 @@ async function handleReplyDraft(args, endpoint) {
     const refusal = await refuseBlockedReply(accessToken, draft, actionName);
     if (refusal) return refusal;
 
-    return formatDraftResponse(draft, `${actionName} draft created`);
+    return formatDraftResponse(
+      draft,
+      `${actionName.charAt(0).toUpperCase()}${actionName.slice(1)} draft created`
+    );
   } catch (error) {
     return handleError(`creating ${actionName} draft`, error);
   }
@@ -556,7 +559,7 @@ async function handleForwardDraft(args) {
       `me/messages/${id}/createForward`,
       requestBody
     );
-    return formatDraftResponse(draft, 'forward draft created');
+    return formatDraftResponse(draft, 'Forward draft created');
   } catch (error) {
     return handleError('creating forward draft', error);
   }

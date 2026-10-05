@@ -255,7 +255,7 @@ describe('draft action=reply/reply-all checks the generated recipients', () => {
     const result = await handleDraft({ action: 'reply-all', id: 'msg-1' });
 
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toContain('reply-all draft created');
+    expect(result.content[0].text).toContain('Reply-all draft created');
     expect(deleteCalls()).toHaveLength(0);
   });
 

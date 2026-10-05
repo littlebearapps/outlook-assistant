@@ -40,6 +40,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with no zone (`10/5/2026, 1:45:00 AM` for 5 Oct, 12:45 pm in Melbourne).
   `get`, `set-auto-replies` and its dry run now show the UTC instant plus a
   labelled local time in the display timezone, as `list-events` does.
+- **Tool output wording** (#306): dry-run previews say "DRY RUN" once
+  (the dispatcher's line), not twice; a `draft` dry run no longer shows
+  "Save to Sent"; `draft` reply, reply-all and forward results read "Reply
+  draft created." (not "Draft reply draft created."); viewing a binary
+  attachment points to `attachments` action=`download` (not the old
+  `download-attachment` tool); `manage-category` action=`set` says it is a
+  deprecated alias for `update`; and `export` target=`mime` with
+  `headersOnly` keeps the headers within `maxSize`.
 
 ### Changed
 

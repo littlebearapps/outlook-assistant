@@ -122,6 +122,6 @@ test('a dry run still previews: nothing is sent either way', async () => {
     dryRun: true,
   });
   expect(result.isError).toBeUndefined();
-  expect(result.content[0].text).toMatch(/DRY RUN/);
+  expect(result.content[0].text).toMatch(/Email NOT sent/);
   expect(writes()).toHaveLength(0);
 });

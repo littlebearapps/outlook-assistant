@@ -104,7 +104,7 @@ async function handleCreateRule(args) {
     // Dry-run: preview without creating
     if (dryRun) {
       const preview = formatRuleDryRunPreview(rule);
-      let text = `DRY RUN — Rule preview (not created):\n\n${preview}`;
+      let text = `Rule preview (not created):\n\n${preview}`;
       if (allWarnings.length > 0) {
         text += `\n\nWarnings:\n${allWarnings.map((w) => `- ${w}`).join('\n')}`;
       }

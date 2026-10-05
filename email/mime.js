@@ -123,7 +123,13 @@ async function handleGetMimeContent(args) {
       // Check size limit
       if (maxSize > 0 && stats.bytes > maxSize) {
         if (headersOnly) {
-          // Return just headers if over limit
+          // Return just headers if over limit, themselves capped at
+          // maxSize (#306): a large header block used to come back whole.
+          const headerBytes = Buffer.byteLength(parsed.headerSection, 'utf8');
+          const headerText =
+            headerBytes > maxSize
+              ? `${Buffer.from(parsed.headerSection, 'utf8').subarray(0, maxSize).toString('utf8')}\n… (headers cut at maxSize ${maxSize} bytes of ${headerBytes})`
+              : parsed.headerSection;
           return {
             content: [
               {
@@ -132,7 +138,7 @@ async function handleGetMimeContent(args) {
                   `# MIME Content (Headers Only - Content Truncated)\n\n` +
                   `**Size**: ${stats.formattedSize} (exceeds ${maxSize} byte limit)\n` +
                   `**Lines**: ${stats.lines}\n\n` +
-                  `## MIME Headers\n\n\`\`\`\n${parsed.headerSection}\n\`\`\``,
+                  `## MIME Headers\n\n\`\`\`\n${headerText}\n\`\`\``,
               },
             ],
             _meta: {

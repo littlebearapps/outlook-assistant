@@ -361,7 +361,7 @@ describe('send-email dryRun with checkRecipients', () => {
     const text = result.content[0].text;
     expect(text).toContain('# Mail Tips');
     expect(text).toContain('On leave until Monday');
-    expect(text).toContain('DRY RUN');
+    expect(text).toContain('Email NOT sent');
     expect(text).toContain('acknowledgeWarnings: true');
     expect(result._meta.mailTips.warningCount).toBe(1);
   });

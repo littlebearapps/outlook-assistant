@@ -4,7 +4,7 @@
     "outlook": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@littlebearapps/outlook-assistant@3.14.0"],
+      "args": ["-y", "@littlebearapps/outlook-assistant@3.14.1"],
       "env": {
         "OUTLOOK_MAX_EMAILS_PER_SESSION": "10"
       }

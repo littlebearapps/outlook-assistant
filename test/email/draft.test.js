@@ -122,7 +122,7 @@ describe('action=create', () => {
       dryRun: true,
     });
 
-    expect(result.content[0].text).toContain('DRY RUN');
+    expect(result.content[0].text).toContain('Draft NOT saved');
     expect(result.content[0].text).toContain('Draft NOT saved');
     expect(callGraphAPI).not.toHaveBeenCalled();
   });
@@ -452,7 +452,7 @@ describe('action=reply', () => {
       comment: 'Thanks for this!',
     });
 
-    expect(result.content[0].text).toContain('reply draft created');
+    expect(result.content[0].text).toContain('Reply draft created');
     expect(callGraphAPI).toHaveBeenCalledWith(
       mockAccessToken,
       'POST',
@@ -490,7 +490,7 @@ describe('action=reply', () => {
       id: 'msg-456',
     });
 
-    expect(result.content[0].text).toContain('reply-all draft created');
+    expect(result.content[0].text).toContain('Reply-all draft created');
     expect(callGraphAPI).toHaveBeenCalledWith(
       mockAccessToken,
       'POST',
@@ -531,7 +531,7 @@ describe('action=forward', () => {
       comment: 'FYI',
     });
 
-    expect(result.content[0].text).toContain('forward draft created');
+    expect(result.content[0].text).toContain('Forward draft created');
     expect(callGraphAPI).toHaveBeenCalledWith(
       mockAccessToken,
       'POST',

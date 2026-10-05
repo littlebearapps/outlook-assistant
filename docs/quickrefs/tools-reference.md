@@ -24,7 +24,7 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 | `get-mail-tips` | Pre-send recipient validation | read-only | `recipients`, `tipTypes` |
 | `update-email` | Mark read/unread, flag/unflag/complete | idempotent | `action` (required), `id`, `ids`, `dueDateTime`, `startDateTime`, `sharedMailbox` (alias `email`) |
 | `attachments` | List, view, or download attachments | moderate write | `action` (`list`/`view`/`download`), `messageId`, `attachmentId`, `outputDir` (download; absolute or `~/…`; default system tmpdir), `sharedMailbox` (alias `email`) |
-| `export` | Export emails to various formats | **destructive** | `target` (`message`/`messages`/`conversation`/`mime`), `id`, `emailIds`, `searchQuery`/`query`, `conversationId`, `format`, `outputDir` (or `savePath` for a single message; absolute or `~/…`), `overwrite` (replace an existing `savePath` file; default false), `sharedMailbox` (alias `email`) |
+| `export` | Export emails to various formats | **destructive** | `target` (`message`/`messages`/`conversation`/`mime`), `id`, `emailIds`, `searchQuery`/`query`, `conversationId`, `format`, `outputDir` (or `savePath` for a single message; absolute or `~/…`; a `savePath` ending in `/` is a folder, created if missing), `overwrite` (replace an existing `savePath` file; default false), `headersOnly`/`base64`/`maxSize` (`mime`), `sharedMailbox` (alias `email`) |
 
 > **`sharedMailbox` is opt-in (work/school only).** Set `OUTLOOK_SHARED_MAILBOX=read` (read: `Mail.Read.Shared`) or `=true` (read and organise: adds `Mail.ReadWrite.Shared`), restart, then run `auth action=authenticate force=true`. While it's unset, `sharedMailbox` calls are refused with these steps, and `access-shared-mailbox` reads only well-known folder names or folder IDs, as before (`listFolders` and custom/nested names need the setting).
 >
@@ -53,7 +53,7 @@ Quick reference for all 22 MCP tools across 9 modules. Each tool includes MCP sa
 
 > **Search metadata**: every `search-emails` response carries `_meta.searchMetadata`. `finalStrategy` names the rung that answered (`combined-search`, `single-term-*`, `client-side-*`, `boolean-filters-only`, `raw-kql-translated`, `recent-emails`); `filterApplied` says whether every supplied filter was honoured; `droppedFilters` lists any that were not — it should always be empty, and a non-empty value means the result set is broader than the query (#229). `candidatesScanned` (with `scanLimit` and `truncated`) discloses how many messages a client-side fallback examined, so a bounded scan never reads as a whole-mailbox answer; `kqlTranslatedTo` records the rewrite when a field-scoped `searchExpression` was translated. An empty search additionally reports in its guidance text how many messages any local narrowing pass looked at.
 
-> **Delta sync** is designed for inbox monitoring workflows. The first call returns current emails and a `deltaToken`; subsequent calls with that token return only new, modified, and deleted messages. `maxResults` (1–200, default 100) sets the page size, sent as `Prefer: odata.maxpagesize` on every request; when a page returns a continuation token (`_meta.tokenType: "continuation"`), keep passing it back with the same `maxResults` until a delta token arrives. See [Monitor Inbox with Delta Sync](../how-to/ai-agents/monitor-inbox-with-delta-sync.md).
+> **Delta sync** is designed for inbox monitoring workflows. The first call returns current emails and a `deltaToken`; subsequent calls with that token return only new, modified, and deleted messages. `maxResults` (1–200, default 100) sets the page size, sent as `Prefer: odata.maxpagesize` on every request; when a page returns a continuation token (`_meta.tokenType: "continuation"`), keep passing it back with the same `maxResults` until a delta token arrives. Every page of an initial sync is labelled initial and every page of an incremental sync incremental (`_meta.syncType`); a continuation token the server didn't issue (for example from before a restart) is labelled `unknown`. See [Monitor Inbox with Delta Sync](../how-to/ai-agents/monitor-inbox-with-delta-sync.md).
 
 ### update-email actions
 
@@ -79,7 +79,7 @@ Flag dates: a `dueDateTime`/`startDateTime` with `Z` or a ±hh:mm offset is kept
 | `reply-all` | Create reply-all draft from message | `id` |
 | `forward` | Create forward draft with new recipients | `id`, `to` |
 
-> **Draft safety**: `dryRun: true` previews without saving (create only). `checkRecipients: true` validates recipients via mail-tips before saving. The `send` action shares rate limits with `send-email`. Recipient allowlist applies to create, update, forward, reply and reply-all (a reply draft with a recipient outside it is deleted and refused), and send re-checks the draft's current to/cc/bcc. Reply, reply-all and forward count towards the draft rate limit. `update`, `send` and `delete` check the `id` first and refuse anything that is not an unsent draft, so a received or sent message is never edited, deleted or re-sent. `comment` and `body` are mutually exclusive on reply/forward.
+> **Draft safety**: `dryRun: true` previews without saving (create only). `checkRecipients: true` validates recipients via mail-tips before saving. The `send` action shares rate limits with `send-email`, so a `send-email` limit of `0` blocks it too. Recipient allowlist applies to create, update, forward, reply and reply-all (a reply draft with a recipient outside it is deleted and refused), and send re-checks the draft's current to/cc/bcc. Reply, reply-all and forward count towards the draft rate limit (a reply the allowlist refuses gives its slot back once its draft is deleted, and so does one Graph rejects outright; a timeout or server error keeps the slot used). `update`, `send` and `delete` check the `id` first and refuse anything that is not an unsent draft, so a received or sent message is never edited, deleted or re-sent. `comment` and `body` are mutually exclusive on reply/forward.
 
 ### Export formats
 
@@ -99,20 +99,20 @@ Flag dates: a `dueDateTime`/`startDateTime` with `Z` or a ±hh:mm offset is kept
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
 | `list-events` | List events: upcoming by default, or past/current/by name with filters (times as canonical UTC ISO-8601 + labelled local) | read-only | `count` (default 10, max 100), `startAfter`/`startBefore` (ISO 8601 with `Z` or ±hh:mm, normalised to UTC), `subject` (case-insensitive contains, ≤ 255 chars). Supplying any filter replaces the default `start ≥ now` bound and filters are AND-ed; backward-looking searches (`startBefore` alone, or `subject` alone) return newest first. Invalid values return a tool error before any Graph call |
-| `create-event` | Create new event | **destructive** (sends invitations) | `subject`, `start`, `end`, `attendees` (email strings are required attendees; `{email, type}` objects set `type` to `required`/`optional`/`resource`), `body`, `dryRun` (preview who would be invited, with an external count, without creating anything). With `OUTLOOK_ALLOWED_RECIPIENTS` set, every attendee must be allowed or nothing is created; counts towards `OUTLOOK_MAX_CREATE_EVENT_PER_SESSION` (else `OUTLOOK_MAX_EMAILS_PER_SESSION`). Times use configured timezone (default: Australia/Melbourne; override with `OUTLOOK_DEFAULT_TIMEZONE` env var) — omit `Z` suffix for local time |
-| `manage-event` | Update, decline, cancel, or delete (delete removes the event and Graph doesn't document a guaranteed recovery path; deleting a meeting you organised that has attendees emails them a cancellation; use `cancel` with a `comment` to control the message) | **destructive** | `action` (`update`/`decline`/`cancel`/`delete`), `eventId` (or alias `id`), `comment` (decline/cancel; omitted if not given), `sendResponse` (decline only; `false` declines without notifying the organiser), `subject`/`start`/`end`/`attendees`/`body`/`location`/`isOnlineMeeting`/`sensitivity`/`showAs`/`importance`/`categories`/`reminderMinutesBeforeStart` (update only — only the fields you pass are changed; `attendees` is a full replacement list of email strings or `{email, type}` objects, and an entry without a type keeps the type that address already has, new addresses being required; with `OUTLOOK_ALLOWED_RECIPIENTS` set, every address on the list must be allowed or the update is refused), `dryRun` (all actions; nothing is changed or sent: decline/cancel/delete read the event and say who would be emailed, with an external count; update previews the PATCH, reading the event first when attendees are untyped so the preview shows the resolved types) |
+| `create-event` | Create new event | **destructive** (sends invitations) | `subject`, `start`, `end`, `attendees` (email strings are required attendees; `{email, type}` objects set `type` to `required`/`optional`/`resource`), `body`, `dryRun` (preview who would be invited, with an external count, without creating anything). With `OUTLOOK_ALLOWED_RECIPIENTS` set, every attendee must be allowed or nothing is created; counts towards `OUTLOOK_MAX_CREATE_EVENT_PER_SESSION` (else `OUTLOOK_MAX_EMAILS_PER_SESSION`; `0` blocks it). Times use configured timezone (default: Australia/Melbourne; override with `OUTLOOK_DEFAULT_TIMEZONE` env var) — omit `Z` suffix for local time |
+| `manage-event` | Update, decline, cancel, or delete (delete removes the event and Graph doesn't document a guaranteed recovery path; deleting a meeting you organised that has attendees emails them a cancellation; use `cancel` with a `comment` to control the message) | **destructive** | `action` (`update`/`decline`/`cancel`/`delete`), `eventId` (or alias `id`), `comment` (decline/cancel; omitted if not given), `sendResponse` (decline only; `false` declines without notifying the organiser), `subject`/`start`/`end`/`attendees`/`body`/`location`/`isOnlineMeeting`/`sensitivity`/`showAs`/`importance`/`categories`/`reminderMinutesBeforeStart` (update only — only the fields you pass are changed; `attendees` is a full replacement list of email strings or `{email, type}` objects, and an entry without a type keeps the type that address already has, new addresses being required; with `OUTLOOK_ALLOWED_RECIPIENTS` set, every address on the list must be allowed or the update is refused), `dryRun` (all actions; nothing is changed or sent: every action reads the event and says who would be emailed, with an external count; update also lists who an `attendees` change adds or removes, says when nobody is emailed, and shows the PATCH with resolved attendee types) |
 
 ## Folder (1 tool)
 
 | Tool | Actions | Safety | Key Parameters |
 |------|---------|--------|----------------|
-| `folders` | `list` (default), `create`, `move`, `stats`, `delete` | **destructive** | `name`, `parentFolder`/`parentFolderId` (create), `emailIds`, `targetFolder`/`targetFolderId` (move), `folder`/`folderId` (stats), `folderName`/`folderId` (delete), `dryRun` (delete: preview the items and subfolders that would be lost), `outputVerbosity`. Folders addressable by nested path (`Parent/Child`) or ID; `list` shows full paths + IDs. All actions accept `sharedMailbox` (alias `email`) |
+| `folders` | `list` (default), `create`, `move`, `stats`, `delete` | **destructive** | `name`, `parentFolder`/`parentFolderId` (create), `emailIds`, `targetFolder`/`targetFolderId` (move; `sourceFolder` is accepted but ignored), `folder`/`folderId` (stats), `folderName`/`folderId` (delete), `dryRun` (delete: preview the items and subfolders that would be lost), `outputVerbosity`. Folders addressable by nested path (`Parent/Child`) or ID; `list` shows full paths + IDs. All actions accept `sharedMailbox` (alias `email`) |
 
 ## Rules (1 tool)
 
 | Tool | Actions | Safety | Key Parameters |
 |------|---------|--------|----------------|
-| `manage-rules` | `list` (default), `create`, `update`, `reorder`, `delete` | **destructive** | `name` (or alias `displayName`), `fromAddresses`, `containsSubject`, `bodyContains`, `hasAttachments`, `moveToFolder`/`copyToFolder` (name, nested path like `Triage/Delete`, or ID), `forwardTo`/`redirectTo` (a rule with any address blocked by `OUTLOOK_ALLOWED_RECIPIENTS` is refused whole), `assignCategories`, `dryRun` (create/update; doesn't count towards the rate limit), `except*`, `ruleName`, `ruleId`, `sequence`. Create, update, reorder and delete count towards `OUTLOOK_MAX_MANAGE_RULES_PER_SESSION` |
+| `manage-rules` | `list` (default), `create`, `update`, `reorder`, `delete` | **destructive** | `name` (or alias `displayName`), `fromAddresses`, `containsSubject`, `bodyContains`, `hasAttachments`, `moveToFolder`/`copyToFolder` (name, nested path like `Triage/Delete`, or ID), `forwardTo`/`redirectTo` (a rule with any address blocked by `OUTLOOK_ALLOWED_RECIPIENTS` is refused whole), `assignCategories`, `dryRun` (create/update; doesn't count towards the rate limit), `except*`, `ruleName`, `ruleId`, `sequence` (reorder lists the resulting rule order). Create, update, reorder and delete count towards `OUTLOOK_MAX_MANAGE_RULES_PER_SESSION` (else `OUTLOOK_MAX_EMAILS_PER_SESSION`; `0` blocks them) |
 
 ## Contacts (2 tools)
 
@@ -125,8 +125,8 @@ Flag dates: a `dueDateTime`/`startDateTime` with `Z` or a ±hh:mm offset is kept
 
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
-| `manage-category` | CRUD: `list` (default), `create`, `update`/`set` (alias), `delete` | **destructive** (`delete`) | `action`, `displayName`, `color`, `id` (or deprecated alias `categoryId`) |
-| `apply-category` | Apply/add/remove categories on messages. With `sharedMailbox`, category names must already exist in that mailbox's master list (`manage-category` manages the signed-in account only) | idempotent | `messageId`/`messageIds`, `categories`, `action`, `sharedMailbox` (alias `email`) |
+| `manage-category` | CRUD: `list` (default), `create`, `update`/`set` (deprecated alias; the result says so), `delete` | **destructive** (`delete`) | `action`, `displayName`, `color`, `id` (or deprecated alias `categoryId`) |
+| `apply-category` | Apply/add/remove categories on messages (`messageIds`: one request per message). With `sharedMailbox`, category names must already exist in that mailbox's master list (`manage-category` manages the signed-in account only) | idempotent | `messageId`/`messageIds`, `categories`, `action`, `sharedMailbox` (alias `email`) |
 | `manage-focused-inbox` | Focused Inbox overrides: `list` (default), `set`, `delete` | **destructive** (`delete`) | `action`, `emailAddress`, `name`, `classifyAs`, `outputVerbosity` |
 
 ### Category colours
@@ -137,7 +137,7 @@ Flag dates: a `dueDateTime`/`startDateTime` with `Z` or a ±hh:mm offset is kept
 
 | Tool | Actions | Safety | Key Parameters |
 |------|---------|--------|----------------|
-| `mailbox-settings` | `get` (default), `set-auto-replies`, `set-working-hours` | **destructive** (auto-replies reach external senders), idempotent | `section`, `enabled`, `startDateTime`, `endDateTime`, `internalReplyMessage`, `externalReplyMessage`, `externalAudience`, `dryRun` (set-auto-replies: preview who would get replies, the schedule and message lengths), `startTime`, `endTime`, `daysOfWeek`, `timeZone` |
+| `mailbox-settings` | `get` (default), `set-auto-replies`, `set-working-hours` | **destructive** (auto-replies reach external senders), idempotent | `section`, `enabled`, `startDateTime`, `endDateTime`, `internalReplyMessage`, `externalReplyMessage`, `externalAudience`, `dryRun` (set-auto-replies: preview who would get replies, the schedule and message lengths), `startTime`, `endTime`, `daysOfWeek`, `timeZone`. Scheduled auto-reply times are shown as the UTC instant plus a labelled local time |
 
 ## Advanced (2 tools)
 
@@ -177,7 +177,7 @@ All four hints are set explicitly on every tool, and derived from the risk-class
 | Pre-send mail tips | `checkRecipients: true` param. Out-of-office, mailbox full, delivery restricted or external recipients refuse the send | Disabled |
 | Send despite mail-tip warnings | `acknowledgeWarnings: true` param (with `checkRecipients`) | `false` |
 | Dry-run preview | `dryRun: true` param | Disabled |
-| Session rate limit | `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION` (shared with `draft action=send`) | Unlimited (unset or `0`) |
+| Session rate limit | `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION` (shared with `draft action=send`) | No limit when unset; `0` blocks |
 | Recipient allowlist | `OUTLOOK_ALLOWED_RECIPIENTS` env. Also covers `draft`, rule forwards, `create-event` attendees and `manage-event` update attendees; not cancel/decline messages or `mailbox-settings` automatic replies. Anything that isn't a single plain address is refused while it's set | Allow all |
 
 ### get-mail-tips
@@ -212,8 +212,8 @@ These are the names you pass in `tipTypes`. Graph's response uses some different
 |---------|--------|---------|
 | Dry-run preview | `dryRun: true` param (create only; refused on other actions) | Disabled |
 | Pre-save mail tips | `checkRecipients: true` param (create only; the tips are returned with the saved draft and never stop it) | Disabled |
-| Session rate limit (create/update/reply/reply-all/forward) | `OUTLOOK_MAX_DRAFT_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION` | Unlimited (unset or `0`) |
-| Session rate limit (send) | Counts towards the `send-email` limit (`OUTLOOK_MAX_SEND_EMAIL_PER_SESSION`, else `OUTLOOK_MAX_EMAILS_PER_SESSION`) | Unlimited (unset or `0`) |
+| Session rate limit (create/update/reply/reply-all/forward) | `OUTLOOK_MAX_DRAFT_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION` | No limit when unset; `0` blocks |
+| Session rate limit (send) | Counts towards the `send-email` limit (`OUTLOOK_MAX_SEND_EMAIL_PER_SESSION`, else `OUTLOOK_MAX_EMAILS_PER_SESSION`) | No limit when unset; `0` blocks |
 | Recipient allowlist | `OUTLOOK_ALLOWED_RECIPIENTS` env: create, update, forward, reply and reply-all (a refused reply draft is deleted); send re-checks the draft's current to/cc/bcc | Allow all |
 | Drafts-only guard (update/send/delete) | Always on | Non-drafts refused |
 

@@ -1344,7 +1344,7 @@ function buildNoResultsSuggestions(searchInfo, searchAllFolders) {
     );
   } else {
     suggestions.push(
-      'Try `searchAllFolders: true` to search across all folders including Archive'
+      'Try `searchAllFolders: true` to search across all folders, including Archive and Junk Email (mail from a new sender often lands in Junk)'
     );
     suggestions.push(
       'Specify the correct folder if emails have been moved (use the `folders` tool to list folders)'

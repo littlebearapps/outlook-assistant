@@ -147,7 +147,7 @@ describe('buildConditions', () => {
       sentCcMe: true,
       isAutomaticReply: true,
     });
-    expect(conditions.hasAttachment).toBe(true);
+    expect(conditions.hasAttachments).toBe(true);
     expect(conditions.sentToMe).toBe(true);
     expect(conditions.sentOnlyToMe).toBe(true);
     expect(conditions.sentCcMe).toBe(true);
@@ -159,7 +159,7 @@ describe('buildConditions', () => {
       hasAttachments: false,
       sentToMe: false,
     });
-    expect(conditions.hasAttachment).toBeUndefined();
+    expect(conditions.hasAttachments).toBeUndefined();
     expect(conditions.sentToMe).toBeUndefined();
   });
 
@@ -200,7 +200,7 @@ describe('buildConditions', () => {
     });
     expect(conditions.fromAddresses).toHaveLength(1);
     expect(conditions.subjectContains).toEqual(['urgent', 'critical']);
-    expect(conditions.hasAttachment).toBe(true);
+    expect(conditions.hasAttachments).toBe(true);
     expect(conditions.importance).toBe('high');
   });
 
@@ -543,7 +543,7 @@ describe('buildExceptions', () => {
 
   it('should build exceptHasAttachments', () => {
     const { exceptions } = buildExceptions({ exceptHasAttachments: true });
-    expect(exceptions.hasAttachment).toBe(true);
+    expect(exceptions.hasAttachments).toBe(true);
   });
 
   it('should return empty exceptions when no except params', () => {
@@ -559,7 +559,7 @@ describe('buildExceptions', () => {
     });
     expect(exceptions.fromAddresses).toHaveLength(1);
     expect(exceptions.subjectContains).toEqual(['FYI']);
-    expect(exceptions.hasAttachment).toBe(true);
+    expect(exceptions.hasAttachments).toBe(true);
   });
 });
 
@@ -620,5 +620,85 @@ describe('constants', () => {
       'private',
       'confidential',
     ]);
+  });
+});
+
+// #300: the builder wrote `hasAttachment`, which Graph rejects with
+// UnableToDeserializePostBody. Every predicate key must be a real
+// messageRulePredicates property:
+// https://learn.microsoft.com/en-us/graph/api/resources/messagerulepredicates
+describe('predicate keys match Graph messageRulePredicates (#300)', () => {
+  const GRAPH_PREDICATES = new Set([
+    'bodyContains',
+    'bodyOrSubjectContains',
+    'categories',
+    'fromAddresses',
+    'hasAttachments',
+    'headerContains',
+    'importance',
+    'isApprovalRequest',
+    'isAutomaticForward',
+    'isAutomaticReply',
+    'isEncrypted',
+    'isMeetingRequest',
+    'isMeetingResponse',
+    'isNonDeliveryReport',
+    'isPermissionControlled',
+    'isReadReceipt',
+    'isSigned',
+    'isVoicemail',
+    'messageActionFlag',
+    'notSentToMe',
+    'recipientContains',
+    'senderContains',
+    'sensitivity',
+    'sentCcMe',
+    'sentOnlyToMe',
+    'sentToAddresses',
+    'sentToMe',
+    'sentToOrCcMe',
+    'subjectContains',
+    'withinSizeRange',
+  ]);
+
+  test('every condition key the builder emits is a Graph property', () => {
+    const { conditions } = buildConditions({
+      fromAddresses: 'a@example.com',
+      containsSubject: 's',
+      bodyContains: 'b',
+      bodyOrSubjectContains: 'x',
+      senderContains: 'y',
+      recipientContains: 'z',
+      sentToAddresses: 'c@example.com',
+      hasAttachments: true,
+      importance: 'high',
+      sensitivity: 'private',
+      sentToMe: true,
+      sentOnlyToMe: true,
+      sentCcMe: true,
+      isAutomaticReply: true,
+    });
+    expect(conditions.hasAttachments).toBe(true);
+    for (const key of Object.keys(conditions)) {
+      expect(
+        GRAPH_PREDICATES.has(key) ? key : `not a Graph predicate: ${key}`
+      ).toBe(key);
+    }
+  });
+
+  test('every exception key the builder emits is a Graph property', () => {
+    const { exceptions } = buildExceptions({
+      exceptFromAddresses: 'a@example.com',
+      exceptSubjectContains: 's',
+      exceptSenderContains: 'y',
+      exceptBodyContains: 'b',
+      exceptHasAttachments: true,
+    });
+    expect(exceptions.hasAttachments).toBe(true);
+    for (const key of Object.keys(exceptions)) {
+      expect(
+        GRAPH_PREDICATES.has(key) ? key : `not a Graph predicate: ${key}`
+      ).toBe(key);
+    }
   });
 });

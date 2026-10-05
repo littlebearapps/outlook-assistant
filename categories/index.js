@@ -699,7 +699,15 @@ const categoriesTools = [
       switch (action) {
         case 'create':
           return handleCreateCategory(args);
-        case 'set': // deprecated alias
+        case 'set': {
+          // Deprecated alias: works, but say so (#306).
+          const result = await handleUpdateCategory(args);
+          if (!result.isError && result.content?.[0]?.text) {
+            result.content[0].text +=
+              '\n\nNote: action=`set` is a deprecated alias for `update`; use `update`.';
+          }
+          return result;
+        }
         case 'update':
           return handleUpdateCategory(args);
         case 'delete':
@@ -716,7 +724,7 @@ const categoriesTools = [
   {
     name: 'apply-category',
     description:
-      "Tag or untag email messages with master categories (those created via `manage-category`). action=`set` (default) replaces the message's category set with the supplied `categories` array. action=`add` appends categories to whatever's already on the message. action=`remove` removes only the named categories, leaving the rest. Accepts either `messageId` (single) or `messageIds` (batch via Graph `$batch`). `categories` are matched by display name — names must already exist in the target mailbox's master list. For your own mailbox, create them via `manage-category` first; for a shared mailbox, the names must already exist there (`manage-category` only manages the signed-in account's master list). Pass `sharedMailbox` (or alias `email`) to categorise messages in a shared/delegated mailbox (default: the signed-in account; requires Mail.ReadWrite.Shared + delegate access). Returns per-message confirmation.",
+      "Tag or untag email messages with master categories (those created via `manage-category`). action=`set` (default) replaces the message's category set with the supplied `categories` array. action=`add` appends categories to whatever's already on the message. action=`remove` removes only the named categories, leaving the rest. Accepts either `messageId` (single) or `messageIds` (batch: one request per message). `categories` are matched by display name — names must already exist in the target mailbox's master list. For your own mailbox, create them via `manage-category` first; for a shared mailbox, the names must already exist there (`manage-category` only manages the signed-in account's master list). Pass `sharedMailbox` (or alias `email`) to categorise messages in a shared/delegated mailbox (default: the signed-in account; requires Mail.ReadWrite.Shared + delegate access). Returns per-message confirmation.",
     ...toolMetadata('apply-category', 'Apply Categories'),
     inputSchema: {
       type: 'object',

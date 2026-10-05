@@ -8,6 +8,7 @@ const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const {
   checkRateLimit,
+  releaseRateLimit,
   checkRecipientAllowlist,
   findBlockedRecipients,
   getRecipientAllowlist,
@@ -86,7 +87,7 @@ function buildMessageObject(args) {
 /**
  * Format a draft response with key details
  * @param {object} draft - Graph API message response
- * @param {string} actionLabel - Human-readable action (e.g. "created", "updated")
+ * @param {string} actionLabel - Heading, e.g. "Draft created" or "Reply draft created"
  * @returns {object} - MCP response
  */
 function formatDraftResponse(draft, actionLabel) {
@@ -94,7 +95,7 @@ function formatDraftResponse(draft, actionLabel) {
     .map((r) => r.emailAddress?.address)
     .join(', ');
 
-  let text = `Draft ${actionLabel}.\n\n`;
+  let text = `${actionLabel}.\n\n`;
   text += `**ID**: \`${draft.id}\`\n`;
   if (draft.subject) text += `**Subject**: ${draft.subject}\n`;
   if (to) text += `**To**: ${to}\n`;
@@ -220,7 +221,7 @@ async function handleCreateDraft(args) {
     const tipsText = tipsResult.content[0]?.text || '';
 
     if (dryRun) {
-      const preview = formatDryRunPreview({ message, saveToSentItems: true });
+      const preview = formatDryRunPreview({ message, isDraft: true });
       return {
         content: [
           {
@@ -238,7 +239,7 @@ async function handleCreateDraft(args) {
 
   // Dry-run mode: preview without saving
   if (dryRun) {
-    const preview = formatDryRunPreview({ message, saveToSentItems: true });
+    const preview = formatDryRunPreview({ message, isDraft: true });
     return {
       content: [
         {
@@ -264,7 +265,7 @@ async function handleCreateDraft(args) {
       'me/messages',
       message
     );
-    const response = formatDraftResponse(draft, 'created');
+    const response = formatDraftResponse(draft, 'Draft created');
     if (tipsResult) {
       response.content[0].text += `\n---\n\n${tipsResult.content[0]?.text || ''}`;
       response._meta.mailTips = tipsResult._meta;
@@ -312,7 +313,7 @@ async function handleUpdateDraft(args) {
       `me/messages/${id}`,
       message
     );
-    return formatDraftResponse(draft, 'updated');
+    return formatDraftResponse(draft, 'Draft updated');
   } catch (error) {
     return handleError('updating draft', error);
   }
@@ -426,14 +427,17 @@ async function handleReplyDraft(args, endpoint) {
 
   const actionName = endpoint === 'createReplyAll' ? 'reply-all' : 'reply';
 
-  // Counted before the draft is created: a reply that the allowlist refuses
-  // below has still written (and removed) a draft.
+  // Taken before the draft is created, and given back only when nothing is
+  // definitely left behind (#299): Graph rejected the create with a 4xx, or
+  // the allowlist refused the reply and its draft was deleted again. A
+  // timeout, 5xx or failed delete may leave a draft, so the slot stays used.
   const rateLimitError = checkRateLimit('draft');
   if (rateLimitError) return rateLimitError;
 
+  let draft;
   try {
     const accessToken = await ensureAuthenticated();
-    const draft = await callGraphAPI(
+    draft = await callGraphAPI(
       accessToken,
       'POST',
       `me/messages/${id}/${endpoint}`,
@@ -443,10 +447,24 @@ async function handleReplyDraft(args, endpoint) {
     // Graph fills in the recipients from the original message, so they can
     // only be checked once the draft exists.
     const refusal = await refuseBlockedReply(accessToken, draft, actionName);
-    if (refusal) return refusal;
+    if (refusal) {
+      if (refusal.draftDeleted) releaseRateLimit('draft');
+      return refusal.error;
+    }
 
-    return formatDraftResponse(draft, `${actionName} draft created`);
+    return formatDraftResponse(
+      draft,
+      `${actionName.charAt(0).toUpperCase()}${actionName.slice(1)} draft created`
+    );
   } catch (error) {
+    // Only Graph's own rejection, read from the start of the error (the
+    // body after it is server text). 408 means it may have gone through.
+    const rejected = /^API call failed with status (4\d\d):/.exec(
+      error.message || ''
+    );
+    if (!draft && rejected && rejected[1] !== '408') {
+      releaseRateLimit('draft');
+    }
     return handleError(`creating ${actionName} draft`, error);
   }
 }
@@ -458,7 +476,8 @@ async function handleReplyDraft(args, endpoint) {
  * @param {string} accessToken - Graph access token
  * @param {object} draft - The draft Graph returned from createReply/createReplyAll
  * @param {string} actionName - 'reply' or 'reply-all'
- * @returns {Promise<object|null>} A tool error, or null to keep the draft
+ * @returns {Promise<{error: object, draftDeleted: boolean}|null>} The
+ *   refusal and whether its draft was deleted, or null to keep the draft
  */
 async function refuseBlockedReply(accessToken, draft, actionName) {
   if (!getRecipientAllowlist()) return null;
@@ -490,18 +509,22 @@ async function refuseBlockedReply(accessToken, draft, actionName) {
   try {
     await callGraphAPI(accessToken, 'DELETE', `me/messages/${draft.id}`);
   } catch (error) {
-    return toolError(
+    const stillThere = toolError(
       `${reason} The draft Graph created could not be deleted (${error.message}), so it is still in Drafts with ID \`${draft.id}\`. Do not send it.`,
       {
         nextStep: `Delete it with draft action=delete id=${draft.id} (or in Outlook). ${nextStep}`,
       }
     );
+    return { error: stillThere, draftDeleted: false };
   }
 
-  return toolError(
-    `${reason} The draft Graph created was deleted, so nothing was kept.`,
-    { nextStep }
-  );
+  return {
+    error: toolError(
+      `${reason} The draft Graph created was deleted, so nothing was kept.`,
+      { nextStep }
+    ),
+    draftDeleted: true,
+  };
 }
 
 /**
@@ -556,7 +579,7 @@ async function handleForwardDraft(args) {
       `me/messages/${id}/createForward`,
       requestBody
     );
-    return formatDraftResponse(draft, 'forward draft created');
+    return formatDraftResponse(draft, 'Forward draft created');
   } catch (error) {
     return handleError('creating forward draft', error);
   }

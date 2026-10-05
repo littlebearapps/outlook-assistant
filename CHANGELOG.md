@@ -7,6 +7,104 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.14.1] - 2026-10-05
+
+Patch release with the fixes from a live test of all 22 tools on v3.14.0.
+Read the upgrade note if you set a session limit to `0`.
+
+### Upgrade notes
+
+- **A session limit of `0` now blocks the tool instead of meaning "no
+  limit"** (#302). If you set `OUTLOOK_MAX_EMAILS_PER_SESSION=0` (or any
+  `OUTLOOK_MAX_<TOOL>_PER_SESSION=0`, or `0` in the Claude Code plugin's
+  *Send limit per session* setting) to mean unlimited, remove it or leave it
+  empty. `0` now refuses every real send, draft write, invitation or rule
+  change it covers.
+
+### Changed
+
+- **Session limits fail closed** (#302). Unset or empty still means no
+  limit. `0` refuses every real call to the tool it covers, and so does any
+  value that isn't a whole number (such as `-1`, `1.5` or `unlimited`), or is
+  too large to count, also blocks it. A
+  tool's own `OUTLOOK_MAX_<TOOL>_PER_SESSION` still wins over
+  `OUTLOOK_MAX_EMAILS_PER_SESSION`, so `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION=0`
+  with `OUTLOOK_MAX_DRAFT_PER_SESSION=20` lets the AI draft but never send.
+  Dry runs still preview.
+- The refusal says which setting blocked the tool and that nothing was sent,
+  and its next step tells the AI not to retry or get round it another way.
+  The server `instructions` name every blocked tool, and hard rule 4 now
+  reads "rate limits (0 = off)".
+- `auth action=about` shows a **Session limits** row with each rate-limited
+  tool's limit (or BLOCKED) and how many calls it has used. The startup log
+  names blocked tools.
+- The `send-email`, `draft`, `create-event` and `manage-rules` descriptions,
+  the plugin skill, the plugin setting, the README, SECURITY.md, the FAQ, the
+  how-to guides and the troubleshooting guide all say that `0` blocks.
+
+### Fixed
+
+- **Inbox rules with "has attachments" can be created again** (#300).
+  `manage-rules` sent `hasAttachment`, but Graph's rule property is
+  `hasAttachments`, so any rule using `hasAttachments` or
+  `exceptHasAttachments` failed with a 400 (`UnableToDeserializePostBody`).
+  Listing and dry-run previews read the same wrong name, so they missed the
+  condition on rules made in Outlook. A test now checks every rule key against
+  Graph's property list.
+- **`export` with a `savePath` ending in `/` creates that folder** (#301).
+  Before, a folder that didn't exist yet became an extensionless file of that
+  name. It now gets a new folder (0700) with a uniquely named file inside,
+  as `outputDir` does.
+- **`manage-event` update previews say who would be emailed** (#303), like
+  the cancel, decline and delete previews: the attendees an organiser's
+  update reaches (with the external count), who an `attendees` change adds
+  (invited) or removes (sent a cancellation), and plainly when nobody is
+  emailed (no attendees, not the organiser, or only your own reminder,
+  categories or show-as changed). An `attendees`-only change says that only
+  the people added or removed are emailed, as Graph does, and rooms and
+  resources count as recipients. The PATCH body still follows.
+- **Automatic-reply schedules show the real time** (#304). `mailbox-settings`
+  printed the scheduled start and end as a bare UTC time in US date order
+  with no zone (`10/5/2026, 1:45:00 AM` for 5 Oct, 12:45 pm in Melbourne).
+  `get`, `set-auto-replies` and its dry run now show the UTC instant plus a
+  labelled local time in the display timezone, as `list-events` does.
+- **Tool output wording** (#306): dry-run previews say "DRY RUN" once
+  (the dispatcher's line), not twice; a `draft` dry run no longer shows
+  "Save to Sent"; `draft` reply, reply-all and forward results read "Reply
+  draft created." (not "Draft reply draft created."); viewing a binary
+  attachment points to `attachments` action=`download` (not the old
+  `download-attachment` tool); `manage-category` action=`set` says it is a
+  deprecated alias for `update`; and `export` target=`mime` with
+  `headersOnly` keeps the headers within `maxSize`, cut at a character
+  boundary.
+- **Delta sync labels every page correctly** (#262). Pages after the first
+  of an initial `search-emails` `deltaMode` sync were labelled incremental
+  and their emails counted as Created/Updated. The server now remembers which
+  sync each continuation token belongs to, so every page of an initial sync
+  says Initial and an incremental sync's later pages stay Incremental. A
+  continuation token from before a restart is labelled as such rather than
+  guessed. The email list heading also names the folder ("Emails in Legal")
+  instead of the verbosity ("Emails in standard", #306).
+- **Smaller gaps from the live test** (#307): `manage-rules` reorder now
+  lists the resulting rule order and names any rule Exchange renumbered (old
+  → new), since Exchange can renumber the other
+  rules and deleting a rule later doesn't shift them back.
+  `access-shared-mailbox` adds the "enable shared-mailbox scopes" hint to a
+  404 as well as a 403 while `OUTLOOK_SHARED_MAILBOX` is off. An empty
+  folder-scoped search now suggests Junk Email, where mail from a new sender
+  often lands.
+- **Small fixes from the v3.14.0 docs sweep** (#299): a `draft` reply or
+  reply-all that the allowlist refuses (once its draft is deleted again), or
+  that Graph rejects outright (a 4xx), no longer uses up a session-limit
+  slot; a timeout, server error or failed delete keeps the slot used, since
+  a draft may be left behind; the
+  `folders` `stats` hints name `search-emails` with `deltaMode: true` for
+  folders over 50 messages (list mode stops at 50), not a `list-emails-delta`
+  or `list-emails` tool that doesn't exist; and the `folders`
+  `sourceFolder`, `apply-category` batch and `export` batch-format
+  descriptions now match what the code does (`sourceFolder` is ignored; one
+  request per message; batch export also takes mime/eml).
+
 ## [3.14.0] - 2026-10-04
 
 Security and safety release. Upgrading is recommended for everyone on 3.13.0

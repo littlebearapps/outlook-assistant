@@ -4,43 +4,26 @@ Active milestones for the Outlook Assistant MCP server. Items may shift or be cu
 
 For shipped work, see [`CHANGELOG.md`](CHANGELOG.md).
 
-## v3.14.0 — Safety skill, hooks & MCP hardening (next)
+## v3.14.1 — Live-test fixes (released 2026-10-05)
 
-This release gates the Claude directory and Cursor Marketplace submissions. The awesome-copilot listing (github/awesome-copilot#4455) will be moved to this tag. It has three layers: the server enforces, client hooks prompt, and the skill teaches. Every change must work across Claude Code and Desktop, GitHub Copilot (VS Code and CLI), Cursor, Codex/ChatGPT, Gemini CLI and local models.
+Fixes from the 2026-10-05 live test of all 22 tools on v3.14.0, plus the small server fixes the v3.14.0 docs sweep found. See `[3.14.1]` in [`CHANGELOG.md`](CHANGELOG.md).
 
-**Status:** #270–#284 are all implemented and in review, unreleased: #270, #275–#277 and #281 in PR #294; #271–#274 and #278–#280 in PR #295; the plugin items #282–#284 in PR #296. The cross-client matrix ([`docs/cross-client-matrix.md`](docs/cross-client-matrix.md)) is started: Claude Code, GitHub Copilot CLI, Cursor CLI and Codex CLI have been checked; VS Code and the Cursor desktop app still need checking by hand.
+- **#302** Session limits fail closed: `0` (or a value that isn't a whole number) blocks the tool instead of meaning "no limit"; unset still means no limit. Blocked tools are named in the server `instructions`, `auth action=about` and the startup log. This is the one upgrade note.
+- **#300** `manage-rules` uses Graph's `hasAttachments` rule property, so rules with `hasAttachments` or `exceptHasAttachments` no longer fail with a 400.
+- **#301** An `export` `savePath` ending in `/` is a folder, created if missing.
+- **#303** `manage-event` update dry runs say who would be emailed.
+- **#304** Automatic-reply schedules are shown as the UTC instant plus a labelled local time.
+- **#306** Tool output wording: one DRY RUN label, no "Save to Sent" on draft previews, the `attachments` download hint, the `manage-category` `set` deprecation note, `mime` `headersOnly` within `maxSize`.
+- **#262** Delta sync labels every page of an initial sync as initial (moved here from the fix queue).
+- **#307** `manage-rules` reorder lists the resulting order; the `access-shared-mailbox` 404 hint; empty folder searches suggest Junk Email.
+- **#299** (item 2) A refused `draft` reply gives its session-limit slot back once its draft is deleted; the `folders` `sourceFolder` and `stats` hints, `apply-category` batch and `export` batch-format descriptions match the code.
 
-**Server safety**
-- **#270** A risk-class map (`read` / `reversible` / `outward` / `destructive` / `persistent`) that annotations, hooks, the skill and read-only mode are all derived from. New tools must be classified on purpose.
-- **#271** MCP server `instructions`; Claude Code `requiresUserInteraction` on `send-email` and `create-event`; an `OUTLOOK_READ_ONLY` mode.
-- **#272** Mail-tips warnings are surfaced instead of being sent inside the payload. Sends to external or out-of-office recipients need acknowledgement.
-- **#273** A rule whose forward or redirect is blocked is refused, not downgraded; rate-limit fixes.
-- **#274** `dryRun` previews for invites, cancel/decline/delete, auto-replies, and folder and contact deletes.
-- **#280** `create-event` uses a Graph `transactionId`, so retries can't duplicate meetings.
-- **#278** Less personal data in logs; verbose logging behind `OUTLOOK_DEBUG`.
-
-**MCP protocol and tool quality**
-- **#275** Every tool error sets `isError`. The stale "authenticate" tool references are fixed.
-- **#276** Real JSON-RPC errors for unknown methods (needed for MCP 2026-07-28 clients); a correct `capabilities` shape; dead code removed.
-- **#277** All four annotation hints set explicitly and accurately on every tool, plus a top-level `title`.
-- **#279** Misleading result hints fixed; description hygiene.
-- **#281** `server.json` metadata, an optional client ID, `smithery.yaml`, and a JSON Schema 2020-12 CI check.
-
-**Plugin**
-- **#282** The `using-outlook-assistant` skill: hard rules first, then a reference file per surface (email, calendar, rules and settings, contacts and folders, search and efficient use, personal vs M365, shared mailboxes, prompt injection, privacy).
-- **#283** A safety hook: PreToolUse `ask` with plain-English reasons, a PostToolUse note that retrieved content is untrusted, and a `confirm_level` setting (`OUTLOOK_CONFIRM_LEVEL` where a client has no plugin settings). It runs in Claude Code, GitHub Copilot CLI (`com.github.copilot/hooks/hooks.json`) and Cursor (`.cursor-plugin/plugin.json` with `hooks/hooks-cursor.json`), which also fixes Cursor loading the v3.13.0 plugin with unexpanded `${user_config.*}` placeholders.
-- **#284** Prompt-injection evals (with and without the skill) and a cross-client verification matrix.
-
-**Follow-ups from this work** (no issues yet)
+**Still open from #299** (follow-ups from v3.14.0, moved to v3.15.0)
+- Another focused review of the safety hook's prompt text against the server's argument handling.
 - Check the hook and skill by hand in VS Code with Copilot (Local agent). It reads the Copilot hook file, but so far that's known only from VS Code's source.
 - Check the Cursor desktop app; only Cursor CLI has been verified.
 - Cursor shows its own generic "Run this MCP tool?" prompt instead of the hook's reason, and an `Mcp(...)` allow rule or `--force` skips it. Revisit if Cursor starts showing hook reasons; until then the docs warn against allowlisting Outlook's send, rule and delete tools.
-- Fill in the rest of the cross-client matrix: Claude Desktop, Gemini CLI, MCP Inspector and a local model.
-- Tool descriptions that the docs sweep found out of step with the code:
-  - `folders`: `sourceFolder` says it defaults to the inbox, but `move` ignores it.
-  - `apply-category`: says it uses Graph `$batch`, but it sends one request per message.
-  - `folders` `stats`: its hint names a `list-emails-delta` tool that doesn't exist.
-  - `export` `format`: the description lists fewer batch formats than the code accepts.
+- Fill in the rest of the cross-client matrix ([`docs/cross-client-matrix.md`](docs/cross-client-matrix.md)): Claude Desktop, Gemini CLI, MCP Inspector and a local model.
 
 ## v3.15.0 — Structured outputs & paging
 
@@ -65,10 +48,9 @@ v3.12.1 release reviews. They ship in patch releases as fixes accumulate, rather
 than one release per fix. The highest-impact ones come first.
 
 - **#261** `search-emails` `query` sends `$orderby` with `$search`, which Graph rejects (`SearchWithOrderBy`), so the search falls back
-- **#262** delta sync labels continuation pages of an initial sync as incremental and counts them as Created/Updated
 - **#263** search-driven `export` wraps `from:`/`subject:` in one quoted phrase, so the field scopes are ignored
 - **#239** `list-events` misses upcoming occurrences of recurring meetings (move to `calendarView`)
-- **#245** `update-email` and `apply-category` claim `$batch` but run sequential PATCHes (v3.12.1 corrected the `update-email` description; the code is still sequential)
+- **#245** `update-email` and `apply-category` batches run one PATCH per message rather than Graph `$batch` (both descriptions now say so; the code is still sequential)
 - **#240** `find-meeting-rooms` fallback calls the beta-only `findRooms` on v1.0
 - **#250** `manage-contact` folder param is unusable
 - **#258** leftovers from the post-3.12.0 hardening: request `Place.Read.All`
@@ -117,6 +99,16 @@ taken by the safety and MCP-quality work above, so these carry forward
 
 ## Recently shipped
 
+- **v3.14.0** (Oct 2026) — **Safety skill, hooks & MCP hardening** (milestone
+  #6). A risk-class map drives every tool's annotations and an
+  `OUTLOOK_READ_ONLY` mode; the server sends `instructions` with hard rules;
+  `dryRun` previews for invitations, meeting actions, automatic replies and
+  folder and contact deletes, and `dryRun` is refused where there's no preview;
+  mail tips can refuse a send; a rule with blocked forwarding is refused whole;
+  `create-event` is retry-safe; quieter logs. The plugin gains the
+  `using-outlook-assistant` skill and a safety hook for Claude Code, GitHub
+  Copilot CLI and Cursor. Three advisories fixed (recipient allowlist, export
+  file writes, dry runs).
 - **v3.13.0** (Oct 2026) — **Marketplace plugins**. A plugin bundle
   (`plugins/outlook-assistant/`) for Claude Code (installable now via
   `claude plugin marketplace add littlebearapps/outlook-assistant`) and, in

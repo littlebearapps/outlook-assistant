@@ -77,7 +77,8 @@ const folderTools = [
         },
         sourceFolder: {
           type: 'string',
-          description: 'Source folder name, default is inbox (action=move)',
+          description:
+            'Ignored: action=move moves each email by ID from wherever it is. Accepted for older callers.',
         },
         // stats params
         folder: {

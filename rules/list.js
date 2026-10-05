@@ -153,7 +153,7 @@ function formatRuleConditions(rule) {
   }
 
   // Booleans
-  if (c.hasAttachment === true) conditions.push('Has attachment');
+  if (c.hasAttachments === true) conditions.push('Has attachment');
   if (c.sentToMe === true) conditions.push('Sent to me');
   if (c.sentOnlyToMe === true) conditions.push('Sent only to me');
   if (c.sentCcMe === true) conditions.push('I am in CC');
@@ -269,7 +269,7 @@ function formatRuleExceptions(rule) {
   if (e.recipientContains?.length > 0) {
     parts.push(`Recipient contains: "${e.recipientContains.join('", "')}"`);
   }
-  if (e.hasAttachment === true) parts.push('Has attachment');
+  if (e.hasAttachments === true) parts.push('Has attachment');
   if (e.importance) parts.push(`Importance: ${e.importance}`);
   if (e.sensitivity) parts.push(`Sensitivity: ${e.sensitivity}`);
   if (e.sentToMe === true) parts.push('Sent to me');

@@ -106,11 +106,32 @@ async function handleEditRuleSequence(args) {
       { sequence }
     );
 
+    // Exchange may renumber other rules to make room, and deleting a rule
+    // later doesn't shift them back (#307), so show the resulting order.
+    let order = '';
+    try {
+      const after = await getInboxRules(accessToken);
+      const before = new Map(rules.map((r) => [r.id, r.sequence]));
+      const lines = [...after]
+        .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0))
+        .map((r) => `${r.sequence}: ${r.displayName}`);
+      const moved = after.filter(
+        (r) => r.id !== rule.id && before.get(r.id) !== r.sequence
+      );
+      const movedNote =
+        moved.length > 0
+          ? `\n\nRenumbered by Exchange: ${moved.map((r) => `"${r.displayName}" ${before.get(r.id)} → ${r.sequence}`).join('; ')}. Tell the user; deleting a rule later doesn't shift them back.`
+          : '\n\nNo other rule was renumbered.';
+      order = `\n\nRule order now (sequence: name):\n${lines.join('\n')}${movedNote}`;
+    } catch (_error) {
+      // The reorder succeeded; the order listing is a courtesy.
+    }
+
     return {
       content: [
         {
           type: 'text',
-          text: `Successfully updated the sequence of rule "${ruleName}" to ${sequence}.`,
+          text: `Successfully updated the sequence of rule "${ruleName}" to ${sequence}.${order}`,
         },
       ],
     };
@@ -128,7 +149,7 @@ const rulesTools = [
   {
     name: 'manage-rules',
     description:
-      'Server-side inbox rules (destructive: covers `delete`; `dryRun` previews create/update). Rules run on the Exchange server whichever client is open. action=`list` (default) returns rules with id/name/sequence; `includeDetails: true` adds conditions/actions/exceptions. action=`create` builds a rule from condition params (12, e.g. fromAddresses, containsSubject, bodyContains, hasAttachments, importance, sentTo, sensitivity), action params (9, e.g. moveToFolder/copyToFolder — folder name, nested path like `Triage/Delete`, or ID — forwardTo, redirectTo, assignCategories, markAsRead, delete) and optional `except*` exceptions. action=`update` patches fields by `ruleId` or `ruleName`. action=`reorder` changes priority via `sequence` (lower runs first). action=`delete` removes a rule. The recipient allowlist applies to forwardTo/redirectTo. There is deliberately no `permanentDelete` action (too dangerous for AI use; use the Outlook UI). Subject to session rate limits (`OUTLOOK_MAX_MANAGE_RULES_PER_SESSION`).',
+      'Server-side inbox rules (destructive: covers `delete`; `dryRun` previews create/update). Rules run on the Exchange server whichever client is open. action=`list` (default) returns rules with id/name/sequence; `includeDetails: true` adds conditions/actions/exceptions. action=`create` builds a rule from condition params (12, e.g. fromAddresses, containsSubject, bodyContains, hasAttachments, importance, sensitivity), action params (9, e.g. moveToFolder/copyToFolder — folder name, nested path like `Triage/Delete`, or ID — forwardTo, redirectTo, assignCategories, markAsRead, delete) and optional `except*` exceptions. action=`update` patches fields by `ruleId` or `ruleName`. action=`reorder` changes priority via `sequence` (lower runs first). action=`delete` removes a rule. The recipient allowlist applies to forwardTo/redirectTo. There is no `permanentDelete` action. Changes count against the session limit (`OUTLOOK_MAX_MANAGE_RULES_PER_SESSION`, else `OUTLOOK_MAX_EMAILS_PER_SESSION`); 0 refuses them.',
     ...toolMetadata('manage-rules', 'Inbox Rules'),
     inputSchema: {
       type: 'object',

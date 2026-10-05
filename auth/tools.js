@@ -21,6 +21,11 @@ const {
 } = require('./device-code');
 const { toolMetadata } = require('../utils/risk-classes');
 const { toolError } = require('../utils/tool-error');
+const {
+  describeSessionLimits,
+  resolveSessionLimit,
+  RATE_LIMITED_TOOLS,
+} = require('../utils/safety');
 const { log } = require('../utils/logger');
 
 // Path for persisting device code state across MCP server restarts
@@ -193,12 +198,15 @@ async function handleAbout() {
     (s) => s !== 'offline_access'
   );
   const testMode = config.USE_TEST_MODE ? 'Enabled' : 'Disabled';
-  const rateLimitConfigured = Boolean(
-    process.env.OUTLOOK_MAX_EMAILS_PER_SESSION
+  // A cap on any rate-limited tool counts as configured (#302).
+  const sessionLimits = describeSessionLimits();
+  const rateLimitConfigured = Object.keys(RATE_LIMITED_TOOLS).some(
+    (tool) => resolveSessionLimit(tool).limit !== null
   );
   const allowlistConfigured = Boolean(process.env.OUTLOOK_ALLOWED_RECIPIENTS);
-  const rateLimit =
-    process.env.OUTLOOK_MAX_EMAILS_PER_SESSION || 'Unlimited (no limit set)';
+  const rateLimit = rateLimitConfigured
+    ? sessionLimits.join('; ')
+    : 'Unlimited (no limit set; 0 would block)';
   const allowlist =
     process.env.OUTLOOK_ALLOWED_RECIPIENTS || 'None (all recipients allowed)';
 
@@ -243,7 +251,7 @@ async function handleAbout() {
     `| Modules | auth, email, calendar, folder, rules, contacts, categories, settings, advanced |`,
     `| Timezone | ${config.DEFAULT_TIMEZONE} |`,
     `| Test Mode | ${testMode} |`,
-    `| Rate Limit | ${rateLimit} |`,
+    `| Session limits | ${rateLimit} |`,
     `| Recipient Allowlist | ${allowlist} |`,
     `| Read-only mode | ${config.READ_ONLY ? 'On (OUTLOOK_READ_ONLY): only read tools and actions run' : 'Off (set OUTLOOK_READ_ONLY=true and restart to refuse every change)'} |`,
     `| Scopes | ${scopes.length} configured |`,
@@ -264,7 +272,9 @@ async function handleAbout() {
     );
     lines.push('```');
     if (!rateLimitConfigured) {
-      lines.push('OUTLOOK_MAX_EMAILS_PER_SESSION=10');
+      lines.push(
+        'OUTLOOK_MAX_EMAILS_PER_SESSION=10   # 0 blocks sending; unset = no limit'
+      );
     }
     if (!allowlistConfigured) {
       lines.push(

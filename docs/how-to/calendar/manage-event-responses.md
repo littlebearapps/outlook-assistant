@@ -37,7 +37,7 @@ params:
     - { email: "boardroom@example.com", type: "resource" }
 ```
 
-If any attendee is given without a type, the event's current attendee list is read first, so `dryRun: true` also signs in and shows the types that would be sent.
+If any attendee is given without a type, the event's current attendee list is read first, so the `dryRun: true` preview shows the types that would be sent.
 
 If the server has a recipient allowlist (`OUTLOOK_ALLOWED_RECIPIENTS`), every address on the new `attendees` list, rooms included, must be on it. One blocked address refuses the whole update (`Event update refused: …`): nothing changes and nobody is emailed, and a `dryRun` reports the same refusal. The allowlist isn't checked when you change other fields without passing `attendees`, or on decline, cancel and delete. See [Send Email Safely](../email/send-email-safely.md#recipient-allowlist).
 
@@ -96,7 +96,7 @@ Delete removes the event from your calendar. It isn't always silent: if you orga
 
 Microsoft Graph doesn't document a guaranteed recovery path for a deleted event, so don't count on getting it back.
 
-## Preview Before You Decline, Cancel or Delete
+## Preview Before You Update, Decline, Cancel or Delete
 
 Add `dryRun: true` to any action to see what it would do without changing or sending anything:
 
@@ -114,7 +114,7 @@ The preview reads the event (nothing is written) and starts with `DRY RUN — no
 - **cancel**: "Cancels 'Team sync' on 3 Apr 2026, 9:00 am GMT+11:00 and emails a cancellation to 6 attendees (2 external)", followed by your message and the attendee list
 - **decline**: the organiser who would get your response (and whether they're external), or that nobody is told when `sendResponse: false`
 - **delete**: whether attendees get a cancellation (only for a meeting you organised that has attendees and isn't already cancelled), or that nobody is emailed
-- **update**: the PATCH body that would be sent
+- **update**: for a meeting you organise, the attendees who would be emailed an update (with the external count); with `attendees`, who would be added (sent an invitation) and who removed (sent a cancellation). If you change only `attendees`, Graph emails just those people, not the rest (unless a removed address is a distribution list, when it emails everyone). Rooms and resources count as recipients too. It says plainly when nobody is emailed: the event has no attendees, you aren't the organiser (only your copy changes), or you changed only your own `categories`, `reminderMinutesBeforeStart` or `showAs`. The PATCH body that would be sent follows
 
 "External" means an address whose domain differs from your own signed-in address. The preview also warns when Graph would refuse the action, for example cancelling a meeting you didn't organise.
 
@@ -136,7 +136,7 @@ The preview reads the event (nothing is written) and starts with `DRY RUN — no
 | `comment` | Message sent with decline/cancel | No (decline/cancel only) |
 | `sendResponse` | `false` declines without notifying the organiser (default `true`) | No (decline only) |
 | `subject`, `start`, `end`, `attendees`, `body`, `location`, `isOnlineMeeting`, `sensitivity`, `showAs`, `importance`, `categories`, `reminderMinutesBeforeStart` | Event fields to change | No (update only — pass only what changes) |
-| `dryRun` | Preview any action without changing or sending anything: who would be emailed (decline/cancel/delete) or the PATCH body (update) | No |
+| `dryRun` | Preview any action without changing or sending anything: who would be emailed, with an external count (update also lists who is added or removed, and the PATCH body) | No |
 
 > **Note**: `manage-event` is marked as destructive and open-world at the tool level, because every action can email other people: a decline goes to the organiser, a cancel or delete to the attendees, and an organiser's update to the attendees. Clients that honour MCP annotations ask for confirmation before any action — including `update`. Use `dryRun: true` to preview any action first.
 

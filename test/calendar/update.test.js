@@ -261,8 +261,11 @@ describe('handleUpdateEvent', () => {
       dryRun: true,
     });
 
-    expect(callGraphAPI).toHaveBeenCalledTimes(1);
-    expect(callGraphAPI.mock.calls[0][1]).toBe('GET');
+    // Reads only: the attendee types, then the event for the recipients
+    // line (#303). Never a PATCH.
+    expect(
+      callGraphAPI.mock.calls.every(([, method]) => method === 'GET')
+    ).toBe(true);
     expect(result.content[0].text).toMatch(/^DRY RUN — nothing was changed\./);
     expect(result.content[0].text).toMatch(/"type": "optional"/);
     expect(result.content[0].text).toMatch(/"type": "resource"/);
@@ -516,7 +519,7 @@ describe('handleUpdateEvent', () => {
 
   // ── dryRun ───────────────────────────────────────────────────────────
 
-  test('dryRun returns the patch payload without calling Graph', async () => {
+  test('dryRun returns the patch payload without writing', async () => {
     ensureAuthenticated.mockResolvedValue('dummy_access_token');
 
     const result = await handleUpdateEvent({
@@ -526,7 +529,9 @@ describe('handleUpdateEvent', () => {
       dryRun: true,
     });
 
-    expect(callGraphAPI).not.toHaveBeenCalled();
+    expect(
+      callGraphAPI.mock.calls.every(([, method]) => method === 'GET')
+    ).toBe(true);
     expect(result.content[0].text).toMatch(/^DRY RUN — nothing was changed\./);
     expect(result.content[0].text).toMatch(/Preview/);
     expect(result.content[0].text).toMatch(/high/);
@@ -557,5 +562,182 @@ describe('handleUpdateEvent', () => {
     });
     expect(result.content[0].text).toMatch(/No fields to update/);
     expect(callGraphAPI).not.toHaveBeenCalled();
+  });
+});
+
+// #303: the update preview says who would be emailed, like the cancel,
+// decline and delete previews.
+describe('handleUpdateEvent dryRun recipients (#303)', () => {
+  const EVENT = {
+    subject: 'Planning',
+    start: { dateTime: '2026-10-06T00:00:00.0000000', timeZone: 'UTC' },
+    end: { dateTime: '2026-10-06T00:30:00.0000000', timeZone: 'UTC' },
+    isOrganizer: true,
+    organizer: { emailAddress: { address: 'me@corp.com' } },
+    attendees: [
+      { emailAddress: { address: 'me@corp.com' }, type: 'required' },
+      { emailAddress: { address: 'colleague@corp.com' }, type: 'required' },
+      { emailAddress: { address: 'guest@gmail.com' }, type: 'required' },
+    ],
+  };
+
+  beforeEach(() => {
+    callGraphAPI.mockReset();
+    ensureAuthenticated.mockReset();
+    ensureAuthenticated.mockResolvedValue('token');
+    callGraphAPI.mockImplementation((_t, method, path) => {
+      if (method !== 'GET') throw new Error(`unexpected ${method}`);
+      if (path === 'me') return Promise.resolve({ mail: 'me@corp.com' });
+      return Promise.resolve(EVENT);
+    });
+  });
+
+  test('names the attendees an organiser update emails, with the external count', async () => {
+    const result = await handleUpdateEvent({
+      eventId: 'evt_1',
+      start: '2026-10-06T11:00:00',
+      dryRun: true,
+    });
+    const text = result.content[0].text;
+    expect(text).toMatch(/emails an update to 2 attendees \(1 external\)/);
+    expect(text).toMatch(/- guest@gmail\.com \(external\)/);
+    expect(text).toMatch(/- colleague@corp\.com/);
+    expect(result._meta).toMatchObject({ notified: 2, external: 1 });
+  });
+
+  test('lists who an attendee change adds and removes', async () => {
+    const result = await handleUpdateEvent({
+      eventId: 'evt_1',
+      attendees: ['colleague@corp.com', 'new@corp.com'],
+      dryRun: true,
+    });
+    const text = result.content[0].text;
+    expect(text).toMatch(/Added \(sent an invitation\): new@corp\.com/);
+    expect(text).toMatch(/Removed \(sent a cancellation\): guest@gmail\.com/);
+  });
+
+  test('says nobody is emailed when only personal fields change', async () => {
+    const result = await handleUpdateEvent({
+      eventId: 'evt_1',
+      reminderMinutesBeforeStart: 30,
+      dryRun: true,
+    });
+    expect(result.content[0].text).toMatch(/attendees aren't sent an update/);
+    expect(result._meta.notified).toBe(0);
+  });
+
+  test("says nobody is emailed when you aren't the organiser", async () => {
+    callGraphAPI.mockImplementation((_t, method, path) =>
+      path === 'me'
+        ? Promise.resolve({ mail: 'me@corp.com' })
+        : Promise.resolve({ ...EVENT, isOrganizer: false })
+    );
+    const result = await handleUpdateEvent({
+      eventId: 'evt_1',
+      subject: 'x',
+      dryRun: true,
+    });
+    expect(result.content[0].text).toMatch(
+      /changes only your copy and nobody is emailed/
+    );
+  });
+
+  test('says nobody is emailed for an event without attendees', async () => {
+    callGraphAPI.mockImplementation((_t, method, path) =>
+      path === 'me'
+        ? Promise.resolve({ mail: 'me@corp.com' })
+        : Promise.resolve({ ...EVENT, attendees: [] })
+    );
+    const result = await handleUpdateEvent({
+      eventId: 'evt_1',
+      subject: 'x',
+      dryRun: true,
+    });
+    expect(result.content[0].text).toMatch(
+      /no attendees, so nobody is emailed/
+    );
+  });
+});
+
+test('update dryRun stays a preview when the event cannot be read (#303)', async () => {
+  callGraphAPI.mockReset();
+  ensureAuthenticated.mockResolvedValue('token');
+  callGraphAPI.mockRejectedValue(new Error('404'));
+  const result = await handleUpdateEvent({
+    eventId: 'evt_1',
+    subject: 'x',
+    dryRun: true,
+  });
+  expect(result.content[0].text).toMatch(/^DRY RUN — nothing was changed\./);
+  expect(result.content[0].text).toMatch(/Couldn't read the event/);
+});
+
+// CodeRabbit review on #308: attendee-only updates email only who changed;
+// a room-only meeting still notifies its room.
+describe('handleUpdateEvent dryRun recipients, review follow-ups', () => {
+  const base = {
+    subject: 'Planning',
+    start: { dateTime: '2026-10-06T00:00:00.0000000', timeZone: 'UTC' },
+    isOrganizer: true,
+    organizer: { emailAddress: { address: 'me@corp.com' } },
+  };
+  const mockEvent = (attendees) =>
+    callGraphAPI.mockImplementation((_t, method, path) =>
+      path === 'me'
+        ? Promise.resolve({ mail: 'me@corp.com' })
+        : Promise.resolve({ ...base, attendees })
+    );
+
+  beforeEach(() => {
+    callGraphAPI.mockReset();
+    ensureAuthenticated.mockReset();
+    ensureAuthenticated.mockResolvedValue('token');
+  });
+
+  test('an attendee-only change emails only the people added or removed', async () => {
+    mockEvent([
+      { emailAddress: { address: 'keep@corp.com' }, type: 'required' },
+      { emailAddress: { address: 'gone@gmail.com' }, type: 'required' },
+    ]);
+    const result = await handleUpdateEvent({
+      eventId: 'evt_1',
+      attendees: ['keep@corp.com', 'new@corp.com'],
+      dryRun: true,
+    });
+    const text = result.content[0].text;
+    expect(text).toMatch(/Only the people added or removed are emailed/);
+    expect(text).toMatch(/Added \(sent an invitation\): new@corp\.com/);
+    expect(text).toMatch(/Removed \(sent a cancellation\): gone@gmail\.com/);
+    expect(text).not.toMatch(/keep@corp\.com \(/);
+    expect(result._meta).toMatchObject({ notified: 2, external: 1 });
+  });
+
+  test('an attendee list that does not change emails nobody', async () => {
+    mockEvent([
+      { emailAddress: { address: 'keep@corp.com' }, type: 'required' },
+    ]);
+    const result = await handleUpdateEvent({
+      eventId: 'evt_1',
+      attendees: ['keep@corp.com'],
+      dryRun: true,
+    });
+    expect(result.content[0].text).toMatch(/No attendee is added or removed/);
+    expect(result._meta.notified).toBe(0);
+  });
+
+  test('a room-only meeting is not reported as emailing nobody', async () => {
+    mockEvent([
+      { emailAddress: { address: 'room1@corp.com' }, type: 'resource' },
+    ]);
+    const result = await handleUpdateEvent({
+      eventId: 'evt_1',
+      start: '2026-10-06T12:00:00',
+      dryRun: true,
+    });
+    const text = result.content[0].text;
+    expect(text).not.toMatch(/nobody is emailed/);
+    expect(text).toMatch(/rooms or resources are sent the update/);
+    expect(text).toMatch(/room1@corp\.com/);
+    expect(result._meta.notified).toBe(1);
   });
 });

@@ -153,11 +153,11 @@ The `draft` tool inherits the same safety controls as `send-email`:
 | Dry-run preview | `create` (other actions refuse `dryRun: true` and change nothing) | `dryRun: true` |
 | Mail-tips check | `create` | `checkRecipients: true` |
 | Recipient allowlist | `create`, `update`, `forward`, `reply`, `reply-all`, `send` | `OUTLOOK_ALLOWED_RECIPIENTS` env |
-| Rate limiting | `create`, `update`, `reply`, `reply-all`, `forward` | `OUTLOOK_MAX_DRAFT_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION` |
-| Send rate limiting | `send` | Shared with `send-email`: `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION` |
+| Rate limiting | `create`, `update`, `reply`, `reply-all`, `forward` | `OUTLOOK_MAX_DRAFT_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION`; `0` blocks, unset = no limit |
+| Send rate limiting | `send` | Shared with `send-email`: `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION` env, else `OUTLOOK_MAX_EMAILS_PER_SESSION`; `0` blocks every send, unset = no limit |
 | Drafts-only guard | `update`, `send`, `delete` | Always on (non-drafts are refused) |
 
-With an allowlist set, `send` checks the draft's to, cc and bcc as they are at send time, so a recipient added later (including in Outlook) is caught before anything goes out. `reply` and `reply-all` check the recipients Graph fills in from the original message; if any isn't allowed, the new draft is deleted and the call is refused (it still counts towards the rate limit, because the draft was created first). Dry runs don't count towards the rate limit.
+With an allowlist set, `send` checks the draft's to, cc and bcc as they are at send time, so a recipient added later (including in Outlook) is caught before anything goes out. `reply` and `reply-all` check the recipients Graph fills in from the original message; if any isn't allowed, the new draft is deleted and the call is refused. Since v3.14.1 a refused reply doesn't count towards the rate limit once its draft has been deleted, and neither does one Graph rejects outright (a 4xx other than 408). A timeout, a server error (5xx), a 408 or a failed delete keeps the slot used, because a draft may have been left behind. Dry runs don't count towards the rate limit.
 
 ## Tips
 

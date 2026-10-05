@@ -325,9 +325,135 @@ async function previewDeleteEvent(accessToken, { eventId }) {
   );
 }
 
+/**
+ * Fields that are the signed-in user's own view of the event. Changing
+ * only these doesn't send attendees a meeting update.
+ */
+const PERSONAL_FIELDS = new Set([
+  'categories',
+  'reminderMinutesBeforeStart',
+  'showAs',
+]);
+
+/**
+ * Who a manage-event update would email (#303): the attendees of an event
+ * you organise, plus who is added or removed when `attendees` is replaced.
+ * @param {string} accessToken
+ * @param {{eventId: string, patch: object}} options - the PATCH body
+ * @returns {Promise<{lines: string[], notified: number, external: (number|null)}>}
+ */
+async function describeUpdateRecipients(accessToken, { eventId, patch }) {
+  let event = null;
+  try {
+    event = await fetchEvent(accessToken, eventId);
+  } catch (_error) {
+    // Fall through to the cautious wording below.
+  }
+  if (!event || typeof event !== 'object') {
+    return {
+      lines: [
+        "Couldn't read the event to check who would be emailed. If you organise it and it has attendees, saving this emails them an update.",
+      ],
+      notified: null,
+      external: null,
+    };
+  }
+  const title = eventTitle(event);
+  const fields = Object.keys(patch);
+
+  if (!event.isOrganizer) {
+    return {
+      lines: [
+        `Updates ${title}. You aren't the organiser, so this changes only your copy and nobody is emailed.`,
+      ],
+      notified: 0,
+      external: 0,
+    };
+  }
+
+  const own = await ownAddressFor(accessToken, event);
+  const before = summariseAttendees(event.attendees, own);
+  const after = patch.attendees
+    ? summariseAttendees(patch.attendees, own)
+    : before;
+
+  const lines = [];
+  if (fields.every((field) => PERSONAL_FIELDS.has(field))) {
+    lines.push(
+      `Updates ${title}. Only your own settings change (${fields.join(', ')}), so attendees aren't sent an update.`
+    );
+    return { lines, notified: 0, external: 0 };
+  }
+
+  const empty = (summary) =>
+    summary.people.length === 0 && summary.resources.length === 0;
+  if (empty(before) && empty(after)) {
+    lines.push(`Updates ${title}. It has no attendees, so nobody is emailed.`);
+    return { lines, notified: 0, external: 0 };
+  }
+
+  const key = (address) => address.toLowerCase();
+  const beforeSet = new Set(before.people.map((p) => key(p.address)));
+  const afterSet = new Set(after.people.map((p) => key(p.address)));
+  const added = after.people.filter((p) => !beforeSet.has(key(p.address)));
+  const removed = before.people.filter((p) => !afterSet.has(key(p.address)));
+  const changeLines = [];
+  if (added.length > 0) {
+    changeLines.push(
+      `Added (sent an invitation): ${added.map((p) => p.address).join(', ')}`
+    );
+  }
+  if (removed.length > 0) {
+    changeLines.push(
+      `Removed (sent a cancellation): ${removed.map((p) => p.address).join(', ')}`
+    );
+  }
+
+  // Graph emails only the attendees whose status changed when the PATCH
+  // carries nothing but `attendees` (except removing a distribution-list
+  // member, which updates everyone): event-update docs.
+  if (fields.length === 1 && fields[0] === 'attendees') {
+    const changed = [...added, ...removed];
+    if (changed.length === 0) {
+      lines.push(
+        `Updates ${title}. No attendee is added or removed, so nobody is emailed.`
+      );
+      return { lines, notified: 0, external: 0 };
+    }
+    lines.push(
+      `Updates the attendees of ${title}. Only the people added or removed are emailed; the others aren't (unless a removed address is a distribution list, when Graph emails every attendee).`,
+      ...changeLines
+    );
+    const external =
+      after.external === null && before.external === null
+        ? null
+        : changed.filter((p) => p.external).length;
+    return { lines, notified: changed.length, external };
+  }
+
+  if (after.people.length > 0) {
+    lines.push(
+      `Updates ${title} and emails an update to ${countPhrase(after)}.`
+    );
+  } else if (after.resources.length > 0) {
+    lines.push(
+      `Updates ${title}. It has no people attendees; its rooms or resources are sent the update.`
+    );
+  } else {
+    lines.push(`Updates ${title} and removes every attendee.`);
+  }
+  lines.push(...changeLines, ...recipientLines(after));
+  return {
+    lines,
+    notified: after.people.length + after.resources.length,
+    external: after.external,
+  };
+}
+
 module.exports = {
   emailDomain,
   summariseAttendees,
+  describeUpdateRecipients,
   previewCreateEvent,
   previewCancelEvent,
   previewDeclineEvent,

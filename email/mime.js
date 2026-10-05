@@ -11,6 +11,22 @@ const { toolError, authRequiredError } = require('../utils/tool-error');
 const { log } = require('../utils/logger');
 
 /**
+ * The longest prefix of `text` that fits in `maxBytes` of UTF-8 without
+ * splitting a character (which would render as U+FFFD).
+ * @param {string} text
+ * @param {number} maxBytes
+ * @returns {string}
+ */
+function utf8Prefix(text, maxBytes) {
+  const bytes = Buffer.from(text, 'utf8');
+  if (bytes.length <= maxBytes) return text;
+  let end = maxBytes;
+  // Step back over continuation bytes (10xxxxxx) to a character start.
+  while (end > 0 && (bytes[end] & 0xc0) === 0x80) end--;
+  return bytes.subarray(0, end).toString('utf8');
+}
+
+/**
  * Parse MIME headers from raw content
  * @param {string} mimeContent - Raw MIME content
  * @returns {object} - Parsed headers and body boundary info
@@ -123,7 +139,13 @@ async function handleGetMimeContent(args) {
       // Check size limit
       if (maxSize > 0 && stats.bytes > maxSize) {
         if (headersOnly) {
-          // Return just headers if over limit
+          // Return just headers if over limit, themselves capped at
+          // maxSize (#306): a large header block used to come back whole.
+          const headerBytes = Buffer.byteLength(parsed.headerSection, 'utf8');
+          const headerText =
+            headerBytes > maxSize
+              ? `${utf8Prefix(parsed.headerSection, maxSize)}\n… (headers cut at maxSize ${maxSize} bytes of ${headerBytes})`
+              : parsed.headerSection;
           return {
             content: [
               {
@@ -132,7 +154,7 @@ async function handleGetMimeContent(args) {
                   `# MIME Content (Headers Only - Content Truncated)\n\n` +
                   `**Size**: ${stats.formattedSize} (exceeds ${maxSize} byte limit)\n` +
                   `**Lines**: ${stats.lines}\n\n` +
-                  `## MIME Headers\n\n\`\`\`\n${parsed.headerSection}\n\`\`\``,
+                  `## MIME Headers\n\n\`\`\`\n${headerText}\n\`\`\``,
               },
             ],
             _meta: {
@@ -250,6 +272,7 @@ async function handleGetMimeContent(args) {
 
 module.exports = {
   handleGetMimeContent,
+  utf8Prefix,
   parseMimeHeaders,
   getMimeStats,
 };

@@ -76,7 +76,7 @@ function buildConditions(args) {
   }
 
   // Boolean conditions
-  if (args.hasAttachments === true) conditions.hasAttachment = true;
+  if (args.hasAttachments === true) conditions.hasAttachments = true;
   if (args.sentToMe === true) conditions.sentToMe = true;
   if (args.sentOnlyToMe === true) conditions.sentOnlyToMe = true;
   if (args.sentCcMe === true) conditions.sentCcMe = true;
@@ -303,7 +303,7 @@ function buildExceptions(args) {
     exceptions.bodyContains = parseCommaSeparated(args.exceptBodyContains);
   }
   if (args.exceptHasAttachments === true) {
-    exceptions.hasAttachment = true;
+    exceptions.hasAttachments = true;
   }
 
   return { exceptions, warnings };

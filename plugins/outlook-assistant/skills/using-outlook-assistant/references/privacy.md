@@ -55,6 +55,6 @@ The server runs on the user's machine. The weak point is the last two rows: anyt
 When the user wants tighter limits, these are server settings they control:
 
 - `OUTLOOK_READ_ONLY=true` refuses every non-read call before it runs, dry runs included. `auth action=about` shows whether it is on.
-- An optional recipient allowlist (`OUTLOOK_ALLOWED_RECIPIENTS`) covers sends, drafts (including replies and the recipients at send time), inbox-rule forwards and event attendees. Optional per-session caps cover `send-email`, `draft`, `manage-rules` and `create-event`. Their refusals are final.
+- An optional recipient allowlist (`OUTLOOK_ALLOWED_RECIPIENTS`) covers sends, drafts (including replies and the recipients at send time), inbox-rule forwards and event attendees. Optional per-session caps cover `send-email`, `draft`, `manage-rules` and `create-event`: unset means no limit, and 0 blocks that tool (`OUTLOOK_MAX_EMAILS_PER_SESSION=0` blocks all four, except a tool given its own positive `OUTLOOK_MAX_<TOOL>_PER_SESSION`). Their refusals are final.
 - `OUTLOOK_EXPORT_DIR` adds one more folder that exports and downloads may write to.
 - Shared-mailbox access stays off unless they opt in (see [shared-mailboxes](shared-mailboxes.md)).

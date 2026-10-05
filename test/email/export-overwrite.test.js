@@ -71,6 +71,53 @@ afterEach(() => {
   fs.rmSync(scratch, { recursive: true, force: true });
 });
 
+// #301: a savePath ending in a separator names a directory. Resolving the
+// path dropped the slash, so a new folder became an extensionless file.
+describe('export target=message with a savePath ending in "/"', () => {
+  test('creates the missing folder (0700) and writes a named file inside', async () => {
+    const dir = path.join(tmp, 'new-folder');
+    const result = await handleExportEmail({
+      id: MESSAGE.id,
+      format: 'json',
+      savePath: `${dir}/`,
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(fs.statSync(dir).isDirectory()).toBe(true);
+    if (process.platform !== 'win32') {
+      expect(fs.statSync(dir).mode & 0o777).toBe(0o700);
+    }
+    const files = fs.readdirSync(dir);
+    expect(files).toHaveLength(1);
+    expect(files[0]).toMatch(/Quarterly_report\.json$/);
+    expect(result._meta.filePath).toBe(path.join(dir, files[0]));
+  });
+
+  test('still refuses a trailing-slash path outside the allowed folders', async () => {
+    const result = await handleExportEmail({
+      id: MESSAGE.id,
+      format: 'json',
+      savePath: `${path.join(outside, 'x')}/`,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/Refusing to write/);
+    expect(fs.existsSync(path.join(outside, 'x'))).toBe(false);
+  });
+
+  test('without a trailing slash a missing path is still a file', async () => {
+    const target = path.join(tmp, 'plain-name');
+    const result = await handleExportEmail({
+      id: MESSAGE.id,
+      format: 'json',
+      savePath: target,
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(fs.statSync(target).isFile()).toBe(true);
+  });
+});
+
 describe('export target=message with an explicit savePath file', () => {
   test('writes a new file at exactly that path', async () => {
     const target = path.join(tmp, 'report.json');

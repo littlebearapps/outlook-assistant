@@ -14,6 +14,12 @@ jest.mock('../../auth');
 
 const mockAccessToken = 'test_token';
 
+// Schedule times render in the configured display timezone (#304), so build
+// the expected local text the same way rather than hard-coding Melbourne.
+const { DEFAULT_TIMEZONE } = require('../../config');
+const { formatLocal } = require('../../calendar/list');
+const local = (utc) => `${utc} (${formatLocal(utc, DEFAULT_TIMEZONE)})`;
+
 beforeEach(() => {
   jest.resetAllMocks();
   jest.spyOn(console, 'error').mockImplementation();
@@ -614,7 +620,7 @@ describe('set-auto-replies dryRun', () => {
     const text = result.content[0].text;
     expect(text).toMatch(/^DRY RUN — nothing was changed\./);
     expect(text).toContain(
-      'Status: scheduled, from 2026-12-20T00:00:00.000Z to 2027-01-05T00:00:00.000Z (UTC).'
+      `Status: scheduled, from ${local('2026-12-20T00:00:00.000Z')} to ${local('2027-01-05T00:00:00.000Z')}.`
     );
     expect(text).toContain(
       'Internal senders (your organisation): get a 25-character reply: "I\'m away until 5 January."'
@@ -704,5 +710,55 @@ describe('set-auto-replies dryRun', () => {
     });
     expect(writeCalls()).toEqual([]);
     expect(result.content[0].text).toMatch(/^DRY RUN/);
+  });
+});
+
+// #304: the schedule was a bare UTC time in the host's locale (US order, no
+// zone), so 5 Oct 12:45 pm AEDT read as "10/5/2026, 1:45:00 AM".
+describe('scheduled auto-reply times (#304)', () => {
+  test('show the UTC instant plus a labelled local time', async () => {
+    callGraphAPI.mockResolvedValue({
+      status: 'scheduled',
+      scheduledStartDateTime: {
+        dateTime: '2026-10-05T01:45:00.0000000',
+        timeZone: 'UTC',
+      },
+      scheduledEndDateTime: {
+        dateTime: '2026-10-05T02:00:00.0000000',
+        timeZone: 'UTC',
+      },
+      externalAudience: 'all',
+    });
+
+    const result = await handleGetMailboxSettings({
+      section: 'automaticRepliesSetting',
+    });
+    const text = result.content[0].text;
+
+    expect(text).toContain(
+      `**Scheduled Start**: ${local('2026-10-05T01:45:00.000Z')}`
+    );
+    expect(text).toContain(
+      `**Scheduled End**: ${local('2026-10-05T02:00:00.000Z')}`
+    );
+    expect(text).not.toMatch(/10\/5\/2026/);
+  });
+
+  test('a zone that cannot be converted is shown as given', async () => {
+    callGraphAPI.mockResolvedValue({
+      status: 'scheduled',
+      scheduledStartDateTime: {
+        dateTime: '2026-10-05T12:45:00.0000000',
+        timeZone: 'AUS Eastern Standard Time',
+      },
+    });
+
+    const result = await handleGetMailboxSettings({
+      section: 'automaticRepliesSetting',
+    });
+
+    expect(result.content[0].text).toContain(
+      '**Scheduled Start**: 2026-10-05T12:45:00.0000000 (AUS Eastern Standard Time)'
+    );
   });
 });

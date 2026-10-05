@@ -678,6 +678,24 @@ describe('handleAbout — F-1/F-2/F-48', () => {
     expect(result.content[0].text).toMatch(/OUTLOOK_ALLOWED_RECIPIENTS/);
   });
 
+  test('shows a session limit of 0 as BLOCKED, not unlimited (#302)', async () => {
+    process.env.OUTLOOK_MAX_EMAILS_PER_SESSION = '0';
+    callGraphAPI.mockResolvedValue({ userPrincipalName: 'u@example.com' });
+
+    const text = (await handleAbout()).content[0].text;
+
+    expect(text).toMatch(/\| Session limits \| send-email: BLOCKED/);
+    expect(text).not.toMatch(/Unlimited/);
+  });
+
+  test('says an unset limit means no limit and 0 would block (#302)', async () => {
+    callGraphAPI.mockResolvedValue({ userPrincipalName: 'u@example.com' });
+
+    const text = (await handleAbout()).content[0].text;
+
+    expect(text).toMatch(/Unlimited \(no limit set; 0 would block\)/);
+  });
+
   test('does not warn when both safety belts are set', async () => {
     process.env.OUTLOOK_MAX_EMAILS_PER_SESSION = '10';
     process.env.OUTLOOK_ALLOWED_RECIPIENTS = 'example.com';

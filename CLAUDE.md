@@ -1,6 +1,6 @@
 # CLAUDE.md - Outlook Assistant
 
-MCP server for Microsoft Outlook via Graph API (v3.14.0). 22 tools across 9 modules. Runtime Node ≥ 18.18; dev tooling (lint-staged hook, `npm run inspect`) needs Node ≥ 22.22.1.
+MCP server for Microsoft Outlook via Graph API (v3.14.1). 22 tools across 9 modules. Runtime Node ≥ 18.18; dev tooling (lint-staged hook, `npm run inspect`) needs Node ≥ 22.22.1.
 
 ## Commands
 
@@ -49,8 +49,9 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 - **MCP annotations** on all 22 tools: all four hints set explicitly and derived from the risk-class map (`utils/risk-classes.js`: `read`/`reversible`/`outward`/`destructive`/`persistent` per tool and action), plus a top-level `title`. `destructiveHint` = any outward, destructive or persistent action; `openWorldHint` = surfaces untrusted content (#92) or reaches other people; `idempotentHint` = read-only or the tool's `idempotent` flag. A test fails on any unclassified tool or action (#270, #277)
 - **Read-only mode** (`OUTLOOK_READ_ONLY`, plugin setting `read_only`, #271): `request-handler.js` refuses every call whose risk class isn't `read` after validation and before the handler (`utils/read-only.js`), dry runs included; unclassified calls fail closed; only `auth` authenticate/device-code-complete are exempt (sign-in). Calls that leave `action` out (or null) are classified by the map's `defaultAction`; `test/dispatcher/read-classes-dont-write.test.js` proves no `read` call writes
 - **Server `instructions`** (`utils/server-instructions.js`, #271): hard rules in the first 512 characters, under 2,000 in total; `send-email` and `create-event` carry `_meta["anthropic/requiresUserInteraction"]` (risk-map flag via `riskMeta`, never on mixed read/write tools)
-- **`dryRun` previews** (#274): `send-email`, `draft` create, `manage-rules` create/update, `create-event`, every `manage-event` action, `mailbox-settings` set-auto-replies, `folders` delete, `manage-contact` delete. The #274 previews start `DRY RUN — nothing was changed.` via `dryRunResult` (`utils/safety.js`); calendar ones (`calendar/preview.js`) may read but never write, and say who would be emailed with an external count. That list is `DRY_RUN_ACTIONS` (`utils/risk-classes.js`): `request-handler.js` refuses `dryRun: true` on any other call before the handler (handlers there ignore it and would really write) and stamps `_meta.dryRun` plus the label on supported previews; `test/dispatcher/dry-run-honoured.test.js` checks every tool/action
+- **`dryRun` previews** (#274): `send-email`, `draft` create, `manage-rules` create/update, `create-event`, every `manage-event` action, `mailbox-settings` set-auto-replies, `folders` delete, `manage-contact` delete. Every preview starts `DRY RUN — nothing was changed.` exactly once (#306): the #274 previews via `dryRunResult` (`utils/safety.js`), the rest via the dispatcher's label; calendar ones (`calendar/preview.js`) may read but never write, and say who would be emailed with an external count. That list is `DRY_RUN_ACTIONS` (`utils/risk-classes.js`): `request-handler.js` refuses `dryRun: true` on any other call before the handler (handlers there ignore it and would really write) and stamps `_meta.dryRun` plus the label on supported previews; `test/dispatcher/dry-run-honoured.test.js` checks every tool/action
 - **get-mail-tips**: pre-send recipient validation (out-of-office, mailbox full, delivery restrictions); `_meta.issues` lists each flag per recipient
+- **Session limits** (`utils/safety.js` `resolveSessionLimit`, #302): per tool `OUTLOOK_MAX_<TOOL>_PER_SESSION`, else `OUTLOOK_MAX_EMAILS_PER_SESSION`; unset = no limit, `0` (or anything not a whole number) refuses every real call, dry runs still preview. Blocked tools are named in the server `instructions`, `auth action=about` and the startup log. `draft` send counts as `send-email`
 - **send-email**: `dryRun`, `checkRecipients` (mail tips), session rate limiting (`OUTLOOK_MAX_EMAILS_PER_SESSION`), recipient allowlist (`OUTLOOK_ALLOWED_RECIPIENTS`). With `checkRecipients`, a failed check refuses the send, and a flagged recipient (out of office, mailbox full, delivery restricted, external, group with external members) refuses it until `acknowledgeWarnings: true` (#272); tips never go in the `sendMail` payload
 - **draft**: `dryRun` on create, `checkRecipients` (mail tips), recipient allowlist (create/update/forward; reply/reply-all check the generated recipients and delete a refused draft; send re-checks the draft's current to/cc/bcc), rate limiting (create/update/reply/reply-all/forward). Send action shares limit with `send-email`. `update`/`send`/`delete` look the ID up first and refuse anything that isn't an unsent draft (`assertIsDraft` in `email/draft.js`).
 - **manage-rules**: `dryRun` on create/update, rate limiting (`OUTLOOK_MAX_MANAGE_RULES_PER_SESSION`), recipient allowlist on forwardTo/redirectTo, no `permanentDelete` (too dangerous for AI). An allowlist-blocked forward/redirect refuses the whole rule or update, dry runs included (`checkRuleRecipients`, #273). The limit counts real writes only: create/update (not dry runs), reorder, and delete once the rule is found (#273, #279). Supports 12 conditions, 9 actions, and exceptions.
@@ -79,7 +80,7 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 | `plugins/outlook-assistant/skills/using-outlook-assistant/` | Agent skill: SKILL.md hard rules + one `references/` file per surface; risk table (`sync-risk-map.js`) and `metadata.version` (`sync-version.js`) are generated |
 | `scripts/sync-risk-map.js` | Copies `utils/risk-classes.js` into the hook's `risk-map.json` and the SKILL.md risk table; `--check` reports drift |
 | `scripts/skill-evals.js` | Prompt-injection evals: `claude -p` against test mode's mock mailbox, with skill + hook, hook only, or neither |
-| `utils/server-instructions.js` | Server `instructions` text (hard rules first); read-only note follows `config.READ_ONLY` |
+| `utils/server-instructions.js` | Server `instructions` text (hard rules first); read-only note follows `config.READ_ONLY`; names tools a session limit of 0 blocks (`blockedTools`) |
 | `utils/read-only.js` | `OUTLOOK_READ_ONLY` gate: refusal for any non-`read` call (`auth` sign-in actions exempt) |
 | `utils/logger.js` | Stderr logger: `log.info`/`log.debug`, per-call notes, `redact()`, `isDebugEnabled()` (`OUTLOOK_DEBUG`) |
 | `utils/tool-error.js` | `toolError(message, { nextStep })` and `authRequiredError()`: every handler error returns `isError: true` |
@@ -94,7 +95,7 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 | `utils/mailbox.js` | `buildMailboxPrefix` → `me` or `users/{mailbox}`; validates addresses and enforces the `OUTLOOK_SHARED_MAILBOX` opt-in |
 | `folder/resolve.js` | Path-aware folder resolver (ID, well-known alias, `Parent/Child` path, bare name), mailbox-aware |
 | `calendar/list.js` | `list-events` filter/order building (`startAfter`/`startBefore`/`subject`) |
-| `calendar/preview.js` | `dryRun` previews for `create-event` and `manage-event` cancel/decline/delete (attendees, external count) |
+| `calendar/preview.js` | `dryRun` previews for `create-event` and `manage-event` update/cancel/decline/delete (attendees, external count; update adds who is added/removed) |
 | `email/mail-tips.js` | Pre-send recipient validation |
 | `utils/safety.js` | Rate limiter, allowlist, dry-run previews (`dryRunResult`) |
 | `utils/safe-write.js` | Shared file writer (attachments, export): output-path confinement to the allowed folders, exclusive create, `overwrite`-gated replace of an explicit `savePath`, 0600/0700 modes |
@@ -107,7 +108,7 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 OUTLOOK_CLIENT_ID=your-client-id           # or save at runtime: auth action=authenticate clientId=<id>
 OUTLOOK_CLIENT_SECRET=your-secret-VALUE    # Browser flow only; NOT the Secret ID!
 USE_TEST_MODE=false
-OUTLOOK_MAX_EMAILS_PER_SESSION=10          # Optional: default per-session cap for send-email, draft, manage-rules, create-event (per tool: OUTLOOK_MAX_<TOOL>_PER_SESSION)
+OUTLOOK_MAX_EMAILS_PER_SESSION=10          # Optional: default per-session cap for send-email, draft, manage-rules, create-event (per tool: OUTLOOK_MAX_<TOOL>_PER_SESSION). Unset = no limit; 0 or a non-whole number BLOCKS the tool (#302)
 OUTLOOK_ALLOWED_RECIPIENTS=example.com     # Optional: restrict recipients and event attendees (scope: Safety Controls)
 OUTLOOK_READ_ONLY=true                     # Optional: refuse every non-read tool call (true|1|yes|on; unrecognised = on)
 OUTLOOK_IMMUTABLE_IDS=true                 # Optional: IDs persist through folder moves
@@ -151,7 +152,7 @@ Common errors (auth, device code, search, timezones) and fixes live in [`docs/tr
 ## Testing
 
 ```bash
-npm test                    # Jest unit tests (100 suites / 2846 tests at v3.14.0)
+npm test                    # Jest unit tests (103 suites / 2908 tests at v3.14.1)
 npm run lint                # ESLint (0 errors expected)
 npm run format:check        # Prettier (CI runs this)
 node scripts/e2e-stdio.js <tool> '<argsJson>'  # Fresh stdio server: initialize + one tools/call
@@ -167,7 +168,7 @@ Mock data defined in `utils/mock-data.js` (includes three prompt-injection email
 - OData filters use proper URI encoding via `utils/odata-helpers.js`
 - Field presets in `utils/field-presets.js` optimise token usage
 - Response verbosity: `minimal`, `standard`, `full` (controls output detail); a body at `full` is capped at 40,000 characters (`DEFAULT_LIMITS.maxFullBodyChars`), and the note points to `export` for the rest
-- Delta sync uses `@odata.deltaLink` for incremental updates
+- Delta sync uses `@odata.deltaLink` for incremental updates; `email/delta.js` remembers each continuation token's phase (initial/incremental; unknown after a restart)
 - Batch API: `callGraphAPIBatch()` sends up to 20 requests via `$batch` endpoint
 - Immutable IDs: opt-in via `OUTLOOK_IMMUTABLE_IDS=true` — IDs persist through folder moves
 

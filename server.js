@@ -9,6 +9,7 @@ const config = require('./config');
 const { createRequestHandler } = require('./request-handler');
 const { TOOLS } = require('./tools');
 const { serverInstructions } = require('./utils/server-instructions');
+const { blockedTools } = require('./utils/safety');
 
 /**
  * @param {Array<object>} [tools] - tool definitions (default: the registry)
@@ -23,8 +24,11 @@ function createServer(tools = TOOLS) {
       // -32601 rather than empty stubs. (#276)
       capabilities: { tools: { listChanged: false } },
       // Model-facing safety rules and usage tips, sent in the initialize
-      // result (#271).
-      instructions: serverInstructions({ readOnly: config.READ_ONLY }),
+      // result (#271), naming any tool a session limit of 0 blocks (#302).
+      instructions: serverInstructions({
+        readOnly: config.READ_ONLY,
+        blockedTools: blockedTools(),
+      }),
     }
   );
 

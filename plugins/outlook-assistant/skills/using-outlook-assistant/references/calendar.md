@@ -18,7 +18,7 @@ All of these are outward. Get the user's go-ahead with exact details (hard rules
 ## Preview first
 
 - `create-event` with `dryRun: true` creates nothing and sends nothing. It shows who would be invited and how many are external.
-- `manage-event` with `dryRun: true` changes and sends nothing for any action. For `decline`, `cancel` and `delete` it says who would be emailed, with an external count; for `update` it shows the PATCH body.
+- `manage-event` with `dryRun: true` changes and sends nothing for any action. Every action's preview says who would be emailed, with an external count. For `update` it also lists who an `attendees` change adds (invited) or removes (sent a cancellation); an `attendees`-only change emails just those people. It counts rooms and resources as recipients, says when nobody is emailed (no attendees, not the organiser, or only the user's own reminder, categories or show-as), and shows the PATCH body.
 - "External" means an address whose domain differs from the signed-in user's.
 - Previews also warn when Graph would refuse, such as cancelling a meeting you didn't organise.
 
@@ -26,7 +26,7 @@ All of these are outward. Get the user's go-ahead with exact details (hard rules
 
 - With a recipient allowlist set, every `create-event` attendee (rooms included), and every address on the list you pass to `manage-event` `update`, must be allowed. One blocked address refuses the whole call (`Event refused` or `Event update refused`), and a dry run reports the same refusal. Tell the user; don't drop the attendee and retry unless they ask.
 - The allowlist doesn't cover cancellations, declines, or updates sent to attendees already on the event, so confirm those as usual.
-- `create-event` can count towards a per-session cap. `Rate limit reached` is final until the server restarts.
+- `create-event` can count towards a per-session cap. `Rate limit reached` is final until the server restarts. A limit of 0 (`create-event is blocked`) means the user has switched invitations off: don't try to invite people another way.
 
 ## Choosing the action
 

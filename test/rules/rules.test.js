@@ -49,7 +49,7 @@ const mockRuleWithExceptions = {
   isEnabled: true,
   sequence: 3,
   conditions: {
-    hasAttachment: true,
+    hasAttachments: true,
     subjectContains: ['invoice', 'receipt', 'payment'],
   },
   actions: {
@@ -216,7 +216,7 @@ describe('handleCreateRule', () => {
       'receipt',
       'payment',
     ]);
-    expect(ruleBody.conditions.hasAttachment).toBe(true);
+    expect(ruleBody.conditions.hasAttachments).toBe(true);
   });
 
   it('should create a rule with bodyContains', async () => {
@@ -270,7 +270,7 @@ describe('handleCreateRule', () => {
       dryRun: true,
     });
 
-    expect(result.content[0].text).toContain('DRY RUN');
+    expect(result.content[0].text).toMatch(/\(not (created|applied)\)/);
     expect(result.content[0].text).toContain('Dry Run Rule');
     // Should only have the getInboxRules call, no POST
     expect(callGraphAPI).toHaveBeenCalledTimes(1);
@@ -510,7 +510,7 @@ describe('handleUpdateRule', () => {
       'invoice',
       'receipt',
     ]);
-    expect(patchCall[3].conditions.hasAttachment).toBe(true);
+    expect(patchCall[3].conditions.hasAttachments).toBe(true);
     // fromAddresses should NOT be in patch (not provided in update)
     expect(patchCall[3].conditions.fromAddresses).toBeUndefined();
   });
@@ -553,7 +553,7 @@ describe('handleUpdateRule', () => {
       dryRun: true,
     });
 
-    expect(result.content[0].text).toContain('DRY RUN');
+    expect(result.content[0].text).toMatch(/\(not (created|applied)\)/);
     expect(result.content[0].text).toContain('CURRENT:');
     expect(result.content[0].text).toContain('AFTER UPDATE:');
     // Should only have the getInboxRules call, no PATCH

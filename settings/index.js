@@ -9,6 +9,26 @@ const { ensureAuthenticated } = require('../auth');
 const { toolMetadata } = require('../utils/risk-classes');
 const { toolError, authRequiredError } = require('../utils/tool-error');
 const { dryRunResult, dryRunUnsupported } = require('../utils/safety');
+const { DEFAULT_TIMEZONE } = require('../config');
+const { toUtcIso, formatLocal } = require('../calendar/list');
+
+/**
+ * A Graph dateTimeTimeZone as the UTC instant plus a labelled local time in
+ * the display timezone, e.g. "2026-10-05T01:45:00.000Z (5 Oct 2026, 12:45 pm
+ * GMT+11:00)" (#304). A zone Graph returns that can't be converted is shown
+ * as given, with its zone.
+ * @param {{dateTime: string, timeZone?: string}} dtz
+ * @returns {string}
+ */
+function formatScheduleTime(dtz) {
+  try {
+    const utc = toUtcIso(dtz);
+    const local = formatLocal(utc, DEFAULT_TIMEZONE);
+    return local ? `${utc} (${local})` : utc;
+  } catch (_error) {
+    return `${dtz?.dateTime} (${dtz?.timeZone || 'UTC'})`;
+  }
+}
 
 // Days of the week for working hours
 const DAYS_OF_WEEK = [
@@ -65,12 +85,12 @@ function formatAutomaticReplies(settings) {
   if (settings.status !== 'disabled') {
     if (settings.scheduledStartDateTime) {
       lines.push(
-        `**Scheduled Start**: ${new Date(settings.scheduledStartDateTime.dateTime).toLocaleString()}`
+        `**Scheduled Start**: ${formatScheduleTime(settings.scheduledStartDateTime)}`
       );
     }
     if (settings.scheduledEndDateTime) {
       lines.push(
-        `**Scheduled End**: ${new Date(settings.scheduledEndDateTime.dateTime).toLocaleString()}`
+        `**Scheduled End**: ${formatScheduleTime(settings.scheduledEndDateTime)}`
       );
     }
 
@@ -118,9 +138,7 @@ function describeReply(message, unchanged) {
 /** "scheduled, from A to B (UTC)" */
 function describeSchedule(start, end) {
   if (!start?.dateTime || !end?.dateTime) return 'scheduled';
-  return start.timeZone === end.timeZone
-    ? `scheduled, from ${start.dateTime} to ${end.dateTime} (${start.timeZone})`
-    : `scheduled, from ${start.dateTime} (${start.timeZone}) to ${end.dateTime} (${end.timeZone})`;
+  return `scheduled, from ${formatScheduleTime(start)} to ${formatScheduleTime(end)}`;
 }
 
 /**

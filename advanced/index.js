@@ -242,7 +242,7 @@ async function handleAccessSharedMailbox(args) {
 
     if (error.message.includes('not found') || error.message.includes('404')) {
       return toolError(
-        `Shared mailbox "${sharedMailbox}" not found. Please verify the email address.`
+        `Shared mailbox "${sharedMailbox}" not found, or you can't access it. Please verify the email address.${sharedEnabled ? '' : ENABLE_SHARED_HINT}`
       );
     }
 

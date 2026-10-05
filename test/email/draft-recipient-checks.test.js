@@ -255,7 +255,7 @@ describe('draft action=reply/reply-all checks the generated recipients', () => {
     const result = await handleDraft({ action: 'reply-all', id: 'msg-1' });
 
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toContain('reply-all draft created');
+    expect(result.content[0].text).toContain('Reply-all draft created');
     expect(deleteCalls()).toHaveLength(0);
   });
 
@@ -353,6 +353,95 @@ describe('draft rate limit covers reply, reply-all and forward', () => {
       to: 'alice@example.com',
     });
     expect(allowed.isError).toBeUndefined();
+  });
+
+  // #299: the slot was taken before the reply draft existed and kept even
+  // when the allowlist refused it and the draft was deleted again.
+  test('a reply refused by the allowlist gives its draft slot back', async () => {
+    process.env.OUTLOOK_ALLOWED_RECIPIENTS = 'example.com';
+    process.env.OUTLOOK_MAX_DRAFT_PER_SESSION = '1';
+    callGraphAPI.mockImplementation((_t, method) => {
+      if (method === 'DELETE') return Promise.resolve({});
+      return Promise.resolve({
+        id: 'd1',
+        toRecipients: [recipient('eve@outside.test')],
+        ccRecipients: [],
+        bccRecipients: [],
+      });
+    });
+
+    const refused = await handleDraft({ action: 'reply', id: 'msg-1' });
+    expect(refused.isError).toBe(true);
+    expect(refused.content[0].text).not.toMatch(/Rate limit reached/);
+
+    callGraphAPI.mockResolvedValue({
+      id: 'd2',
+      toRecipients: [recipient('alice@example.com')],
+      ccRecipients: [],
+      bccRecipients: [],
+    });
+    const allowed = await handleDraft({ action: 'reply', id: 'msg-2' });
+    expect(allowed.isError).toBeUndefined();
+  });
+
+  test('a reply whose draft could not be created gives its slot back', async () => {
+    process.env.OUTLOOK_MAX_DRAFT_PER_SESSION = '1';
+    callGraphAPI.mockRejectedValueOnce(
+      new Error('API call failed with status 404: ErrorItemNotFound')
+    );
+    const failed = await handleDraft({ action: 'reply', id: 'missing' });
+    expect(failed.isError).toBe(true);
+
+    callGraphAPI.mockResolvedValue({ id: 'd3' });
+    const next = await handleDraft({ action: 'reply', id: 'msg-1' });
+    expect(next.isError).toBeUndefined();
+  });
+
+  // The slot stays used whenever a draft may have been left behind, so a
+  // failing call can't be used to create drafts past the limit.
+  test.each([
+    ['a timeout', new Error('Request timed out after 60000 ms')],
+    ['a 5xx', new Error('API call failed with status 503: unavailable')],
+    [
+      'a 5xx whose body mentions a 4xx',
+      new Error('API call failed with status 502: upstream said status 404'),
+    ],
+    ['a 408', new Error('API call failed with status 408: timeout')],
+    ['an unprefixed message', new Error('fetch failed: status 404 cached')],
+  ])('a reply that failed with %s keeps its slot', async (_label, error) => {
+    process.env.OUTLOOK_MAX_DRAFT_PER_SESSION = '1';
+    callGraphAPI.mockRejectedValueOnce(error);
+    const failed = await handleDraft({ action: 'reply', id: 'msg-1' });
+    expect(failed.isError).toBe(true);
+
+    callGraphAPI.mockResolvedValue({ id: 'd4' });
+    const next = await handleDraft({ action: 'reply', id: 'msg-1' });
+    expect(next.content[0].text).toMatch(/Rate limit reached/);
+  });
+
+  test('a refused reply whose draft could not be deleted keeps its slot', async () => {
+    process.env.OUTLOOK_ALLOWED_RECIPIENTS = 'example.com';
+    process.env.OUTLOOK_MAX_DRAFT_PER_SESSION = '1';
+    callGraphAPI.mockImplementation((_t, method) => {
+      if (method === 'DELETE') {
+        return Promise.reject(new Error('API call failed with status 500'));
+      }
+      return Promise.resolve({
+        id: 'd5',
+        toRecipients: [recipient('eve@outside.test')],
+        ccRecipients: [],
+        bccRecipients: [],
+      });
+    });
+    const refused = await handleDraft({ action: 'reply', id: 'msg-1' });
+    expect(refused.content[0].text).toMatch(/could not be deleted/);
+
+    const next = await handleDraft({
+      action: 'create',
+      to: 'a@example.com',
+      subject: 'x',
+    });
+    expect(next.content[0].text).toMatch(/Rate limit reached/);
   });
 
   test('without a limit configured, reply is unlimited', async () => {

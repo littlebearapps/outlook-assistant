@@ -374,18 +374,37 @@ describe('Hermes mode (plugins/outlook-assistant-guard)', () => {
       const out = hermes(name(tool), action ? { action } : {});
       expect(out.action).toBe('approve');
       expect(out.message).toMatch(/^Outlook Assistant: \S/);
-      expect(out.rule_key).toMatch(/^outlook:[a-z-]+:[0-9a-f]{12}$/);
+      expect(out.rule_key).toMatch(/^outlook:[a-z-]+:[0-9a-f]{16}$/);
     }
   );
 
-  test('"always" is keyed on the reason, not just the tool', () => {
-    const a = hermes(name('send-email'), { to: 'a@x.com', subject: 'One' });
-    const again = hermes(name('send-email'), { to: 'a@x.com', subject: 'One' });
-    const b = hermes(name('send-email'), { to: 'b@x.com', subject: 'One' });
+  test('"always" is keyed on the whole call, not the tool or the reason', () => {
+    const call = { to: 'a@x.com', subject: 'One', body: 'Hello' };
+    const a = hermes(name('send-email'), call);
+    const reordered = hermes(name('send-email'), {
+      body: 'Hello',
+      subject: 'One',
+      to: 'a@x.com',
+    });
+    // Same reason (the body isn't in it), but a different call.
+    const otherBody = hermes(name('send-email'), { ...call, body: 'Pay now' });
+    const otherTo = hermes(name('send-email'), { ...call, to: 'b@x.com' });
     expect(a.message).toMatch(/Sends an email to a@x\.com/);
-    expect(again.rule_key).toBe(a.rule_key);
+    expect(otherBody.message).toBe(a.message);
+    expect(reordered.rule_key).toBe(a.rule_key);
+    expect(otherBody.rule_key).not.toBe(a.rule_key);
+    expect(otherTo.rule_key).not.toBe(a.rule_key);
+    expect(a.rule_key).toMatch(/^outlook:send-email:[0-9a-f]{16}$/);
+  });
+
+  test('a long recipient list clipped in the reason still gets its own key', () => {
+    const many = Array.from({ length: 12 }, (_, i) => `p${i}@x.com`);
+    const a = hermes(name('send-email'), { to: many, subject: 'S' });
+    const b = hermes(name('send-email'), {
+      to: [...many.slice(0, 11), 'attacker@evil.example'],
+      subject: 'S',
+    });
     expect(b.rule_key).not.toBe(a.rule_key);
-    expect(a.rule_key.startsWith('outlook:send-email:')).toBe(true);
   });
 
   test('reads, genuine dry runs, off and other tools get no opinion', () => {

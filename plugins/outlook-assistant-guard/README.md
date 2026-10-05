@@ -28,7 +28,7 @@ Start a new session afterwards. Check that both are listed as enabled with `herm
 | Cron jobs, `hermes chat -q`, webhooks | Refused, because nobody is there to approve it |
 | `--yolo`, `/yolo` or approvals turned off | Runs without asking; use `confirm_level: block` to refuse these calls instead |
 
-Answering "always" approves only that exact call again (the same recipients, subject and effect), not every later email.
+Answering "always" approves only an identical call again (the same recipients, subject, body and options), not every later email.
 
 **Fails closed.** If the check itself can't run (Node.js missing, an error, no answer within 20 seconds), Hermes asks you, with a "couldn't check" reason. An Outlook tool or action this plugin doesn't recognise also asks.
 
@@ -45,7 +45,7 @@ Answering "always" approves only that exact call again (the same recipients, sub
 
 Set it with `hermes config set plugins.entries.outlook-assistant-guard.settings.confirm_level block`, or in the Hermes desktop app's Plugins tab. The `OUTLOOK_CONFIRM_LEVEL` environment variable is used when the setting isn't present.
 
-Server settings (read-only mode, the recipient allowlist, session limits) belong to the Outlook Assistant server. See the [main README](https://github.com/littlebearapps/outlook-assistant#hermes-agent).
+Server settings (read-only mode, the recipient allowlist, session limits) belong to the Outlook Assistant server. See [Hermes Agent](https://github.com/littlebearapps/outlook-assistant/tree/main/plugins/outlook-assistant#hermes-agent) in the outlook-assistant plugin's README.
 
 ## Disclosure
 

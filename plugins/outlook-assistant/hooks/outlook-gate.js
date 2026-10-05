@@ -695,23 +695,43 @@ function handleCursor(payload, event, env) {
 }
 
 /**
+ * JSON with object keys sorted at every level, so the same call always
+ * gives the same text whatever order its arguments arrived in.
+ * @param {*} value
+ * @returns {string}
+ */
+function canonicalJson(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+}
+
+/**
  * Hermes's `approve`, built from the Claude-style output: Hermes sends the
  * call to its human approval gate (a prompt in the terminal, an /approve card
  * in the messaging gateway) and blocks it when nobody can answer (cron, -q).
  * `rule_key` is what "always" remembers. Without one Hermes keys on the tool
- * name, so a single "always" would approve every later call of that tool;
- * keyed on the reason it covers only the same recipients, subject and effect.
+ * name, so a single "always" would approve every later call of that tool.
+ * The reason can't be the key either: it clips long recipient lists and
+ * leaves out the body. So the key is a hash of the whole call (tool name and
+ * every argument), and "always" re-approves only an identical call.
  * @param {object} output - from ask()
- * @param {string} tool
- * @param {string} [salt] - makes the key unique, so "always" never matches again
+ * @param {string} tool - for a readable key
+ * @param {string} call - what the key stands for; a random value makes it
+ *   unique, so "always" never matches again
  */
-function hermesApprove(output, tool, salt = '') {
+function hermesApprove(output, tool, call) {
   const message = output.hookSpecificOutput.permissionDecisionReason;
   const digest = crypto
     .createHash('sha256')
-    .update(`${message}${salt}`)
+    .update(call)
     .digest('hex')
-    .slice(0, 12);
+    .slice(0, 16);
   const name = String(tool)
     .replace(/[^A-Za-z0-9_-]/g, '_')
     .slice(0, 64);
@@ -733,7 +753,11 @@ function handleHermes(payload, event, env) {
   }
   const output = preToolUse(payload, env, 'hermes');
   if (!output) return null;
-  return hermesApprove(output, outlookTool(payload.tool_name, 'hermes'));
+  return hermesApprove(
+    output,
+    outlookTool(payload.tool_name, 'hermes'),
+    canonicalJson([payload.tool_name, payload.tool_input ?? {}])
+  );
 }
 
 /**

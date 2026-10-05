@@ -457,7 +457,12 @@ async function handleReplyDraft(args, endpoint) {
       `${actionName.charAt(0).toUpperCase()}${actionName.slice(1)} draft created`
     );
   } catch (error) {
-    if (!draft && /status 4\d\d\b/.test(error.message || '')) {
+    // Only Graph's own rejection, read from the start of the error (the
+    // body after it is server text). 408 means it may have gone through.
+    const rejected = /^API call failed with status (4\d\d):/.exec(
+      error.message || ''
+    );
+    if (!draft && rejected && rejected[1] !== '408') {
       releaseRateLimit('draft');
     }
     return handleError(`creating ${actionName} draft`, error);

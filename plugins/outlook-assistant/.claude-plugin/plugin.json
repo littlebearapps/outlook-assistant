@@ -1,7 +1,7 @@
 {
   "name": "outlook-assistant",
   "displayName": "Outlook Assistant",
-  "version": "3.14.0",
+  "version": "3.14.1",
   "description": "Microsoft Outlook email, calendar and contacts for Claude: 22 tools via Microsoft Graph, with dry-run previews, send limits and recipient allowlists. Works with Outlook.com and Microsoft 365.",
   "author": {
     "name": "Little Bear Apps",
@@ -64,7 +64,7 @@
   "mcpServers": {
     "outlook": {
       "command": "npx",
-      "args": ["-y", "@littlebearapps/outlook-assistant@3.14.0"],
+      "args": ["-y", "@littlebearapps/outlook-assistant@3.14.1"],
       "env": {
         "OUTLOOK_CLIENT_ID": "${user_config.client_id}",
         "OUTLOOK_AUTH_AUDIENCE": "${user_config.auth_audience}",

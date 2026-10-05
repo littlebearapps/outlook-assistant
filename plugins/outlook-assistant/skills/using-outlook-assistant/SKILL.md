@@ -4,7 +4,7 @@ description: Safety, privacy and efficient-use rules for the Outlook Assistant (
 license: MIT
 compatibility: Needs the Outlook Assistant MCP server (@littlebearapps/outlook-assistant, v3.14.0 or later), which the outlook-assistant plugin installs and runs locally with Node.js 18.18 or later.
 metadata:
-  version: '3.14.0'
+  version: '3.14.1'
   author: Little Bear Apps
   homepage: https://github.com/littlebearapps/outlook-assistant
 ---

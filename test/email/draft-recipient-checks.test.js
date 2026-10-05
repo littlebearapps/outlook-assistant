@@ -387,7 +387,7 @@ describe('draft rate limit covers reply, reply-all and forward', () => {
   test('a reply whose draft could not be created gives its slot back', async () => {
     process.env.OUTLOOK_MAX_DRAFT_PER_SESSION = '1';
     callGraphAPI.mockRejectedValueOnce(
-      new Error('API call failed with status 404')
+      new Error('API call failed with status 404: ErrorItemNotFound')
     );
     const failed = await handleDraft({ action: 'reply', id: 'missing' });
     expect(failed.isError).toBe(true);
@@ -402,6 +402,12 @@ describe('draft rate limit covers reply, reply-all and forward', () => {
   test.each([
     ['a timeout', new Error('Request timed out after 60000 ms')],
     ['a 5xx', new Error('API call failed with status 503: unavailable')],
+    [
+      'a 5xx whose body mentions a 4xx',
+      new Error('API call failed with status 502: upstream said status 404'),
+    ],
+    ['a 408', new Error('API call failed with status 408: timeout')],
+    ['an unprefixed message', new Error('fetch failed: status 404 cached')],
   ])('a reply that failed with %s keeps its slot', async (_label, error) => {
     process.env.OUTLOOK_MAX_DRAFT_PER_SESSION = '1';
     callGraphAPI.mockRejectedValueOnce(error);

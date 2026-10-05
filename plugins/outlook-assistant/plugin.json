@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "outlook-assistant",
-  "version": "3.14.0",
+  "version": "3.14.1",
   "description": "Microsoft Outlook email, calendar and contacts: 22 MCP tools via Microsoft Graph, with dry-run previews, send limits and recipient allowlists. Works with Outlook.com and Microsoft 365.",
   "author": {
     "name": "Little Bear Apps",

@@ -50,7 +50,7 @@ const CALLS = Object.entries(TOOL_RISK).flatMap(([tool, entry]) =>
 const HIGH = ['outward', 'destructive', 'persistent'];
 
 describe('generated copies of the risk map', () => {
-  test('sync-risk-map --check reports risk-map.json and SKILL.md in sync', async () => {
+  test('sync-risk-map --check reports risk-map.json, SKILL.md and the Hermes guard’s copies in sync', async () => {
     await expect(
       execFileAsync(process.execPath, [
         path.join(ROOT, 'scripts', 'sync-risk-map.js'),
@@ -336,6 +336,118 @@ describe('Cursor hooks (.cursor-plugin + hooks/hooks-cursor.json)', () => {
     );
     expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({});
+  });
+});
+
+describe('Hermes mode (plugins/outlook-assistant-guard)', () => {
+  // Verified with Hermes Agent v0.21.5: MCP tools are named
+  // mcp__<server>__<tool> with hyphens turned into underscores; the guard
+  // plugin (gate.py) passes {tool_name, tool_input} and reads back
+  // {action, message, rule_key} or {note}.
+  const hermes = (tool, input = {}, event = 'PreToolUse', env = {}) =>
+    handle(
+      JSON.stringify({
+        hook_event_name: event,
+        tool_name: tool,
+        tool_input: input,
+      }),
+      event,
+      env,
+      'hermes'
+    );
+  const name = (tool) => `mcp__outlook__${tool.replace(/-/g, '_')}`;
+
+  test('every tool in the risk map is recognised under its Hermes name', () => {
+    for (const tool of Object.keys(TOOL_RISK)) {
+      expect(outlookTool(name(tool), 'hermes')).toBe(tool);
+    }
+    expect(outlookTool('mcp__outlook_assistant__send_email', 'hermes')).toBe(
+      'send-email'
+    );
+    expect(outlookTool('mcp__github__create_issue', 'hermes')).toBeNull();
+    expect(outlookTool('terminal', 'hermes')).toBeNull();
+  });
+
+  test.each(CALLS.filter(([, , c]) => HIGH.includes(c)))(
+    '%s %s (%s) goes to Hermes’s approval gate with a reason',
+    (tool, action) => {
+      const out = hermes(name(tool), action ? { action } : {});
+      expect(out.action).toBe('approve');
+      expect(out.message).toMatch(/^Outlook Assistant: \S/);
+      expect(out.rule_key).toMatch(/^outlook:[a-z-]+:[0-9a-f]{12}$/);
+    }
+  );
+
+  test('"always" is keyed on the reason, not just the tool', () => {
+    const a = hermes(name('send-email'), { to: 'a@x.com', subject: 'One' });
+    const again = hermes(name('send-email'), { to: 'a@x.com', subject: 'One' });
+    const b = hermes(name('send-email'), { to: 'b@x.com', subject: 'One' });
+    expect(a.message).toMatch(/Sends an email to a@x\.com/);
+    expect(again.rule_key).toBe(a.rule_key);
+    expect(b.rule_key).not.toBe(a.rule_key);
+    expect(a.rule_key.startsWith('outlook:send-email:')).toBe(true);
+  });
+
+  test('reads, genuine dry runs, off and other tools get no opinion', () => {
+    expect(hermes(name('search-emails'))).toBeNull();
+    expect(
+      hermes(name('send-email'), { to: 'a@x.com', dryRun: true })
+    ).toBeNull();
+    expect(
+      hermes(name('send-email'), { to: 'a@x.com' }, 'PreToolUse', {
+        OUTLOOK_CONFIRM_LEVEL: 'off',
+      })
+    ).toBeNull();
+    expect(hermes('mcp__github__create_issue')).toBeNull();
+  });
+
+  test('all-writes also asks before reversible calls', () => {
+    const env = { OUTLOOK_CONFIRM_LEVEL: 'all-writes' };
+    expect(hermes(name('update-email'), { action: 'flag' })).toBeNull();
+    expect(
+      hermes(name('update-email'), { action: 'flag' }, 'PreToolUse', env).action
+    ).toBe('approve');
+  });
+
+  test('an unknown Outlook tool or action asks', () => {
+    expect(hermes('mcp__outlook__purge_mailbox').message).toMatch(
+      /isn't in this plugin's risk map/
+    );
+    expect(
+      hermes(name('manage-rules'), { action: 'export-all' }).message
+    ).toMatch(/isn't in this plugin's risk map/);
+  });
+
+  test('unreadable input asks, and its key never repeats', () => {
+    const one = handle('{not json', 'PreToolUse', {}, 'hermes');
+    const two = handle('{not json', 'PreToolUse', {}, 'hermes');
+    expect(one.action).toBe('approve');
+    expect(one.message).toMatch(/couldn't check this call/);
+    expect(one.rule_key).not.toBe(two.rule_key);
+  });
+
+  test('PostToolUse returns the note after untrusted-content tools only', () => {
+    expect(hermes(name('read-email'), {}, 'PostToolUse')).toEqual({
+      note: UNTRUSTED_NOTE,
+    });
+    expect(hermes(name('auth'), {}, 'PostToolUse')).toBeNull();
+    expect(handle('{not json', 'PostToolUse', {}, 'hermes')).toEqual({
+      note: UNTRUSTED_NOTE,
+    });
+  });
+
+  test('runs as a process the way gate.py calls it', () => {
+    const result = spawnSync(process.execPath, [GATE, 'PreToolUse', 'hermes'], {
+      input: JSON.stringify({
+        hook_event_name: 'PreToolUse',
+        tool_name: name('send-email'),
+        tool_input: { to: 'a@x.com', subject: 'Hi' },
+      }),
+      env: { PATH: process.env.PATH },
+      encoding: 'utf8',
+    });
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout).action).toBe('approve');
   });
 });
 

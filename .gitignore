@@ -54,3 +54,7 @@ docs/research/
 /.mcp.*.json
 /.envrc
 /.untether-outbox/
+
+# Python bytecode (Hermes guard tests); Hermes rejects binary files in a plugin
+__pycache__/
+*.pyc

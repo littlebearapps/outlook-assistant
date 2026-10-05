@@ -19,7 +19,7 @@ const {
 } = require('./fixtures/hermes-injection-patterns.json');
 
 const PLUGINS_DIR = path.join(__dirname, '..', 'plugins');
-const BINARY = /\.(png|jpe?g|gif|ico|webp)$/i;
+const BINARY = /\.(png|jpe?g|gif|ico|webp|pyc)$/i;
 
 function walk(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {

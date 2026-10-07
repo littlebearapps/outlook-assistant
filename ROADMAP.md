@@ -1,103 +1,96 @@
 # Roadmap
 
-Active milestones for the Outlook Assistant MCP server. Items may shift or be cut as priorities evolve. The authoritative source is the [GitHub milestones page](https://github.com/littlebearapps/outlook-assistant/milestones); this document is a periodic snapshot.
+Active milestones for the Outlook Assistant MCP server. Items may shift or be cut as priorities evolve. The authoritative source is the [GitHub milestones page](https://github.com/littlebearapps/outlook-assistant/milestones); this document is a periodic snapshot (last synced 2026-10-07, with v3.14.1 live). Issues are listed under their current titles.
 
 For shipped work, see [`CHANGELOG.md`](CHANGELOG.md).
 
-## v3.14.1 — Live-test fixes (released 2026-10-05)
+## v3.14.2 — Fix queue
 
-Fixes from the 2026-10-05 live test of all 22 tools on v3.14.0, plus the small server fixes the v3.14.0 docs sweep found. See `[3.14.1]` in [`CHANGELOG.md`](CHANGELOG.md).
+The next patch after v3.14.1: user-facing bug fixes that are small and safe to ship alone.
 
-- **#302** Session limits fail closed: `0` (or a value that isn't a whole number) blocks the tool instead of meaning "no limit"; unset still means no limit. Blocked tools are named in the server `instructions`, `auth action=about` and the startup log. This is the one upgrade note.
-- **#300** `manage-rules` uses Graph's `hasAttachments` rule property, so rules with `hasAttachments` or `exceptHasAttachments` no longer fail with a 400.
-- **#301** An `export` `savePath` ending in `/` is a folder, created if missing.
-- **#303** `manage-event` update dry runs say who would be emailed.
-- **#304** Automatic-reply schedules are shown as the UTC instant plus a labelled local time.
-- **#306** Tool output wording: one DRY RUN label, no "Save to Sent" on draft previews, the `attachments` download hint, the `manage-category` `set` deprecation note, `mime` `headersOnly` within `maxSize`.
-- **#262** Delta sync labels every page of an initial sync as initial (moved here from the fix queue).
-- **#307** `manage-rules` reorder lists the resulting order; the `access-shared-mailbox` 404 hint; empty folder searches suggest Junk Email.
-- **#299** (item 2) A refused `draft` reply gives its session-limit slot back once its draft is deleted; the `folders` `sourceFolder` and `stats` hints, `apply-category` batch and `export` batch-format descriptions match the code.
+- **#261** fix(search): query search sends $orderby with $search, so Graph rejects it (SearchWithOrderBy) and falls back
+- **#263** fix(export): search export wraps from:/subject: in one quoted phrase, so field scopes are ignored
+- **#240** fix(calendar): find-meeting-rooms fallback calls beta-only findRooms on v1.0 and misreports M365 users as personal
+- **#320** fix(docker): image fails at start because the Dockerfile omits server.js, tools.js and request-handler.js
+- **#321** chore(deps): clear critical proxy-addr advisory (GHSA-jqcg-44mw-7w3h) before the CI audit gate fails
+- **#322** fix(delta): minimal verbosity lists no message IDs, so callers cannot act on changes
+- **#323** fix(calendar): update preview undercounts notified attendees; rule reorder hides a failed follow-up listing
+- **#131** docs: confirm Mail-Advanced.ReadWrite enforcement (31 Dec 2026) doesn't affect Outlook Assistant — a troubleshooting note, no code change; due before Microsoft's 31 December 2026 deadline.
+- **#305** question(settings): scheduled auto-replies set via Graph may not fire on personal accounts — likely docs and success-message wording after a manual re-test.
 
-**Still open from #299** (follow-ups from v3.14.0, moved to v3.15.0)
-- Another focused review of the safety hook's prompt text against the server's argument handling.
-- Check the hook and skill by hand in VS Code with Copilot (Local agent). It reads the Copilot hook file, but so far that's known only from VS Code's source.
-- Check the Cursor desktop app; only Cursor CLI has been verified.
-- Cursor shows its own generic "Run this MCP tool?" prompt instead of the hook's reason, and an `Mcp(...)` allow rule or `--force` skips it. Revisit if Cursor starts showing hook reasons; until then the docs warn against allowlisting Outlook's send, rule and delete tools.
-- Fill in the rest of the cross-client matrix ([`docs/cross-client-matrix.md`](docs/cross-client-matrix.md)): Claude Desktop, Gemini CLI, MCP Inspector and a local model.
+**Repo-only** (no npm release needed; they land before v3.14.2 so the release exercises them):
 
-## v3.15.0 — Structured outputs & paging
+- **#319** ci(release): notify-website hid 401s as green; harden curl, auto-tag diff and prerelease publishing
+- **#119** Add CITATION.cff + README cross-link to product page
 
-- **#285** `outputSchema` + `structuredContent` on all tools. Each half (structured data and text) must stand alone, because clients surface them differently.
-- **#286** Real cursor pagination for `search-emails`, `list-events` and `access-shared-mailbox`.
-- **#287** Progress notifications and cancellation for long exports and scans.
-- **#288** Input validation gaps (nested `oneOf`, formats, ranges, per-action required parameters).
-- **#289** Consistent parameter naming, with alias deprecation.
-- **#290** Supply-chain hardening (image digests, SBOM, OpenSSF Scorecard).
-- **#93** / **#243** Tool description audit: each description at most 1,024 characters (VS Code truncates there; a test enforces this since #279), and contradictions with actual behaviour fixed.
+## v3.15.0 — Structured outputs, paging & Hermes
 
-## v4.0.0 — MCP 2026-07-28 & server-side confirmation (breaking)
+Machine-readable results and real paging, Hermes Agent support, and the v3.14.0 follow-ups. Verified across the cross-client matrix ([`docs/cross-client-matrix.md`](docs/cross-client-matrix.md)).
 
-- **#291** Migrate to MCP TypeScript SDK v2 / protocol 2026-07-28 (`server/discover`, stateless requests), with URL-mode elicitation for device-code sign-in.
-- **#269** Server-side confirmation for sends and destructive actions (two-phase confirm or MCP elicitation), enforced in every client.
-- **#292** Split mixed read/write tools, and trim the tool count.
+- **#285** feat: outputSchema + structuredContent on all tools — the structured and text halves must each stand alone, because clients surface them differently.
+- **#239** fix(calendar): list-events misses upcoming occurrences of recurring meetings — moves `list-events` to `calendarView`.
+- **#286** feat: real cursor pagination for search-emails, list-events and access-shared-mailbox — depends on #261 (v3.14.2) and #239.
+- **#264** perf(conversations): eml/mbox conversation export downloads MIME sequentially (up to 1000 requests) — bounded parallel downloads.
+- **#288** fix: input validation gaps
+- **#289** chore: parameter naming consistency and alias deprecation — deprecated aliases keep working until v4.0.0.
+- **#243** fix(docs): tool descriptions contradict implemented behaviour — adds a description↔schema test.
+- **#93** docs: audit and improve all tool descriptions — umbrella issue; closes once #243's test lands.
+- **#309** feat(plugin): Hermes Agent support, stage 1: scanner-safe skill text and plugin-catalog listing
+- **#310** feat(plugin): Hermes Agent support, stage 2: native approval guard plugin (outlook-assistant-guard)
+- **#324** test(evals): skill-evals grading can pass vacuously; sync-version --check misses a missing metadata.version — fixed before the Hermes work relies on the evals.
+- **#299** v3.14.0 follow-ups: hook prompt review and manual client checks — still open: a focused review of the hook's prompt text against the server's argument handling, and hand checks in VS Code with Copilot (Local agent), the Cursor desktop app, Claude Desktop, Gemini CLI, MCP Inspector and a local model.
+- **#290** ci: supply-chain hardening (image digests, SBOM, OpenSSF Scorecard)
 
-## Fix queue — next patch releases
+## v3.16.0 — Calendar, tasks & contacts
 
-Correctness bugs from the September 2026 Graph API audit and the v3.12.0 and
-v3.12.1 release reviews. They ship in patch releases as fixes accumulate, rather
-than one release per fix. The highest-impact ones come first.
+The next feature minor after v3.15.0. New scopes are opt-in and reported by `auth action=about`; nothing changes for existing sign-ins.
 
-- **#261** `search-emails` `query` sends `$orderby` with `$search`, which Graph rejects (`SearchWithOrderBy`), so the search falls back
-- **#263** search-driven `export` wraps `from:`/`subject:` in one quoted phrase, so the field scopes are ignored
-- **#239** `list-events` misses upcoming occurrences of recurring meetings (move to `calendarView`)
-- **#245** `update-email` and `apply-category` batches run one PATCH per message rather than Graph `$batch` (both descriptions now say so; the code is still sequential)
-- **#240** `find-meeting-rooms` fallback calls the beta-only `findRooms` on v1.0
-- **#250** `manage-contact` folder param is unusable
-- **#258** leftovers from the post-3.12.0 hardening: request `Place.Read.All`
-  for room lookup (with #240) and non-ASCII shared-mailbox addresses (log
-  redaction moves to #278 in v3.14.0)
-- **#264** (performance) `eml`/`mbox` conversation export fetches MIME one
-  message at a time, up to 1000 sequential requests
+- **#125** feat: recurring calendar events (create-event recurrence support) — with a series guard on `manage-event`; the read side lands in v3.15.0 via #239.
+- **#127** feat: contact structured email fields (primary/secondary/tertiary)
+- **#250** fix(contacts): manage-contact folder param is unusable (no way to list contact folders)
+- **#89** feat: add manage-tasks tool for Microsoft To Do — behind an opt-in scope.
+- **#117** feat: improve search-emails experience for Sent Items and non-inbox folders
+- **#245** perf(email): use $batch for bulk flag/read/category updates
 
-## v3.8.x — Task Integration & Auth (carry-over)
+## v4.0.0 — MCP 2026-07-28 & server-side confirmation
 
-v3.8.0 shipped the `manage-event update` action (#124) and two community-contributed config overrides — see "Recently shipped" below. The items in this section are the rest of the original v3.8.0 slate, carrying forward into v3.8.1 (or renumbered if scope shifts).
+Breaking. SDK v1.x gets fixes until at least late January 2027.
 
-### Highlights
+- **#291** feat!: migrate to MCP TS SDK v2 / protocol 2026-07-28 — stateless requests, `server/discover`, multi-round-trip requests and URL-mode elicitation for device-code sign-in.
+- **#325** chore!: require Node 22+ and test on Node 24 — Node 18 and 20 are end of life; Node 24 joins the CI matrix earlier, repo-only.
+- **#287** feat: progress notifications and cancellation for long operations — builds on #291 (the new handler context).
+- **#269** feat(safety): server-side confirmation for sends and destructive actions (two-phase confirm / MCP elicitation) — driven by the risk-class map and enforced in every client; builds on #291.
+- **#292** refactor!: split mixed read/write tools and trim the tool count — also removes the aliases deprecated in v3.15.0 (#289).
 
-- **#89** `manage-tasks` tool for Microsoft To Do — list, create, update, complete tasks (10th tool module)
-- **#123** Client credentials (app-only) authentication — eliminates the 90-day re-auth cliff for headless deployments
-- **#125** Recurring calendar events — `create-event` recurrence rules
+## v4.1.0+ — New Graph surfaces & auth options
 
-### Search & people
+Later backlog, after the v4.0.0 SDK move and tool split. Larger or Microsoft 365-only additions, roughly by audience size.
 
-- **#117** Improve `search-emails` experience for Sent Items and non-inbox folders
-- **#127** Contact structured email fields (primary/secondary/tertiary)
-- **#91** Extend `search-people` with org hierarchy lookup
-
-### Calendar & meetings
-
-- **#126** `findMeetingTimes` scheduling assistant
-
-### Workflow
-
-- **#90** Add MCP prompts for common email workflows
-
-## v3.16.0+ — New Graph APIs & Platform Maturity
-
-Larger surface-area additions and platform hardening. v3.14.0 and v3.15.0 are
-taken by the safety and MCP-quality work above, so these carry forward
-(renamed from "v3.13.0+").
-
-- **#147** Publisher-verified shared multi-tenant app (one-click setup for read-only scopes)
-- **#133** MCP OAuth 2.1 / PKCE auth flow
-- **#132** Copilot Meeting Insights (AI meeting notes and action items)
-- **#131** Prepare for `Mail-Advanced.ReadWrite` breaking change (Microsoft Graph deprecation, Dec 2026)
-- **#130** Places API expansion (workspace booking, check-in)
-- **#129** Reference attachments (OneDrive/SharePoint file links — file-by-link instead of inline upload)
-- **#128** Message Trace API for email delivery tracking
+- **#126** feat: findMeetingTimes scheduling assistant — a `scheduling` tool absorbing `find-meeting-rooms`; work/school only.
+- **#91** feat: extend search-people with org hierarchy — work/school only.
+- **#129** feat: reference attachments (OneDrive/SharePoint file links)
+- **#90** feat: add MCP prompts for email workflows — after the SDK v2 migration (#291).
+- **#133** feat(auth): PKCE for the browser sign-in flow (no client secret)
+- **#123** feat: client credentials (app-only) authentication to eliminate 90-day re-auth cliff — waits for server-side confirmation (#269); work/school only.
+- **#130** feat: Places API expansion (workspace booking, check-in) — needs #240; work/school only.
+- **#128** feat: Message Trace API for email delivery tracking — Exchange admins only.
 
 ## Recently shipped
+
+- **v3.14.1** (Oct 2026) — **Live-test fixes** (milestone #9), from the
+  2026-10-05 live test of all 22 tools on v3.14.0:
+  - **A session limit of `0` now blocks the tool** instead of meaning "no
+    limit" (#302); so does any value that isn't a whole number. Unset still
+    means no limit. Blocked tools are named in the server `instructions`,
+    `auth action=about` and the startup log. This is the one upgrade note.
+  - `manage-rules` uses Graph's `hasAttachments` rule property, so rules
+    with "has attachments" conditions no longer fail with a 400 (#300); an
+    `export` `savePath` ending in `/` creates that folder (#301).
+  - `manage-event` update dry runs say who would be emailed (#303);
+    automatic-reply schedules show the UTC instant plus a labelled local time
+    (#304); every page of an initial delta sync is labelled initial (#262).
+  - Tool output wording and smaller gaps (#306, #307), and the small server
+    fixes from the v3.14.0 docs sweep (#299).
 
 - **v3.14.0** (Oct 2026) — **Safety skill, hooks & MCP hardening** (milestone
   #6). A risk-class map drives every tool's annotations and an

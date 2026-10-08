@@ -7,6 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.14.2] - 2026-10-08
+
+Patch release: the v3.14.2 fix queue (milestone #10). Search, export, delta
+sync and meeting-room fixes, more accurate calendar previews, a Docker image
+that starts again, dependency updates and release-workflow hardening. No
+upgrade steps. #305 (scheduled automatic replies on personal accounts) is
+**not** in this release: it stays open until a live mail re-test.
+
+### Fixed
+
+- **`query` searches run Graph `$search` again** (#261). Graph rejects
+  `$search` together with `$orderby` (`400 SearchWithOrderBy`) or `$filter`
+  (`400 SearchWithFilter`), and every `query` search sent `$orderby`, so it
+  always fell back to a subject-only match. `$search` is now sent on its own
+  and matches subject, body and sender, on personal accounts too. `from`,
+  `to`, `subject` and the date and boolean filters are applied to the page
+  it returns, which is sorted newest first; `_meta.searchMetadata` reports
+  `orderedWithinPage` and the filters applied locally (`clientSideFilters`).
+  If nothing on that page passes, the search falls back as before. The
+  `query` and `searchExpression` descriptions no longer say `$search` is
+  unavailable on personal accounts or that its results aren't in date order.
+- **`from` with a bare domain label finds the sender's mail** (#328). A
+  `from` value with no `@` and no dot (such as `examplecorp`) matched display
+  names only, so mail from `someone@examplecorp.com.au` was never found. It
+  now matches the name or the address. An empty result says "no message in
+  this mailbox matches" only when every filter was checked across the
+  mailbox; otherwise it says a match may still exist.
+- **A raw `searchExpression` says when it ignores the date window** (#329).
+  `receivedAfter`/`receivedBefore` (and `hasAttachments`/`unreadOnly`) never
+  reach a raw `$search` expression. They are now listed in `droppedFilters`
+  (so `filterApplied` is `false`) with a visible note showing how to put a
+  date in the expression itself (`"invoice AND received>=2026-01-01"`, quoted
+  as a whole). The "more results" footer for these searches no longer
+  suggests the date parameters. Results are unchanged.
+- **Search-driven `export` works with a date window** (#263).
+  `export target=messages` with `searchQuery` sent `from`/`subject` as one
+  quoted `$search` phrase next to a date `$filter`, which Graph rejects. It
+  now builds one OData filter, as `search-emails` does (exact address,
+  domain, or name-or-address for `from`; `contains` for `subject`), still
+  newest first.
+- **Delta sync at `minimal` verbosity lists what changed** (#322): one line
+  per changed message (`ID | subject | sender`) and the IDs of removed ones,
+  not just counts. Graph returns an updated message with only the properties
+  that changed, so it shows as `ID | changed: isRead` (at every verbosity)
+  instead of "(no subject)" from an unknown sender.
+- **`manage-event` update previews count everyone emailed** (#323). People
+  removed from a meeting (who get a cancellation) now count towards
+  `notified` and `external`, and rooms or resources added or removed are
+  listed and counted, so adding only a room no longer says nobody is emailed.
+  A `manage-rules` reorder whose follow-up listing fails now says other rules
+  may have been renumbered and to list them.
+- **`find-meeting-rooms` on Microsoft 365** (#240). The fallback called the
+  beta-only `findRooms` on v1.0 (always a 404) and any 404 was reported as a
+  personal account. Rooms are now read page by page (up to 1,000); a refused
+  `places` call (403, missing `Place.Read.All`, which this server doesn't
+  request yet, #130) falls back to the beta `findRooms` call (names and
+  addresses, first 100 rooms) and says so; a personal account gets a plain
+  "Microsoft 365 only" error without a second call. The scope name in
+  messages is now `Place.Read.All`.
+- **The Docker image starts again** (#320). The Dockerfile didn't copy
+  `server.js`, `tools.js` or `request-handler.js`, so the container failed
+  with `Cannot find module './server'`. It now copies every runtime entry in
+  `package.json` `files`, and a test fails if the two drift apart.
+
 ### Security
 
 - **Dependencies:** `proxy-addr` 2.0.8 clears the critical
@@ -17,6 +81,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Docker image installs from the lockfile, and
   `npm audit --omit=dev --audit-level=high` (CI and the weekly scheduled
   audit) now passes again.
+
+### Changed
+
+- **Dependencies** (Dependabot #312–#318, applied as our own conventional
+  commits because Dependabot's `Bump …` subjects fail commitlint):
+  `dotenv` 18.0.5 (#313; used only by the browser auth server, whose
+  "injected env" line now goes to stderr), `supertest` 7.3.1 (#316),
+  `@commitlint/cli` and `@commitlint/config-conventional` 21.2.3 (#314,
+  #315; the CI Commit Lint job moves to Node 22, which commitlint 21
+  needs), `actions/setup-node` 7.0.0 (#317), `actions/github-script` 9.0.0
+  (#312) and `anthropics/claude-code-action` 1.0.240 (#318).
+- **Release workflows** (#319): the website notification fails unless
+  GitHub answers HTTP 204 (a 401 used to pass silently); auto-tag compares
+  `package.json` with the commit before the push rather than `HEAD~1`, and
+  tags only a higher version; prereleases become GitHub prereleases,
+  publish to npm under `next` and skip the MCP Registry and the website;
+  the publish job no longer uses the npm cache. The version checks live in
+  `scripts/release-check.js`, with tests.
+
+### Documentation
+
+- `docs/troubleshooting.md` notes Microsoft's Mail-Advanced.ReadWrite
+  enforcement from 31 December 2026 and why it doesn't affect Outlook
+  Assistant (#131).
+- `CITATION.cff` ("Cite this repository" on GitHub) and a README link to the
+  [product page](https://littlebearapps.com/builds/outlook-assistant/)
+  (#119).
+- The roadmap lists #328 and #329 under v3.14.2 (#330). The search guides,
+  tools reference, README, FAQ and llms.txt describe the new `query`
+  behaviour.
 
 ## [3.14.1] - 2026-10-05
 

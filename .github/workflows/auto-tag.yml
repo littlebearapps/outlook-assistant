@@ -12,6 +12,11 @@
 #   version bump on main → auto-tag → GitHub Release → publish.yml
 #   → npm publish + MCP Registry publish (via OIDC)
 #
+# A prerelease version (e.g. 3.15.0-rc.1) is tagged and released as a GitHub
+# prerelease, published to npm under the `next` dist-tag, and skips the MCP
+# Registry and the website notification. A push that lowers the version
+# (e.g. a force push back to an older commit) is not tagged.
+#
 # This eliminates the manual steps of running:
 #   git tag v3.4.0 && git push origin v3.4.0 && gh release create v3.4.0
 
@@ -39,20 +44,41 @@ jobs:
 
       - name: Check for version change
         id: version
+        env:
+          BEFORE: ${{ github.event.before }}
         run: |
           CURRENT=$(node -p "require('./package.json').version")
-          PREVIOUS=$(git show HEAD~1:package.json 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).version" 2>/dev/null || echo "")
 
-          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
-          echo "previous=$PREVIOUS" >> "$GITHUB_OUTPUT"
+          # package.json version at a commit, or "" if it can't be read.
+          version_at() {
+            git show "$1:package.json" 2>/dev/null \
+              | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).version||"")}catch{console.log("")}})' \
+              || true
+          }
 
-          if [ "$CURRENT" != "$PREVIOUS" ] && [ -n "$PREVIOUS" ]; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-            echo "Version changed: $PREVIOUS → $CURRENT"
+          # Compare with main as it was before this push (#319): HEAD~1 saw
+          # only the last commit, so a bump earlier in a multi-commit push was
+          # never tagged. BEFORE is all zeros on a branch's first push; after a
+          # force push it may not be an ancestor of HEAD (fetch it by SHA), or
+          # may be gone. In those cases fall back to HEAD~1.
+          PREVIOUS=""
+          if [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] \
+            && git fetch --no-tags --depth=1 origin "$BEFORE" 2>/dev/null; then
+            echo "Comparing with the pre-push tip $BEFORE"
+            PREVIOUS=$(version_at "$BEFORE")
           else
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "No version change (current: $CURRENT, previous: $PREVIOUS)"
+            echo "::warning::Pre-push SHA '$BEFORE' is unusable; comparing with HEAD~1"
+            PREVIOUS=$(version_at HEAD~1)
           fi
+
+          # changed=true only when the version went up (a force push back to an
+          # older version must not publish it as npm `latest`); prerelease=true
+          # for versions such as 3.15.0-rc.1.
+          {
+            echo "current=$CURRENT"
+            echo "previous=$PREVIOUS"
+            node scripts/release-check.js compare "$PREVIOUS" "$CURRENT"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Check tag doesn't already exist
         if: steps.version.outputs.changed == 'true'
@@ -81,10 +107,18 @@ jobs:
         if: steps.version.outputs.changed == 'true' && steps.check-tag.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.current }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
         run: |
-          TAG="v${{ steps.version.outputs.current }}"
-          gh release create "$TAG" --generate-notes --title "$TAG"
-          echo "Created GitHub Release: $TAG"
+          TAG="v$VERSION"
+          if [ "$PRERELEASE" = "true" ]; then
+            # A prerelease never becomes the repo's "Latest" release.
+            gh release create "$TAG" --generate-notes --title "$TAG" --prerelease
+            echo "Created GitHub prerelease: $TAG"
+          else
+            gh release create "$TAG" --generate-notes --title "$TAG"
+            echo "Created GitHub Release: $TAG"
+          fi
 
       - name: Trigger publish (npm + MCP Registry)
         if: steps.version.outputs.changed == 'true' && steps.check-tag.outputs.exists == 'false'
@@ -101,7 +135,8 @@ jobs:
         # dispatched explicitly. Same workaround pattern as the publish step
         # above. workflow_dispatch IS exempt from the GITHUB_TOKEN trigger
         # restriction, so this works without a PAT.
-        if: steps.version.outputs.changed == 'true' && steps.check-tag.outputs.exists == 'false'
+        # Prereleases aren't announced: the site shows the latest release.
+        if: steps.version.outputs.changed == 'true' && steps.check-tag.outputs.exists == 'false' && steps.version.outputs.prerelease != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

@@ -44,14 +44,39 @@ jobs:
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "Using tag: $TAG"
+          # The site shows the latest release, so prereleases (a hyphen in the
+          # version before any +build metadata, e.g. v3.15.0-rc.1) are skipped.
+          CORE="${TAG#v}"
+          CORE="${CORE%%+*}"
+          case "$CORE" in
+            *-*)
+              echo "prerelease=true" >> "$GITHUB_OUTPUT"
+              echo "::notice::$TAG is a prerelease; not notifying the website"
+              ;;
+            *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
 
       - name: Trigger website rebuild
+        if: steps.tag.outputs.prerelease != 'true' && github.event.release.prerelease != true
         env:
           TAG: ${{ steps.tag.outputs.tag }}
           DISPATCH_TOKEN: ${{ secrets.WEBSITE_DISPATCH_TOKEN }}
         run: |
-          curl -s -X POST \
+          # GitHub answers a good dispatch with 204 No Content. Anything else
+          # fails the job (#319): `curl -s` alone exited 0 on 401 Bad
+          # credentials, so six releases showed green without reaching the site.
+          BODY="$RUNNER_TEMP/dispatch-response.json"
+          set +e
+          STATUS=$(curl --fail-with-body -sS -o "$BODY" -w '%{http_code}' -X POST \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer $DISPATCH_TOKEN" \
             https://api.github.com/repos/littlebearapps/littlebearapps.com/dispatches \
-            -d "$(jq -n --arg tag "$TAG" '{event_type:"release-published",client_payload:{repo:"outlook-assistant",tag:$tag}}')"
+            -d "$(jq -n --arg tag "$TAG" '{event_type:"release-published",client_payload:{repo:"outlook-assistant",tag:$tag}}')")
+          CURL_EXIT=$?
+          set -e
+          if [ "$CURL_EXIT" -ne 0 ] || [ "$STATUS" != "204" ]; then
+            echo "::error::Website dispatch failed: HTTP ${STATUS:-none}, curl exit $CURL_EXIT (expected 204)"
+            cat "$BODY" 2>/dev/null || true
+            exit 1
+          fi
+          echo "Website dispatch accepted (HTTP 204) for $TAG"

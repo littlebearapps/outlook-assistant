@@ -27,6 +27,9 @@
 # The mcp-publisher CLI exchanges the workflow's OIDC token for a registry JWT.
 # Server name must match the publishing repo's GitHub owner (littlebearapps).
 #
+# Prereleases (a version such as 3.15.0-rc.1, per scripts/release-check.js)
+# publish to npm under the `next` dist-tag and skip the MCP Registry.
+#
 # Note: This workflow uses no untrusted input in run commands.
 
 name: Publish to npm and MCP Registry
@@ -57,7 +60,8 @@ jobs:
           # Trusted Publishing requires npm >= 11.5.1, so we upgrade npm
           # explicitly in the next step.
           node-version: '22'
-          cache: 'npm'
+          # No dependency cache in a publish job: setup-node's docs advise
+          # against it (a poisoned cache would reach the published package).
           registry-url: 'https://registry.npmjs.org'
 
       - name: Upgrade npm for OIDC Trusted Publishing
@@ -77,38 +81,61 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Read version
+        id: meta
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          node scripts/release-check.js prerelease "$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Publish to npm
         id: npm-publish
         continue-on-error: true
         # Under Trusted Publishing the short-lived OIDC token is minted from
         # `permissions: id-token: write` on this job — no NODE_AUTH_TOKEN
         # needed. `--provenance` is implied; passing it explicitly is fine
-        # but redundant.
-        run: npm publish --access public
+        # but redundant. A prerelease goes to the `next` dist-tag so `latest`
+        # (what `npx @littlebearapps/outlook-assistant` installs) never moves
+        # to it (#319).
+        env:
+          PRERELEASE: ${{ steps.meta.outputs.prerelease }}
+        run: |
+          if [ "$PRERELEASE" = "true" ]; then
+            npm publish --access public --tag next
+          else
+            npm publish --access public
+          fi
 
       - name: Verify npm publication
+        env:
+          EXPECTED: ${{ steps.meta.outputs.version }}
+          OUTCOME: ${{ steps.npm-publish.outcome }}
         run: |
-          EXPECTED=$(node -p "require('./package.json').version")
-          if [ "${{ steps.npm-publish.outcome }}" = "failure" ]; then
+          # Ask for this exact version: `npm view <pkg> version` reports
+          # `latest`, which a prerelease never becomes.
+          if [ "$OUTCOME" = "failure" ]; then
             sleep 5
-            PUBLISHED=$(npm view @littlebearapps/outlook-assistant version 2>/dev/null || echo "none")
+            PUBLISHED=$(npm view "@littlebearapps/outlook-assistant@$EXPECTED" version 2>/dev/null || echo "none")
             if [ "$PUBLISHED" = "$EXPECTED" ]; then
-              echo "Version $EXPECTED already on npm — continuing to MCP Registry"
+              echo "Version $EXPECTED already on npm — continuing"
             else
               echo "::error::npm publish failed and version $EXPECTED is not on npm (found: $PUBLISHED)"
               exit 1
             fi
           else
             sleep 10
-            npm view @littlebearapps/outlook-assistant version
+            npm view "@littlebearapps/outlook-assistant@$EXPECTED" version
           fi
 
       - name: Install mcp-publisher
+        # Prereleases stay out of the MCP Registry.
+        if: steps.meta.outputs.prerelease != 'true'
         run: |
           curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
           chmod +x mcp-publisher
 
       - name: Publish to MCP Registry
+        if: steps.meta.outputs.prerelease != 'true'
         run: |
           ./mcp-publisher login github-oidc
           ./mcp-publisher publish

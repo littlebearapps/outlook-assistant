@@ -459,7 +459,16 @@ async function progressiveSearch(
         params,
         maxCount
       );
-      if (response.value && response.value.length > 0) {
+      if (params.$search) {
+        const fromSearch = narrowSearchPage(
+          response,
+          searchTerms,
+          filterTerms,
+          searchAttempts,
+          scanState
+        );
+        if (fromSearch) return fromSearch;
+      } else if (response.value && response.value.length > 0) {
         log.debug(
           `Combined search successful: found ${response.value.length} results`
         );
@@ -1036,6 +1045,72 @@ function applySecondarySearchTerms(messages, searchTerms, appliedTerm) {
   return { matched, secondaryApplied: secondary };
 }
 
+/** Date/boolean filters, in the order they are reported. */
+const WINDOW_FILTER_KEYS = [
+  'receivedAfter',
+  'receivedBefore',
+  'hasAttachments',
+  'unreadOnly',
+];
+
+/**
+ * Finish the combined step's `$search` request. Graph accepts `$search` only
+ * on its own (#261), so the other search terms and the date/boolean window
+ * are applied here, to the page it returned, and the survivors are sorted
+ * newest first. Graph returns message `$search` results by sent date; the
+ * local sort by received date makes that order explicit.
+ *
+ * @returns {object|null} - The narrowed response, or null to continue the ladder
+ */
+function narrowSearchPage(
+  response,
+  searchTerms,
+  filterTerms,
+  searchAttempts,
+  scanState
+) {
+  const page = response.value || [];
+  const { matched: termMatched, secondaryApplied } = applySecondarySearchTerms(
+    page,
+    searchTerms,
+    'query'
+  );
+  const matched = applyBooleanDateFilters(termMatched, filterTerms);
+  if (matched.length === 0) {
+    if (page.length > 0) recordNarrowingMiss(scanState, page.length);
+    log.debug(
+      `$search returned ${page.length} results, none passing the other filters — continuing`
+    );
+    return null;
+  }
+
+  const time = (m) => Date.parse(m.receivedDateTime) || 0;
+  narrowResponse(
+    response,
+    [...matched].sort((a, b) => time(b) - time(a))
+  );
+  const localFilters = [
+    ...secondaryApplied,
+    ...WINDOW_FILTER_KEYS.filter((k) =>
+      k === 'hasAttachments' || k === 'unreadOnly'
+        ? filterTerms[k] === true
+        : Boolean(filterTerms[k])
+    ),
+  ];
+  log.debug(`$search successful: ${matched.length} of ${page.length} kept`);
+  response._searchInfo = {
+    attemptsCount: searchAttempts.length,
+    strategies: searchAttempts,
+    originalTerms: searchTerms,
+    filterTerms,
+    appliedTerms: ['query', ...secondaryApplied],
+    ...(localFilters.length > 0 && { clientSideTerms: localFilters }),
+    orderedWithinPage: true,
+    searchPageSize: page.length,
+  };
+  return response;
+}
+
 /**
  * Fetch a window of recent messages for the client-side filtering fallback.
  * Uses the 'search' field preset (includes toRecipients and bodyPreview).
@@ -1195,13 +1270,18 @@ function buildSearchParams(searchTerms, filterTerms, count, selectFields) {
     $select: selectFields,
   };
 
-  // Track if we're using email address filters (which are incompatible with $orderby)
-  let usesEmailFilter = false;
-
-  // Handle search terms - use $search only for free-text query
+  // Free-text `query` goes out as `$search`, and alone: Graph rejects
+  // `$search` with `$orderby` (400 SearchWithOrderBy) and with `$filter`
+  // (400 SearchWithFilter). Sending either made this step fail on every
+  // query search, so `query` never reached `$search`. The caller applies the
+  // other terms and the date/boolean window to the returned page. (#261)
   if (searchTerms.query) {
     params.$search = quoteSearchPhrase(searchTerms.query);
+    return params;
   }
+
+  // Track if we're using email address filters (which are incompatible with $orderby)
+  let usesEmailFilter = false;
 
   // Build filter conditions array - use $filter for structured fields (more reliable)
   const filterConditions = [];
@@ -1384,7 +1464,7 @@ function buildNoResultsSuggestions(searchInfo, searchAllFolders) {
 
   if (filters.query) {
     suggestions.push(
-      'Free-text `query` falls back to a subject match on personal accounts — try `subject` directly, or fewer words'
+      '`query` was tried as a Graph `$search` (subject, body and sender) and as a subject match — try fewer words, or `subject` directly'
     );
   }
 
@@ -1458,6 +1538,11 @@ function formatSearchResults(response, folder, verbosity, searchAllFolders) {
       ...(response._searchInfo.kqlTranslatedTo && {
         kqlTranslatedTo: response._searchInfo.kqlTranslatedTo,
       }),
+      // A `query` answered by `$search` is sorted newest first by us, within
+      // the page Graph returned, not across the whole mailbox. (#261)
+      ...(response._searchInfo.orderedWithinPage && {
+        orderedWithinPage: true,
+      }),
       // Surface client-side scan coverage so callers can tell when a fallback
       // result may be incomplete (older matches beyond the scan budget). (#169)
       ...(response._searchInfo.candidatesScanned !== undefined && {
@@ -1515,6 +1600,14 @@ function formatSearchResults(response, folder, verbosity, searchAllFolders) {
         '\n\n**Note**: No search filters were applied — showing recent emails.';
     } else if (strategy.startsWith('client-side-')) {
       searchNote = `\n\n_Search strategy: ${strategy} (filtered locally due to personal account API limitations)_`;
+    } else if (response._searchInfo.orderedWithinPage) {
+      const page = response._searchInfo.searchPageSize;
+      const local = response._searchInfo.clientSideTerms || [];
+      const filtered =
+        local.length > 0
+          ? `, filtered locally by ${local.map((k) => `\`${k}\``).join(', ')}`
+          : '';
+      searchNote = `\n\n_Search strategy: ${strategy} (Graph \`$search\` over subject, body and sender: ${page} message${page === 1 ? '' : 's'} returned${filtered}, sorted newest first within that page)_`;
     } else {
       searchNote = `\n\n_Search strategy: ${strategy}_`;
     }

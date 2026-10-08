@@ -2046,3 +2046,150 @@ describe('handleSearchEmails — bounded scan disclosure with results', () => {
     expect(result.content[0].text).toMatch(/older|not.*seen|receivedAfter/i);
   });
 });
+
+// ──────────────────────────────────────────────────
+// #261: Graph rejects `$search` combined with `$orderby` (400 SearchWithOrderBy)
+// or `$filter` (400 SearchWithFilter), verified live on a personal mailbox.
+// The combined step used to send `$orderby` with every `query`, so `$search`
+// never ran and `query` always fell back to the subject match. `$search` now
+// goes out alone; the other terms and the date/boolean window are applied to
+// the page it returns, sorted newest first.
+// ──────────────────────────────────────────────────
+describe('handleSearchEmails — $search request shape (#261)', () => {
+  const searchCalls = () =>
+    callGraphAPIPaginated.mock.calls
+      .map(([, , , p]) => p)
+      .filter((p) => p && p.$search);
+
+  test.each([
+    [{ query: 'Bunnings' }],
+    [{ query: 'Bunnings', subject: 'receipt' }],
+    [{ query: 'Bunnings', from: 'info@bunnings.com.au' }],
+    [{ query: 'Bunnings', to: 'nathan@live.com' }],
+    [{ query: 'Bunnings', receivedAfter: '2026-01-01T00:00:00Z' }],
+    [{ query: 'Bunnings', unreadOnly: true, hasAttachments: true }],
+    [{ query: 'Bunnings', searchAllFolders: true }],
+  ])('never sends $orderby or $filter alongside $search: %j', async (args) => {
+    callGraphAPIPaginated.mockResolvedValue({ value: [] });
+
+    await handleSearchEmails(args);
+
+    const calls = searchCalls();
+    expect(calls.length).toBeGreaterThan(0);
+    for (const params of calls) {
+      expect(params.$orderby).toBeUndefined();
+      expect(params.$filter).toBeUndefined();
+    }
+  });
+
+  test('a $search page that arrives out of order comes back newest first', async () => {
+    const older = mockEmail({
+      id: 'old',
+      subject: 'Bunnings order (older)',
+      receivedDateTime: '2026-03-01T00:00:00Z',
+    });
+    const newest = mockEmail({
+      id: 'new',
+      subject: 'Bunnings order (newest)',
+      receivedDateTime: '2026-09-01T00:00:00Z',
+    });
+    const middle = mockEmail({
+      id: 'mid',
+      subject: 'Bunnings order (middle)',
+      receivedDateTime: '2026-06-01T00:00:00Z',
+    });
+    callGraphAPIPaginated.mockResolvedValueOnce({
+      value: [older, newest, middle],
+    });
+
+    const result = await handleSearchEmails({ query: 'Bunnings' });
+
+    const text = result.content[0].text;
+    expect(result._meta.searchMetadata.finalStrategy).toBe('combined-search');
+    expect(text.indexOf('(newest)')).toBeLessThan(text.indexOf('(middle)'));
+    expect(text.indexOf('(middle)')).toBeLessThan(text.indexOf('(older)'));
+    // The order is ours, over the page Graph returned, and says so.
+    expect(result._meta.searchMetadata.orderedWithinPage).toBe(true);
+    expect(text).toContain('newest first');
+  });
+
+  test('applies the date window and other terms to the $search page locally', async () => {
+    const inWindow = mockEmail({
+      id: 'in',
+      subject: 'Bunnings receipt in window',
+      receivedDateTime: '2026-09-10T00:00:00Z',
+    });
+    const tooOld = mockEmail({
+      id: 'old',
+      subject: 'Bunnings receipt too old',
+      receivedDateTime: '2025-01-10T00:00:00Z',
+    });
+    const wrongSubject = mockEmail({
+      id: 'subj',
+      subject: 'Bunnings newsletter in window',
+      receivedDateTime: '2026-09-11T00:00:00Z',
+    });
+    callGraphAPIPaginated.mockResolvedValueOnce({
+      value: [inWindow, tooOld, wrongSubject],
+    });
+
+    const result = await handleSearchEmails({
+      query: 'Bunnings',
+      subject: 'receipt',
+      receivedAfter: '2026-09-01T00:00:00Z',
+    });
+
+    expect(result._meta.returned).toBe(1);
+    expect(result.content[0].text).toContain('Bunnings receipt in window');
+    const meta = result._meta.searchMetadata;
+    expect(meta.finalStrategy).toBe('combined-search');
+    expect(meta.droppedFilters).toEqual([]);
+    expect(meta.filterApplied).toBe(true);
+    expect(meta.clientSideFilters).toEqual(
+      expect.arrayContaining(['subject', 'receivedAfter'])
+    );
+  });
+
+  test('falls through to the subject ladder when nothing on the $search page passes the local filters', async () => {
+    const tooNew = mockEmail({
+      id: 'new',
+      subject: 'Bunnings receipt',
+      receivedDateTime: '2026-09-10T00:00:00Z',
+    });
+    const olderMatch = mockEmail({
+      id: 'old',
+      subject: 'Bunnings receipt 2024',
+      receivedDateTime: '2024-05-10T00:00:00Z',
+    });
+    callGraphAPIPaginated
+      // combined $search → only mail newer than the window
+      .mockResolvedValueOnce({ value: [tooNew] })
+      // single-term-query → subject contains() with the window server-side
+      .mockResolvedValueOnce({ value: [olderMatch] });
+
+    const result = await handleSearchEmails({
+      query: 'Bunnings',
+      receivedBefore: '2025-01-01T00:00:00Z',
+    });
+
+    expect(result._meta.returned).toBe(1);
+    expect(result.content[0].text).toContain('Bunnings receipt 2024');
+    expect(result._meta.searchMetadata.finalStrategy).toBe('single-term-query');
+    const [, , , ladderParams] = callGraphAPIPaginated.mock.calls[1];
+    expect(ladderParams.$search).toBeUndefined();
+    expect(ladderParams.$filter).toContain("contains(subject, 'Bunnings')");
+    expect(ladderParams.$filter).toContain('receivedDateTime le');
+  });
+
+  test('a structured search without query keeps its $filter request unchanged', async () => {
+    callGraphAPIPaginated.mockResolvedValue({ value: [] });
+
+    await handleSearchEmails({ from: 'john@example.com', subject: 'Test' });
+
+    const [, , , params] = callGraphAPIPaginated.mock.calls[0];
+    expect(params.$search).toBeUndefined();
+    expect(params.$filter).toBe(
+      "contains(subject, 'Test') and from/emailAddress/address eq 'john@example.com'"
+    );
+  });
+});

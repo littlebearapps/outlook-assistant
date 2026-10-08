@@ -28,12 +28,12 @@ Never list a whole mailbox to answer a narrow question. Every result goes into t
 
 | Input              | Work/school (Microsoft 365)                                                          | Personal Outlook.com                                                                                                                |
 | ------------------ | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `query`            | Server-side search                                                                   | Subject substring only: every word must be in the subject. Bodies are not searched                                                  |
-| `searchExpression` | Graph `$search` over the whole message, body included. Ranked by relevance, not date | Only `from:`, `to:` and `subject:` terms are translated and retried (`raw-kql-translated`); free text and `AND`/`OR` are not        |
+| `query` | Graph `$search` over subject, body and sender. Other filters are applied to the page it returns, newest first | The same `$search` first. If it fails or nothing on its page passes the other filters: a subject substring match (every word in the subject) |
+| `searchExpression` | Graph `$search` over the whole message, body included, newest first | Only `from:`, `to:` and `subject:` terms are translated and retried (`raw-kql-translated`); free text and `AND`/`OR` are not |
 | `to`               | Server-side filter                                                                   | Matched locally over the most recent messages only (500 by default). Pair with `receivedAfter`/`receivedBefore` to reach older mail |
 | Structured filters | Reliable                                                                             | The most reliable option                                                                                                            |
 
-With `searchExpression`, quote your own phrases (`subject:"quarterly report"`). It takes the place of the other search parameters. Because results are ranked by relevance, top hits can look unrelated to a subject you expected.
+With `searchExpression`, quote your own phrases (`subject:"quarterly report"`). It takes the place of the other search parameters. Because `$search` reads bodies, a hit can match on body text alone and look unrelated to the subject you expected.
 
 ## Check `_meta.searchMetadata`
 
@@ -41,6 +41,7 @@ Every search response carries it. Read it before acting on results:
 
 - `finalStrategy` names the strategy that answered: `combined-search`, `single-term-*`, `client-side-*`, `boolean-filters-only`, `raw-kql-translated` or `recent-emails`.
 - `recent-emails` means no filter was applied: you are looking at recent mail, not matches.
+- `orderedWithinPage: true` means a `query` was answered by `$search`: results are newest first within the page Graph returned, not across the whole mailbox.
 - `droppedFilters` lists filters that could not be honoured. It should be empty. If it isn't, the results are broader than asked: narrow again (tighter dates, a different filter) rather than acting on them.
 - `truncated: true` (with `candidatesScanned` and `scanLimit`) means a local scan stopped before the end. "No match" is then not proof of absence; narrow the date window and search again.
 - `kqlTranslatedTo` shows how a `searchExpression` was rewritten on a personal account.

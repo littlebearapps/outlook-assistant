@@ -823,7 +823,12 @@ function buildFromFilter(val) {
   } else if (type === 'email') {
     return `from/emailAddress/address eq '${escapeODataString(val)}'`;
   }
-  return `contains(from/emailAddress/name, '${escapeODataString(val)}')`;
+  // No `@` and no `.`: a display name, or a bare domain label such as
+  // `examplecorp`. Match either field; a label never appears in the display
+  // name, so a name-only match missed that sender's mail entirely. The `or`
+  // is parenthesised because callers AND this onto other conditions. (#328)
+  const escaped = escapeODataString(val);
+  return `(contains(from/emailAddress/name, '${escaped}') or contains(from/emailAddress/address, '${escaped}'))`;
 }
 
 /**
@@ -944,8 +949,10 @@ function filterFromClientSide(messages, fromValue) {
   }
 
   const needle = fromValue.toLowerCase();
-  return messages.filter((m) =>
-    (m.from?.emailAddress?.name || '').toLowerCase().includes(needle)
+  return messages.filter(
+    (m) =>
+      (m.from?.emailAddress?.name || '').toLowerCase().includes(needle) ||
+      (m.from?.emailAddress?.address || '').toLowerCase().includes(needle)
   );
 }
 
@@ -1418,7 +1425,17 @@ function buildNoResultsSuggestions(searchInfo, searchAllFolders) {
   const suggestions = [];
 
   // Scope — only worth suggesting when it isn't already what we just did.
-  if (searchAllFolders) {
+  // Say nothing in the mailbox matches only when every filter was checked
+  // server-side; a local pass over a bounded scan or one page is not proof
+  // of absence, and the notes below say how much was examined. (#328)
+  const partialCoverage = Boolean(
+    searchInfo.truncated || searchInfo.narrowedCandidates
+  );
+  if (searchAllFolders && partialCoverage) {
+    suggestions.push(
+      'All folders were searched, but some filters could only be checked against part of the mailbox (see below), so a match may still exist'
+    );
+  } else if (searchAllFolders) {
     suggestions.push(
       'All folders were already searched, so no message in this mailbox matches these filters'
     );

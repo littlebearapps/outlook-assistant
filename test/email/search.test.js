@@ -89,9 +89,11 @@ describe('buildFromFilter', () => {
     expect(filter).toBe("contains(from/emailAddress/address, 'example.com')");
   });
 
-  test('should produce contains filter for name', () => {
+  test('should match a name value against the display name or the address (#328)', () => {
     const filter = buildFromFilter('John');
-    expect(filter).toBe("contains(from/emailAddress/name, 'John')");
+    expect(filter).toBe(
+      "(contains(from/emailAddress/name, 'John') or contains(from/emailAddress/address, 'John'))"
+    );
   });
 
   // ── #230: single quotes must be OData-escaped (doubled) ──
@@ -103,7 +105,9 @@ describe('buildFromFilter', () => {
 
   test('should escape single quotes in a display name', () => {
     const filter = buildFromFilter("O'Brien");
-    expect(filter).toBe("contains(from/emailAddress/name, 'O''Brien')");
+    expect(filter).toBe(
+      "(contains(from/emailAddress/name, 'O''Brien') or contains(from/emailAddress/address, 'O''Brien'))"
+    );
   });
 
   test('should escape single quotes in a domain', () => {
@@ -116,7 +120,7 @@ describe('buildFromFilter', () => {
     // Every quote doubled, so the payload stays inside the string literal
     // rather than closing it and appending a new clause.
     expect(filter).toBe(
-      "contains(from/emailAddress/name, 'x'' or startswith(subject,''')"
+      "(contains(from/emailAddress/name, 'x'' or startswith(subject,''') or contains(from/emailAddress/address, 'x'' or startswith(subject,'''))"
     );
     // The raw, literal-terminating form must not survive.
     expect(filter).not.toContain("'x' or");
@@ -2190,6 +2194,183 @@ describe('handleSearchEmails — $search request shape (#261)', () => {
     expect(params.$search).toBeUndefined();
     expect(params.$filter).toBe(
       "contains(subject, 'Test') and from/emailAddress/address eq 'john@example.com'"
+    );
+  });
+});
+
+// ──────────────────────────────────────────────────
+// #328: a `from` value with no `@` and no `.` (a bare domain label such as
+// `examplecorp`) is classified as a name. It used to match the display name
+// only, so mail from someone@examplecorp.com.au was never found, and the
+// no-results text then said nothing in the mailbox matched.
+// ──────────────────────────────────────────────────
+describe('handleSearchEmails — from with a dotless domain label (#328)', () => {
+  /** Evaluate the small $filter grammar search.js emits, over plain rows. */
+  function evaluateFilter(filter, m) {
+    const fields = {
+      subject: m.subject || '',
+      'from/emailAddress/name': m.from?.emailAddress?.name || '',
+      'from/emailAddress/address': m.from?.emailAddress?.address || '',
+    };
+    const field = (path) => {
+      if (!(path in fields)) throw new Error(`unsupported field: ${path}`);
+      return fields[path];
+    };
+    const atom = (text) => {
+      const t = text.trim();
+      let match = /^contains\(([\w/]+), '((?:[^']|'')*)'\)$/.exec(t);
+      if (match) {
+        return field(match[1])
+          .toLowerCase()
+          .includes(match[2].replace(/''/g, "'").toLowerCase());
+      }
+      match = /^([\w/]+) eq '((?:[^']|'')*)'$/.exec(t);
+      if (match) {
+        return (
+          field(match[1]).toLowerCase() ===
+          match[2].replace(/''/g, "'").toLowerCase()
+        );
+      }
+      match = /^receivedDateTime (ge|le) (\S+)$/.exec(t);
+      if (match) {
+        const rec = Date.parse(m.receivedDateTime);
+        const bound = Date.parse(match[2]);
+        return match[1] === 'ge' ? rec >= bound : rec <= bound;
+      }
+      throw new Error(`unsupported filter clause: ${t}`);
+    };
+    // Split on top-level ' and ', then ' or ' inside a parenthesised group.
+    const conjuncts = [];
+    let depth = 0;
+    let start = 0;
+    for (let i = 0; i < filter.length; i++) {
+      if (filter[i] === '(') depth++;
+      else if (filter[i] === ')') depth--;
+      else if (depth === 0 && filter.startsWith(' and ', i)) {
+        conjuncts.push(filter.slice(start, i));
+        start = i + 5;
+      }
+    }
+    conjuncts.push(filter.slice(start));
+    return conjuncts.every((c) => {
+      const t = c.trim();
+      if (t.startsWith('(') && t.endsWith(')') && t.includes(' or ')) {
+        return t.slice(1, -1).split(' or ').some(atom);
+      }
+      return atom(t);
+    });
+  }
+
+  function mockGraphEvaluatingFilters(rows) {
+    callGraphAPIPaginated.mockImplementation((_t, _m, _e, params) => {
+      if (params.$search) throw new Error('unexpected $search');
+      const value = params.$filter
+        ? rows.filter((m) => evaluateFilter(params.$filter, m))
+        : rows;
+      return Promise.resolve({ value });
+    });
+  }
+
+  const fromCorp = (id, subject, date) =>
+    mockEmail({
+      id,
+      subject,
+      receivedDateTime: date,
+      from: {
+        emailAddress: {
+          name: 'Jane Citizen',
+          address: 'someone@examplecorp.com.au',
+        },
+      },
+    });
+  const rows = [
+    fromCorp('c1', 'Quarterly statement', '2026-08-01T00:00:00Z'),
+    fromCorp('c2', 'Renewal notice', '2025-02-01T00:00:00Z'),
+    mockEmail({
+      id: 'o1',
+      subject: 'Unrelated newsletter',
+      from: { emailAddress: { name: 'News', address: 'news@other.example' } },
+    }),
+  ];
+
+  test("finds a known sender's mail from a dotless domain label", async () => {
+    mockGraphEvaluatingFilters(rows);
+
+    const result = await handleSearchEmails({
+      from: 'examplecorp',
+      searchAllFolders: true,
+      count: 50,
+    });
+
+    expect(result._meta.returned).toBe(2);
+    const text = result.content[0].text;
+    expect(text).toContain('Quarterly statement');
+    expect(text).toContain('Renewal notice');
+    expect(text).not.toContain('Unrelated newsletter');
+    expect(result._meta.searchMetadata.filterApplied).toBe(true);
+  });
+
+  test('still finds it with a date window', async () => {
+    mockGraphEvaluatingFilters(rows);
+
+    const result = await handleSearchEmails({
+      from: 'examplecorp',
+      searchAllFolders: true,
+      receivedAfter: '2026-01-01T00:00:00Z',
+    });
+
+    expect(result._meta.returned).toBe(1);
+    expect(result.content[0].text).toContain('Quarterly statement');
+  });
+
+  test('still matches a display name', async () => {
+    mockGraphEvaluatingFilters(rows);
+
+    const result = await handleSearchEmails({
+      from: 'Jane',
+      searchAllFolders: true,
+    });
+
+    expect(result._meta.returned).toBe(2);
+  });
+
+  test('the local from matcher checks the address for a name value too', () => {
+    const matched = filterFromClientSide(rows, 'examplecorp');
+    expect(matched.map((m) => m.id)).toEqual(['c1', 'c2']);
+  });
+
+  test('does not claim the mailbox has no match when only one page was checked', async () => {
+    callGraphAPIPaginated
+      // combined-search → empty (or rejected on a personal account)
+      .mockResolvedValueOnce({ value: [] })
+      // single-term-from → this sender's mail, none with the subject
+      .mockResolvedValueOnce({ value: [rows[0], rows[1]] })
+      // single-term-subject → empty
+      .mockResolvedValueOnce({ value: [] });
+
+    const result = await handleSearchEmails({
+      from: 'examplecorp',
+      subject: 'Zebra',
+      searchAllFolders: true,
+      count: 2,
+    });
+
+    const text = result.content[0].text;
+    expect(result._meta.returned).toBe(0);
+    expect(text).not.toContain('no message in this mailbox matches');
+    expect(text).toContain('All folders were searched');
+  });
+
+  test('keeps the definitive wording when every filter was checked server-side', async () => {
+    callGraphAPIPaginated.mockResolvedValue({ value: [] });
+
+    const result = await handleSearchEmails({
+      from: 'examplecorp',
+      searchAllFolders: true,
+    });
+
+    expect(result.content[0].text).toContain(
+      'All folders were already searched, so no message in this mailbox matches these filters'
     );
   });
 });

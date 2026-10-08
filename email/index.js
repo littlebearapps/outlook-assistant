@@ -65,7 +65,7 @@ const emailTools = [
         query: {
           type: 'string',
           description:
-            'Free-text search. Omit for list mode. Sent to Graph `$search`, which matches subject, body and sender. `$search` takes no other filters, so `from`, `to`, `subject` and the date and boolean filters are applied to the page it returns, sorted newest first within that page. If `$search` fails or nothing on that page passes those filters, this falls back to a subject substring match (all words must appear in the subject) with the filters applied server-side. The response names the strategy used.',
+            "Free-text search. Omit for list mode. Alone or with only date and boolean filters, it is sent to Graph `$search`, which matches subject, body and sender. `$search` takes no other filters, so those are applied to its results, newest first, reading at most 250. With `from`, `to` or `subject`, those go to Graph as a filter and `query` is matched against each result's subject, preview and sender. If nothing passes, this falls back to a subject substring match (all words must appear in the subject) with the filters applied server-side. The response names the strategy used and says when coverage was partial.",
         },
         searchExpression: {
           type: 'string',

@@ -28,7 +28,7 @@ Never list a whole mailbox to answer a narrow question. Every result goes into t
 
 | Input              | Work/school (Microsoft 365)                                                          | Personal Outlook.com                                                                                                                |
 | ------------------ | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `query` | Graph `$search` over subject, body and sender. Other filters are applied to the page it returns, newest first | The same `$search` first. If it fails or nothing on its page passes the other filters: a subject substring match (every word in the subject) |
+| `query` | Graph `$search` over subject, body and sender; a date or boolean window is applied to its results (newest first, at most 250 read). With `from`/`to`/`subject`: those as a server-side filter, `query` matched against subject, preview and sender | The same. If nothing passes: a subject substring match (every word in the subject) with the filters server-side |
 | `searchExpression` | Graph `$search` over the whole message, body included, newest first | Only `from:`, `to:` and `subject:` terms are translated and retried (`raw-kql-translated`); free text and `AND`/`OR` are not |
 | `to`               | Server-side filter                                                                   | Matched locally over the most recent messages only (500 by default). Pair with `receivedAfter`/`receivedBefore` to reach older mail |
 | Structured filters | Reliable                                                                             | The most reliable option                                                                                                            |
@@ -41,14 +41,15 @@ Every search response carries it. Read it before acting on results:
 
 - `finalStrategy` names the strategy that answered: `combined-search`, `single-term-*`, `client-side-*`, `boolean-filters-only`, `raw-kql-translated` or `recent-emails`.
 - `recent-emails` means no filter was applied: you are looking at recent mail, not matches.
-- `orderedWithinPage: true` means a `query` was answered by `$search`: results are newest first within the page Graph returned, not across the whole mailbox.
+- `orderedWithinPage: true` means a `query` was answered by `$search`: results are newest first within what Graph returned, not across the whole mailbox.
+- `partialCoverage: true` (with `narrowedCandidates`) means filters were applied locally to that many messages and Graph had more: other matches may exist. Narrow the search rather than reading the results as complete.
 - `droppedFilters` lists filters that could not be honoured. It should be empty. If it isn't, the results are broader than asked: narrow again (tighter dates, a different filter) rather than acting on them.
 - `truncated: true` (with `candidatesScanned` and `scanLimit`) means a local scan stopped before the end. "No match" is then not proof of absence; narrow the date window and search again.
 - `kqlTranslatedTo` shows how a `searchExpression` was rewritten on a personal account.
 
 ## Paging: use date windows
 
-There is no page cursor. `count` defaults to 25 for a list and 10 for a search, with a maximum of 50. When a result says more are available, narrow `receivedAfter`/`receivedBefore` and search window by window, rather than asking for more at once.
+There is no page cursor. `count` defaults to 25 for a list and 10 for a search, with a maximum of 50. When a result says more are available, narrow `receivedAfter`/`receivedBefore` and search window by window, rather than asking for more at once. A `query` alone reads at most 250 `$search` results for a window; for older mail, add `from` or `subject` so the window is applied server-side.
 
 ## Verbosity and body length
 

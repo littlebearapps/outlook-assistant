@@ -21,13 +21,23 @@ upgrade steps. #305 (scheduled automatic replies on personal accounts) is
   `$search` together with `$orderby` (`400 SearchWithOrderBy`) or `$filter`
   (`400 SearchWithFilter`), and every `query` search sent `$orderby`, so it
   always fell back to a subject-only match. `$search` is now sent on its own
-  and matches subject, body and sender, on personal accounts too. `from`,
-  `to`, `subject` and the date and boolean filters are applied to the page
-  it returns, which is sorted newest first; `_meta.searchMetadata` reports
-  `orderedWithinPage` and the filters applied locally (`clientSideFilters`).
-  If nothing on that page passes, the search falls back as before. The
-  `query` and `searchExpression` descriptions no longer say `$search` is
-  unavailable on personal accounts or that its results aren't in date order.
+  and matches subject, body and sender, on personal accounts too. A date or
+  boolean window is applied to its results, newest first, reading further
+  pages (at most 250 messages) and stopping once results are older than
+  `receivedAfter`. With `from`, `to` or `subject`, those go to Graph as the
+  filter and `query` is matched against each result's subject, preview and
+  sender. `_meta.searchMetadata` reports `orderedWithinPage` and the filters
+  applied locally (`clientSideFilters`). If nothing passes, the search falls
+  back as before. The `query` and `searchExpression` descriptions no longer
+  say `$search` is unavailable on personal accounts or that its results
+  aren't in date order.
+- **Locally filtered results say when coverage was partial.** Whenever a
+  filter is applied locally and drops messages while Graph had more to read,
+  the result keeps `hasMore`, reports `partialCoverage` and
+  `narrowedCandidates`, and says other matches may exist (earlier versions
+  dropped the "more available" hint). The footer for a `$search` result
+  suggests raising `count` or adding words to `query`, not a date window
+  that would re-read the same messages.
 - **`from` with a bare domain label finds the sender's mail** (#328). A
   `from` value with no `@` and no dot (such as `examplecorp`) matched display
   names only, so mail from `someone@examplecorp.com.au` was never found. It

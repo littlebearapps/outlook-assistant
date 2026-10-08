@@ -446,11 +446,24 @@ async function progressiveSearch(
     // Skip directly to boolean-only filter (step 3) — combined search is redundant
     log.debug('Only boolean filters provided, skipping combined search');
   } else {
+    // `query` with `from`/`to`/`subject`: Graph takes `$search` only on its
+    // own, so the structured terms go out as the `$filter` (the narrower set)
+    // and `query` is matched locally, rather than narrowing a `$search` page
+    // of mostly other senders. (#261 follow-up)
+    const structuredQuery =
+      Boolean(searchTerms.query) &&
+      Boolean(searchTerms.from || searchTerms.to || searchTerms.subject);
+    // Narrowing reads full pages, so a window costs few requests.
+    const narrows =
+      structuredQuery ||
+      (Boolean(searchTerms.query) &&
+        activeWindowFilters(filterTerms).length > 0);
+    const pageSize = narrows ? NARROW_PAGE_SIZE : Math.min(50, maxCount);
     try {
       const params = buildSearchParams(
-        searchTerms,
+        structuredQuery ? { ...searchTerms, query: undefined } : searchTerms,
         filterTerms,
-        Math.min(50, maxCount),
+        pageSize,
         selectFields
       );
       log.debug('Attempting combined search with params:', params);
@@ -461,17 +474,23 @@ async function progressiveSearch(
         'GET',
         endpoint,
         params,
-        maxCount
+        narrows ? pageSize : maxCount
       );
+      const narrowCtx = {
+        accessToken,
+        pageSize,
+        maxCount,
+        searchTerms,
+        filterTerms,
+        searchAttempts,
+        scanState,
+      };
       if (params.$search) {
-        const fromSearch = narrowSearchPage(
-          response,
-          searchTerms,
-          filterTerms,
-          searchAttempts,
-          scanState
-        );
+        const fromSearch = await narrowSearchPage(response, narrowCtx);
         if (fromSearch) return fromSearch;
+      } else if (structuredQuery) {
+        const fromFilter = await narrowStructuredPage(response, narrowCtx);
+        if (fromFilter) return fromFilter;
       } else if (response.value && response.value.length > 0) {
         log.debug(
           `Combined search successful: found ${response.value.length} results`
@@ -1020,12 +1039,107 @@ const CLIENT_SIDE_TERM_MATCHERS = {
  * @param {Array} matched - The rows that survived narrowing
  */
 function narrowResponse(response, matched) {
-  const dropped = (response.value || []).length !== matched.length;
+  const examined = (response.value || []).length;
+  const dropped = examined !== matched.length;
   response.value = matched;
   if (dropped) {
+    const more = Boolean(response.hasMore || response['@odata.nextLink']);
     delete response['@odata.count'];
     delete response['@odata.nextLink'];
     delete response.hasMore;
+    // Rows beyond this page were never checked, so more matches may exist:
+    // say so rather than present the survivors as the whole answer.
+    // (#261 follow-up)
+    if (more) {
+      response.hasMore = true;
+      response._partialNarrowing = { examined };
+    }
+  }
+}
+
+/** Page size a narrowing search requests, so a window costs few requests. */
+const NARROW_PAGE_SIZE = 50;
+
+/**
+ * Most messages a narrowing search reads (five full pages) before it stops
+ * and reports partial coverage. (#261 follow-up)
+ */
+const NARROW_SCAN_LIMIT = 250;
+
+/**
+ * Read pages from a first response, keeping the rows `narrow` accepts, until
+ * `maxCount` are kept, Graph has no more, NARROW_SCAN_LIMIT rows have been
+ * read, or (for newest-first `$search` results) a page ends before
+ * `stopBefore`, past which nothing can match. A failed follow-up page keeps
+ * what was found and reports that more may exist.
+ *
+ * @returns {Promise<{kept: Array, scanned: number, pages: number, more: boolean}>}
+ */
+async function collectNarrowed(first, narrow, ctx, stopBefore) {
+  let rows = first.value || [];
+  let scanned = rows.length;
+  let pages = 1;
+  const kept = narrow(rows);
+  let nextLink = first['@odata.nextLink'];
+  let more = Boolean(first.hasMore || nextLink);
+  const pastWindow = (page) =>
+    stopBefore !== undefined &&
+    page.length > 0 &&
+    (Date.parse(page[page.length - 1].receivedDateTime) || 0) < stopBefore;
+
+  while (
+    kept.length < ctx.maxCount &&
+    nextLink &&
+    scanned < NARROW_SCAN_LIMIT &&
+    !pastWindow(rows)
+  ) {
+    let next;
+    try {
+      next = await callGraphAPIPaginated(
+        ctx.accessToken,
+        'GET',
+        nextLink,
+        {},
+        ctx.pageSize
+      );
+    } catch (error) {
+      log.debug(`Narrowing stopped on a failed page: ${error.message}`);
+      break;
+    }
+    rows = next?.value || [];
+    scanned += rows.length;
+    pages += 1;
+    kept.push(...narrow(rows));
+    nextLink = next?.['@odata.nextLink'];
+    more = Boolean(next?.hasMore || nextLink);
+  }
+  // `$search` is newest first: rows past the window's start can't match.
+  if (pastWindow(rows)) more = false;
+  return { kept, scanned, pages, more };
+}
+
+/**
+ * Put the narrowed rows on the response: newest first when `sort`, cut to
+ * `maxCount`, with `hasMore` and a partial-coverage marker when rows were
+ * dropped and Graph had more to read. (#261 follow-up)
+ */
+function finishNarrowed(response, { kept, scanned, more }, maxCount, sort) {
+  const time = (m) => Date.parse(m.receivedDateTime) || 0;
+  const ordered = sort ? [...kept].sort((a, b) => time(b) - time(a)) : kept;
+  const hasMore = more || ordered.length > maxCount;
+  response.value = ordered.slice(0, maxCount);
+  delete response['@odata.count'];
+  delete response['@odata.nextLink'];
+  delete response.hasMore;
+  delete response._partialNarrowing;
+  if (hasMore) {
+    response.hasMore = true;
+    if (scanned > kept.length) {
+      response._partialNarrowing = {
+        examined: scanned,
+        capped: scanned >= NARROW_SCAN_LIMIT,
+      };
+    }
   }
 }
 
@@ -1103,40 +1217,51 @@ function ignoredFiltersNote(keys) {
  * newest first. Graph returns message `$search` results by sent date; the
  * local sort by received date makes that order explicit.
  *
- * @returns {object|null} - The narrowed response, or null to continue the ladder
+ * A window reads further pages (collectNarrowed) rather than narrowing one
+ * page and dropping the rest. (#261 follow-up)
+ *
+ * @returns {Promise<object|null>} - The narrowed response, or null to continue the ladder
  */
-function narrowSearchPage(
-  response,
-  searchTerms,
-  filterTerms,
-  searchAttempts,
-  scanState
-) {
-  const page = response.value || [];
-  const { matched: termMatched, secondaryApplied } = applySecondarySearchTerms(
-    page,
-    searchTerms,
-    'query'
+async function narrowSearchPage(response, ctx) {
+  const { searchTerms, filterTerms, searchAttempts, scanState } = ctx;
+  const secondaryApplied = SEARCH_TERM_KEYS.filter(
+    (t) => t !== 'query' && searchTerms[t]
   );
-  const matched = applyBooleanDateFilters(termMatched, filterTerms);
-  if (matched.length === 0) {
-    if (page.length > 0) recordNarrowingMiss(scanState, page.length);
+  const narrow = (rows) =>
+    applyBooleanDateFilters(
+      applySecondarySearchTerms(rows, searchTerms, 'query').matched,
+      filterTerms
+    );
+  const after = filterTerms.receivedAfter
+    ? Date.parse(filterTerms.receivedAfter)
+    : NaN;
+  // Graph returns `$search` results newest first by sent date; a message is
+  // received after it is sent, so once a page ends before `receivedAfter`,
+  // later pages hold nothing in the window.
+  const collected = await collectNarrowed(
+    response,
+    narrow,
+    ctx,
+    Number.isNaN(after) ? undefined : after
+  );
+  if (collected.kept.length === 0) {
+    if (collected.scanned > 0) {
+      recordNarrowingMiss(scanState, collected.scanned);
+    }
     log.debug(
-      `$search returned ${page.length} results, none passing the other filters — continuing`
+      `$search returned ${collected.scanned} results, none passing the other filters — continuing`
     );
     return null;
   }
 
-  const time = (m) => Date.parse(m.receivedDateTime) || 0;
-  narrowResponse(
-    response,
-    [...matched].sort((a, b) => time(b) - time(a))
-  );
+  finishNarrowed(response, collected, ctx.maxCount, true);
   const localFilters = [
     ...secondaryApplied,
     ...activeWindowFilters(filterTerms),
   ];
-  log.debug(`$search successful: ${matched.length} of ${page.length} kept`);
+  log.debug(
+    `$search successful: ${collected.kept.length} of ${collected.scanned} kept`
+  );
   response._searchInfo = {
     attemptsCount: searchAttempts.length,
     strategies: searchAttempts,
@@ -1145,7 +1270,49 @@ function narrowSearchPage(
     appliedTerms: ['query', ...secondaryApplied],
     ...(localFilters.length > 0 && { clientSideTerms: localFilters }),
     orderedWithinPage: true,
-    searchPageSize: page.length,
+    searchPageSize: collected.scanned,
+    searchPages: collected.pages,
+  };
+  return response;
+}
+
+/**
+ * Finish the combined step for `query` with `from`/`to`/`subject`: Graph
+ * applied the structured terms and the window as `$filter`; `query` is
+ * matched here against subject, preview and sender, reading further pages
+ * until `count` match. (#261 follow-up)
+ *
+ * @returns {Promise<object|null>} - The narrowed response, or null to continue the ladder
+ */
+async function narrowStructuredPage(response, ctx) {
+  const { searchTerms, filterTerms, searchAttempts, scanState } = ctx;
+  const collected = await collectNarrowed(
+    response,
+    (rows) => filterQueryClientSide(rows, searchTerms.query),
+    ctx
+  );
+  if (collected.kept.length === 0) {
+    if (collected.scanned > 0) {
+      recordNarrowingMiss(scanState, collected.scanned);
+    }
+    log.debug(
+      `Combined $filter returned ${collected.scanned} results, none matching query — continuing`
+    );
+    return null;
+  }
+
+  finishNarrowed(response, collected, ctx.maxCount, false);
+  log.debug(
+    `Combined search successful: ${collected.kept.length} of ${collected.scanned} matched query`
+  );
+  response._searchInfo = {
+    attemptsCount: searchAttempts.length,
+    strategies: searchAttempts,
+    originalTerms: searchTerms,
+    filterTerms,
+    appliedTerms: SEARCH_TERM_KEYS.filter((t) => searchTerms[t]),
+    clientSideTerms: ['query'],
+    queryMatchedLocally: true,
   };
   return response;
 }
@@ -1574,7 +1741,9 @@ function formatSearchResults(response, folder, verbosity, searchAllFolders) {
       ...suppliedTerms
         .filter((k) => !appliedTerms.includes(k))
         .map((k) => FILTER_LABELS[k] || k),
-      ...(response._searchInfo.ignoredFilters || []),
+      ...(response._searchInfo.ignoredFilters || []).map(
+        (k) => FILTER_LABELS[k] || k
+      ),
     ];
 
     meta.searchMetadata = {
@@ -1598,6 +1767,12 @@ function formatSearchResults(response, folder, verbosity, searchAllFolders) {
       // the page Graph returned, not across the whole mailbox. (#261)
       ...(response._searchInfo.orderedWithinPage && {
         orderedWithinPage: true,
+      }),
+      // Rows were dropped by local narrowing while Graph had more to read,
+      // so matches beyond those examined may exist. (#261 follow-up)
+      ...(response._partialNarrowing && {
+        narrowedCandidates: response._partialNarrowing.examined,
+        partialCoverage: true,
       }),
       // Surface client-side scan coverage so callers can tell when a fallback
       // result may be incomplete (older matches beyond the scan budget). (#169)
@@ -1663,7 +1838,11 @@ function formatSearchResults(response, folder, verbosity, searchAllFolders) {
         local.length > 0
           ? `, filtered locally by ${local.map((k) => `\`${k}\``).join(', ')}`
           : '';
-      searchNote = `\n\n_Search strategy: ${strategy} (Graph \`$search\` over subject, body and sender: ${page} message${page === 1 ? '' : 's'} returned${filtered}, sorted newest first within that page)_`;
+      const pages = response._searchInfo.searchPages || 1;
+      const span = pages > 1 ? `across ${pages} pages` : 'within that page';
+      searchNote = `\n\n_Search strategy: ${strategy} (Graph \`$search\` over subject, body and sender: ${page} message${page === 1 ? '' : 's'} returned${filtered}, sorted newest first ${span})_`;
+    } else if (response._searchInfo.queryMatchedLocally) {
+      searchNote = `\n\n_Search strategy: ${strategy} (\`from\`/\`to\`/\`subject\` and dates applied by Graph; \`query\` matched locally against subject, preview and sender)_`;
     } else {
       searchNote = `\n\n_Search strategy: ${strategy}_`;
     }
@@ -1678,6 +1857,13 @@ function formatSearchResults(response, folder, verbosity, searchAllFolders) {
     // says so only when the search returns nothing; a truncated scan that
     // DID match is exactly as incomplete and reads as authoritative. On a
     // large archive that silently caps historical searches.
+    if (response._partialNarrowing) {
+      const examined = response._partialNarrowing.examined;
+      const next = response._partialNarrowing.capped
+        ? `A filtered search reads at most ${NARROW_SCAN_LIMIT} messages, so narrow it: add words to \`query\` or a date window.`
+        : 'Raise `count` (up to 50) to read further.';
+      searchNote += `\n\n> **Partial coverage**: these were filtered locally from the first ${examined} message${examined === 1 ? '' : 's'} Graph returned, and more were available beyond them, so other matches may exist. ${next}`;
+    }
     if (response._searchInfo.truncated) {
       const scanned = response._searchInfo.candidatesScanned;
       const limit = response._searchInfo.scanLimit;

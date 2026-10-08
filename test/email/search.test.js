@@ -1634,8 +1634,10 @@ describe('handleSearchEmails — narrowing correctness follow-ups', () => {
       mockEmail({ id: 'n3', subject: 'Parking', from }),
     ];
 
-    // The page claims more beyond it (#279), but narrowing dropped rows, so
-    // neither the total nor the paging hint may survive.
+    // The page claims more beyond it (#279) and narrowing dropped rows: the
+    // total must not survive, but the rows beyond the page were never
+    // checked, so `hasMore` stays and coverage is reported as partial
+    // (#261 follow-up).
     callGraphAPIPaginated
       .mockResolvedValueOnce({ value: [] })
       .mockResolvedValueOnce({
@@ -1655,7 +1657,9 @@ describe('handleSearchEmails — narrowing correctness follow-ups', () => {
     // Reporting 3 would invite a caller to paginate for two matches that
     // do not exist.
     expect(result._meta.totalAvailable).not.toBe(3);
-    expect(result._meta.hasMore).toBe(false);
+    expect(result._meta.hasMore).toBe(true);
+    expect(result._meta.searchMetadata.partialCoverage).toBe(true);
+    expect(result._meta.searchMetadata.narrowedCandidates).toBe(3);
   });
 
   test('should disclose how many messages a failed narrowing examined', async () => {
@@ -2067,9 +2071,6 @@ describe('handleSearchEmails — $search request shape (#261)', () => {
 
   test.each([
     [{ query: 'Bunnings' }],
-    [{ query: 'Bunnings', subject: 'receipt' }],
-    [{ query: 'Bunnings', from: 'info@bunnings.com.au' }],
-    [{ query: 'Bunnings', to: 'nathan@live.com' }],
     [{ query: 'Bunnings', receivedAfter: '2026-01-01T00:00:00Z' }],
     [{ query: 'Bunnings', unreadOnly: true, hasAttachments: true }],
     [{ query: 'Bunnings', searchAllFolders: true }],
@@ -2085,6 +2086,27 @@ describe('handleSearchEmails — $search request shape (#261)', () => {
       expect(params.$filter).toBeUndefined();
     }
   });
+
+  // With from/to/subject the structured terms go out as `$filter` and `query`
+  // is matched locally (#261 follow-up), so no request may mix the two.
+  test.each([
+    [{ query: 'Bunnings', subject: 'receipt' }],
+    [{ query: 'Bunnings', from: 'info@bunnings.com.au' }],
+    [{ query: 'Bunnings', to: 'nathan@live.com' }],
+  ])(
+    'with a structured term, no request mixes $search and $filter: %j',
+    async (args) => {
+      callGraphAPIPaginated.mockResolvedValue({ value: [] });
+
+      await handleSearchEmails(args);
+
+      expect(callGraphAPIPaginated).toHaveBeenCalled();
+      for (const params of searchCalls()) {
+        expect(params.$orderby).toBeUndefined();
+        expect(params.$filter).toBeUndefined();
+      }
+    }
+  );
 
   test('a $search page that arrives out of order comes back newest first', async () => {
     const older = mockEmail({
@@ -2117,7 +2139,7 @@ describe('handleSearchEmails — $search request shape (#261)', () => {
     expect(text).toContain('newest first');
   });
 
-  test('applies the date window and other terms to the $search page locally', async () => {
+  test('applies the date window to the $search page locally', async () => {
     const inWindow = mockEmail({
       id: 'in',
       subject: 'Bunnings receipt in window',
@@ -2128,18 +2150,19 @@ describe('handleSearchEmails — $search request shape (#261)', () => {
       subject: 'Bunnings receipt too old',
       receivedDateTime: '2025-01-10T00:00:00Z',
     });
-    const wrongSubject = mockEmail({
-      id: 'subj',
-      subject: 'Bunnings newsletter in window',
+    const notUnread = mockEmail({
+      id: 'read',
+      subject: 'Bunnings receipt already read',
       receivedDateTime: '2026-09-11T00:00:00Z',
+      isRead: true,
     });
     callGraphAPIPaginated.mockResolvedValueOnce({
-      value: [inWindow, tooOld, wrongSubject],
+      value: [inWindow, tooOld, notUnread],
     });
 
     const result = await handleSearchEmails({
       query: 'Bunnings',
-      subject: 'receipt',
+      unreadOnly: true,
       receivedAfter: '2026-09-01T00:00:00Z',
     });
 
@@ -2150,8 +2173,31 @@ describe('handleSearchEmails — $search request shape (#261)', () => {
     expect(meta.droppedFilters).toEqual([]);
     expect(meta.filterApplied).toBe(true);
     expect(meta.clientSideFilters).toEqual(
-      expect.arrayContaining(['subject', 'receivedAfter'])
+      expect.arrayContaining(['unreadOnly', 'receivedAfter'])
     );
+  });
+
+  test('query with subject sends subject and the window as $filter and matches query locally', async () => {
+    callGraphAPIPaginated.mockResolvedValueOnce({
+      value: [
+        mockEmail({ id: 'q1', subject: 'Bunnings receipt' }),
+        mockEmail({ id: 'q2', subject: 'Mitre 10 receipt' }),
+      ],
+    });
+
+    const result = await handleSearchEmails({
+      query: 'Bunnings',
+      subject: 'receipt',
+      receivedAfter: '2026-01-01T00:00:00Z',
+    });
+
+    const [, , , params] = callGraphAPIPaginated.mock.calls[0];
+    expect(params.$search).toBeUndefined();
+    expect(params.$filter).toContain("contains(subject, 'receipt')");
+    expect(params.$filter).toContain('receivedDateTime ge');
+    expect(result._meta.returned).toBe(1);
+    expect(result.content[0].text).toContain('Bunnings receipt');
+    expect(result._meta.searchMetadata.clientSideFilters).toEqual(['query']);
   });
 
   test('falls through to the subject ladder when nothing on the $search page passes the local filters', async () => {
@@ -2469,5 +2515,232 @@ describe('handleSearchEmails — raw searchExpression ignores the date window (#
     expect(result._meta.searchMetadata.droppedFilters).toEqual([]);
     expect(result._meta.searchMetadata.filterApplied).toBe(true);
     expect(result.content[0].text).not.toContain('was not applied');
+  });
+});
+
+// ──────────────────────────────────────────────────
+// #261 follow-up (whole-branch review): narrowing one `$search` page and then
+// dropping its nextLink lost recall. `query` with `from`/`to`/`subject` now
+// uses the structured `$filter` and matches `query` locally; a date or boolean
+// window on a `$search` reads further pages (newest first, so it can stop once
+// rows are older than `receivedAfter`); and any narrowing that drops rows
+// while Graph had more keeps `hasMore` and says coverage was partial.
+// ──────────────────────────────────────────────────
+describe('handleSearchEmails — narrowing across pages (#261 follow-up)', () => {
+  const NEXT = (n) => `https://graph.microsoft.com/v1.0/me/messages?$skip=${n}`;
+  const sender = (name) => ({
+    emailAddress: { name, address: `${name}@example.com` },
+  });
+  const day = (d) => new Date(Date.UTC(2026, 9, d)).toISOString();
+
+  test('query with from uses the structured $filter, not $search, and matches query locally', async () => {
+    const rows = [
+      mockEmail({ id: 'a1', subject: 'Invoice 1', from: sender('acme') }),
+      mockEmail({ id: 'a2', subject: 'Newsletter', from: sender('acme') }),
+      mockEmail({ id: 'a3', subject: 'Invoice 3', from: sender('acme') }),
+    ];
+    callGraphAPIPaginated.mockResolvedValueOnce({ value: rows });
+
+    const result = await handleSearchEmails({
+      query: 'invoice',
+      from: 'acme',
+      count: 10,
+    });
+
+    const [, , , first] = callGraphAPIPaginated.mock.calls[0];
+    expect(first.$search).toBeUndefined();
+    expect(first.$filter).toContain(
+      "contains(from/emailAddress/address, 'acme')"
+    );
+    const meta = result._meta.searchMetadata;
+    expect(meta.finalStrategy).toBe('combined-search');
+    expect(result._meta.returned).toBe(2);
+    expect(meta.droppedFilters).toEqual([]);
+    expect(meta.clientSideFilters).toEqual(['query']);
+    expect(result.content[0].text).toContain('matched locally');
+  });
+
+  test('query with from follows nextLink until count matches are found', async () => {
+    callGraphAPIPaginated.mockImplementation((tok, m, path) => {
+      if (path === NEXT(50)) {
+        return {
+          value: [
+            mockEmail({
+              id: 'p2a',
+              subject: 'Invoice B',
+              from: sender('acme'),
+            }),
+            mockEmail({
+              id: 'p2b',
+              subject: 'Invoice C',
+              from: sender('acme'),
+            }),
+          ],
+        };
+      }
+      return {
+        value: [
+          mockEmail({ id: 'p1a', subject: 'Invoice A', from: sender('acme') }),
+          mockEmail({ id: 'p1b', subject: 'Other', from: sender('acme') }),
+        ],
+        hasMore: true,
+        '@odata.nextLink': NEXT(50),
+      };
+    });
+
+    const result = await handleSearchEmails({
+      query: 'invoice',
+      from: 'acme',
+      count: 3,
+    });
+
+    expect(result._meta.returned).toBe(3);
+    expect(callGraphAPIPaginated.mock.calls[1][2]).toBe(NEXT(50));
+    expect(result._meta.hasMore).toBe(false);
+  });
+
+  test('a receivedBefore window straddling the $search page reads the next page', async () => {
+    const page1 = Array.from({ length: 5 }, (_, i) =>
+      mockEmail({
+        id: `n${i}`,
+        subject: `invoice new ${i}`,
+        receivedDateTime: day(20 - i),
+      })
+    );
+    const page2 = Array.from({ length: 5 }, (_, i) =>
+      mockEmail({
+        id: `o${i}`,
+        subject: `invoice old ${i}`,
+        receivedDateTime: day(9 - i),
+      })
+    );
+    callGraphAPIPaginated.mockImplementation((tok, m, path, params) => {
+      if (path === NEXT(5)) return { value: page2 };
+      if (params && params.$search) {
+        return { value: page1, hasMore: true, '@odata.nextLink': NEXT(5) };
+      }
+      return { value: [] };
+    });
+
+    const result = await handleSearchEmails({
+      query: 'invoice',
+      receivedBefore: day(10),
+      count: 3,
+    });
+
+    const meta = result._meta.searchMetadata;
+    expect(meta.finalStrategy).toBe('combined-search');
+    expect(result._meta.returned).toBe(3);
+    expect(result.content[0].text).toContain('invoice old 0');
+    expect(result.content[0].text).not.toContain('invoice new');
+    // The first request asks for full pages, so the window costs few requests.
+    expect(callGraphAPIPaginated.mock.calls[0][3].$top).toBe(50);
+  });
+
+  test('stops paging once $search rows are older than receivedAfter', async () => {
+    callGraphAPIPaginated.mockResolvedValueOnce({
+      value: [
+        mockEmail({
+          id: 'k1',
+          subject: 'invoice in',
+          receivedDateTime: day(20),
+        }),
+        mockEmail({
+          id: 'k2',
+          subject: 'invoice out',
+          receivedDateTime: day(2),
+        }),
+      ],
+      hasMore: true,
+      '@odata.nextLink': NEXT(2),
+    });
+
+    const result = await handleSearchEmails({
+      query: 'invoice',
+      receivedAfter: day(10),
+      count: 10,
+    });
+
+    expect(callGraphAPIPaginated).toHaveBeenCalledTimes(1);
+    expect(result._meta.returned).toBe(1);
+    // Everything beyond is older than the window, so nothing more matches.
+    expect(result._meta.hasMore).toBe(false);
+    expect(result.content[0].text).not.toContain('Partial coverage');
+  });
+
+  test('stops at the scan cap, keeps hasMore and says coverage was partial', async () => {
+    let n = 0;
+    callGraphAPIPaginated.mockImplementation(() => {
+      n += 1;
+      const value = Array.from({ length: 50 }, (_, i) =>
+        mockEmail({
+          id: `c${n}-${i}`,
+          subject: i === 0 ? 'invoice keep' : 'invoice',
+          receivedDateTime: day(25),
+          isRead: i !== 0,
+        })
+      );
+      return { value, hasMore: true, '@odata.nextLink': NEXT(n * 50) };
+    });
+
+    const result = await handleSearchEmails({
+      query: 'invoice',
+      unreadOnly: true,
+      count: 20,
+    });
+
+    expect(callGraphAPIPaginated.mock.calls.length).toBeLessThanOrEqual(5);
+    expect(result._meta.returned).toBe(callGraphAPIPaginated.mock.calls.length);
+    expect(result._meta.hasMore).toBe(true);
+    const meta = result._meta.searchMetadata;
+    expect(meta.partialCoverage).toBe(true);
+    expect(meta.narrowedCandidates).toBe(
+      callGraphAPIPaginated.mock.calls.length * 50
+    );
+    expect(result.content[0].text).toContain('Partial coverage');
+    // Raising count can't read past the cap, so the note mustn't suggest it.
+    expect(result.content[0].text).toContain('reads at most 250');
+    expect(result.content[0].text).not.toContain('to read further');
+  });
+
+  test('a ladder step that narrows a page with more beyond it keeps hasMore', async () => {
+    callGraphAPIPaginated
+      // combined (structured, with `to`) rejected, as on personal accounts
+      .mockRejectedValueOnce(new Error('400 ErrorInvalidProperty'))
+      // single-term-to returns a page with more beyond it
+      .mockResolvedValueOnce({
+        value: [
+          mockEmail({ id: 't1', subject: 'Invoice 1' }),
+          mockEmail({ id: 't2', subject: 'Lunch' }),
+        ],
+        hasMore: true,
+        '@odata.nextLink': NEXT(2),
+      });
+
+    const result = await handleSearchEmails({
+      query: 'invoice',
+      to: 'jane@example.com',
+    });
+
+    expect(result._meta.searchMetadata.finalStrategy).toBe('single-term-to');
+    expect(result._meta.returned).toBe(1);
+    expect(result._meta.hasMore).toBe(true);
+    expect(result._meta.searchMetadata.partialCoverage).toBe(true);
+    expect(result.content[0].text).toContain('Partial coverage');
+  });
+
+  test('the more-available footer for a $search result suggests count, not the date parameters', async () => {
+    callGraphAPIPaginated.mockResolvedValueOnce({
+      value: [mockEmail({ id: 'f1', subject: 'invoice' })],
+      hasMore: true,
+      '@odata.nextLink': NEXT(1),
+    });
+
+    const result = await handleSearchEmails({ query: 'invoice', count: 1 });
+
+    const text = result.content[0].text;
+    expect(result._meta.hasMore).toBe(true);
+    expect(text).toContain('raise `count`');
+    expect(text).not.toContain('receivedBefore');
   });
 });

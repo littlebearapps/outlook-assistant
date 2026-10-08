@@ -67,7 +67,7 @@ All of these are outward. Get the user's go-ahead with exact details (hard rules
 
 ## Meeting rooms
 
-`find-meeting-rooms` is work/school only and needs room-lookup permission granted by an admin; personal accounts get an empty list. Add a room to `attendees` as `{email, type: "resource"}`. See [accounts-personal-vs-m365](accounts-personal-vs-m365.md).
+`find-meeting-rooms` is work/school only; on a personal account it returns an error saying so. Without an admin-granted `Place.Read.All` it lists names and addresses only (beta `findRooms`, first 100 rooms) and says so; `building`, `floor` and `capacity` aren't applied then. Add a room to `attendees` as `{email, type: "resource"}`. See [accounts-personal-vs-m365](accounts-personal-vs-m365.md).
 
 ## Execute once
 

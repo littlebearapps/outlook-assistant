@@ -36,7 +36,7 @@ On a work account, upstream controls are not a reason to relax. They are also no
 | `to` filter                                                 | Local scan of recent mail only                                  | Server-side                                          |
 | `get-mail-tips`, `checkRecipients`                          | No tips returned; can't refuse a send                           | Full                                                 |
 | Shared mailboxes (`sharedMailbox`, `access-shared-mailbox`) | Not available                                                   | Opt-in (see [shared-mailboxes](shared-mailboxes.md)) |
-| `find-meeting-rooms`                                        | Empty list                                                      | Needs a room-lookup permission granted by an admin   |
+| `find-meeting-rooms`                                        | Error: rooms are Microsoft 365 only                             | Full list with `Place.Read.All`; else names and addresses (beta) |
 | Automatic replies                                           | Scheduled only (`startDateTime` + `endDateTime`)                | Scheduled or always on                               |
 | Focused Inbox overrides                                     | May be stored without changing where mail lands                 | Full                                                 |
 

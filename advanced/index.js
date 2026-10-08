@@ -590,8 +590,73 @@ async function handleClearMessageFlag(args) {
   }
 }
 
+/** Most pages of `places/microsoft.graph.room` read (100 rooms per page). */
+const ROOM_PAGE_CAP = 10;
+
 /**
- * Find meeting rooms handler
+ * `findRooms` exists only on the beta endpoint (v1.0 always 404s), so the
+ * fallback names the beta URL in full. Beta APIs can change without notice.
+ * It needs only User.Read but returns at most the first 100 rooms, as
+ * `{ name, address }` pairs with no building, floor or capacity.
+ */
+const FIND_ROOMS_BETA_URL = 'https://graph.microsoft.com/beta/me/findRooms';
+
+const PLACE_SCOPE_NOTE =
+  "Listing rooms through Graph `places` needs the Place.Read.All permission (admin consent), and this server doesn't request that scope yet (tracked in #130)";
+
+/** HTTP status from a callGraphAPI error message, or null. */
+function graphErrorStatus(error) {
+  const match = /status (\d{3})/.exec(error?.message || '');
+  return match ? Number(match[1]) : null;
+}
+
+/**
+ * Graph says so outright for a personal account (live, 2026-10-08):
+ * `400 … This API is not supported for MSA accounts`.
+ */
+function isPersonalAccountError(error) {
+  return /not supported for MSA accounts/i.test(error?.message || '');
+}
+
+/** A refusal for want of permission: missing Place.Read.All consent. */
+function isPermissionError(error) {
+  return (
+    graphErrorStatus(error) === 403 ||
+    /ErrorAccessDenied|Authorization_RequestDenied|Forbidden/i.test(
+      error?.message || ''
+    )
+  );
+}
+
+/**
+ * Every room from `places/microsoft.graph.room`, following `@odata.nextLink`
+ * up to ROOM_PAGE_CAP pages.
+ * @returns {Promise<{rooms: object[], truncated: boolean}>}
+ */
+async function listPlacesRooms(accessToken) {
+  let response = await callGraphAPI(
+    accessToken,
+    'GET',
+    'places/microsoft.graph.room'
+  );
+  const rooms = [...(response?.value || [])];
+  let pages = 1;
+  while (response?.['@odata.nextLink'] && pages < ROOM_PAGE_CAP) {
+    response = await callGraphAPI(
+      accessToken,
+      'GET',
+      response['@odata.nextLink']
+    );
+    rooms.push(...(response?.value || []));
+    pages++;
+  }
+  return { rooms, truncated: Boolean(response?.['@odata.nextLink']) };
+}
+
+/**
+ * Find meeting rooms handler (#240): `places` first, paged; the beta
+ * `findRooms` when that fails, except on a personal account, where Graph
+ * has no rooms to offer.
  */
 async function handleFindMeetingRooms(args) {
   const { query, building, floor, capacity, outputVerbosity } = args;
@@ -600,44 +665,74 @@ async function handleFindMeetingRooms(args) {
   try {
     const accessToken = await ensureAuthenticated();
 
-    // Try the findRooms endpoint first (may not be available in all tenants)
     let rooms = [];
+    let source = 'places';
+    let truncated = false;
+    const notes = [];
 
     try {
-      // Try /places endpoint for room lists
-      const placesResponse = await callGraphAPI(
-        accessToken,
-        'GET',
-        'places/microsoft.graph.room'
-      );
-      rooms = placesResponse.value || [];
-    } catch (_placesError) {
-      // Fall back to findRooms
+      ({ rooms, truncated } = await listPlacesRooms(accessToken));
+    } catch (placesError) {
+      if (isPersonalAccountError(placesError)) {
+        return toolError(
+          "Meeting rooms are a Microsoft 365 (work or school) feature. Graph doesn't support room lookup for personal Microsoft accounts (Outlook.com, Hotmail, Live), so there are no rooms to find.",
+          {
+            nextStep:
+              'Sign in with a Microsoft 365 work or school account to look up rooms.',
+          }
+        );
+      }
+      const placesWhy = isPermissionError(placesError)
+        ? `${PLACE_SCOPE_NOTE}, so Graph refused it.`
+        : `Graph \`places\` failed: ${placesError.message}`;
       try {
         const roomsResponse = await callGraphAPI(
           accessToken,
           'GET',
-          'me/findRooms'
+          FIND_ROOMS_BETA_URL
         );
-        rooms = roomsResponse.value || [];
+        rooms = (roomsResponse?.value || []).map((r) => ({
+          displayName: r.name,
+          emailAddress: r.address,
+        }));
+        source = 'findRooms-beta';
+        notes.push(
+          `_Listed with the beta \`findRooms\` call (names and addresses only, at most the first 100 rooms in the organisation). ${placesWhy}_`
+        );
       } catch (findRoomsError) {
-        // F-47: distinguish "feature not available on personal account"
-        // from generic permission errors. Personal Outlook.com accounts
-        // surface a 404 here; organizational accounts surface
-        // permission errors. Both look similar in Graph but mean very
-        // different things to the caller.
-        const errMsg = findRoomsError.message || '';
-        const isLikelyPersonal =
-          errMsg.includes('404') ||
-          errMsg.includes('Not Found') ||
-          errMsg.includes('NotFound');
-        const explanation = isLikelyPersonal
-          ? 'Meeting room search is M365-only. Personal Outlook.com accounts cannot use this feature — there are no rooms to find. Connect a Microsoft 365 work/school account to enable.'
-          : 'This feature requires:\n- Places.Read.All permission\n- Meeting rooms configured in your organization';
+        const explanation = isPermissionError(placesError)
+          ? `Couldn't list meeting rooms. ${PLACE_SCOPE_NOTE}, so Graph refused it (403).`
+          : `Couldn't list meeting rooms. ${placesWhy}`;
         return toolError(
-          `Unable to find meeting rooms.\n\n**Note**: ${explanation}\n\nError: ${errMsg}`
+          `${explanation}\n\nThe fallback, the beta \`findRooms\` call (needs only User.Read), also failed: ${findRoomsError.message}`,
+          {
+            nextStep:
+              "If you know the room's email address, add it to `create-event` as an attendee with type `resource`.",
+          }
         );
       }
+    }
+
+    if (source === 'findRooms-beta') {
+      // findRooms carries no building, floor or capacity, so filtering on
+      // them would drop every room. Say so rather than return nothing.
+      const unchecked = [
+        ['building', building],
+        ['floor', floor],
+        ['capacity', capacity],
+      ]
+        .filter(([, value]) => value !== undefined && value !== null)
+        .map(([name]) => `\`${name}\``);
+      if (unchecked.length > 0) {
+        notes.push(
+          `_${unchecked.join(', ')} ${unchecked.length === 1 ? 'was' : 'were'} not applied: \`findRooms\` returns no building, floor or capacity._`
+        );
+      }
+    }
+    if (truncated) {
+      notes.push(
+        `_Only the first ${ROOM_PAGE_CAP} pages of rooms were read, so the list may be incomplete._`
+      );
     }
 
     // Apply filters
@@ -651,16 +746,18 @@ async function handleFindMeetingRooms(args) {
       );
     }
 
-    if (building) {
+    const placeFilters = source === 'places';
+
+    if (building && placeFilters) {
       const b = building.toLowerCase();
       rooms = rooms.filter((r) => r.building?.toLowerCase().includes(b));
     }
 
-    if (floor !== undefined) {
+    if (floor !== undefined && placeFilters) {
       rooms = rooms.filter((r) => r.floorNumber === floor);
     }
 
-    if (capacity) {
+    if (capacity && placeFilters) {
       rooms = rooms.filter((r) => r.capacity >= capacity);
     }
 
@@ -669,9 +766,13 @@ async function handleFindMeetingRooms(args) {
         content: [
           {
             type: 'text',
-            text: 'No meeting rooms found matching your criteria.\n\nTry broadening your search or check if rooms are configured in your organization.',
+            text: [
+              'No meeting rooms found matching your criteria.\n\nTry broadening your search or check if rooms are configured in your organisation.',
+              ...notes,
+            ].join('\n\n'),
           },
         ],
+        _meta: { count: 0, rooms: [], source, truncated },
       };
     }
 
@@ -723,6 +824,10 @@ async function handleFindMeetingRooms(args) {
       });
     }
 
+    if (notes.length > 0) {
+      output.push('', ...notes);
+    }
+
     return {
       content: [
         {
@@ -733,6 +838,8 @@ async function handleFindMeetingRooms(args) {
       _meta: {
         count: rooms.length,
         rooms: rooms,
+        source,
+        truncated,
       },
     };
   } catch (error) {
@@ -795,7 +902,7 @@ const advancedTools = [
   {
     name: 'find-meeting-rooms',
     description:
-      "Discover bookable meeting rooms in the user's organisation via the Graph rooms endpoint (read-only). Returns room resources with displayName, emailAddress, building, floor, capacity, and bookingType — suitable for piping into `create-event` as attendees. Filter by `query` (matches name/email), `building`, `floor`, or minimum `capacity`. Returns empty list on personal accounts (the rooms endpoint is M365-only). Use `outputVerbosity` to control field count.",
+      "List bookable meeting rooms in the user's Microsoft 365 organisation (read-only). Reads Graph `places` (all pages, up to 1,000 rooms): name, email address, building, floor, capacity and devices. `places` needs the Place.Read.All permission, which this server doesn't request yet (#130); when Graph refuses it, the tool falls back to the beta `findRooms` call (User.Read; names and addresses only, first 100 rooms), and says so in the result. A room's email address works as a `create-event` attendee with type `resource`. Filter by `query` (name or address), `building`, `floor` or minimum `capacity`; filters run on the returned list, and `findRooms` results can't be filtered by building, floor or capacity. Personal Microsoft accounts (Outlook.com) have no rooms: the call returns an error saying so. `outputVerbosity` controls field count.",
     ...toolMetadata('find-meeting-rooms', 'Meeting Rooms'),
     inputSchema: {
       type: 'object',

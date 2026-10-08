@@ -121,3 +121,24 @@ describe.each([
     expect(result.content[0].text).not.toContain('More emails available');
   });
 });
+
+// #329: a raw `searchExpression` goes to Graph `$search` as written and takes
+// no date window, so the hint must not send the caller to
+// `receivedAfter`/`receivedBefore`: following it changes nothing.
+describe('raw searchExpression', () => {
+  test('the hint does not suggest the date parameters', async () => {
+    graphAnswers({
+      value: [message('a'), message('b')],
+      '@odata.nextLink': NEXT,
+    });
+
+    const result = await search({ searchExpression: 'report', count: 2 });
+    const text = result.content[0].text;
+
+    expect(result._meta.searchMetadata.finalStrategy).toBe('raw-kql');
+    expect(text).toContain('More emails available');
+    expect(text).toContain('raise `count`');
+    expect(text).not.toContain('narrow the date range');
+    expect(text).not.toMatch(/set `receivedBefore` to the oldest date/);
+  });
+});

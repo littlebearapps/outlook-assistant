@@ -2374,3 +2374,100 @@ describe('handleSearchEmails — from with a dotless domain label (#328)', () =>
     );
   });
 });
+
+// ──────────────────────────────────────────────────
+// #329: an untranslated `searchExpression` is sent to Graph `$search` as
+// written, with no `$filter`, so `receivedAfter`/`receivedBefore` (and the
+// boolean filters) never reach the request. That used to happen silently,
+// with `filterApplied: true`. They are now reported as dropped.
+// ──────────────────────────────────────────────────
+describe('handleSearchEmails — raw searchExpression ignores the date window (#329)', () => {
+  const recent = mockEmail({
+    id: 'r1',
+    subject: 'someterm newsletter',
+    receivedDateTime: '2026-09-01T00:00:00Z',
+  });
+
+  test('reports receivedBefore as dropped, visibly', async () => {
+    callGraphAPIPaginated.mockResolvedValueOnce({ value: [recent] });
+
+    const result = await handleSearchEmails({
+      searchExpression: 'someterm',
+      receivedBefore: '2023-01-01T00:00:00Z',
+      searchAllFolders: true,
+    });
+
+    const meta = result._meta.searchMetadata;
+    expect(meta.finalStrategy).toBe('raw-kql');
+    expect(meta.droppedFilters).toEqual(['receivedBefore']);
+    expect(meta.filterApplied).toBe(false);
+    const text = result.content[0].text;
+    expect(text).toContain('`receivedBefore` was not applied');
+    // The request itself is unchanged: $search as written, nothing else.
+    const [, , , params] = callGraphAPIPaginated.mock.calls[0];
+    expect(params.$filter).toBeUndefined();
+  });
+
+  test('reports every date and boolean filter it could not apply', async () => {
+    callGraphAPIPaginated.mockResolvedValueOnce({ value: [recent] });
+
+    const result = await handleSearchEmails({
+      searchExpression: 'someterm',
+      receivedAfter: '2026-01-01T00:00:00Z',
+      receivedBefore: '2026-12-31T00:00:00Z',
+      unreadOnly: true,
+      hasAttachments: false,
+    });
+
+    expect(result._meta.searchMetadata.droppedFilters).toEqual([
+      'receivedAfter',
+      'receivedBefore',
+      'unreadOnly',
+    ]);
+  });
+
+  test('says so in the no-results guidance too', async () => {
+    callGraphAPIPaginated.mockResolvedValue({ value: [] });
+
+    const result = await handleSearchEmails({
+      searchExpression: '"zzzznonexistentterm"',
+      receivedAfter: '2026-01-01T00:00:00Z',
+    });
+
+    const text = result.content[0].text;
+    expect(text).toContain('No emails found');
+    expect(text).toContain('`receivedAfter` was not applied');
+    expect(result._meta.searchMetadata.droppedFilters).toEqual([
+      'receivedAfter',
+    ]);
+  });
+
+  test('a translated expression still applies the date window (nothing dropped)', async () => {
+    callGraphAPIPaginated
+      // raw-kql → empty (personal accounts answer field-scoped $search with 0)
+      .mockResolvedValueOnce({ value: [] })
+      // translated combined-search → a match
+      .mockResolvedValueOnce({ value: [mockEmail({ id: 't1' })] });
+
+    const result = await handleSearchEmails({
+      searchExpression: 'from:john@example.com',
+      receivedAfter: '2026-01-01T00:00:00Z',
+    });
+
+    const meta = result._meta.searchMetadata;
+    expect(meta.finalStrategy).toBe('raw-kql-translated');
+    expect(meta.droppedFilters).toEqual([]);
+    const [, , , params] = callGraphAPIPaginated.mock.calls[1];
+    expect(params.$filter).toContain('receivedDateTime ge');
+  });
+
+  test('without a date window nothing is reported', async () => {
+    callGraphAPIPaginated.mockResolvedValueOnce({ value: [recent] });
+
+    const result = await handleSearchEmails({ searchExpression: 'someterm' });
+
+    expect(result._meta.searchMetadata.droppedFilters).toEqual([]);
+    expect(result._meta.searchMetadata.filterApplied).toBe(true);
+    expect(result.content[0].text).not.toContain('was not applied');
+  });
+});

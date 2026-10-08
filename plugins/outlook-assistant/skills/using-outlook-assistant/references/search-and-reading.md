@@ -33,7 +33,7 @@ Never list a whole mailbox to answer a narrow question. Every result goes into t
 | `to`               | Server-side filter                                                                   | Matched locally over the most recent messages only (500 by default). Pair with `receivedAfter`/`receivedBefore` to reach older mail |
 | Structured filters | Reliable                                                                             | The most reliable option                                                                                                            |
 
-With `searchExpression`, quote your own phrases (`subject:"quarterly report"`). It takes the place of the other search parameters. Because `$search` reads bodies, a hit can match on body text alone and look unrelated to the subject you expected.
+With `searchExpression`, quote your own phrases (`subject:"quarterly report"`). It takes the place of the other search parameters, including `receivedAfter`/`receivedBefore` and the boolean filters: those come back in `droppedFilters`. To limit by date, put it in the expression, quoted as a whole (`"invoice AND received>=2026-01-01"`). Because `$search` reads bodies, a hit can match on body text alone and look unrelated to the subject you expected.
 
 ## Check `_meta.searchMetadata`
 

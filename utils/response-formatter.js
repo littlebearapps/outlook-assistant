@@ -190,7 +190,11 @@ function formatEmailList(
 
   // Add metadata footer
   // There is no page cursor yet (#286): say what reaches the rest today.
-  if (meta.hasMore) {
+  // A raw `searchExpression` takes no date window, so pointing at
+  // `receivedAfter`/`receivedBefore` there would change nothing. (#329)
+  if (meta.hasMore && meta.searchMetadata?.finalStrategy === 'raw-kql') {
+    output += `\n\n---\n_More emails available. To see them, raise \`count\` (up to 50) or add terms to the \`searchExpression\` (it takes no \`receivedAfter\`/\`receivedBefore\`)._`;
+  } else if (meta.hasMore) {
     output += `\n\n---\n_More emails available. To see them, raise \`count\` (up to 50) or narrow the date range with \`receivedAfter\`/\`receivedBefore\` (for older mail, set \`receivedBefore\` to the oldest date shown)._`;
   }
 

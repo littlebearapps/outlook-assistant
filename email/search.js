@@ -370,6 +370,9 @@ async function progressiveSearch(
         filterTerms: filterTerms,
         kqlApplied: kqlForSearch,
         appliedTerms: ['kqlQuery'],
+        // `$search` carries no `$filter`, so the date/boolean window never
+        // reached Graph. Report it rather than imply it was applied. (#329)
+        ignoredFilters: activeWindowFilters(filterTerms),
         // noResults flips on the helpful "Suggestions" block in the
         // formatter — without it, an empty kqlQuery result would render
         // the bare "No emails found matching your search criteria" line
@@ -421,6 +424,7 @@ async function progressiveSearch(
           filterTerms: filterTerms,
           kqlError: error.message,
           appliedTerms: ['kqlQuery'],
+          ignoredFilters: activeWindowFilters(filterTerms),
           noResults: true,
         },
       };
@@ -1061,6 +1065,38 @@ const WINDOW_FILTER_KEYS = [
 ];
 
 /**
+ * The date/boolean filters the caller actually set. The booleans only count
+ * when `true`: `false` filters nothing, so it is never applied or dropped.
+ * @param {object} filterTerms - Filter terms
+ * @returns {string[]} - Keys in WINDOW_FILTER_KEYS order
+ */
+function activeWindowFilters(filterTerms) {
+  return WINDOW_FILTER_KEYS.filter((k) =>
+    k === 'hasAttachments' || k === 'unreadOnly'
+      ? filterTerms[k] === true
+      : Boolean(filterTerms[k])
+  );
+}
+
+/** `a`, `a` and `b`, `a`, `b` and `c` (backticked). */
+function listParams(keys) {
+  const quoted = keys.map((k) => `\`${k}\``);
+  return quoted.length > 1
+    ? `${quoted.slice(0, -1).join(', ')} and ${quoted[quoted.length - 1]}`
+    : quoted[0];
+}
+
+/**
+ * Say which filters an untranslated `searchExpression` left out. (#329)
+ * @param {string[]} keys - The ignored filter keys
+ * @returns {string}
+ */
+function ignoredFiltersNote(keys) {
+  const verb = keys.length === 1 ? 'was' : 'were';
+  return `${listParams(keys)} ${verb} not applied: \`searchExpression\` goes to Graph \`$search\` as written, which takes no date or boolean filters. To limit by date, put it in the expression, quoted as a whole, e.g. \`"invoice AND received>=2026-01-01"\``;
+}
+
+/**
  * Finish the combined step's `$search` request. Graph accepts `$search` only
  * on its own (#261), so the other search terms and the date/boolean window
  * are applied here, to the page it returned, and the survivors are sorted
@@ -1098,11 +1134,7 @@ function narrowSearchPage(
   );
   const localFilters = [
     ...secondaryApplied,
-    ...WINDOW_FILTER_KEYS.filter((k) =>
-      k === 'hasAttachments' || k === 'unreadOnly'
-        ? filterTerms[k] === true
-        : Boolean(filterTerms[k])
-    ),
+    ...activeWindowFilters(filterTerms),
   ];
   log.debug(`$search successful: ${matched.length} of ${page.length} kept`);
   response._searchInfo = {
@@ -1473,6 +1505,10 @@ function buildNoResultsSuggestions(searchInfo, searchAllFolders) {
     );
   }
 
+  if (searchInfo.ignoredFilters?.length > 0) {
+    suggestions.push(ignoredFiltersNote(searchInfo.ignoredFilters));
+  }
+
   if (filters.kqlQuery) {
     suggestions.push(
       'Structured filters (`from`, `to`, `subject`) reach messages that `searchExpression` cannot on personal accounts'
@@ -1534,9 +1570,12 @@ function formatSearchResults(response, folder, verbosity, searchAllFolders) {
       (k) => response._searchInfo.originalTerms?.[k]
     );
     const appliedTerms = response._searchInfo.appliedTerms ?? suppliedTerms;
-    const droppedFilters = suppliedTerms
-      .filter((k) => !appliedTerms.includes(k))
-      .map((k) => FILTER_LABELS[k] || k);
+    const droppedFilters = [
+      ...suppliedTerms
+        .filter((k) => !appliedTerms.includes(k))
+        .map((k) => FILTER_LABELS[k] || k),
+      ...(response._searchInfo.ignoredFilters || []),
+    ];
 
     meta.searchMetadata = {
       strategiesAttempted: response._searchInfo.strategies,
@@ -1627,6 +1666,11 @@ function formatSearchResults(response, folder, verbosity, searchAllFolders) {
       searchNote = `\n\n_Search strategy: ${strategy} (Graph \`$search\` over subject, body and sender: ${page} message${page === 1 ? '' : 's'} returned${filtered}, sorted newest first within that page)_`;
     } else {
       searchNote = `\n\n_Search strategy: ${strategy}_`;
+    }
+
+    const ignored = response._searchInfo.ignoredFilters || [];
+    if (ignored.length > 0) {
+      searchNote += `\n\n> **Not applied**: ${ignoredFiltersNote(ignored)}.`;
     }
 
     // A local scan that filled its budget did not see the whole mailbox, so

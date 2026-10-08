@@ -124,7 +124,10 @@ async function handleEditRuleSequence(args) {
           : '\n\nNo other rule was renumbered.';
       order = `\n\nRule order now (sequence: name):\n${lines.join('\n')}${movedNote}`;
     } catch (_error) {
-      // The reorder succeeded; the order listing is a courtesy.
+      // The reorder succeeded, but say so plainly rather than dropping the
+      // renumbering check without a word (#323).
+      order =
+        "\n\nCouldn't list the rules afterwards, so other rules may have been renumbered by Exchange. Run `manage-rules` action=`list` to check the order and tell the user about any change.";
     }
 
     return {

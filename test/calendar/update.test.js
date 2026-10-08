@@ -705,7 +705,9 @@ describe('handleUpdateEvent dryRun recipients, review follow-ups', () => {
       dryRun: true,
     });
     const text = result.content[0].text;
-    expect(text).toMatch(/Only the people added or removed are emailed/);
+    expect(text).toMatch(
+      /Only the people and rooms added or removed are emailed/
+    );
     expect(text).toMatch(/Added \(sent an invitation\): new@corp\.com/);
     expect(text).toMatch(/Removed \(sent a cancellation\): gone@gmail\.com/);
     expect(text).not.toMatch(/keep@corp\.com \(/);
@@ -739,5 +741,94 @@ describe('handleUpdateEvent dryRun recipients, review follow-ups', () => {
     expect(text).toMatch(/rooms or resources are sent the update/);
     expect(text).toMatch(/room1@corp\.com/);
     expect(result._meta.notified).toBe(1);
+  });
+});
+
+// #323: removed attendees get a cancellation and rooms are emailed too, so
+// both count towards `notified`/`external`.
+describe('handleUpdateEvent dryRun counts removed attendees and rooms (#323)', () => {
+  const base = {
+    subject: 'Planning',
+    start: { dateTime: '2026-10-06T00:00:00.0000000', timeZone: 'UTC' },
+    isOrganizer: true,
+    organizer: { emailAddress: { address: 'me@corp.com' } },
+  };
+  const mockEvent = (attendees) =>
+    callGraphAPI.mockImplementation((_t, method, path) => {
+      if (method !== 'GET') throw new Error(`unexpected ${method}`);
+      return path === 'me'
+        ? Promise.resolve({ mail: 'me@corp.com' })
+        : Promise.resolve({ ...base, attendees });
+    });
+  const person = (address) => ({ emailAddress: { address }, type: 'required' });
+  const room = (address) => ({ emailAddress: { address }, type: 'resource' });
+
+  beforeEach(() => {
+    callGraphAPI.mockReset();
+    ensureAuthenticated.mockReset();
+    ensureAuthenticated.mockResolvedValue('token');
+  });
+
+  test('a mixed-field update counts the removed attendee it cancels', async () => {
+    mockEvent([person('keep@corp.com'), person('gone@gmail.com')]);
+    const result = await handleUpdateEvent({
+      eventId: 'evt_1',
+      subject: 'Renamed',
+      attendees: ['keep@corp.com', 'new@corp.com'],
+      dryRun: true,
+    });
+    expect(result.content[0].text).toMatch(
+      /Removed \(sent a cancellation\): gone@gmail\.com/
+    );
+    // keep + new get the update, gone gets a cancellation.
+    expect(result._meta).toMatchObject({ notified: 3, external: 1 });
+  });
+
+  test('a mixed-field update counts a removed room', async () => {
+    mockEvent([person('keep@corp.com'), room('room1@corp.com')]);
+    const result = await handleUpdateEvent({
+      eventId: 'evt_1',
+      subject: 'Renamed',
+      attendees: ['keep@corp.com'],
+      dryRun: true,
+    });
+    expect(result.content[0].text).toMatch(
+      /Rooms or resources removed \(sent a cancellation\): room1@corp\.com/
+    );
+    expect(result._meta).toMatchObject({ notified: 2, external: 0 });
+  });
+
+  test('an attendee-only change that adds a room emails that room', async () => {
+    mockEvent([person('keep@corp.com'), room('room1@corp.com')]);
+    const result = await handleUpdateEvent({
+      eventId: 'evt_1',
+      attendees: [
+        'keep@corp.com',
+        'room1@corp.com',
+        { email: 'room2@corp.com', type: 'resource' },
+      ],
+      dryRun: true,
+    });
+    const text = result.content[0].text;
+    expect(text).not.toMatch(/nobody is emailed/);
+    expect(text).toMatch(
+      /Rooms or resources added \(sent an invitation\): room2@corp\.com/
+    );
+    expect(result._meta).toMatchObject({ notified: 1, external: 0 });
+  });
+
+  test('an attendee-only change that drops a room emails that room', async () => {
+    mockEvent([person('keep@corp.com'), room('room1@corp.com')]);
+    const result = await handleUpdateEvent({
+      eventId: 'evt_1',
+      attendees: ['keep@corp.com'],
+      dryRun: true,
+    });
+    const text = result.content[0].text;
+    expect(text).not.toMatch(/nobody is emailed/);
+    expect(text).toMatch(
+      /Rooms or resources removed \(sent a cancellation\): room1@corp\.com/
+    );
+    expect(result._meta).toMatchObject({ notified: 1, external: 0 });
   });
 });

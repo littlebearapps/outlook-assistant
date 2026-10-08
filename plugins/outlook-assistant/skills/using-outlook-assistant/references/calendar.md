@@ -8,7 +8,7 @@ Read this when you are listing, creating, changing, declining, cancelling or del
 | -------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
 | `create-event` with `attendees`  | Every attendee gets an invitation on save                                                           | Subject, time and zone, every attendee, external count |
 | `create-event` without attendees | Nobody                                                                                              | Subject and time                                       |
-| `manage-event` action=`update`   | As organiser, attendees are sent the change                                                         | The fields that change, and who sees them              |
+| `manage-event` action=`update`   | As organiser, attendees are sent the change; anyone removed (people or rooms) gets a cancellation | The fields that change, and who sees them              |
 | `manage-event` action=`decline`  | The organiser, unless `sendResponse: false`                                                         | Whether to tell the organiser, and the `comment`       |
 | `manage-event` action=`cancel`   | Every attendee gets a cancellation (organiser only)                                                 | The attendee list and the `comment`                    |
 | `manage-event` action=`delete`   | As organiser of a meeting with attendees, they get a cancellation with no message; otherwise nobody | That it can't be undone, and who is emailed            |

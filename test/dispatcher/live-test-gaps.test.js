@@ -86,6 +86,37 @@ test('manage-rules reorder names each rule Exchange renumbered, old to new', asy
   expect(text).not.toMatch(/"New" 5/);
 });
 
+// #323: a failed follow-up listing used to drop the renumbering note silently.
+test('manage-rules reorder says other rules may be renumbered when it cannot list them', async () => {
+  let reads = 0;
+  graph.callGraphAPI.mockImplementation((_t, method) => {
+    if (method !== 'GET') return Promise.resolve({});
+    reads++;
+    return reads === 1
+      ? Promise.resolve({
+          value: [
+            { id: 'a', displayName: 'First', sequence: 1 },
+            { id: 'b', displayName: 'New', sequence: 5 },
+          ],
+        })
+      : Promise.reject(new Error('API call failed with status 503'));
+  });
+
+  const result = await run('manage-rules', {
+    action: 'reorder',
+    ruleName: 'New',
+    sequence: 1,
+  });
+  const text = textOf(result);
+
+  // The reorder itself succeeded, so this is not an error.
+  expect(result.isError).toBeFalsy();
+  expect(text).toMatch(/to 1\./);
+  expect(text).toMatch(/couldn't list the rules afterwards/i);
+  expect(text).toMatch(/other rules may have been renumbered/i);
+  expect(text).toMatch(/manage-rules.*action=`list`/);
+});
+
 test('folders stats points folders over 50 items at delta sync', async () => {
   graph.callGraphAPI.mockImplementation((_t, _m, path) =>
     Promise.resolve(

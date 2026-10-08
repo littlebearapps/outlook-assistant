@@ -6,7 +6,7 @@ For shipped work, see [`CHANGELOG.md`](CHANGELOG.md).
 
 ## v3.14.2 — Fix queue
 
-The next patch after v3.14.1: user-facing bug fixes that are small and safe to ship alone.
+The next patch after v3.14.1: user-facing bug fixes that are small and safe to ship alone. Everything below except #305 is fixed for v3.14.2; see `[3.14.2]` in [`CHANGELOG.md`](CHANGELOG.md).
 
 - **#261** fix(search): query search sends $orderby with $search, so Graph rejects it (SearchWithOrderBy) and falls back
 - **#263** fix(export): search export wraps from:/subject: in one quoted phrase, so field scopes are ignored
@@ -18,7 +18,7 @@ The next patch after v3.14.1: user-facing bug fixes that are small and safe to s
 - **#328** search-emails: dotless domain label in `from` matches display name only, and zero-results guidance falsely says nothing in the mailbox matches
 - **#329** search-emails: raw searchExpression silently ignores receivedAfter/receivedBefore, and the pagination footer tells callers to use them
 - **#131** docs: confirm Mail-Advanced.ReadWrite enforcement (31 Dec 2026) doesn't affect Outlook Assistant — a troubleshooting note, no code change; due before Microsoft's 31 December 2026 deadline.
-- **#305** question(settings): scheduled auto-replies set via Graph may not fire on personal accounts — likely docs and success-message wording after a manual re-test.
+- **#305** question(settings): scheduled auto-replies set via Graph may not fire on personal accounts — likely docs and success-message wording after a manual re-test. **Not in v3.14.2**: it stays open until that re-test.
 
 **Repo-only** (no npm release needed; they land before v3.14.2 so the release exercises them):
 

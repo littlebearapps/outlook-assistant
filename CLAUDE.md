@@ -1,6 +1,6 @@
 # CLAUDE.md - Outlook Assistant
 
-MCP server for Microsoft Outlook via Graph API (v3.14.1). 22 tools across 9 modules. Runtime Node ≥ 18.18; dev tooling (lint-staged hook, `npm run inspect`) needs Node ≥ 22.22.1.
+MCP server for Microsoft Outlook via Graph API (v3.14.2). 22 tools across 9 modules. Runtime Node ≥ 18.18; dev tooling (lint-staged hook, `npm run inspect`) needs Node ≥ 22.22.1.
 
 ## Commands
 
@@ -79,6 +79,7 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 | `plugins/outlook-assistant/hooks/outlook-gate.js` | Plugin hook for Claude Code (`hooks/hooks.json`), Copilot CLI/VS Code (`com.github.copilot/hooks/hooks.json`, arg `copilot`) and Cursor (`hooks/hooks-cursor.json` via `.cursor-plugin/plugin.json`, arg `cursor`): before outward/destructive/persistent calls, `ask` with a plain-English reason (`describe()`; unknown tool or action asks), after untrusted-content tools a note; classifies with the generated `hooks/risk-map.json` |
 | `plugins/outlook-assistant/skills/using-outlook-assistant/` | Agent skill: SKILL.md hard rules + one `references/` file per surface; risk table (`sync-risk-map.js`) and `metadata.version` (`sync-version.js`) are generated |
 | `scripts/sync-risk-map.js` | Copies `utils/risk-classes.js` into the hook's `risk-map.json` and the SKILL.md risk table; `--check` reports drift |
+| `scripts/release-check.js` | Version decisions for `auto-tag.yml`/`publish.yml` (tag only a higher version; prereleases go to npm `next`, skip Registry and website); no deps |
 | `scripts/skill-evals.js` | Prompt-injection evals: `claude -p` against test mode's mock mailbox, with skill + hook, hook only, or neither |
 | `utils/server-instructions.js` | Server `instructions` text (hard rules first); read-only note follows `config.READ_ONLY`; names tools a session limit of 0 blocks (`blockedTools`) |
 | `utils/read-only.js` | `OUTLOOK_READ_ONLY` gate: refusal for any non-`read` call (`auth` sign-in actions exempt) |

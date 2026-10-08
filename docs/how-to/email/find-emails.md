@@ -60,9 +60,9 @@ params:
   query: "budget approval"
 ```
 
-The `query` parameter searches across subject, body, and other fields **on work/school Microsoft 365 accounts**. On personal Outlook.com accounts Graph `$search` is unavailable, so `query` falls back to a subject substring match (every word must appear in the subject) — precise, but it does not read message bodies. Use `searchExpression` when you need body content there.
+The `query` parameter goes to Graph `$search`, which matches subject, body and sender on both work/school Microsoft 365 and personal Outlook.com accounts. `$search` takes no other filters, so `from`, `to`, `subject` and date or boolean filters are applied to the page it returns, sorted newest first within that page (`_meta.searchMetadata.orderedWithinPage`).
 
-> **Personal accounts**: Free-text `query` search uses Microsoft's `$search` API, which has limited support on personal Outlook.com accounts. Outlook Assistant handles this automatically — if `$search` returns no results, it progressively falls back to OData filters (`from`, `subject`, `to`), then boolean filters, then recent message listing. For the most direct results on personal accounts, use the structured filter parameters below. See [Account Compatibility](../../../README.md#account-compatibility) for details.
+> **Personal accounts**: Microsoft's `$search` API has limited support on personal Outlook.com accounts (field-scoped expressions such as `subject:"…"` are rejected). Outlook Assistant handles this automatically — if `$search` fails or nothing on its page passes your other filters, it progressively falls back to OData filters (`from`, `subject`, `to`), then boolean filters, then recent message listing. For the most direct results on personal accounts, use the structured filter parameters below. See [Account Compatibility](../../../README.md#account-compatibility) for details.
 
 ## Filter by Date Range
 
@@ -193,7 +193,7 @@ params:
 | List (no query) | 25 | 50 |
 | Search | 10 | 50 |
 
-There is no page cursor. When the result says more emails are available, raise `count` (up to 50) or narrow the date range with `receivedAfter`/`receivedBefore`.
+There is no page cursor. When the result says more emails are available, raise `count` (up to 50) or narrow the date range with `receivedAfter`/`receivedBefore`. A raw `searchExpression` ignores those two parameters (the response lists them in `droppedFilters`), so put the date in the expression instead, quoted as a whole: `"invoice AND received>=2026-01-01"`.
 
 ![Search results with email list](../../assets/screenshots/find-emails-01.png)
 
@@ -224,7 +224,7 @@ Delta sync is useful for inbox monitoring workflows, audit trails, and notificat
 
 | Parameter | What it does | Example |
 |-----------|-------------|---------|
-| `query` | Free-text search across all fields (subject-only on personal accounts — see above) | `"budget approval"` |
+| `query` | Free-text search over subject, body and sender; other filters apply to the page it returns (see above) | `"budget approval"` |
 | `from` | Filter by sender email or name | `"sarah@company.com"` |
 | `to` | Filter by recipient | `"team@company.com"` |
 | `subject` | Filter by subject line | `"quarterly report"` |
@@ -246,7 +246,7 @@ Delta sync is useful for inbox monitoring workflows, audit trails, and notificat
 - For advanced queries, see the [KQL Search Reference](../advanced/kql-search-reference.md)
 - Combine `from` + `receivedAfter` for the most targeted searches
 - To search a shared mailbox, add `sharedMailbox` — every mode works, including `folder` paths and `searchAllFolders`. It needs the opt-in `OUTLOOK_SHARED_MAILBOX` setting; see [Access Shared Mailboxes](../advanced/access-shared-mailboxes.md)
-- **Personal accounts (Outlook.com)**: Outlook Assistant automatically tries multiple search strategies if `$search` is unavailable, but `subject`, `from`, `to`, and date range filters give the most direct results. See [Account Compatibility](../../../README.md#account-compatibility)
+- **Personal accounts (Outlook.com)**: Outlook Assistant automatically tries multiple search strategies if `$search` fails or nothing on its page passes your filters, but `subject`, `from`, `to`, and date range filters give the most direct results. See [Account Compatibility](../../../README.md#account-compatibility)
 
 ## Related
 

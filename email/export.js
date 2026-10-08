@@ -18,7 +18,8 @@ const {
 const { getEmailFields } = require('../utils/field-presets');
 const { resolveFolderPath } = require('./folder-utils');
 const { buildMailboxPrefix } = require('../utils/mailbox');
-const { quoteSearchPhrase } = require('../utils/odata-helpers');
+const { escapeODataString } = require('../utils/odata-helpers');
+const { buildFromFilter } = require('./search');
 const { safeAttachmentFilename } = require('./attachments');
 const {
   writeClaimedFile,
@@ -508,6 +509,9 @@ function batchLimitNote(found, emailIds, searchQuery) {
   return `\n> The search stopped at ${searchLimit} messages, the \`searchQuery.maxResults\` limit (default 25, max 100 per call), so more may match. To get the rest, ${raise}export in date ranges with \`searchQuery.receivedAfter\`/\`receivedBefore\`.\n`;
 }
 
+/** Lower bound that lets an export search sort by date with no window (#263). */
+const EARLIEST_RECEIVED = '1900-01-01T00:00:00Z';
+
 /**
  * Search emails for batch export
  * @param {string} accessToken
@@ -518,41 +522,42 @@ async function searchEmailsForExport(accessToken, query, mailbox = null) {
   const folder = query.folder || 'inbox';
   const maxResults = Math.min(query.maxResults || 25, 100);
 
-  // Build filter conditions
-  const filterParts = [];
-  if (query.receivedAfter) {
-    filterParts.push(
-      `receivedDateTime ge ${new Date(query.receivedAfter).toISOString()}`
-    );
-  }
+  // One `$filter`, built from the same predicates search-emails uses: `from`
+  // via buildFromFilter, `subject` via contains(). The old `$search` wrapped
+  // `from:x subject:y` in a single quoted phrase, so Graph matched that
+  // literal text rather than the two fields, and a date window added a
+  // `$filter` that Graph rejects next to `$search` (SearchWithFilter). (#263)
+  //
+  // `receivedDateTime` comes first: Graph allows `$orderby` only when the
+  // sorted property leads the filter (otherwise 400 InefficientFilter), so
+  // without `receivedAfter` an always-true lower bound stands in.
+  const filterParts = [
+    `receivedDateTime ge ${
+      query.receivedAfter
+        ? new Date(query.receivedAfter).toISOString()
+        : EARLIEST_RECEIVED
+    }`,
+  ];
   if (query.receivedBefore) {
     filterParts.push(
       `receivedDateTime le ${new Date(query.receivedBefore).toISOString()}`
+    );
+  }
+  if (query.from) {
+    filterParts.push(buildFromFilter(query.from));
+  }
+  if (query.subject) {
+    filterParts.push(
+      `contains(subject, '${escapeODataString(query.subject)}')`
     );
   }
 
   const params = {
     $select: 'id',
     $top: maxResults,
+    $filter: filterParts.join(' and '),
     $orderby: 'receivedDateTime desc',
   };
-
-  if (filterParts.length > 0) {
-    params.$filter = filterParts.join(' and ');
-  }
-
-  // Add search for from/subject if provided
-  const searchParts = [];
-  if (query.from) {
-    searchParts.push(`from:${query.from}`);
-  }
-  if (query.subject) {
-    searchParts.push(`subject:${query.subject}`);
-  }
-  if (searchParts.length > 0) {
-    params.$search = quoteSearchPhrase(searchParts.join(' '));
-    delete params.$orderby; // Can't combine $search with $orderby
-  }
 
   // resolveFolderPath handles well-known names, custom/localized names, nested
   // paths, and raw IDs, scoped to the signed-in user or the shared mailbox.

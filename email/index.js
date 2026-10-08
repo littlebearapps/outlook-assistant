@@ -593,11 +593,12 @@ const emailTools = [
             },
             from: {
               type: 'string',
-              description: 'Sender address or name to match (Graph `$search`)',
+              description:
+                'Sender to match: a full address (exact), a domain such as `example.com`, or a name or other text matched against the sender name and address',
             },
             subject: {
               type: 'string',
-              description: 'Subject text to match (Graph `$search`)',
+              description: 'Text the subject must contain',
             },
             receivedAfter: {
               type: 'string',
@@ -612,7 +613,7 @@ const emailTools = [
             maxResults: {
               type: 'number',
               description:
-                'Most messages to export (default: 25, max: 100 per call). Newest first, or by relevance when `from`/`subject` is set.',
+                'Most messages to export (default: 25, max: 100 per call), newest first.',
             },
           },
           description:

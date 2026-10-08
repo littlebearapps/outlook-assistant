@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Dependencies:** `proxy-addr` 2.0.8 clears the critical
+  [GHSA-jqcg-44mw-7w3h](https://github.com/advisories/GHSA-jqcg-44mw-7w3h)
+  advisory, and `@modelcontextprotocol/sdk` moves to 1.32.1 (#321, #326).
+  The old `proxy-addr` 2.0.7 reached the production tree through the SDK's
+  `express` dependency. The stdio server never loads `express`, but the
+  Docker image installs from the lockfile, and
+  `npm audit --omit=dev --audit-level=high` (CI and the weekly scheduled
+  audit) now passes again.
+
 ## [3.14.1] - 2026-10-05
 
 Patch release with the fixes from a live test of all 22 tools on v3.14.0.

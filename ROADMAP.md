@@ -15,6 +15,8 @@ The next patch after v3.14.1: user-facing bug fixes that are small and safe to s
 - **#321** chore(deps): clear critical proxy-addr advisory (GHSA-jqcg-44mw-7w3h) before the CI audit gate fails
 - **#322** fix(delta): minimal verbosity lists no message IDs, so callers cannot act on changes
 - **#323** fix(calendar): update preview undercounts notified attendees; rule reorder hides a failed follow-up listing
+- **#328** search-emails: dotless domain label in `from` matches display name only, and zero-results guidance falsely says nothing in the mailbox matches
+- **#329** search-emails: raw searchExpression silently ignores receivedAfter/receivedBefore, and the pagination footer tells callers to use them
 - **#131** docs: confirm Mail-Advanced.ReadWrite enforcement (31 Dec 2026) doesn't affect Outlook Assistant — a troubleshooting note, no code change; due before Microsoft's 31 December 2026 deadline.
 - **#305** question(settings): scheduled auto-replies set via Graph may not fire on personal accounts — likely docs and success-message wording after a manual re-test.
 

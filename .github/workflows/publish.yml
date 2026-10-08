@@ -112,19 +112,28 @@ jobs:
           OUTCOME: ${{ steps.npm-publish.outcome }}
         run: |
           # Ask for this exact version: `npm view <pkg> version` reports
-          # `latest`, which a prerelease never becomes.
-          if [ "$OUTCOME" = "failure" ]; then
-            sleep 5
+          # `latest`, which a prerelease never becomes. The registry can lag
+          # a fresh publish (E404 for a while), so retry for up to 2 minutes
+          # before calling it missing.
+          PUBLISHED=none
+          for attempt in $(seq 1 12); do
+            sleep 10
             PUBLISHED=$(npm view "@littlebearapps/outlook-assistant@$EXPECTED" version 2>/dev/null || echo "none")
-            if [ "$PUBLISHED" = "$EXPECTED" ]; then
+            [ "$PUBLISHED" = "$EXPECTED" ] && break
+            echo "Attempt $attempt: $EXPECTED not visible on npm yet (found: $PUBLISHED)"
+          done
+          if [ "$PUBLISHED" = "$EXPECTED" ]; then
+            if [ "$OUTCOME" = "failure" ]; then
               echo "Version $EXPECTED already on npm — continuing"
             else
-              echo "::error::npm publish failed and version $EXPECTED is not on npm (found: $PUBLISHED)"
-              exit 1
+              echo "Version $EXPECTED is on npm"
             fi
+          elif [ "$OUTCOME" = "failure" ]; then
+            echo "::error::npm publish failed and version $EXPECTED is not on npm (found: $PUBLISHED)"
+            exit 1
           else
-            sleep 10
-            npm view "@littlebearapps/outlook-assistant@$EXPECTED" version
+            echo "::error::npm publish succeeded but version $EXPECTED was still not visible on npm after 2 minutes (found: $PUBLISHED)"
+            exit 1
           fi
 
       - name: Install mcp-publisher

@@ -107,7 +107,9 @@ upgrade steps. #305 (scheduled automatic replies on personal accounts) is
   `package.json` with the commit before the push rather than `HEAD~1`, and
   tags only a higher version; prereleases become GitHub prereleases,
   publish to npm under `next` and skip the MCP Registry and the website;
-  the publish job no longer uses the npm cache. The version checks live in
+  the publish job no longer uses the npm cache and retries its npm check for
+  up to 2 minutes, so registry lag doesn't fail the run and skip the MCP
+  Registry. The version checks live in
   `scripts/release-check.js`, with tests.
 
 ### Documentation

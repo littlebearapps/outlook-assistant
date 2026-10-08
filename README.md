@@ -21,6 +21,8 @@ Outlook Assistant connects AI assistants to your Microsoft Outlook account throu
 
 **Works with personal Outlook.com and work/school Microsoft 365 accounts.**
 
+**[Help docs, roadmap and community on the Outlook Assistant product page →](https://littlebearapps.com/builds/outlook-assistant/)**
+
 <div align="center">
   <br />
   <a href="https://github.com/littlebearapps/outlook-assistant/blob/main/docs/demo/outlook-assistant-demo.mp4">

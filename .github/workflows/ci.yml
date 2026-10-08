@@ -93,7 +93,8 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
-          node-version: '20'
+          # commitlint 21 needs Node >= 22.12.
+          node-version: '22'
           cache: 'npm'
       - run: npm ci
       - name: Validate commits

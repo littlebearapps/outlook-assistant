@@ -84,8 +84,8 @@
     "dotenv": "^18.0.5"
   },
   "devDependencies": {
-    "@commitlint/cli": "^20.4.3",
-    "@commitlint/config-conventional": "^20.4.3",
+    "@commitlint/cli": "^21.2.3",
+    "@commitlint/config-conventional": "^21.2.3",
     "@eslint/js": "^10.0.1",
     "@modelcontextprotocol/inspector": "^2.8.0",
     "ajv": "^8.20.0",

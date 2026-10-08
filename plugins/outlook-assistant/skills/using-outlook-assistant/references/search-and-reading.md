@@ -63,7 +63,7 @@ Verbosity also controls which fields are fetched, so `minimal` is cheaper as wel
 ## Delta sync
 
 1. `search-emails` with `deltaMode: true` and no token. A large first sync arrives over several pages, each returning a continuation token: keep calling with it until a delta token comes back. Pass the same `maxResults` on every page.
-2. Store the delta token. Next time, pass it as `deltaToken` to get only changes.
+2. Store the delta token. Next time, pass it as `deltaToken` to get only changes. Every verbosity lists changed messages by ID and removed ones by ID. An updated message carries only its changed properties (`changed: isRead`), with no subject or sender: read it by ID if you need them.
 3. The token encodes its own mailbox and folder, so `folder` and `sharedMailbox` don't apply when you pass it.
 4. If the token has expired, start a fresh initial sync.
 

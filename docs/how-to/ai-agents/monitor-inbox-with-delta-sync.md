@@ -110,7 +110,8 @@ Detect emails from specific senders or matching patterns:
 - To monitor a shared mailbox, add `sharedMailbox` (needs the opt-in `OUTLOOK_SHARED_MAILBOX` setting) and keep passing it with the same `deltaToken` — see [Access Shared Mailboxes](../advanced/access-shared-mailboxes.md).
 - Pass `deltaToken` back exactly as you received it. Tokens that point anywhere other than `https://graph.microsoft.com` are refused, so the access token is never sent elsewhere.
 - Store tokens persistently between agent sessions — they remain valid for extended periods.
-- Use `outputVerbosity: "minimal"` for efficient polling when you only need to detect changes, not read full content.
+- Use `outputVerbosity: "minimal"` for efficient polling: one line per changed message (`ID | subject | sender`) plus the IDs of removed ones.
+- A message that was updated (read, flagged, moved) comes back with only the properties that changed, so it shows as `ID | changed: isRead` with no subject or sender. Read it by ID if you need them.
 - Combine with `read-email` to get full content of specific changed messages after detecting them.
 - Use `maxResults` (1–200, default 100) to set the page size. It is sent to Graph as the `Prefer: odata.maxpagesize` header and sizes each page, never the whole sync — pass the same value on every page (an omitted value means 100).
 

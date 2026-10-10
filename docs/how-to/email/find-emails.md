@@ -161,7 +161,7 @@ params:
 
 Cross-folder search is a strict **superset** of an inbox-only search — it never returns fewer results than searching the inbox alone (v3.9.0). Multi-word queries also match when the words aren't adjacent in the subject, and if nothing turns up the result explicitly reports that it searched **all folders**.
 
-> **`$search` and all folders**: a `query` or `searchExpression` answered by Graph `$search` across all folders leaves out Deleted Items and Junk Email (measured on a personal mailbox); name the folder to search inside one of them. The structured filters (`from`, `to`, `subject`, dates) do cover every folder. Since v3.14.2 a field-scoped or boolean `searchExpression` (`from:…`, `subject:… AND received>=…`) works on personal accounts, and one made only of `from:`/`to:`/`subject:` terms is retried as filters when `$search` finds nothing.
+> **`$search` and all folders**: a `query` or `searchExpression` answered by Graph `$search` across all folders leaves out Deleted Items and Junk Email (measured on a personal mailbox); name the folder to search inside one of them. The structured filters (`from`, `to`, `subject`, dates) do cover every folder. Since v3.14.2 a boolean `searchExpression` (`invoice OR receipt`, `subject:… AND received>=…`) works on personal accounts; one made only of `from:`/`to:`/`subject:` terms is answered by filters there, as before.
 
 ## Combine Filters
 

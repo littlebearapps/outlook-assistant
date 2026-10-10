@@ -313,21 +313,29 @@ async function progressiveSearch(
   //    would drop the user's filter and return unrelated recent emails
   //    with a misleading "combined-search" strategy line. (#169)
   if (searchTerms.kqlQuery) {
-    // Graph reads KQL (field scopes, `AND`/`OR`, `received>=…`) only when
-    // the whole expression is one double-quoted string. Unquoted, `from:x` is
-    // a 400 syntax error and a multi-word expression comes back as the newest
-    // mail, unfiltered, so the expression is always sent quoted: as written
-    // when it already is one quoted string, otherwise wrapped with the
-    // caller's own `"` and `\` escaped (`subject:"a b"` becomes
-    // `"subject:\"a b\""`, never the broken `"subject:"a b""` of #169
-    // V37-F-1). (#333)
+    // Graph reads KQL (operators, `received>=…`, mixed terms) only when the
+    // whole expression is one double-quoted string. Unquoted, a multi-word
+    // expression comes back as the newest mail, unfiltered, and a comparison
+    // is a 400. So the expression is sent quoted: as written when it already
+    // is one quoted string, otherwise wrapped with the caller's own `"` and
+    // `\` escaped (`body:"a b"` becomes `"body:\"a b\""`, never the broken
+    // `"body:"a b""` of #169 V37-F-1). (#333)
+    //
+    // The exception is an expression made only of `from:`/`to:`/`subject:`
+    // terms. It keeps the v3.14.1 sequence, as written first and then the
+    // OData filters, so its results (substring match, every folder searched,
+    // date and boolean params applied by the filters) do not change in a
+    // patch release. Which of the two should answer it waits on a Microsoft
+    // 365 test matrix (#334).
     const trimmedKql = searchTerms.kqlQuery.trim();
-    const kqlForSearch = quoteSearchExpression(trimmedKql);
+    const kqlForSearch = parseFieldScopedExpression(trimmedKql)
+      ? trimmedKql
+      : quoteSearchExpression(trimmedKql);
 
-    // A quoted expression can still be rejected, or find nothing where the
-    // equivalent OData filter would (`$search` matches whole words and skips
-    // Deleted Items and Junk Email in a mailbox-wide search), so the
-    // translated retry stays reachable from the catch and the empty path.
+    // Graph rejects an unquoted field scope on personal accounts ("Syntax
+    // error: character ':' is not valid") and some tenants answer it with
+    // nothing, so the translated retry is reachable from the catch and from
+    // the empty path.
     const translationContext = {
       endpoint,
       accessToken,
@@ -1675,9 +1683,17 @@ function buildNoResultsSuggestions(searchInfo, searchAllFolders) {
   const partialCoverage = Boolean(
     searchInfo.truncated || searchInfo.narrowedCandidates
   );
+  // A `searchExpression` answered by `$search` alone never reached Deleted
+  // Items or Junk Email, so it is not proof of absence either. (#333)
+  const answeredBySearchOnly =
+    Boolean(filters.kqlQuery) && !strategies.includes('raw-kql-translated');
   if (searchAllFolders && partialCoverage) {
     suggestions.push(
       'All folders were searched, but some filters could only be checked against part of the mailbox (see below), so a match may still exist'
+    );
+  } else if (searchAllFolders && answeredBySearchOnly) {
+    suggestions.push(
+      'Graph `$search` across all folders leaves out Deleted Items and Junk Email, so a match may still exist there (name the folder to search inside one)'
     );
   } else if (searchAllFolders) {
     suggestions.push(
@@ -1723,7 +1739,7 @@ function buildNoResultsSuggestions(searchInfo, searchAllFolders) {
 
   if (filters.kqlQuery) {
     suggestions.push(
-      '`searchExpression` is a Graph `$search`: it matches whole words or their beginnings and, across all folders, leaves out Deleted Items and Junk Email. The structured filters (`from`, `to`, `subject`) match substrings in every folder'
+      '`searchExpression` is a Graph `$search`: it matches whole words or their beginnings. The structured filters (`from`, `to`, `subject`) match substrings'
     );
   }
 

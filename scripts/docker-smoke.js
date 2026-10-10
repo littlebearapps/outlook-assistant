@@ -21,6 +21,7 @@ const path = require('path');
 const SERVER_NAME = 'outlook-assistant';
 const TOOL_COUNT = 22;
 const DEFAULT_TIMEOUT_MS = 30000;
+const CLEANUP_TIMEOUT_MS = 30000;
 
 const REQUESTS = [
   {
@@ -242,8 +243,11 @@ async function runSmoke(options, pkg) {
     result = await exchange(launch.command, { timeoutMs: options.timeoutMs });
   } finally {
     if (launch.cleanup) {
+      // Bounded, so a runtime that hangs on `rm` cannot hold the job open.
       spawnSync(launch.cleanup[0], launch.cleanup.slice(1), {
         stdio: 'ignore',
+        timeout: options.cleanupTimeoutMs ?? CLEANUP_TIMEOUT_MS,
+        killSignal: 'SIGKILL',
       });
     }
   }

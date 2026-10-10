@@ -255,6 +255,30 @@ describe('runSmoke', () => {
     expect(result.problems.join('\n')).toContain('could not start');
   }, 30000);
 
+  test('a clean-up command that hangs is cut off, and the result still stands', async () => {
+    // A fake runtime: `run …` answers like the server, `rm …` never returns.
+    const runtime = path.join(home, 'fake-runtime.js');
+    fs.writeFileSync(
+      runtime,
+      `if (process.argv[2] === 'rm') { setInterval(() => {}, 1000); } else { ${fakeServer({})[2]} }`
+    );
+
+    const started = Date.now();
+    const result = await runSmoke(
+      {
+        runtime: `${NODE} ${runtime}`,
+        image: 'oa:ci',
+        tools: TOOL_COUNT,
+        timeoutMs: 20000,
+        cleanupTimeoutMs: 500,
+      },
+      pkg
+    );
+
+    expect(result.ok).toBe(true);
+    expect(Date.now() - started).toBeLessThan(15000);
+  }, 30000);
+
   test('fails when nothing answers before the timeout', async () => {
     const result = await runSmoke(
       options([NODE, '-e', 'setInterval(() => {}, 1000)'], { timeoutMs: 500 }),

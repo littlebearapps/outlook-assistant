@@ -145,6 +145,7 @@ OUTLOOK_CONFIRM_LEVEL=outward              # Plugin hook only, not read by the s
 5. Description ≤ 1,024 characters, stating facts and boundaries without steering between tools (`test/tools-registry.test.js` enforces both)
 6. Add test in `test/[module]/`
 7. Keep the plugin in step: see [`.claude/rules/plugin-and-skill-maintenance.md`](.claude/rules/plugin-and-skill-maintenance.md) (risk class, skill reference, hook map)
+8. A new action that edits a delivered (non-draft) message's subject, body or recipients needs `Mail-Advanced.ReadWrite` from 31 Dec 2026 (#131): check Microsoft's list first and classify it in `utils/risk-classes.js`
 
 ## Common Issues
 

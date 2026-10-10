@@ -832,3 +832,122 @@ describe('handleUpdateEvent dryRun counts removed attendees and rooms (#323)', (
     expect(result._meta).toMatchObject({ notified: 1, external: 0 });
   });
 });
+
+// Live-test follow-up to #323: the headline said "2 attendees (2 external)"
+// while `_meta` said notified 3 / external 3, so a client that reads only the
+// text saw a smaller number. Both now come from one helper.
+describe('preview headline and _meta agree (#323)', () => {
+  const base = {
+    subject: 'Planning',
+    start: { dateTime: '2026-10-06T00:00:00.0000000', timeZone: 'UTC' },
+    isOrganizer: true,
+    organizer: { emailAddress: { address: 'me@corp.com' } },
+  };
+  const mockEvent = (attendees) =>
+    callGraphAPI.mockImplementation((_t, method, path) => {
+      if (method !== 'GET') throw new Error(`unexpected ${method}`);
+      return path === 'me'
+        ? Promise.resolve({ mail: 'me@corp.com' })
+        : Promise.resolve({ ...base, attendees });
+    });
+  const person = (address) => ({ emailAddress: { address }, type: 'required' });
+  const room = (address) => ({ emailAddress: { address }, type: 'resource' });
+
+  /** The count and external count the first line of the preview states. */
+  function headline(result) {
+    const first = result.content[0].text
+      .split('\n')
+      .find((line) => /emails/.test(line));
+    const match =
+      /emails (?:an update to |invitations to |a cancellation to )?(\d+) (?:recipients?|attendees?) \((\d+) external/.exec(
+        first || ''
+      );
+    return match
+      ? { notified: Number(match[1]), external: Number(match[2]) }
+      : null;
+  }
+
+  beforeEach(() => {
+    callGraphAPI.mockReset();
+    ensureAuthenticated.mockReset();
+    ensureAuthenticated.mockResolvedValue('token');
+  });
+
+  test.each([
+    [
+      'one person replaced by another',
+      [person('a@gmail.com'), person('b@gmail.com')],
+      { subject: 'x', attendees: ['a@gmail.com', 'fake.person@example.com'] },
+      { notified: 3, external: 3 },
+    ],
+    [
+      'two people replaced and a room added',
+      [person('a@gmail.com'), person('b@gmail.com')],
+      {
+        subject: 'x',
+        attendees: [
+          'c@gmail.com',
+          'd@gmail.com',
+          { email: 'room1@corp.com', type: 'resource' },
+        ],
+      },
+      { notified: 5, external: 4 },
+    ],
+    [
+      'nobody added or removed',
+      [person('a@corp.com'), person('b@gmail.com')],
+      { subject: 'x' },
+      { notified: 2, external: 1 },
+    ],
+    [
+      'a room dropped',
+      [person('a@corp.com'), room('room1@corp.com')],
+      { subject: 'x', attendees: ['a@corp.com'] },
+      { notified: 2, external: 0 },
+    ],
+    [
+      'attendees only: one added, one removed',
+      [person('a@corp.com'), person('b@gmail.com')],
+      { attendees: ['a@corp.com', 'c@gmail.com'] },
+      { notified: 2, external: 2 },
+    ],
+    [
+      'every attendee removed',
+      [person('a@corp.com'), person('b@gmail.com')],
+      { subject: 'x', attendees: [] },
+      { notified: 2, external: 1 },
+    ],
+    [
+      'only rooms left',
+      [room('room1@corp.com')],
+      { subject: 'x' },
+      { notified: 1, external: 0 },
+    ],
+  ])('%s', async (_name, attendees, change, expected) => {
+    mockEvent(attendees);
+
+    const result = await handleUpdateEvent({
+      eventId: 'evt_1',
+      ...change,
+      dryRun: true,
+    });
+
+    expect(result._meta).toMatchObject(expected);
+    expect(headline(result)).toEqual(expected);
+  });
+
+  test('the headline says what the total is made of', async () => {
+    mockEvent([person('a@gmail.com'), person('b@gmail.com')]);
+
+    const result = await handleUpdateEvent({
+      eventId: 'evt_1',
+      subject: 'x',
+      attendees: ['a@gmail.com', 'fake.person@example.com'],
+      dryRun: true,
+    });
+
+    expect(result.content[0].text).toContain(
+      'emails 3 recipients (3 external): 2 attendees, 1 removed (sent a cancellation)'
+    );
+  });
+});

@@ -91,6 +91,47 @@ function countPhrase({ people, external }) {
   return `${plural(people.length, 'attendee')} (${ext})`;
 }
 
+/**
+ * One set of numbers for a preview's headline and its `_meta`, so the two
+ * can't disagree: everyone on the event (people and rooms or resources, which
+ * are emailed too) plus anyone being removed, who gets a cancellation. The
+ * external count covers people only. (#323)
+ * @param {{people: Array, resources: string[], external: (number|null)}} summary
+ * @param {{people?: Array, resources?: string[], external?: (number|null)}} [removed]
+ * @returns {{notified: number, external: (number|null), phrase: string}}
+ */
+function emailedTotals(summary, removed = {}) {
+  const gonePeople = (removed.people || []).length;
+  const goneRooms = (removed.resources || []).length;
+  const removedExternal = removed.external === undefined ? 0 : removed.external;
+  const notified =
+    summary.people.length + summary.resources.length + gonePeople + goneRooms;
+  const external =
+    summary.external === null || removedExternal === null
+      ? null
+      : summary.external + removedExternal;
+  if (summary.resources.length + gonePeople + goneRooms === 0) {
+    return { notified, external, phrase: countPhrase(summary) };
+  }
+  const ext =
+    external === null ? 'external count unknown' : `${external} external`;
+  const rooms = (count) =>
+    `${count} ${count === 1 ? 'room or resource' : 'rooms or resources'}`;
+  const parts = [];
+  if (summary.people.length > 0) {
+    parts.push(plural(summary.people.length, 'attendee'));
+  }
+  if (summary.resources.length > 0) parts.push(rooms(summary.resources.length));
+  if (gonePeople + goneRooms > 0) {
+    parts.push(`${gonePeople + goneRooms} removed (sent a cancellation)`);
+  }
+  return {
+    notified,
+    external,
+    phrase: `${plural(notified, 'recipient')} (${ext}): ${parts.join(', ')}`,
+  };
+}
+
 /** Who would be emailed, by address (capped). */
 function recipientLines({ people, resources }) {
   const lines = [];
@@ -185,11 +226,14 @@ async function previewCreateEvent(event) {
       ? `on ${start.dateTime} to ${end.dateTime} (${start.timeZone})`
       : `on ${start.dateTime} (${start.timeZone}) to ${end.dateTime} (${end.timeZone})`;
   const head = `Creates '${subject}' ${when} in your calendar`;
+  const totals = emailedTotals(summary);
   let lines;
   if (summary.people.length > 0) {
-    lines = [`${head} and emails invitations to ${countPhrase(summary)}.`];
+    lines = [`${head} and emails invitations to ${totals.phrase}.`];
   } else if (summary.resources.length > 0) {
-    lines = [`${head}. No people are invited.`];
+    lines = [
+      `${head} and emails invitations to ${totals.phrase}. No people are invited.`,
+    ];
   } else {
     lines = [`${head}. No attendees, so no invitations are sent.`];
   }
@@ -197,8 +241,8 @@ async function previewCreateEvent(event) {
   return dryRunResult([...lines, ...recipientLines(summary)], {
     action: 'create',
     subject,
-    notified: summary.people.length,
-    external: summary.external,
+    notified: totals.notified,
+    external: totals.external,
     event,
   });
 }
@@ -223,17 +267,18 @@ async function previewCancelEvent(accessToken, { eventId, comment }) {
     event.attendees,
     await ownAddressFor(accessToken, event)
   );
+  const totals = emailedTotals(summary);
   const lines =
     summary.people.length > 0
       ? [
-          `Cancels ${title} and emails a cancellation to ${countPhrase(summary)}.`,
+          `Cancels ${title} and emails a cancellation to ${totals.phrase}.`,
           messageLine(comment),
         ]
       : [`Cancels ${title}. It has no attendees, so nobody is emailed.`];
 
   return dryRunResult([...lines, ...recipientLines(summary)], {
     ...meta,
-    notified: summary.people.length,
+    notified: summary.people.length > 0 ? totals.notified : 0,
     external: summary.external,
   });
 }
@@ -316,12 +361,16 @@ async function previewDeleteEvent(accessToken, { eventId }) {
 
   return dryRunResult(
     [
-      `${head} and emails a cancellation to ${countPhrase(summary)}.`,
+      `${head} and emails a cancellation to ${emailedTotals(summary).phrase}.`,
       'To word that cancellation yourself, use action=cancel with a `comment` instead.',
       RESTORE_NOTE,
       ...recipientLines(summary),
     ],
-    { ...meta, notified: summary.people.length, external: summary.external }
+    {
+      ...meta,
+      notified: emailedTotals(summary).notified,
+      external: summary.external,
+    }
   );
 }
 
@@ -439,43 +488,37 @@ async function describeUpdateRecipients(accessToken, { eventId, patch }) {
       );
       return { lines, notified: 0, external: 0 };
     }
-    lines.push(
-      `Updates the attendees of ${title}. Only the people and rooms added or removed are emailed; the others aren't (unless a removed address is a distribution list, when Graph emails every attendee).`,
-      ...changeLines
-    );
     const external =
       after.external === null && before.external === null
         ? null
         : changed.filter((p) => p.external).length;
-    return { lines, notified: changed.length + changedRooms, external };
+    const notified = changed.length + changedRooms;
+    const ext =
+      external === null ? 'external count unknown' : `${external} external`;
+    lines.push(
+      `Updates the attendees of ${title} and emails ${plural(notified, 'recipient')} (${ext}). Only the people and rooms added or removed are emailed; the others aren't (unless a removed address is a distribution list, when Graph emails every attendee).`,
+      ...changeLines
+    );
+    return { lines, notified, external };
   }
 
-  if (after.people.length > 0) {
-    lines.push(
-      `Updates ${title} and emails an update to ${countPhrase(after)}.`
-    );
-  } else if (after.resources.length > 0) {
-    lines.push(
-      `Updates ${title}. It has no people attendees; its rooms or resources are sent the update.`
-    );
-  } else {
-    lines.push(`Updates ${title} and removes every attendee.`);
-  }
-  lines.push(...changeLines, ...recipientLines(after));
   // Everyone still on the event gets the update; anyone removed gets a
   // cancellation, so they count as emailed too (#323).
-  return {
-    lines,
-    notified:
-      after.people.length +
-      after.resources.length +
-      removed.length +
-      removedRooms.length,
-    external:
-      after.external === null || removedExternal === null
-        ? null
-        : after.external + removedExternal,
-  };
+  const totals = emailedTotals(after, {
+    people: removed,
+    resources: removedRooms,
+    external: removedExternal,
+  });
+  const nobodyLeft = after.people.length + after.resources.length === 0;
+  const simple = totals.notified === after.people.length;
+  let head = `Updates ${title} and emails ${simple ? 'an update to ' : ''}${totals.phrase}.`;
+  if (nobodyLeft) head += ' Every attendee is removed.';
+  else if (after.people.length === 0) {
+    head +=
+      ' It has no people attendees; its rooms or resources are sent the update.';
+  }
+  lines.push(head, ...changeLines, ...recipientLines(after));
+  return { lines, notified: totals.notified, external: totals.external };
 }
 
 module.exports = {

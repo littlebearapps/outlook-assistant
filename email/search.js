@@ -872,9 +872,12 @@ function buildToFilter(val) {
       val
     )}')`;
   }
-  return `toRecipients/any(r: contains(r/emailAddress/name, '${escapeODataString(
-    val
-  )}'))`;
+  // No `@` and no `.`: a display name, or a bare domain label such as
+  // `examplecorp`. Match either field of the same recipient, as
+  // buildFromFilter does for the sender (#328) and filterToClientSide does
+  // locally; the `or` sits inside the lambda, so it needs no parentheses. (#332)
+  const escaped = escapeODataString(val);
+  return `toRecipients/any(r: contains(r/emailAddress/name, '${escaped}') or contains(r/emailAddress/address, '${escaped}'))`;
 }
 
 /**

@@ -56,6 +56,14 @@ upgrade steps. #305 (scheduled automatic replies on personal accounts) is
   now matches the name or the address. An empty result says "no message in
   this mailbox matches" only when every filter was checked across the
   mailbox; otherwise it says a match may still exist.
+- **`to` with a bare domain label matches the recipient's address** (#332).
+  The same defect as #328, for `to`: a value with no `@` and no dot (such
+  as `examplecorp`) was sent to Graph as a recipient display-name match
+  only. It now matches the name or the address of the same recipient. This
+  matters where Graph accepts recipient filters (Microsoft 365; not verified
+  live, no test tenant). Personal Outlook.com accounts reject those filters
+  and already match `to` locally against both fields, so their results are
+  unchanged.
 - **A raw `searchExpression` says when it ignores the date window** (#329).
   `receivedAfter`/`receivedBefore` (and `hasAttachments`/`unreadOnly`) never
   reach a raw `$search` expression. They are now listed in `droppedFilters`

@@ -148,7 +148,7 @@ describe('buildToFilter', () => {
   test('should produce any() contains filter for name', () => {
     const filter = buildToFilter('Jane');
     expect(filter).toBe(
-      "toRecipients/any(r: contains(r/emailAddress/name, 'Jane'))"
+      "toRecipients/any(r: contains(r/emailAddress/name, 'Jane') or contains(r/emailAddress/address, 'Jane'))"
     );
   });
 
@@ -164,7 +164,7 @@ describe('buildToFilter', () => {
   test('should escape single quotes in a display name', () => {
     const filter = buildToFilter("O'Brien");
     expect(filter).toBe(
-      "toRecipients/any(r: contains(r/emailAddress/name, 'O''Brien'))"
+      "toRecipients/any(r: contains(r/emailAddress/name, 'O''Brien') or contains(r/emailAddress/address, 'O''Brien'))"
     );
   });
 
@@ -178,7 +178,7 @@ describe('buildToFilter', () => {
   test('should neutralise an OData injection attempt', () => {
     const filter = buildToFilter("x' or startswith(subject,'");
     expect(filter).toBe(
-      "toRecipients/any(r: contains(r/emailAddress/name, 'x'' or startswith(subject,'''))"
+      "toRecipients/any(r: contains(r/emailAddress/name, 'x'' or startswith(subject,''') or contains(r/emailAddress/address, 'x'' or startswith(subject,'''))"
     );
     expect(filter).not.toContain("'x' or");
   });
@@ -2928,5 +2928,214 @@ describe('handleSearchEmails — receivedDateTime leads a sorted $filter (#331)'
     const [params] = sentParams();
     expect(params.$filter).toBeUndefined();
     expect(params.$orderby).toBe('receivedDateTime desc');
+  });
+});
+
+// ──────────────────────────────────────────────────
+// #332: the same defect as #328, for `to`. A value with no `@` and no dot
+// (`examplecorp`) went out as a display-name match only, so where Graph accepts
+// the `toRecipients/any()` lambda (Microsoft 365) mail to
+// `someone@examplecorp.com.au` was not matched server-side. Personal accounts
+// reject the lambda and use the local matcher, which already checks both.
+// ──────────────────────────────────────────────────
+describe('handleSearchEmails — to with a dotless domain label (#332)', () => {
+  const strip = (v) => v.replace(/''/g, "'").toLowerCase();
+
+  /** One clause inside or outside the lambda, against `fields`. */
+  function evaluateAtom(text, fields) {
+    const t = text.trim();
+    let match = /^contains\(([\w/]+), '((?:[^']|'')*)'\)$/.exec(t);
+    if (match) {
+      if (!(match[1] in fields)) throw new Error(`unsupported: ${match[1]}`);
+      return fields[match[1]].toLowerCase().includes(strip(match[2]));
+    }
+    match = /^([\w/]+) eq '((?:[^']|'')*)'$/.exec(t);
+    if (match) {
+      if (!(match[1] in fields)) throw new Error(`unsupported: ${match[1]}`);
+      return fields[match[1]].toLowerCase() === strip(match[2]);
+    }
+    throw new Error(`unsupported filter clause: ${t}`);
+  }
+
+  /** Evaluate the `to` filters search.js emits (AND of clauses), over a row. */
+  function evaluateFilter(filter, m) {
+    return filter.split(/ and (?![^(]*\))/).every((clause) => {
+      const c = clause.trim();
+      const date = /^receivedDateTime (ge|le) (\S+)$/.exec(c);
+      if (date) {
+        const rec = Date.parse(m.receivedDateTime);
+        return date[1] === 'ge'
+          ? rec >= Date.parse(date[2])
+          : rec <= Date.parse(date[2]);
+      }
+      const lambda = /^toRecipients\/any\(r: (.*)\)$/.exec(c);
+      if (lambda) {
+        return (m.toRecipients || []).some((r) =>
+          lambda[1].split(' or ').some((atom) =>
+            evaluateAtom(atom, {
+              'r/emailAddress/name': r.emailAddress?.name || '',
+              'r/emailAddress/address': r.emailAddress?.address || '',
+            })
+          )
+        );
+      }
+      return evaluateAtom(c, { subject: m.subject || '' });
+    });
+  }
+
+  /** A mailbox where Graph accepts the lambda, as Microsoft 365 does. */
+  function mockGraphEvaluatingFilters(rows) {
+    callGraphAPIPaginated.mockImplementation((_t, _m, _e, params) => {
+      if (params.$search) throw new Error('unexpected $search');
+      const value = params.$filter
+        ? rows.filter((m) => evaluateFilter(params.$filter, m))
+        : rows;
+      return Promise.resolve({ value });
+    });
+  }
+
+  const toCorp = (id, subject, date) =>
+    mockEmail({
+      id,
+      subject,
+      receivedDateTime: date,
+      toRecipients: [
+        {
+          emailAddress: { name: 'Sam Lee', address: 'other@elsewhere.example' },
+        },
+        {
+          emailAddress: {
+            name: 'Jane Citizen',
+            address: 'someone@examplecorp.com.au',
+          },
+        },
+      ],
+    });
+  const rows = [
+    toCorp('c1', 'Quarterly statement', '2026-08-01T00:00:00Z'),
+    toCorp('c2', 'Renewal notice', '2025-02-01T00:00:00Z'),
+    mockEmail({ id: 'o1', subject: 'Unrelated newsletter' }),
+  ];
+
+  test('finds mail to a recipient from a dotless domain label, server-side', async () => {
+    mockGraphEvaluatingFilters(rows);
+
+    const result = await handleSearchEmails({
+      to: 'examplecorp',
+      searchAllFolders: true,
+      count: 50,
+    });
+
+    expect(result._meta.returned).toBe(2);
+    const text = result.content[0].text;
+    expect(text).toContain('Quarterly statement');
+    expect(text).toContain('Renewal notice');
+    expect(text).not.toContain('Unrelated newsletter');
+    expect(result._meta.searchMetadata.finalStrategy).toBe('combined-search');
+    expect(result._meta.searchMetadata.filterApplied).toBe(true);
+    expect(callGraphAPIPaginated).toHaveBeenCalledTimes(1);
+  });
+
+  test('still finds it with a date window and a subject', async () => {
+    mockGraphEvaluatingFilters(rows);
+
+    const result = await handleSearchEmails({
+      to: 'examplecorp',
+      subject: 'statement',
+      searchAllFolders: true,
+      receivedAfter: '2026-01-01T00:00:00Z',
+    });
+
+    expect(result._meta.returned).toBe(1);
+    expect(result.content[0].text).toContain('Quarterly statement');
+    expect(result._meta.searchMetadata.finalStrategy).toBe('combined-search');
+  });
+
+  test('still matches a display name', async () => {
+    mockGraphEvaluatingFilters(rows);
+
+    const result = await handleSearchEmails({
+      to: 'Jane',
+      searchAllFolders: true,
+    });
+
+    expect(result._meta.returned).toBe(3); // Jane Citizen ×2, Jane Smith ×1
+  });
+
+  test('the name-or-address test sits inside the lambda, so one recipient must satisfy it', () => {
+    expect(buildToFilter('examplecorp')).toBe(
+      "toRecipients/any(r: contains(r/emailAddress/name, 'examplecorp') or contains(r/emailAddress/address, 'examplecorp'))"
+    );
+  });
+
+  test('the server-side filter and the local matcher agree on every row', () => {
+    for (const value of ['examplecorp', 'Jane', 'citizen', 'elsewhere']) {
+      const server = rows
+        .filter((m) => evaluateFilter(buildToFilter(value), m))
+        .map((m) => m.id);
+      const local = filterToClientSide(rows, value).map((m) => m.id);
+      expect(local).toEqual(server);
+    }
+  });
+
+  test('personal accounts: the rejected lambda still falls to the local matcher, which finds it', async () => {
+    callGraphAPIPaginated.mockImplementation((_t, _m, _e, params) => {
+      if (params.$filter && params.$filter.includes('toRecipients/any(')) {
+        return Promise.reject(
+          new Error(
+            'API call failed with status 400: {"error":{"code":"ErrorInvalidUrlQueryFilter"}}'
+          )
+        );
+      }
+      return Promise.resolve({ value: rows });
+    });
+
+    const result = await handleSearchEmails({
+      to: 'examplecorp',
+      searchAllFolders: true,
+    });
+
+    expect(result._meta.returned).toBe(2);
+    expect(result._meta.searchMetadata.finalStrategy).toBe('client-side-to');
+  });
+
+  test('no match: definitive wording when the whole mailbox was checked', async () => {
+    mockGraphEvaluatingFilters(rows);
+
+    const result = await handleSearchEmails({
+      to: 'zebracorp',
+      searchAllFolders: true,
+    });
+
+    expect(result._meta.returned).toBe(0);
+    expect(result.content[0].text).toContain(
+      'All folders were already searched, so no message in this mailbox matches these filters'
+    );
+  });
+
+  test('no match after a scan that hit its limit: says a match may still exist', async () => {
+    const page = Array.from({ length: 500 }, (_, i) =>
+      mockEmail({ id: `p${i}`, subject: `Mail ${i}` })
+    );
+    callGraphAPIPaginated.mockImplementation((_t, _m, _e, params) =>
+      Promise.resolve(
+        params.$filter
+          ? { value: [] }
+          : {
+              value: page,
+              '@odata.nextLink': 'https://graph.microsoft.com/v1.0/next',
+            }
+      )
+    );
+
+    const result = await handleSearchEmails({
+      to: 'zebracorp',
+      searchAllFolders: true,
+    });
+
+    const text = result.content[0].text;
+    expect(result._meta.returned).toBe(0);
+    expect(text).not.toContain('no message in this mailbox matches');
+    expect(text).toContain('so a match may still exist');
   });
 });

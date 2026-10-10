@@ -3589,3 +3589,150 @@ describe('handleSearchEmails — whole-quoted searchExpression (#333)', () => {
     expect(result._meta.searchMetadata.finalStrategy).toBe('raw-kql');
   });
 });
+
+// ──────────────────────────────────────────────────
+// A translated `to:` expression is matched locally wherever Graph rejects the
+// recipient filter, and so is any `to`/`query` term the ladder narrows by. The
+// request must therefore ask for the fields those matchers read. The
+// `searchExpression` path asked for the lean `list` preset, so with a date
+// window `to:x` matched nothing at minimal and standard verbosity (#333).
+// ──────────────────────────────────────────────────
+describe('handleSearchEmails — locally matched fields are always requested', () => {
+  const toJane = (id, date, extra = {}) =>
+    mockEmail({
+      id,
+      subject: `Mail ${id}`,
+      receivedDateTime: date,
+      toRecipients: [
+        { emailAddress: { name: 'Jane Smith', address: 'jane@example.com' } },
+      ],
+      ...extra,
+    });
+  const mailbox = [
+    toJane('j1', '2026-09-10T00:00:00Z'),
+    { ...toJane('j2', '2026-09-20T00:00:00Z'), hasAttachments: true },
+    mockEmail({
+      id: 'o1',
+      subject: 'Someone else',
+      receivedDateTime: '2026-09-15T00:00:00Z',
+      toRecipients: [
+        { emailAddress: { name: 'Sam Lee', address: 'sam@example.com' } },
+      ],
+    }),
+  ];
+
+  const recent = [
+    mockEmail({
+      id: 'r1',
+      subject: 'Newer mail',
+      receivedDateTime: '2026-10-09T00:00:00Z',
+      toRecipients: [
+        { emailAddress: { name: 'Sam Lee', address: 'sam@example.com' } },
+      ],
+    }),
+  ];
+
+  /**
+   * A personal mailbox: no unquoted field scope in `$search`, no recipient
+   * lambda, and (the point of this block) only the selected fields come back.
+   */
+  function mockPersonalGraphHonouringSelect() {
+    callGraphAPIPaginated.mockImplementation((_t, _m, _e, params) => {
+      if (params.$search && /:/.test(params.$search)) {
+        return Promise.reject(
+          new Error('API call failed with status 400: BadRequest')
+        );
+      }
+      if ((params.$filter || '').includes('toRecipients/any(')) {
+        return Promise.reject(
+          new Error(
+            'API call failed with status 400: ErrorInvalidUrlQueryFilter'
+          )
+        );
+      }
+      const fields = params.$select.split(',');
+      // The unfiltered recent scan sees only newer mail, as on a mailbox with
+      // more than 500 messages since the window.
+      const rows = params.$filter || params.$search ? mailbox : recent;
+      const value = rows.map((m) =>
+        Object.fromEntries(fields.filter((f) => f in m).map((f) => [f, m[f]]))
+      );
+      return Promise.resolve({ value });
+    });
+  }
+
+  test.each([['minimal'], ['standard'], ['full'], [undefined]])(
+    'searchExpression to: with a date window finds the mail at %s verbosity',
+    async (outputVerbosity) => {
+      mockPersonalGraphHonouringSelect();
+
+      const result = await handleSearchEmails({
+        searchExpression: 'to:jane',
+        receivedAfter: '2026-09-01T00:00:00Z',
+        receivedBefore: '2026-09-30T00:00:00Z',
+        searchAllFolders: true,
+        ...(outputVerbosity && { outputVerbosity }),
+      });
+
+      expect(result._meta.returned).toBe(2);
+      expect(result._meta.searchMetadata.finalStrategy).toBe(
+        'raw-kql-translated'
+      );
+    }
+  );
+
+  test('the same search through the to parameter agrees', async () => {
+    mockPersonalGraphHonouringSelect();
+
+    const result = await handleSearchEmails({
+      to: 'jane',
+      receivedAfter: '2026-09-01T00:00:00Z',
+      receivedBefore: '2026-09-30T00:00:00Z',
+      searchAllFolders: true,
+      outputVerbosity: 'minimal',
+    });
+
+    expect(result._meta.returned).toBe(2);
+  });
+
+  test.each([
+    [{ searchExpression: 'to:jane' }],
+    [{ searchExpression: 'from:john to:jane' }],
+    [{ searchExpression: 'invoice OR receipt' }],
+    [{ searchExpression: 'hasattachment:true' }],
+    [{ to: 'jane' }],
+    [{ query: 'mail' }],
+    [{ from: 'john', subject: 'mail' }],
+    [{ to: 'jane', unreadOnly: true }],
+  ])(
+    'every request asks for the fields the local matchers and the list read: %j',
+    async (args) => {
+      mockPersonalGraphHonouringSelect();
+
+      await handleSearchEmails({ ...args, outputVerbosity: 'minimal' });
+
+      for (const [, , , params] of callGraphAPIPaginated.mock.calls) {
+        const fields = params.$select.split(',');
+        expect(fields).toEqual(
+          expect.arrayContaining([
+            'toRecipients',
+            'bodyPreview',
+            'from',
+            'subject',
+            'hasAttachments',
+          ])
+        );
+      }
+    }
+  );
+
+  test('a searchExpression result shows the attachment marker', async () => {
+    mockPersonalGraphHonouringSelect();
+
+    const result = await handleSearchEmails({
+      searchExpression: 'invoice OR receipt',
+    });
+
+    expect(result.content[0].text).toContain('📎');
+  });
+});

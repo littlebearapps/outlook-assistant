@@ -97,8 +97,15 @@ async function handleSearchEmails(args) {
   // `undefined` on every row and drop the entire result set.
   const searchTermCount = [query, from, to, subject].filter(Boolean).length;
   const needsMatcherFields = Boolean(to) || Boolean(query);
+  // A `searchExpression` needs it as well: a translated `to:` term is matched
+  // locally wherever Graph rejects the recipient filter, and the lean preset
+  // also left `hasAttachments` out, so its results never showed the
+  // attachment marker. (#333)
   const selectFields = getEmailFields(
-    verbosity === VERBOSITY.FULL || searchTermCount > 1 || needsMatcherFields
+    verbosity === VERBOSITY.FULL ||
+      searchTermCount > 1 ||
+      needsMatcherFields ||
+      Boolean(kqlQuery)
       ? 'search'
       : 'list'
   );

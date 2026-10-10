@@ -195,6 +195,13 @@ upgrade steps. #305 (scheduled automatic replies on personal accounts) is
 
 ### Documentation
 
+- The `access-shared-mailbox` description, the shared-mailbox guide, the
+  tools reference, `SECURITY.md` and the plugin skill now say plainly that
+  this one tool still sends its read to Microsoft Graph with the existing
+  sign-in while `OUTLOOK_SHARED_MAILBOX` is unset (a well-known folder or
+  folder ID only), and adds the setup steps on a 403 or 404. Every other
+  tool's `sharedMailbox` parameter is refused before any request. Behaviour
+  is unchanged (#338).
 - `docs/troubleshooting.md` notes Microsoft's Mail-Advanced.ReadWrite
   enforcement from 31 December 2026 and why it doesn't affect Outlook
   Assistant (#131).

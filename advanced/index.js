@@ -69,9 +69,12 @@ const ENABLE_SHARED_HINT =
  *
  * With OUTLOOK_SHARED_MAILBOX off this behaves exactly as before the opt-in
  * flag existed: `folder` (or `folderId`) is used as given — a well-known name
- * or a folder ID — with whatever scopes the token already has. With the flag
- * on, custom/localized names and nested paths are resolved, and
- * `listFolders` is available.
+ * or a folder ID — and the read is sent to Graph with whatever scopes the
+ * token already has; a 403 or 404 gets the setup hint. This is deliberate and
+ * documented (#338): it is the one tool that makes a request for another
+ * mailbox while the opt-in is off. Every other tool goes through
+ * buildMailboxPrefix, which refuses first. With the flag on, custom/localized
+ * names and nested paths are resolved, and `listFolders` is available.
  */
 async function handleAccessSharedMailbox(args) {
   // F-46: accept `email` as alias for `sharedMailbox`. The original
@@ -855,7 +858,7 @@ const advancedTools = [
   {
     name: 'access-shared-mailbox',
     description:
-      "List emails or folders in a shared mailbox the signed-in user can access (read-only). Returns messages from `sharedMailbox` (alias `email`) and `folder` (default `inbox`) with id/subject/from/receivedDateTime/preview, the same shape as `search-emails` list mode. `folder` takes a well-known name (inbox, sent, archive…), a custom/localized display name (e.g. `Archiv`), a nested path (e.g. `Inbox/Vendors/Acme`), or pass a raw `folderId`. `listFolders: true` enumerates the shared mailbox's folder tree (names, paths, IDs, counts), to find custom subfolders before reading them. Needs the mailbox delegated to the signed-in user in Exchange (admin-configured). `outputVerbosity` sets field count and `count` (default 25, max 50) page size. For search and filters over a shared mailbox, use `search-emails` with `sharedMailbox` set. Custom/localized names, nested paths and `listFolders` need the server opt-in setting OUTLOOK_SHARED_MAILBOX (work/school only); without it `folder` must be a well-known name or a folder ID.",
+      "List emails or folders in a shared mailbox the signed-in user can access (read-only). While the server setting OUTLOOK_SHARED_MAILBOX is unset, this tool still sends the read to Microsoft Graph with whatever access the current sign-in has, for a well-known `folder` name or a `folderId` only, and adds the setup steps on a 403 or 404; every other tool's `sharedMailbox` parameter is refused before any request. With the setting on (work/school only), `folder` also takes a custom/localized display name (e.g. `Archiv`) or a nested path (e.g. `Inbox/Vendors/Acme`), and `listFolders: true` enumerates the mailbox's folder tree. Returns messages from `sharedMailbox` (alias `email`) and `folder` (default `inbox`) with id/subject/from/receivedDateTime/preview. Needs the mailbox delegated to the signed-in user in Exchange (admin-configured). `outputVerbosity` sets field count and `count` (default 25, max 50) page size. `search-emails` with `sharedMailbox` searches and filters a shared mailbox.",
     ...toolMetadata('access-shared-mailbox', 'Shared Mailbox'),
     inputSchema: {
       type: 'object',

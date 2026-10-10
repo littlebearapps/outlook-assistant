@@ -25,7 +25,7 @@ Use the device-code flow (the default) to sign in. The browser flow (`npm run au
 
 If your organisation blocks user consent, an administrator has to grant consent for the shared scopes. If they won't, unset `OUTLOOK_SHARED_MAILBOX` and you'll sign in with the standard scopes again.
 
-While the setting is off, `access-shared-mailbox` behaves as it always has (a well-known folder name or folder ID, using whatever access your existing token has). Every other tool's `sharedMailbox` parameter is refused with these setup steps.
+While the setting is off, `access-shared-mailbox` behaves as it always has: it still sends the read to Microsoft Graph (a well-known folder name or folder ID, using whatever access your existing sign-in has) and adds these setup steps if Graph answers 403 or 404. On a personal account that is always a 404. Every other tool's `sharedMailbox` parameter is refused with these setup steps before any request is made.
 
 ## Read from a Shared Mailbox
 

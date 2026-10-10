@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Hermes Agent support** (#309, #310). Outlook Assistant now installs in
+  [Hermes Agent](https://github.com/NousResearch/hermes-agent) 0.21.5 or later
+  as two plugins:
+  - `plugins/outlook-assistant`: the existing Agent Plugins folder, which gives
+    Hermes the server and the skill (tools appear as `mcp__outlook__<tool>`);
+  - `plugins/outlook-assistant-guard`: a new native Hermes plugin, because
+    Hermes doesn't run plugin hook files or read the server's instructions.
+    It asks through Hermes's own approval gate, with the hook's plain-English
+    reason, before calls that reach other people, delete something or keep
+    acting:
+    - a prompt in the terminal, or `/approve` in the messaging gateway;
+    - refused when nobody can answer (cron, `-q`).
+
+    It also adds the untrusted-content note after reads and puts the hard
+    rules in the system prompt. Answering "always" covers only an identical
+    call. A new `confirm_level: block` refuses those calls outright, which
+    also holds under `--yolo`. If its check can't run, it asks.
+- `outlook-gate.js` has a `hermes` mode, and `scripts/sync-risk-map.js` writes
+  the guard's copies of the gate, the risk map and the system-prompt text.
+- A Hermes CI job (pinned to Hermes v0.21.5):
+  - runs `hermes plugins validate` on both plugins;
+  - runs the guard's Python tests;
+  - runs `scripts/hermes-smoke.py`, which installs both plugins and calls
+    through Hermes with the server in test mode.
+
+### Fixed
+
+- **The plugin couldn't be installed in Hermes Agent** (#309). Hermes's install
+  scanner rated it "dangerous" because the skill's prompt-injection reference
+  quoted an attack phrase, and `--force` can't override that verdict. The
+  reference now describes the pattern instead. `test/plugin-hermes-scan.test.js`
+  checks every plugin file against Hermes's injection patterns.
+
 ## [3.14.1] - 2026-10-05
 
 Patch release with the fixes from a live test of all 22 tools on v3.14.0.

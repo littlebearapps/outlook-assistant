@@ -5,9 +5,12 @@
  * Copilot and Cursor plugin marketplaces install. Those directories reject an
  * unpinned npx launcher, so every manifest must name the exact version in
  * package.json — `npm version` keeps them in step via scripts/sync-version.js,
- * and this suite catches a hand edit that drifts.
+ * and this suite catches a hand edit that drifts. The Hermes Agent guard
+ * (`plugins/outlook-assistant-guard/`) is a separate plugin with its own
+ * `plugin.yaml`.
  */
 const { execFile } = require('child_process');
+const fs = require('fs');
 const path = require('path');
 const { promisify } = require('util');
 
@@ -25,6 +28,16 @@ const cursorPlugin = require(
   path.join(PLUGIN, '.cursor-plugin', 'plugin.json')
 );
 
+const guardYaml = fs.readFileSync(
+  path.join(ROOT, 'plugins', 'outlook-assistant-guard', 'plugin.yaml'),
+  'utf8'
+);
+/** A top-level `key: value` line of the guard's plugin.yaml, quotes removed. */
+const guardField = (key) =>
+  new RegExp(`^${key}: (.*)$`, 'm')
+    .exec(guardYaml)?.[1]
+    .replace(/^(['"])(.*)\1$/, '$2');
+
 const PINNED = `${pkg.name}@${pkg.version}`;
 
 describe('plugin manifests', () => {
@@ -41,6 +54,19 @@ describe('plugin manifests', () => {
     expect(claudePlugin.version).toBe(pkg.version);
     expect(agentPlugin.version).toBe(pkg.version);
     expect(cursorPlugin.version).toBe(pkg.version);
+    expect(guardField('version')).toBe(pkg.version);
+  });
+
+  test('the Hermes guard is a native plugin named for the catalog, with a SemVer floor', () => {
+    expect(guardField('name')).toBe('outlook-assistant-guard');
+    // Hermes's catalog rule 14: a SemVer floor, never a CalVer date.
+    expect(guardField('requires_hermes')).toMatch(/^>=\d+\.\d+\.\d+$/);
+    // A plugin.json beside plugin.yaml would be ignored (plugin.yaml wins).
+    expect(
+      fs.existsSync(
+        path.join(ROOT, 'plugins', 'outlook-assistant-guard', 'plugin.json')
+      )
+    ).toBe(false);
   });
 
   test('every npx launcher is pinned to the exact package version', () => {

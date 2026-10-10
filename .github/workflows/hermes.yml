@@ -1,0 +1,77 @@
+name: Hermes Agent
+
+# Hermes Agent scans a plugin folder at install and at plugin-catalog
+# admission; a "dangerous" verdict blocks install even with --force (#309).
+# This runs Hermes's own validator, pinned to a release, on both plugins
+# (the portable outlook-assistant and the native outlook-assistant-guard,
+# #310), the guard's Python tests, and an install-and-call smoke test with
+# the server in test mode. Bump HERMES_SHA deliberately (release tags only)
+# and refresh test/fixtures/hermes-injection-patterns.json at the same time.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'plugins/**'
+      - 'test/hermes/**'
+      - 'test/fixtures/hermes-*'
+      - 'scripts/hermes-smoke.py'
+      - 'scripts/sync-risk-map.js'
+      - 'utils/risk-classes.js'
+      - 'utils/server-instructions.js'
+      - '.github/workflows/hermes.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'plugins/**'
+      - 'test/hermes/**'
+      - 'test/fixtures/hermes-*'
+      - 'scripts/hermes-smoke.py'
+      - 'scripts/sync-risk-map.js'
+      - 'utils/risk-classes.js'
+      - 'utils/server-instructions.js'
+      - '.github/workflows/hermes.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # v0.21.5 (tag v2026.9.24)
+  HERMES_SHA: f97608f178d1ffeca59860195ab7da295f7c8e5f
+
+jobs:
+  validate:
+    name: Validate and smoke-test plugins (Hermes v0.21.5)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Install Hermes Agent
+        run: |
+          git init -q "$RUNNER_TEMP/hermes"
+          git -C "$RUNNER_TEMP/hermes" fetch -q --depth 1 https://github.com/NousResearch/hermes-agent "$HERMES_SHA"
+          git -C "$RUNNER_TEMP/hermes" checkout -q FETCH_HEAD
+          # Hermes refuses wheel builds, so install it editable.
+          uv venv --python 3.14 "$RUNNER_TEMP/venv"
+          VIRTUAL_ENV="$RUNNER_TEMP/venv" uv pip install -e "$RUNNER_TEMP/hermes[mcp]"
+          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
+      - name: Validate both plugins
+        env:
+          HERMES_HOME: ${{ runner.temp }}/hermes-home
+        run: |
+          mkdir -p "$HERMES_HOME"
+          hermes --version
+          hermes plugins validate plugins/outlook-assistant
+          hermes plugins validate plugins/outlook-assistant-guard
+      - name: Guard unit tests
+        run: python -m unittest discover -s test/hermes -v
+      - name: Install and call through Hermes (test mode, no model)
+        run: python scripts/hermes-smoke.py

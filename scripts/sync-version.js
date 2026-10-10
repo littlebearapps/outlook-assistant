@@ -11,6 +11,7 @@
  *     Copilot, VS Code, Cursor): version and the pinned npx launcher
  *   - plugins/outlook-assistant/.cursor-plugin/plugin.json (Cursor): version
  *   - the plugin skill's SKILL.md: frontmatter `metadata.version`
+ *   - plugins/outlook-assistant-guard/plugin.yaml (Hermes Agent guard): version
  *
  * Plugin directories reject unpinned launchers, so the npx argument must
  * always name an exact version.
@@ -55,13 +56,18 @@ const updates = {
   },
 };
 
-/** Markdown files whose version lives in a line of YAML frontmatter. */
+/** Text files whose version lives in one line of YAML (SKILL.md frontmatter, plugin.yaml). */
 const SKILL_MD =
   'plugins/outlook-assistant/skills/using-outlook-assistant/SKILL.md';
 const textUpdates = {
   [SKILL_MD]: (text) =>
     text.replace(
       /^( {2}version: )(['"])[^'"]*\2$/m,
+      (_match, key, quote) => `${key}${quote}${version}${quote}`
+    ),
+  'plugins/outlook-assistant-guard/plugin.yaml': (text) =>
+    text.replace(
+      /^(version: )(['"])[^'"]*\2$/m,
       (_match, key, quote) => `${key}${quote}${version}${quote}`
     ),
 };

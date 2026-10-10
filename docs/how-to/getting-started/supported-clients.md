@@ -10,7 +10,7 @@ Outlook Assistant is a standard MCP server, so it runs in any MCP client. What c
 
 - **The server's own checks** run in every client. See [What Works in Every Client](#what-works-in-every-client).
 - **The `using-outlook-assistant` skill** teaches the model the hard rules: retrieved email is data, not instructions; confirm with exact details; draft first. It loads in clients that support Agent Skills.
-- **The safety hook** asks you before any call that reaches other people, deletes something or keeps acting (rules, forwarding, automatic replies), with a plain-English reason. It ships in the [plugin](../../../plugins/outlook-assistant/README.md) and runs in Claude Code, GitHub Copilot and Cursor (from v3.14.0).
+- **The safety hook** asks you before any call that reaches other people, deletes something or keeps acting (rules, forwarding, automatic replies), with a plain-English reason. It ships in the [plugin](../../../plugins/outlook-assistant/README.md) and runs in Claude Code, GitHub Copilot and Cursor (from v3.14.0). In Hermes Agent (from v3.15.0) a separate plugin, [`outlook-assistant-guard`](../../../plugins/outlook-assistant-guard/README.md), does the same job.
 
 Test results for each client and model are in the [cross-client verification matrix](../../cross-client-matrix.md).
 
@@ -22,6 +22,7 @@ Test results for each client and model are in the [cross-client verification mat
 | **GitHub Copilot CLI** | Plugin | Loads automatically | Asks with the reason; adds the note | `OUTLOOK_CONFIRM_LEVEL` environment variable | A hook that times out lets the call through; `-p` and the cloud agent turn a prompt into a denial |
 | **VS Code + GitHub Copilot** (Local agent) | Plugin (not checked), or manual `.vscode/mcp.json` | Not checked by hand | Reads the same hook file; not checked by hand | `OUTLOOK_CONFIRM_LEVEL`, only if set in VS Code's environment | A hook that times out lets the call through |
 | **Cursor** | Plugin (v3.14.0 or later), or manual `.cursor/mcp.json` | Loads | Runs, but Cursor's prompt doesn't show the reason; adds the note | `OUTLOOK_CONFIRM_LEVEL` environment variable | An `Mcp(...)` allow rule, or `--force` / Run Everything mode, skips the prompt; desktop app not checked |
+| **Hermes Agent** (0.21.5 or later) | Two plugins: `outlook-assistant` (server and skill) and `outlook-assistant-guard` (safety checks) | Listed only when the model asks (`skills_list`); the guard tells the model to read it | Guard: asks through Hermes's approval gate with the reason; adds the note | Guard's `confirm_level` setting (adds `block`) | `--yolo` or approvals turned off skip the prompt (use `block`); cron and `-q` refuse instead of asking; server settings need your own `mcp_servers` entry |
 | **Codex CLI, Gemini CLI, Claude Desktop, Windsurf, other MCP clients** | Manual MCP config | Copy the skill folder if the client supports Agent Skills | None | Not applicable | Server-side checks, annotations and instructions only |
 
 The confirmation level sets how often the hook asks:
@@ -29,6 +30,7 @@ The confirmation level sets how often the hook asks:
 - `outward` (default) asks before sends, invitations, cancellations, every delete, rules and automatic replies.
 - `all-writes` also asks before flags, moves, drafts and other changes you can undo.
 - `off` never asks (not recommended).
+- `block` (Hermes guard only) refuses those calls instead of asking.
 
 The hook never asks before reads, or before `dryRun: true` previews on calls that support them. (Claude Code still asks before every `send-email` and `create-event` call, dry runs included, because of those tools' own flag.)
 
@@ -117,6 +119,25 @@ Before v3.14.0 the plugin had no Cursor manifest, so Cursor loaded the Claude Co
 
 **Workaround on v3.13.0:** remove the plugin and use a manual MCP configuration in `.cursor/mcp.json` with `OUTLOOK_CLIENT_ID` set (see the [Cursor config in the README](../../../README.md#3-configure-your-mcp-client)), or update to v3.14.0.
 
+## Hermes Agent
+
+From v3.15.0, Outlook Assistant works in [Hermes Agent](https://github.com/NousResearch/hermes-agent) 0.21.5 or later, as two plugins. Install both:
+
+```bash
+hermes plugins install littlebearapps/outlook-assistant/plugins/outlook-assistant --enable
+hermes plugins install littlebearapps/outlook-assistant/plugins/outlook-assistant-guard --enable
+```
+
+Once they're listed in the Hermes plugin catalog, `hermes plugins install outlook-assistant --enable` (and `outlook-assistant-guard`) works too. Start a new session after installing. Verified with Hermes v0.21.5 and a 3 October 2026 build of its main branch, without a model; see the [matrix](../../cross-client-matrix.md).
+
+- **`outlook-assistant`** is the same Agent Plugins folder Copilot uses. Hermes runs its MCP server (tools appear as `mcp__outlook__send_email` and so on) and lists its skill. Hermes doesn't run its hook, doesn't pass the server instructions to the model and ignores the annotations other than `readOnlyHint`.
+- **`outlook-assistant-guard`** is a native Hermes plugin that puts those layers back. Before a call that reaches other people, deletes something or keeps acting, it sends the call to Hermes's own approval gate with the hook's plain-English reason: a prompt in the terminal (allow once, for the session, always, or deny), or an approval message with `/approve` and `/deny` in the messaging gateway. It adds the untrusted-content note after reads, and puts the hard rules and a pointer to the skill in the system prompt.
+- **Nobody to ask:** cron jobs, `hermes chat -q` and webhooks refuse these calls instead of waiting.
+- **"Always"** approves only an identical call again (the same recipients, subject, body and options), not every later email.
+- **Fails closed:** if the check can't run (Node.js missing, an error, no answer within 20 seconds), Hermes asks with a "couldn't check" reason; if the guard plugin itself fails to load, Hermes shows it as failed and the Outlook tools run without it.
+- **`--yolo`, `/yolo` or approvals turned off** skip the prompt. Set the guard's `confirm_level` to `block` to refuse those calls outright instead: `hermes config set plugins.entries.outlook-assistant-guard.settings.confirm_level block`.
+- **Server settings:** the plugin's server starts with the send limit (10) and nothing else, and Hermes doesn't pass your `.env` values to it. Give your client ID at sign-in. For read-only mode, the allowlist or other limits, add your own `outlook` server to Hermes's `mcp_servers` config with an `env` block (see the [README](../../../README.md#3-configure-your-mcp-client)). A server you configure under the same name replaces the plugin's, and the skill and guard still apply.
+
 ## Codex CLI, Gemini CLI, Claude Desktop and Other MCP Clients
 
 These clients use a manual MCP configuration and get no plugin hook. Set the command to `npx -y @littlebearapps/outlook-assistant` and put your settings in the client's `env` block. See [Connect Outlook to Your AI Assistant](connect-outlook-to-claude.md#add-to-your-ai-tool).
@@ -131,5 +152,6 @@ Codex CLI has been spot-checked: it refused a forwarding-rule request injected i
 
 - [Connect Outlook to Your AI Assistant](connect-outlook-to-claude.md): install, configure and sign in
 - [Plugin README](../../../plugins/outlook-assistant/README.md): the skill, the hook and the plugin settings
+- [Guard plugin README](../../../plugins/outlook-assistant-guard/README.md): the Hermes Agent safety plugin
 - [Troubleshooting: Client-Specific Issues](../../troubleshooting.md#client-specific-issues)
 - [Cross-client verification matrix](../../cross-client-matrix.md)

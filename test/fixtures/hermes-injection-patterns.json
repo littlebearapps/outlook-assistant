@@ -1,0 +1,91 @@
+{
+  "$comment": "Copied from Hermes Agent tools/skills_guard.py THREAT_PATTERNS (category injection, severity critical or high; all case-insensitive). Hermes scans every text file in a plugin folder at install and at catalog admission: a critical match blocks install even with --force, a high one makes the user confirm. Prose demotion does not apply to injection patterns. Refresh from upstream when the Hermes CI pin moves.",
+  "source": "https://github.com/NousResearch/hermes-agent/blob/bdef06de3b8c0d190cd7f69edc911ac6961ca358/tools/skills_guard.py",
+  "patterns": [
+    {
+      "id": "prompt_injection_ignore",
+      "severity": "critical",
+      "pattern": "ignore\\s+(?:\\w+\\s+)*(previous|all|above|prior)\\s+instructions"
+    },
+    {
+      "id": "role_hijack",
+      "severity": "high",
+      "pattern": "you\\s+are\\s+(?:\\w+\\s+)*now\\s+"
+    },
+    {
+      "id": "deception_hide",
+      "severity": "high",
+      "pattern": "do\\s+not\\s+(?:\\w+\\s+)*tell\\s+(?:\\w+\\s+)*the\\s+user(?!\\s+to\\s+[\"\\'\\u201c\\u2018])(?!.*\\b(?:unless|except|until|confirm|diagnose|verify|check)\\b)"
+    },
+    {
+      "id": "sys_prompt_override",
+      "severity": "critical",
+      "pattern": "system\\s+(?:\\w+\\s+)*prompt\\s+(?:\\w+\\s+)*override"
+    },
+    {
+      "id": "role_pretend",
+      "severity": "high",
+      "pattern": "pretend\\s+(?:\\w+\\s+)*(you\\s+are|to\\s+be)\\s+"
+    },
+    {
+      "id": "disregard_rules",
+      "severity": "critical",
+      "pattern": "disregard\\s+(?:\\w+\\s+)*(your|all|any)\\s+(?:\\w+\\s+)*(instructions|rules|guidelines)"
+    },
+    {
+      "id": "leak_system_prompt",
+      "severity": "high",
+      "pattern": "output\\s+(?:\\w+\\s+)*(system|initial)\\s+prompt"
+    },
+    {
+      "id": "conditional_deception",
+      "severity": "high",
+      "pattern": "(when|if)\\s+no\\s*one\\s+is\\s+(watching|looking)"
+    },
+    {
+      "id": "bypass_restrictions",
+      "severity": "critical",
+      "pattern": "act\\s+as\\s+(if|though)\\s+(?:\\w+\\s+)*you\\s+(?:\\w+\\s+)*(have\\s+no|don\\'t\\s+have)\\s+(?:\\w+\\s+)*(restrictions|limits|rules)"
+    },
+    {
+      "id": "translate_execute",
+      "severity": "critical",
+      "pattern": "translate\\s+.*\\s+into\\s+.*\\s+and\\s+(execute|run|eval)"
+    },
+    {
+      "id": "html_comment_injection",
+      "severity": "high",
+      "pattern": "<!--[^>]*(?:ignore|override|system|secret|hidden)[^>]*-->"
+    },
+    {
+      "id": "hidden_div",
+      "severity": "high",
+      "pattern": "<\\s*div\\s+style\\s*=\\s*[\"\\'][\\s\\S]*?display\\s*:\\s*none"
+    },
+    {
+      "id": "jailbreak_dan",
+      "severity": "critical",
+      "pattern": "\\bDAN\\s+mode\\b|Do\\s+Anything\\s+Now"
+    },
+    {
+      "id": "jailbreak_dev_mode",
+      "severity": "critical",
+      "pattern": "\\bdeveloper\\s+mode\\b.*\\benabled?\\b"
+    },
+    {
+      "id": "hypothetical_bypass",
+      "severity": "high",
+      "pattern": "hypothetical\\s+scenario.*(?:ignore|bypass|override)"
+    },
+    {
+      "id": "remove_filters",
+      "severity": "critical",
+      "pattern": "(respond|answer|reply)\\s+without\\s+(?:\\w+\\s+)*(restrictions|limitations|filters|safety)"
+    },
+    {
+      "id": "fake_update",
+      "severity": "high",
+      "pattern": "you\\s+have\\s+been\\s+(?:\\w+\\s+)*(updated|upgraded|patched)\\s+to"
+    }
+  ]
+}

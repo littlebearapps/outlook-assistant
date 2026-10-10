@@ -1,0 +1,16 @@
+name: outlook-assistant-guard
+version: '3.14.1'
+description: "Approval gate for the outlook-assistant plugin in Hermes Agent: asks you before Outlook calls that email or notify other people, delete something, or set up forwarding, rules or automatic replies, with a plain-English reason. Adds a data-not-instructions note after tools that return other people's content, and puts Outlook Assistant's hard rules in the system prompt. Fails closed."
+author: 'Little Bear Apps (https://littlebearapps.com)'
+license: MIT
+homepage: https://github.com/littlebearapps/outlook-assistant/tree/main/plugins/outlook-assistant-guard
+manifest_version: 2
+requires_hermes: '>=0.21.5'
+provides_hooks:
+  - pre_tool_call
+  - transform_tool_result
+config_schema:
+  confirm_level:
+    type: str
+    default: outward
+    description: 'outward (default): ask before calls that reach other people, delete or keep acting. all-writes: also ask before reversible changes. block: refuse those calls outright (also under --yolo). off: never ask.'

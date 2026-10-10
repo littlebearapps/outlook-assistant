@@ -5,13 +5,17 @@
  *   - plugins/outlook-assistant/hooks/risk-map.json, read by the hook
  *     (hooks/outlook-gate.js) to classify each call
  *   - the risk table in the skill's SKILL.md, between the
- *     `<!-- risk-table:start -->` and `<!-- risk-table:end -->` markers
+ *   `<!-- risk-table:start -->` and `<!-- risk-table:end -->` markers
+ *   - the Hermes Agent guard plugin (plugins/outlook-assistant-guard), which
+ *     is installed on its own and so can't reach the plugin above: copies of
+ *     hooks/outlook-gate.js and hooks/risk-map.json, and system-prompt.md
+ *     built from the server's hard rules (utils/server-instructions.js)
  *
- * Run it after any change to utils/risk-classes.js;
- * test/plugin-hooks.test.js fails while either copy is stale.
+ * Run it after any change to utils/risk-classes.js, the hook or the hard
+ * rules; test/plugin-hooks.test.js fails while any copy is stale.
  *
  * Usage: node scripts/sync-risk-map.js [--check]
- *   --check  exit 1 if either file is out of sync, without writing
+ *   --check  exit 1 if any file is out of sync, without writing
  */
 const fs = require('fs');
 const path = require('path');
@@ -20,6 +24,7 @@ const {
   RISK_CLASSES,
   TOOL_RISK,
 } = require('../utils/risk-classes');
+const { HARD_RULES } = require('../utils/server-instructions');
 
 const root = path.join(__dirname, '..');
 const PLUGIN = path.join(root, 'plugins', 'outlook-assistant');
@@ -30,6 +35,11 @@ const SKILL = path.join(
   'using-outlook-assistant',
   'SKILL.md'
 );
+const GATE = path.join(PLUGIN, 'hooks', 'outlook-gate.js');
+const GUARD = path.join(root, 'plugins', 'outlook-assistant-guard');
+const GUARD_GATE = path.join(GUARD, 'hooks', 'outlook-gate.js');
+const GUARD_RISK_MAP = path.join(GUARD, 'hooks', 'risk-map.json');
+const GUARD_PROMPT = path.join(GUARD, 'system-prompt.md');
 const START = '<!-- risk-table:start -->';
 const END = '<!-- risk-table:end -->';
 
@@ -72,6 +82,22 @@ function riskTable() {
   ].join('\n');
 }
 
+/**
+ * The guard's system-prompt section. Hermes ignores the server's
+ * `instructions` and lists plugin skills only when asked, so this carries the
+ * hard rules and points at the skill. Hermes charges it on every turn and
+ * caps it at 4,000 characters.
+ */
+function systemPrompt() {
+  const paragraphs = [
+    'Outlook Assistant (Microsoft Outlook mail, calendar and contacts; its tools are named like mcp__outlook__send_email) acts on the user’s real mailbox.',
+    HARD_RULES,
+    'Before your first Outlook tool call, call skills_list and read the using-outlook-assistant skill with skill_view: it says who each send, reply-all, invitation or cancellation reaches and what each delete loses.',
+    'Calls that reach other people, delete something or keep acting wait for the user’s approval. If one is blocked or denied, tell the user; don’t retry it or reach the same result another way.',
+  ];
+  return `${paragraphs.join('\n\n')}\n`;
+}
+
 async function format(filePath, text) {
   const prettier = await import('prettier');
   const options = await prettier.resolveConfig(filePath);
@@ -87,8 +113,12 @@ async function main() {
     throw new Error(`${SKILL} is missing the ${START} … ${END} markers`);
   }
 
+  const riskMapText = await format(RISK_MAP, JSON.stringify(riskMap()));
   const wanted = {
-    [RISK_MAP]: await format(RISK_MAP, JSON.stringify(riskMap())),
+    [RISK_MAP]: riskMapText,
+    [GUARD_RISK_MAP]: riskMapText,
+    [GUARD_GATE]: fs.readFileSync(GATE, 'utf8'),
+    [GUARD_PROMPT]: systemPrompt(),
     [SKILL]: await format(
       SKILL,
       `${skill.slice(0, start)}${START}\n\n${riskTable()}\n\n${skill.slice(end)}`
@@ -100,12 +130,15 @@ async function main() {
     const current = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
     if (current === text) continue;
     stale.push(path.relative(root, file));
-    if (!check) fs.writeFileSync(file, text);
+    if (!check) {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, text);
+    }
   }
 
   if (check && stale.length) {
     console.error(
-      `Out of sync with utils/risk-classes.js: ${stale.join(', ')}`
+      `Out of sync with utils/risk-classes.js, utils/server-instructions.js or the hook: ${stale.join(', ')}`
     );
     console.error('Run: node scripts/sync-risk-map.js');
     process.exit(1);

@@ -211,7 +211,7 @@ Through `search-emails` on the same mailbox, v3.14.1 against v3.14.2:
 | `zzzqqqxxx yyywwwvvv` | `raw-kql`, the 25 newest messages (unfiltered) | `raw-kql`, no results |
 | `invoice AND received<2023-01-01` | `raw-kql-error`, no results | `raw-kql`, 25 results |
 | `hasattachment:true AND subject:invoice` | `raw-kql-error`, no results | `raw-kql`, 25 results |
-| `from:microsoft.com`, `from:user@example.com`, with and without `receivedAfter`/`receivedBefore` or `unreadOnly` | one 400, then `raw-kql-translated` | the same requests and the same messages |
+| `from:microsoft.com`, `from:user@example.com`, with and without `receivedAfter`/`receivedBefore` or `unreadOnly` | one 400, then `raw-kql-translated` | the same sequence, and the same messages whenever `count` or fewer match |
 | `to:label`, with and without `receivedAfter`; `subject:x` with fewer matches than `count`, with and without a window | one 400, then `raw-kql-translated` | the same messages |
 | `subject:password`, `from:microsoft.com` (more matches than `count`) | `raw-kql-translated`, the 25 oldest | `raw-kql-translated`, the 25 newest (#331) |
 | `from:label` (no dot) | `raw-kql-translated`, display-name matches only | `raw-kql-translated`, name or address matches (#328) |

@@ -146,9 +146,10 @@ upgrade steps. #305 (scheduled automatic replies on personal accounts) is
 - **Commit Lint accepts Dependabot's commits** (#335). Dependabot now
   writes `chore(deps): Bump <package> from <a> to <b>`, and the capital
   letter failed `subject-case` on every one of its pull requests.
-  `commitlint.config.js` skips exactly that header (and the grouped
-  `Bump the <name> group … with <n> updates` form); every other commit is
-  linted as before, and a test pins both sides.
+  `commitlint.config.js` skips exactly Dependabot's headers (that one, and
+  its grouped forms such as `Bump <package> in the <name> group` and
+  `Bump the <name> group … with <n> updates`); every other commit is linted
+  as before, and a test pins both sides.
 - **CI builds the Docker image and smoke-tests it** (#336). A new
   `Docker Build & Smoke Test` job runs `docker build`, then
   `scripts/docker-smoke.js` sends `initialize` and `tools/list` to the

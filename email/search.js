@@ -1460,6 +1460,58 @@ async function runClientSideFallback(
   };
 }
 
+/** Lower bound that is true for every message; see receivedFirstClauses. */
+const EARLIEST_RECEIVED = '1900-01-01T00:00:00Z';
+
+/**
+ * The date window as `$filter` clauses, only for the bounds that were given.
+ * @param {{receivedAfter?: string, receivedBefore?: string}} window
+ * @returns {string[]}
+ */
+function receivedWindowClauses({ receivedAfter, receivedBefore } = {}) {
+  const clauses = [];
+  if (receivedAfter) {
+    clauses.push(
+      `receivedDateTime ge ${new Date(receivedAfter).toISOString()}`
+    );
+  }
+  if (receivedBefore) {
+    clauses.push(
+      `receivedDateTime le ${new Date(receivedBefore).toISOString()}`
+    );
+  }
+  return clauses;
+}
+
+/**
+ * The clauses that must open a `$filter` sent with
+ * `$orderby=receivedDateTime desc`. Graph allows the sort only when the sorted
+ * property leads the filter (otherwise 400 InefficientFilter), so without
+ * `receivedAfter` an always-true lower bound stands in. Shared by search-emails
+ * (#331) and the export search (#263). An invalid date throws a RangeError.
+ * @param {{receivedAfter?: string, receivedBefore?: string}} window
+ * @returns {string[]} - One or two clauses, `receivedDateTime ge …` first
+ */
+function receivedFirstClauses(window = {}) {
+  const clauses = receivedWindowClauses(window);
+  return window.receivedAfter
+    ? clauses
+    : [`receivedDateTime ge ${EARLIEST_RECEIVED}`, ...clauses];
+}
+
+/**
+ * A date the window helpers can take, or '' (logged) when it does not parse,
+ * so a bad value is left out of the request as it always has been here.
+ */
+function validDateOrEmpty(value, label) {
+  if (!value) return '';
+  if (Number.isNaN(new Date(value).getTime())) {
+    log.debug(`Invalid ${label} date: ${value}`);
+    return '';
+  }
+  return value;
+}
+
 /**
  * Build search parameters from search terms and filter terms
  * Uses $filter for email addresses (more reliable than $search)
@@ -1486,7 +1538,7 @@ function buildSearchParams(searchTerms, filterTerms, count, selectFields) {
     return params;
   }
 
-  // Track if we're using email address filters (which are incompatible with $orderby)
+  // `from`/`to` filters go out without `$orderby`, as before.
   let usesEmailFilter = false;
 
   // Build filter conditions array - use $filter for structured fields (more reliable)
@@ -1500,7 +1552,6 @@ function buildSearchParams(searchTerms, filterTerms, count, selectFields) {
   }
 
   // Use $filter for from/to email addresses (much more reliable than $search)
-  // NOTE: $filter on email addresses is incompatible with $orderby - Graph API limitation
   if (searchTerms.from) {
     usesEmailFilter = true;
     filterConditions.push(buildFromFilter(searchTerms.from));
@@ -1511,7 +1562,6 @@ function buildSearchParams(searchTerms, filterTerms, count, selectFields) {
     filterConditions.push(buildToFilter(searchTerms.to));
   }
 
-  // Add boolean filters (these ARE compatible with $orderby)
   if (filterTerms.hasAttachments === true) {
     filterConditions.push('hasAttachments eq true');
   }
@@ -1520,28 +1570,28 @@ function buildSearchParams(searchTerms, filterTerms, count, selectFields) {
     filterConditions.push('isRead eq false');
   }
 
-  // Add date range filters
-  if (filterTerms.receivedAfter) {
-    try {
-      const afterDate = new Date(filterTerms.receivedAfter).toISOString();
-      filterConditions.push(`receivedDateTime ge ${afterDate}`);
-    } catch (_e) {
-      log.debug(`Invalid receivedAfter date: ${filterTerms.receivedAfter}`);
-    }
-  }
+  const window = {
+    receivedAfter: validDateOrEmpty(filterTerms.receivedAfter, 'receivedAfter'),
+    receivedBefore: validDateOrEmpty(
+      filterTerms.receivedBefore,
+      'receivedBefore'
+    ),
+  };
+  const hasWindow = Boolean(window.receivedAfter || window.receivedBefore);
 
-  if (filterTerms.receivedBefore) {
-    try {
-      const beforeDate = new Date(filterTerms.receivedBefore).toISOString();
-      filterConditions.push(`receivedDateTime le ${beforeDate}`);
-    } catch (_e) {
-      log.debug(`Invalid receivedBefore date: ${filterTerms.receivedBefore}`);
+  if (usesEmailFilter) {
+    // Unsorted: the window follows the field clauses, as it always has.
+    if (hasWindow) {
+      filterConditions.push(...receivedWindowClauses(window));
     }
-  }
-
-  // Only add $orderby if we're NOT using email address filters
-  if (!usesEmailFilter) {
+  } else {
+    // Sorted. Graph takes `$orderby` next to a `$filter` only when the sorted
+    // property leads the filter, otherwise 400 InefficientFilter (which cost
+    // every `subject` search a failed request on personal accounts). (#331)
     params.$orderby = 'receivedDateTime desc';
+    if (filterConditions.length > 0 || hasWindow) {
+      filterConditions.unshift(...receivedFirstClauses(window));
+    }
   }
 
   // Combine all filter conditions
@@ -1568,24 +1618,18 @@ function addBooleanFilters(params, filterTerms) {
     filterConditions.push('isRead eq false');
   }
 
-  // Add date range filters
-  if (filterTerms.receivedAfter) {
-    try {
-      const afterDate = new Date(filterTerms.receivedAfter).toISOString();
-      filterConditions.push(`receivedDateTime ge ${afterDate}`);
-    } catch (_e) {
-      log.debug(`Invalid receivedAfter date: ${filterTerms.receivedAfter}`);
-    }
-  }
-
-  if (filterTerms.receivedBefore) {
-    try {
-      const beforeDate = new Date(filterTerms.receivedBefore).toISOString();
-      filterConditions.push(`receivedDateTime le ${beforeDate}`);
-    } catch (_e) {
-      log.debug(`Invalid receivedBefore date: ${filterTerms.receivedBefore}`);
-    }
-  }
+  filterConditions.push(
+    ...receivedWindowClauses({
+      receivedAfter: validDateOrEmpty(
+        filterTerms.receivedAfter,
+        'receivedAfter'
+      ),
+      receivedBefore: validDateOrEmpty(
+        filterTerms.receivedBefore,
+        'receivedBefore'
+      ),
+    })
+  );
 
   // AND onto any $filter the caller already built — never replace it.
   //
@@ -1990,4 +2034,5 @@ module.exports = {
   filterQueryClientSide,
   filterFromClientSide,
   filterSubjectClientSide,
+  receivedFirstClauses,
 };

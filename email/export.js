@@ -19,7 +19,7 @@ const { getEmailFields } = require('../utils/field-presets');
 const { resolveFolderPath } = require('./folder-utils');
 const { buildMailboxPrefix } = require('../utils/mailbox');
 const { escapeODataString } = require('../utils/odata-helpers');
-const { buildFromFilter } = require('./search');
+const { buildFromFilter, receivedFirstClauses } = require('./search');
 const { safeAttachmentFilename } = require('./attachments');
 const {
   writeClaimedFile,
@@ -509,9 +509,6 @@ function batchLimitNote(found, emailIds, searchQuery) {
   return `\n> The search stopped at ${searchLimit} messages, the \`searchQuery.maxResults\` limit (default 25, max 100 per call), so more may match. To get the rest, ${raise}export in date ranges with \`searchQuery.receivedAfter\`/\`receivedBefore\`.\n`;
 }
 
-/** Lower bound that lets an export search sort by date with no window (#263). */
-const EARLIEST_RECEIVED = '1900-01-01T00:00:00Z';
-
 /**
  * Search emails for batch export
  * @param {string} accessToken
@@ -531,18 +528,7 @@ async function searchEmailsForExport(accessToken, query, mailbox = null) {
   // `receivedDateTime` comes first: Graph allows `$orderby` only when the
   // sorted property leads the filter (otherwise 400 InefficientFilter), so
   // without `receivedAfter` an always-true lower bound stands in.
-  const filterParts = [
-    `receivedDateTime ge ${
-      query.receivedAfter
-        ? new Date(query.receivedAfter).toISOString()
-        : EARLIEST_RECEIVED
-    }`,
-  ];
-  if (query.receivedBefore) {
-    filterParts.push(
-      `receivedDateTime le ${new Date(query.receivedBefore).toISOString()}`
-    );
-  }
+  const filterParts = receivedFirstClauses(query);
   if (query.from) {
     filterParts.push(buildFromFilter(query.from));
   }

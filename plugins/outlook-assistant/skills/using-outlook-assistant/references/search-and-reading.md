@@ -16,7 +16,7 @@ Never list a whole mailbox to answer a narrow question. Every result goes into t
 | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | Recent mail in a folder                     | `search-emails` with no filters (`folder`, default `inbox`)                                                                    |
 | Sender, subject, date, unread, attachments  | `search-emails` structured filters: `from`, `to`, `subject`, `receivedAfter`, `receivedBefore`, `unreadOnly`, `hasAttachments` |
-| Words that may be in the body (work/school) | `searchExpression`, optionally with `searchAllFolders: true`                                                                   |
+| Words that may be in the body, or KQL        | `searchExpression`, optionally with `searchAllFolders: true`                                                                   |
 | A thread                                    | `conversationId` (up to 100 messages, oldest first)                                                                            |
 | Threads rather than messages                | `groupByConversation: true`                                                                                                    |
 | One message by RFC Message-ID               | `internetMessageId`                                                                                                            |
@@ -29,23 +29,23 @@ Never list a whole mailbox to answer a narrow question. Every result goes into t
 | Input              | Work/school (Microsoft 365)                                                          | Personal Outlook.com                                                                                                                |
 | ------------------ | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `query` | Graph `$search` over subject, body and sender; a date or boolean window is applied to its results (newest first, at most 250 read). With `from`/`to`/`subject`: those as a server-side filter, `query` matched against subject, preview and sender | The same. If nothing passes: a subject substring match (every word in the subject) with the filters server-side |
-| `searchExpression` | Graph `$search` over the whole message, body included, newest first | Only `from:`, `to:` and `subject:` terms are translated and retried (`raw-kql-translated`); free text and `AND`/`OR` are not |
+| `searchExpression` | Graph `$search` (KQL) over the whole message, body included, newest first | The same: field scopes, `AND`/`OR`/`NOT` and `received>=…` work (v3.14.2). If Graph rejects it or finds nothing, one made only of `from:`, `to:` and `subject:` terms is retried as filters (`raw-kql-translated`) |
 | `to`               | Server-side filter                                                                   | Matched locally over the most recent messages only (500 by default). Pair with `receivedAfter`/`receivedBefore` to reach older mail |
 | Structured filters | Reliable                                                                             | The most reliable option                                                                                                            |
 
-With `searchExpression`, quote your own phrases (`subject:"quarterly report"`). It takes the place of the other search parameters, including `receivedAfter`/`receivedBefore` and the boolean filters: those come back in `droppedFilters`. To limit by date, put it in the expression, quoted as a whole (`"invoice AND received>=2026-01-01"`). Because `$search` reads bodies, a hit can match on body text alone and look unrelated to the subject you expected.
+With `searchExpression`, write the KQL plainly (`from:example.com AND subject:"quarterly report"`): the server sends it to Graph as one quoted string. Operators are upper-case (`AND`, `OR`, `NOT`); terms match whole words or their beginnings. It takes the place of the other search parameters, including `receivedAfter`/`receivedBefore` and the boolean filters: those come back in `droppedFilters`. To limit by date, put it in the expression (`invoice AND received>=2026-01-01`). Because `$search` reads bodies, a hit can match on body text alone and look unrelated to the subject you expected. Across all folders, `$search` leaves out Deleted Items and Junk Email; the structured filters cover every folder.
 
 ## Check `_meta.searchMetadata`
 
 Every search response carries it. Read it before acting on results:
 
-- `finalStrategy` names the strategy that answered: `combined-search`, `single-term-*`, `client-side-*`, `boolean-filters-only`, `raw-kql-translated` or `recent-emails`.
+- `finalStrategy` names the strategy that answered: `combined-search`, `single-term-*`, `client-side-*`, `boolean-filters-only`, `raw-kql` (a `searchExpression` answered by `$search`), `raw-kql-translated` or `recent-emails`.
 - `recent-emails` means no filter was applied: you are looking at recent mail, not matches.
 - `orderedWithinPage: true` means a `query` was answered by `$search`: results are newest first within what Graph returned, not across the whole mailbox.
 - `partialCoverage: true` (with `narrowedCandidates`) means filters were applied locally to that many messages and Graph had more: other matches may exist. Narrow the search rather than reading the results as complete.
 - `droppedFilters` lists filters that could not be honoured. It should be empty. If it isn't, the results are broader than asked: narrow again (tighter dates, a different filter) rather than acting on them.
 - `truncated: true` (with `candidatesScanned` and `scanLimit`) means a local scan stopped before the end. "No match" is then not proof of absence; narrow the date window and search again.
-- `kqlTranslatedTo` shows how a `searchExpression` was rewritten on a personal account.
+- `kqlTranslatedTo` shows how a `searchExpression` was rewritten as filters after `$search` rejected it or found nothing.
 
 ## Paging: use date windows
 

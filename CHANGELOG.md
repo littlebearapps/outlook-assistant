@@ -71,7 +71,26 @@ upgrade steps. #305 (scheduled automatic replies on personal accounts) is
   date in the expression itself (`"invoice AND received>=2026-01-01"`, quoted
   as a whole). The "more results" footer for these searches no longer
   suggests the date parameters. Results are unchanged.
-- **Search-driven `export` works with a date window** (#263).
+- **A `searchExpression` is sent to Graph as one quoted string** (#333).
+  Graph reads KQL (field scopes, `AND`/`OR`/`NOT`, `received>=…`) only
+  when the whole expression is one double-quoted string. Sent unquoted, as
+  before, a multi-word expression such as `invoice OR receipt` came back as
+  the newest mail in the mailbox, unfiltered, and `from:…`, `received>=…`
+  or `hasattachment:true` was a `400` on personal accounts. The expression
+  is now always sent quoted (as written when it already is one quoted
+  string, otherwise wrapped with your own `"` and `\` escaped), so those
+  expressions work on personal Outlook.com accounts. What changes for
+  callers there: a `from:`/`to:`/`subject:` expression is now answered by
+  `$search` first (strategy `raw-kql`: whole words or their beginnings,
+  newest first, and without Deleted Items and Junk Email when searching all
+  folders) and is retried as OData filters (`raw-kql-translated`, substring
+  match, every folder) only when `$search` rejects it or finds nothing; an
+  already-quoted `"from:…"` gets the same retry. The `searchExpression`
+  description, the "not applied" note for date parameters and the
+  [KQL reference](docs/how-to/advanced/kql-search-reference.md) are
+  corrected, and the reference records the live test matrix. Measured on a
+  personal mailbox; not verified on Microsoft 365.
+
   `export target=messages` with `searchQuery` sent `from`/`subject` as one
   quoted `$search` phrase next to a date `$filter`, which Graph rejects. It
   now builds one OData filter, as `search-emails` does (exact address,

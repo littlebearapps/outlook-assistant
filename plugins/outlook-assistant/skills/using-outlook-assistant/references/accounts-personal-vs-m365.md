@@ -32,7 +32,7 @@ On a work account, upstream controls are not a reason to relax. They are also no
 
 | Feature                                                     | Personal Outlook.com                                            | Work/school                                          |
 | ----------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------- |
-| Free-text search (`query`, `searchExpression`)              | Limited; falls back automatically. Structured filters work best | Full server-side search                              |
+| Free-text search (`query`, `searchExpression`)              | Graph `$search`, with automatic fallback to filters; across all folders it leaves out Deleted Items and Junk Email | Full server-side search                              |
 | `to` filter                                                 | Local scan of recent mail only                                  | Server-side                                          |
 | `get-mail-tips`, `checkRecipients`                          | No tips returned; can't refuse a send                           | Full                                                 |
 | Shared mailboxes (`sharedMailbox`, `access-shared-mailbox`) | Not available                                                   | Opt-in (see [shared-mailboxes](shared-mailboxes.md)) |

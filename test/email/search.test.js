@@ -457,26 +457,26 @@ describe('handleSearchEmails — kqlQuery silent-drop prevention (#169)', () => 
     expect(callGraphAPIPaginated).toHaveBeenCalledTimes(1);
   });
 
-  test('does NOT auto-wrap a kqlQuery that already contains quotes', async () => {
+  test('wraps a kqlQuery that contains quotes, escaping them (#333)', async () => {
     callGraphAPIPaginated.mockResolvedValue({ value: [] });
 
     await handleSearchEmails({
       kqlQuery: 'subject:"personal access token"',
     });
 
-    // Inspect the params passed to Graph — $search should be the
-    // *original* string, not double-wrapped to `"subject:"foo""`.
+    // One quoted string with the caller's quotes escaped inside it, never
+    // the broken nested `"subject:"foo""` this test first guarded against.
     const [, , , params] = callGraphAPIPaginated.mock.calls[0];
-    expect(params.$search).toBe('subject:"personal access token"');
+    expect(params.$search).toBe('"subject:\\"personal access token\\""');
   });
 
-  test('does NOT auto-wrap a kqlQuery that contains a colon (KQL field syntax)', async () => {
+  test('quotes a field-scoped kqlQuery as a whole (#333)', async () => {
     callGraphAPIPaginated.mockResolvedValue({ value: [] });
 
     await handleSearchEmails({ kqlQuery: 'from:github.com' });
 
     const [, , , params] = callGraphAPIPaginated.mock.calls[0];
-    expect(params.$search).toBe('from:github.com');
+    expect(params.$search).toBe('"from:github.com"');
   });
 
   test('quotes a bare single-token kqlQuery so Graph treats it as a phrase', async () => {
@@ -488,13 +488,13 @@ describe('handleSearchEmails — kqlQuery silent-drop prevention (#169)', () => 
     expect(params.$search).toBe('"invoice"');
   });
 
-  test('does NOT auto-wrap a multi-word kqlQuery (whitespace = trust caller)', async () => {
+  test('quotes a multi-word kqlQuery as a whole, operators included (#333)', async () => {
     callGraphAPIPaginated.mockResolvedValue({ value: [] });
 
     await handleSearchEmails({ kqlQuery: 'invoice OR receipt' });
 
     const [, , , params] = callGraphAPIPaginated.mock.calls[0];
-    expect(params.$search).toBe('invoice OR receipt');
+    expect(params.$search).toBe('"invoice OR receipt"');
   });
 
   test('surfaces Graph errors instead of falling through to unrelated results', async () => {
@@ -560,7 +560,7 @@ describe('handleSearchEmails — $search phrase escaping (#251)', () => {
     expect(params.$search).toBe('"O\\"Brien\\\\x"');
   });
 
-  test('passes a caller-written expression with quotes through untouched', async () => {
+  test('escapes a caller-written expression once when wrapping it (#333)', async () => {
     callGraphAPIPaginated.mockResolvedValue({ value: [] });
 
     await handleSearchEmails({
@@ -568,7 +568,7 @@ describe('handleSearchEmails — $search phrase escaping (#251)', () => {
     });
 
     const [, , , params] = callGraphAPIPaginated.mock.calls[0];
-    expect(params.$search).toBe('subject:"a \\"b\\"" OR c\\d');
+    expect(params.$search).toBe('"subject:\\"a \\\\\\"b\\\\\\"\\" OR c\\\\d"');
   });
 });
 
@@ -866,7 +866,7 @@ describe('handleSearchEmails — searchExpression alias (#169)', () => {
     await handleSearchEmails({ searchExpression: 'from:github.com' });
 
     const [, , , params] = callGraphAPIPaginated.mock.calls[0];
-    expect(params.$search).toBe('from:github.com');
+    expect(params.$search).toBe('"from:github.com"');
   });
 
   test('searchExpression takes precedence over the deprecated kqlQuery alias', async () => {
@@ -878,7 +878,7 @@ describe('handleSearchEmails — searchExpression alias (#169)', () => {
     });
 
     const [, , , params] = callGraphAPIPaginated.mock.calls[0];
-    expect(params.$search).toBe('subject:new');
+    expect(params.$search).toBe('"subject:new"');
   });
 
   test('kqlQuery still works as a back-compat alias', async () => {
@@ -887,7 +887,7 @@ describe('handleSearchEmails — searchExpression alias (#169)', () => {
     const result = await handleSearchEmails({ kqlQuery: 'subject:PR' });
 
     const [, , , params] = callGraphAPIPaginated.mock.calls[0];
-    expect(params.$search).toBe('subject:PR');
+    expect(params.$search).toBe('"subject:PR"');
     // The alias must route into the raw-KQL branch. `subject:PR` is
     // field-scoped, so a zero-result run now continues into the #217
     // translated retry — assert the branch, not the terminal label.
@@ -3137,5 +3137,223 @@ describe('handleSearchEmails — to with a dotless domain label (#332)', () => {
     expect(result._meta.returned).toBe(0);
     expect(text).not.toContain('no message in this mailbox matches');
     expect(text).toContain('so a match may still exist');
+  });
+});
+
+// ──────────────────────────────────────────────────
+// #333: a `searchExpression` goes to Graph `$search` as one double-quoted
+// string. Measured on a personal mailbox, that is the only form Graph reads as
+// KQL: unquoted `from:x` or `received>=…` is a 400 syntax error, and an
+// unquoted multi-word expression (`invoice OR receipt`) is answered with the
+// newest mail, unfiltered. The translation to OData filters (#217) stays as
+// the fallback when the quoted expression is rejected or finds nothing.
+// ──────────────────────────────────────────────────
+describe('handleSearchEmails — whole-quoted searchExpression (#333)', () => {
+  const NEWEST = [
+    mockEmail({ id: 'n1', subject: 'Newest unrelated' }),
+    mockEmail({ id: 'n2', subject: 'Second newest unrelated' }),
+  ];
+  const HIT = mockEmail({ id: 'h1', subject: 'Invoice 42' });
+
+  /**
+   * Graph as measured: KQL only inside one pair of quotes. Unquoted with `:`,
+   * `<`, `>` or `=` → 400; unquoted multi-word → the newest mail, unfiltered.
+   */
+  function mockGraphReadingOnlyQuotedKql(quotedResult = [HIT]) {
+    callGraphAPIPaginated.mockImplementation((_t, _m, _e, params) => {
+      const search = params.$search;
+      if (search === undefined) return Promise.resolve({ value: [HIT] });
+      if (params.$filter || params.$orderby) {
+        return Promise.reject(
+          new Error('API call failed with status 400: SearchWithFilter')
+        );
+      }
+      const quoted =
+        search.length >= 2 && search.startsWith('"') && search.endsWith('"');
+      const inner = quoted ? search.slice(1, -1) : '';
+      if (quoted && !/(^|[^\\])"/.test(inner)) {
+        return Promise.resolve({ value: quotedResult });
+      }
+      if (/[:<>=]/.test(search) || quoted) {
+        return Promise.reject(
+          new Error(
+            'API call failed with status 400: {"error":{"code":"BadRequest","message":"Syntax error: character \':\' is not valid"}}'
+          )
+        );
+      }
+      return Promise.resolve({ value: NEWEST });
+    });
+  }
+
+  const searches = () =>
+    callGraphAPIPaginated.mock.calls.map((c) => c[3].$search).filter(Boolean);
+
+  test.each([
+    ['from:example.com', '"from:example.com"'],
+    ['to:jane@example.com', '"to:jane@example.com"'],
+    ['subject:invoice', '"subject:invoice"'],
+    ['received>=2026-01-01', '"received>=2026-01-01"'],
+    ['invoice AND received<2023-01-01', '"invoice AND received<2023-01-01"'],
+    ['invoice OR receipt', '"invoice OR receipt"'],
+    ['hasattachment:true', '"hasattachment:true"'],
+    ['budget approval', '"budget approval"'],
+    ['invoice', '"invoice"'],
+    ['subject:"reset your password"', '"subject:\\"reset your password\\""'],
+    ['"invoice" OR "receipt"', '"\\"invoice\\" OR \\"receipt\\""'],
+    [
+      '"from:example.com AND subject:invoice"',
+      '"from:example.com AND subject:invoice"',
+    ],
+    ['"subject:\\"a b\\""', '"subject:\\"a b\\""'],
+  ])(
+    '%s is sent as %s and answered by raw-kql in one request',
+    async (expression, sent) => {
+      mockGraphReadingOnlyQuotedKql();
+
+      const result = await handleSearchEmails({ searchExpression: expression });
+
+      expect(searches()).toEqual([sent]);
+      expect(callGraphAPIPaginated).toHaveBeenCalledTimes(1);
+      expect(result._meta.returned).toBe(1);
+      expect(result.content[0].text).toContain('Invoice 42');
+      expect(result._meta.searchMetadata.finalStrategy).toBe('raw-kql');
+      expect(result._meta.searchMetadata.strategiesAttempted).toEqual([
+        'raw-kql',
+      ]);
+      expect(result._meta.searchMetadata.kqlTranslatedTo).toBeUndefined();
+    }
+  );
+
+  test('a multi-word expression no longer comes back as unfiltered recent mail', async () => {
+    mockGraphReadingOnlyQuotedKql([]);
+
+    const result = await handleSearchEmails({
+      searchExpression: 'zzzqqq OR yyywww',
+    });
+
+    expect(result._meta.returned).toBe(0);
+    expect(result.content[0].text).not.toContain('Newest unrelated');
+    expect(result._meta.searchMetadata.finalStrategy).toBe('raw-kql');
+  });
+
+  test('the request carries $search alone: no $filter, no $orderby', async () => {
+    mockGraphReadingOnlyQuotedKql();
+
+    await handleSearchEmails({
+      searchExpression: 'from:example.com',
+      receivedAfter: '2026-01-01T00:00:00Z',
+      unreadOnly: true,
+    });
+
+    const [, , , params] = callGraphAPIPaginated.mock.calls[0];
+    expect(params.$filter).toBeUndefined();
+    expect(params.$orderby).toBeUndefined();
+  });
+
+  test('the date window is reported as not applied on the quoted path (#329)', async () => {
+    mockGraphReadingOnlyQuotedKql();
+
+    const result = await handleSearchEmails({
+      searchExpression: 'from:example.com',
+      receivedBefore: '2023-01-01T00:00:00Z',
+    });
+
+    const meta = result._meta.searchMetadata;
+    expect(meta.finalStrategy).toBe('raw-kql');
+    expect(meta.droppedFilters).toEqual(['receivedBefore']);
+    expect(meta.filterApplied).toBe(false);
+    const text = result.content[0].text;
+    expect(text).toContain('`receivedBefore` was not applied');
+    // The advice no longer asks the caller to quote anything.
+    expect(text).toContain('`invoice AND received>=2026-01-01`');
+    expect(text).not.toContain('quoted as a whole');
+  });
+
+  test('a quoted expression Graph rejects is still translated, and says so', async () => {
+    callGraphAPIPaginated.mockImplementation((_t, _m, _e, params) =>
+      params.$search
+        ? Promise.reject(
+            new Error('API call failed with status 400: BadRequest')
+          )
+        : Promise.resolve({ value: [HIT] })
+    );
+
+    const result = await handleSearchEmails({
+      searchExpression: 'from:example.com',
+      receivedAfter: '2026-01-01T00:00:00Z',
+    });
+
+    const meta = result._meta.searchMetadata;
+    expect(searches()).toEqual(['"from:example.com"']);
+    expect(meta.finalStrategy).toBe('raw-kql-translated');
+    expect(meta.strategiesAttempted[0]).toBe('raw-kql');
+    expect(meta.kqlTranslatedTo).toEqual({ from: 'example.com' });
+    // The translated filters do take the window, so nothing is dropped.
+    expect(meta.droppedFilters).toEqual([]);
+    const filters = callGraphAPIPaginated.mock.calls
+      .map((c) => c[3].$filter)
+      .filter(Boolean);
+    expect(filters[0]).toContain(
+      'receivedDateTime ge 2026-01-01T00:00:00.000Z'
+    );
+  });
+
+  test('a quoted expression that finds nothing is still translated (mail $search does not reach)', async () => {
+    callGraphAPIPaginated.mockImplementation((_t, _m, _e, params) =>
+      Promise.resolve({ value: params.$search ? [] : [HIT] })
+    );
+
+    const result = await handleSearchEmails({
+      searchExpression: 'subject:"Invoice 42"',
+      searchAllFolders: true,
+    });
+
+    expect(searches()).toEqual(['"subject:\\"Invoice 42\\""']);
+    expect(result._meta.returned).toBe(1);
+    expect(result._meta.searchMetadata.finalStrategy).toBe(
+      'raw-kql-translated'
+    );
+  });
+
+  test('an already-quoted field-scoped expression gets the same translated retry', async () => {
+    callGraphAPIPaginated.mockImplementation((_t, _m, _e, params) =>
+      Promise.resolve({ value: params.$search ? [] : [HIT] })
+    );
+
+    const result = await handleSearchEmails({
+      searchExpression: '"subject:\\"Invoice 42\\" from:example.com"',
+    });
+
+    expect(searches()).toEqual(['"subject:\\"Invoice 42\\" from:example.com"']);
+    expect(result._meta.searchMetadata.finalStrategy).toBe(
+      'raw-kql-translated'
+    );
+    expect(result._meta.searchMetadata.kqlTranslatedTo).toEqual({
+      subject: 'Invoice 42',
+      from: 'example.com',
+    });
+  });
+
+  test('a quoted plain phrase is not mistaken for a field-scoped expression', async () => {
+    callGraphAPIPaginated.mockResolvedValue({ value: [] });
+
+    const result = await handleSearchEmails({
+      searchExpression: '"personal access token"',
+    });
+
+    expect(callGraphAPIPaginated).toHaveBeenCalledTimes(1);
+    expect(result._meta.searchMetadata.finalStrategy).toBe('raw-kql');
+  });
+
+  test('an expression that cannot be translated still ends with no results, not other mail', async () => {
+    callGraphAPIPaginated.mockResolvedValue({ value: [] });
+
+    const result = await handleSearchEmails({
+      searchExpression: 'from:a@example.com OR from:b@example.com',
+    });
+
+    expect(callGraphAPIPaginated).toHaveBeenCalledTimes(1);
+    expect(result._meta.returned).toBe(0);
+    expect(result._meta.searchMetadata.finalStrategy).toBe('raw-kql');
   });
 });

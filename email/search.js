@@ -16,8 +16,9 @@ const {
 const { getEmailFields } = require('../utils/field-presets');
 const {
   escapeODataString,
-  escapeSearchPhrase,
   quoteSearchPhrase,
+  isWholeQuotedSearch,
+  quoteSearchExpression,
 } = require('../utils/odata-helpers');
 const { toolError, authRequiredError } = require('../utils/tool-error');
 const { log } = require('../utils/logger');
@@ -239,7 +240,13 @@ async function retryFieldScopedExpression(ctx) {
     searchAttempts,
   } = ctx;
 
-  const translated = parseFieldScopedExpression(trimmedKql);
+  // A caller who already quoted the whole expression gets the same retry as
+  // one who didn't: translate what is inside the quotes. (#333)
+  const translated = parseFieldScopedExpression(
+    isWholeQuotedSearch(trimmedKql)
+      ? trimmedKql.slice(1, -1).replace(/\\(.)/g, '$1')
+      : trimmedKql
+  );
   if (!translated) return null;
 
   log.debug(
@@ -306,30 +313,21 @@ async function progressiveSearch(
   //    would drop the user's filter and return unrelated recent emails
   //    with a misleading "combined-search" strategy line. (#169)
   if (searchTerms.kqlQuery) {
-    // Pass the user's KQL through as-is. The user is responsible for
-    // their own phrase quoting (e.g. `subject:"foo bar"`); we do NOT
-    // auto-wrap, which previously produced broken nested quotes like
-    // `"subject:"foo bar""` on Graph $search and silently returned
-    // recent unfiltered messages. (#169 V37-F-1)
+    // Graph reads KQL (field scopes, `AND`/`OR`, `received>=…`) only when
+    // the whole expression is one double-quoted string. Unquoted, `from:x` is
+    // a 400 syntax error and a multi-word expression comes back as the newest
+    // mail, unfiltered, so the expression is always sent quoted: as written
+    // when it already is one quoted string, otherwise wrapped with the
+    // caller's own `"` and `\` escaped (`subject:"a b"` becomes
+    // `"subject:\"a b\""`, never the broken `"subject:"a b""` of #169
+    // V37-F-1). (#333)
     const trimmedKql = searchTerms.kqlQuery.trim();
-    const alreadyQuoted =
-      trimmedKql.startsWith('"') && trimmedKql.endsWith('"');
-    const looksLikeExpression =
-      trimmedKql.includes(':') || /\s/.test(trimmedKql);
-    // Already-quoted phrases and KQL-looking expressions (field syntax
-    // or multi-word) are passed through as-is; only bare single tokens
-    // are wrapped so Graph treats them as phrase searches. The wrapped
-    // token's own `"` and `\` are escaped so they cannot end the phrase. (#251)
-    let kqlForSearch;
-    if (alreadyQuoted || looksLikeExpression) {
-      kqlForSearch = trimmedKql;
-    } else {
-      kqlForSearch = `"${escapeSearchPhrase(trimmedKql)}"`;
-    }
+    const kqlForSearch = quoteSearchExpression(trimmedKql);
 
-    // Graph rejects field-scoped expressions outright on personal accounts
-    // ("Syntax error: character ':' is not valid"), so the translated retry
-    // has to be reachable from the catch as well as the empty-result path.
+    // A quoted expression can still be rejected, or find nothing where the
+    // equivalent OData filter would (`$search` matches whole words and skips
+    // Deleted Items and Junk Email in a mailbox-wide search), so the
+    // translated retry stays reachable from the catch and the empty path.
     const translationContext = {
       endpoint,
       accessToken,
@@ -1210,7 +1208,7 @@ function listParams(keys) {
  */
 function ignoredFiltersNote(keys) {
   const verb = keys.length === 1 ? 'was' : 'were';
-  return `${listParams(keys)} ${verb} not applied: \`searchExpression\` goes to Graph \`$search\` as written, which takes no date or boolean filters. To limit by date, put it in the expression, quoted as a whole, e.g. \`"invoice AND received>=2026-01-01"\``;
+  return `${listParams(keys)} ${verb} not applied: \`searchExpression\` goes to Graph \`$search\`, which takes no date or boolean filters. To limit by date, put it in the expression, e.g. \`invoice AND received>=2026-01-01\``;
 }
 
 /**
@@ -1725,7 +1723,7 @@ function buildNoResultsSuggestions(searchInfo, searchAllFolders) {
 
   if (filters.kqlQuery) {
     suggestions.push(
-      'Structured filters (`from`, `to`, `subject`) reach messages that `searchExpression` cannot on personal accounts'
+      '`searchExpression` is a Graph `$search`: it matches whole words or their beginnings and, across all folders, leaves out Deleted Items and Junk Email. The structured filters (`from`, `to`, `subject`) match substrings in every folder'
     );
   }
 

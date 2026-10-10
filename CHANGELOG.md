@@ -141,6 +141,12 @@ upgrade steps. #305 (scheduled automatic replies on personal accounts) is
   #315; the CI Commit Lint job moves to Node 22, which commitlint 21
   needs), `actions/setup-node` 7.0.0 (#317), `actions/github-script` 9.0.0
   (#312) and `anthropics/claude-code-action` 1.0.240 (#318).
+- **Commit Lint accepts Dependabot's commits** (#335). Dependabot now
+  writes `chore(deps): Bump <package> from <a> to <b>`, and the capital
+  letter failed `subject-case` on every one of its pull requests.
+  `commitlint.config.js` skips exactly that header (and the grouped
+  `Bump the <name> group … with <n> updates` form); every other commit is
+  linted as before, and a test pins both sides.
 - **Release workflows** (#319): the website notification fails unless
   GitHub answers HTTP 204 (a 401 used to pass silently); auto-tag compares
   `package.json` with the commit before the push rather than `HEAD~1`, and

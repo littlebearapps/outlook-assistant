@@ -1683,9 +1683,8 @@ describe('handleSearchEmails — narrowing correctness follow-ups', () => {
     });
 
     expect(result._meta.returned).toBe(0);
-    expect(result.content[0].text).toContain(
-      'applied locally to the 2 messages'
-    );
+    // The newest page and then the oldest page (empty here) were both read.
+    expect(result.content[0].text).toContain('applied locally to 2 messages');
   });
 });
 
@@ -3998,12 +3997,15 @@ describe('handleSearchEmails — advice matches the real state', () => {
     expect(result._meta.searchMetadata.narrowedCandidates).toBeUndefined();
   });
 
-  test('the "beyond that page" line stays when Graph had more to read', async () => {
+  test('the unread-part line stays when Graph had more to read', async () => {
     callGraphAPIPaginated
       .mockResolvedValueOnce({ value: [] })
+      // single-term-from: the newest page, with more beyond it
       .mockResolvedValueOnce(
         page(21, { hasMore: true, '@odata.nextLink': NEXT })
       )
+      // …then the oldest page, also with no subject match
+      .mockResolvedValueOnce(page(21, { hasMore: true }))
       .mockResolvedValueOnce({ value: [] });
 
     const result = await handleSearchEmails({
@@ -4013,7 +4015,8 @@ describe('handleSearchEmails — advice matches the real state', () => {
     });
 
     const text = result.content[0].text;
-    expect(text).toContain('beyond that page');
+    expect(text).toContain('a match between them would not have been seen');
+    expect(text).toContain('applied locally to 42 messages');
     expect(text).not.toContain('no message in this mailbox matches');
   });
 
@@ -4042,5 +4045,533 @@ describe('handleSearchEmails — advice matches the real state', () => {
     const text = result.content[0].text;
     expect(text).toContain('`searchAllFolders: true`');
     expect(text).not.toContain('including Archive');
+  });
+});
+
+// ──────────────────────────────────────────────────
+// Re-test N1: sorting the fallback steps (#331) made the page that is narrowed
+// locally the newest N in place of the oldest N, so `subject` + `to` (and
+// `query` + `to`) lost matches that sit in old mail. The candidates must come
+// from inside the caller's date window, the old unsorted page must still be
+// consulted before giving up, and the advice must point the right way.
+// ──────────────────────────────────────────────────
+describe('handleSearchEmails — local narrowing keeps old-mail matches (N1)', () => {
+  const iso = (y, m, d) => new Date(Date.UTC(y, m - 1, d)).toISOString();
+  const to = (address) => [{ emailAddress: { name: 'X', address } }];
+
+  /** 600 recent non-matching messages, then invoices through 2021. */
+  function buildMailbox({ oldestAreTheMatches }) {
+    const rows = [];
+    for (let i = 0; i < 600; i++) {
+      rows.push(
+        mockEmail({
+          id: `recent-${i}`,
+          subject: 'Newsletter',
+          bodyPreview: 'news',
+          receivedDateTime: iso(2026, 1, 1 + (i % 28)),
+          toRecipients: to('me@example.com'),
+        })
+      );
+    }
+    for (let i = 0; i < 60; i++) {
+      rows.push(
+        mockEmail({
+          id: `inv-${i}`,
+          subject: 'Invoice',
+          bodyPreview: 'invoice attached',
+          receivedDateTime: iso(2021, 7 + Math.floor(i / 12), 1 + (i % 12)),
+          toRecipients: to('me@example.com'),
+        })
+      );
+    }
+    const matchDates = oldestAreTheMatches
+      ? [iso(2021, 6, 10), iso(2021, 6, 11)]
+      : [iso(2021, 6, 10), iso(2021, 6, 11)];
+    matchDates.forEach((date, i) =>
+      rows.push(
+        mockEmail({
+          id: `match-${i}`,
+          subject: 'Invoice',
+          bodyPreview: 'invoice attached',
+          receivedDateTime: date,
+          toRecipients: to('billing@empresio.example'),
+        })
+      )
+    );
+    return rows;
+  }
+
+  /**
+   * A personal mailbox that honours the window in `$filter`, sorts only when
+   * asked (oldest first otherwise, as measured), pages with `$top`, and
+   * rejects the recipient lambda and `$search` beside other parameters.
+   */
+  function mockPersonalMailbox(rows) {
+    const byDate = (a, b) =>
+      Date.parse(a.receivedDateTime) - Date.parse(b.receivedDateTime);
+    callGraphAPIPaginated.mockImplementation(
+      (_t, _m, _endpoint, params, maxCount) => {
+        const filter = params.$filter || '';
+        if (filter.includes('toRecipients/any(')) {
+          return Promise.reject(
+            new Error(
+              'API call failed with status 400: {"error":{"code":"ErrorInvalidUrlQueryFilter"}}'
+            )
+          );
+        }
+        if (params.$search) {
+          if (params.$filter || params.$orderby) {
+            return Promise.reject(
+              new Error('API call failed with status 400: SearchWithFilter')
+            );
+          }
+          const word = params.$search.replace(/"/g, '').toLowerCase();
+          const hits = rows
+            .filter((m) =>
+              `${m.subject} ${m.bodyPreview}`.toLowerCase().includes(word)
+            )
+            .sort((a, b) => byDate(b, a));
+          return Promise.resolve({ value: hits.slice(0, maxCount) });
+        }
+        let value = rows.filter((m) =>
+          filter
+            .split(' and ')
+            .filter(Boolean)
+            .every((clause) => {
+              const c = clause.trim();
+              let match = /^receivedDateTime (ge|le) (\S+)$/.exec(c);
+              if (match) {
+                const at = Date.parse(m.receivedDateTime);
+                return match[1] === 'ge'
+                  ? at >= Date.parse(match[2])
+                  : at <= Date.parse(match[2]);
+              }
+              match = /^contains\(subject, '([^']*)'\)$/.exec(c);
+              if (match) {
+                return m.subject.toLowerCase().includes(match[1].toLowerCase());
+              }
+              throw new Error(`unsupported clause: ${c}`);
+            })
+        );
+        value = [...value].sort(
+          params.$orderby ? (a, b) => byDate(b, a) : byDate
+        );
+        const limit = maxCount || params.$top;
+        return Promise.resolve({
+          value: value.slice(0, limit),
+          hasMore: value.length > limit,
+        });
+      }
+    );
+  }
+
+  const ids = (result) =>
+    [...result.content[0].text.matchAll(/ID: `?(match-\d|inv-\d+|recent-\d+)/g)]
+      .map((m) => m[1])
+      .sort();
+
+  test('subject + to + receivedBefore: finds the old mail (v3.14.1 found 2)', async () => {
+    mockPersonalMailbox(buildMailbox({ oldestAreTheMatches: true }));
+
+    const result = await handleSearchEmails({
+      subject: 'invoice',
+      to: 'empresio',
+      receivedBefore: '2022-01-01',
+      searchAllFolders: true,
+      count: 50,
+    });
+
+    expect(result._meta.returned).toBe(2);
+    expect(ids(result)).toEqual(['match-0', 'match-1']);
+  });
+
+  test('subject + to, no window: finds the old mail (v3.14.1 found 2)', async () => {
+    mockPersonalMailbox(buildMailbox({ oldestAreTheMatches: true }));
+
+    const result = await handleSearchEmails({
+      subject: 'invoice',
+      to: 'empresio',
+      searchAllFolders: true,
+      count: 25,
+    });
+
+    expect(result._meta.returned).toBe(2);
+    expect(ids(result)).toEqual(['match-0', 'match-1']);
+    // Found on the old unsorted page, so more may sit between the two ends.
+    expect(result._meta.searchMetadata.finalStrategy).toBe(
+      'single-term-subject'
+    );
+  });
+
+  test('query + to + receivedBefore: finds the old mail without a second scan', async () => {
+    mockPersonalMailbox(buildMailbox({ oldestAreTheMatches: true }));
+
+    const result = await handleSearchEmails({
+      query: 'invoice',
+      to: 'empresio',
+      receivedBefore: '2022-01-01',
+      searchAllFolders: true,
+      count: 25,
+    });
+
+    expect(result._meta.returned).toBe(2);
+    expect(ids(result)).toEqual(['match-0', 'match-1']);
+    expect(
+      result._meta.searchMetadata.strategiesAttempted.filter((s) =>
+        s.startsWith('client-side-')
+      )
+    ).toEqual(['client-side-to']);
+  });
+
+  test('the local scan asks Graph for the window, receivedDateTime first', async () => {
+    mockPersonalMailbox(buildMailbox({ oldestAreTheMatches: true }));
+
+    await handleSearchEmails({
+      to: 'empresio',
+      receivedAfter: '2021-01-01',
+      receivedBefore: '2022-01-01',
+      searchAllFolders: true,
+    });
+
+    const scan = callGraphAPIPaginated.mock.calls
+      .map((c) => c[3])
+      .find((p) => p.$orderby && !/toRecipients/.test(p.$filter || ''));
+    expect(scan.$filter).toBe(
+      'receivedDateTime ge 2021-01-01T00:00:00.000Z and receivedDateTime le 2022-01-01T00:00:00.000Z'
+    );
+  });
+
+  test('the local scan without a window is unchanged: no $filter (control)', async () => {
+    mockPersonalMailbox(buildMailbox({ oldestAreTheMatches: true }));
+
+    await handleSearchEmails({ to: 'empresio', searchAllFolders: true });
+
+    const scan = callGraphAPIPaginated.mock.calls
+      .map((c) => c[3])
+      .find((p) => p.$orderby && !p.$filter);
+    expect(scan).toBeDefined();
+  });
+
+  // Nothing matches `to`, the invoices fill more than a page: the advice has
+  // to say where the unread part of the window is.
+  const BETWEEN =
+    'set `receivedAfter` and `receivedBefore` around the dates you expect';
+  test.each([
+    [{}, BETWEEN],
+    [{ receivedAfter: '2021-01-01' }, BETWEEN],
+    [{ receivedBefore: '2022-01-01' }, BETWEEN],
+    [{ receivedAfter: '2021-01-01', receivedBefore: '2022-01-01' }, BETWEEN],
+  ])(
+    'no match with window %j: both ends were read, so it says %s',
+    async (window, advice) => {
+      mockPersonalMailbox(buildMailbox({ oldestAreTheMatches: true }));
+
+      const result = await handleSearchEmails({
+        subject: 'invoice',
+        to: 'nobody-at-all',
+        searchAllFolders: true,
+        count: 25,
+        ...window,
+      });
+
+      const text = result.content[0].text;
+      expect(result._meta.returned).toBe(0);
+      expect(text).toContain('the newest and the oldest');
+      expect(text).toContain(advice);
+      expect(text).not.toContain('narrow with `receivedAfter`');
+    }
+  );
+
+  test.each([
+    [{}, 'set `receivedBefore`'],
+    [{ receivedAfter: '2026-01-01' }, 'set `receivedBefore`'],
+    [{ receivedBefore: '2026-06-01' }, 'set an earlier `receivedBefore`'],
+    [
+      { receivedAfter: '2026-01-01', receivedBefore: '2026-06-01' },
+      'set an earlier `receivedBefore`',
+    ],
+  ])(
+    'a scan that hit its limit with window %j says to %s',
+    async (window, advice) => {
+      mockPersonalMailbox(buildMailbox({ oldestAreTheMatches: true }));
+
+      const result = await handleSearchEmails({
+        to: 'nobody-at-all',
+        searchAllFolders: true,
+        ...window,
+      });
+
+      const text = result.content[0].text;
+      expect(result._meta.returned).toBe(0);
+      expect(text).toContain('hitting the 500 scan limit');
+      expect(text).toContain(advice);
+      expect(text).not.toContain('narrow with `receivedAfter`');
+    }
+  );
+});
+
+// ──────────────────────────────────────────────────
+// Re-test N2: a scan or step that fails part-way (a Graph 502, a timeout) has
+// not checked the mailbox, so the result must not say nothing in it matches.
+// ──────────────────────────────────────────────────
+describe('handleSearchEmails — a failed request is not proof of absence (N2)', () => {
+  const transient = () =>
+    Promise.reject(
+      new Error(
+        'API call failed with status 502: {"error":{"code":"UnknownError"}}'
+      )
+    );
+  const rejected = () =>
+    Promise.reject(
+      new Error(
+        'API call failed with status 400: {"error":{"code":"ErrorInvalidUrlQueryFilter"}}'
+      )
+    );
+  const DEFINITIVE = 'no message in this mailbox matches';
+
+  test('the client-side to scan fails: softened wording, and it says a request failed', async () => {
+    callGraphAPIPaginated.mockImplementation((_t, _m, _e, params) => {
+      const filter = params.$filter || '';
+      if (filter.includes('toRecipients/any(')) return rejected();
+      if (!filter && params.$orderby) return transient(); // the scan
+      // single-term-from: the sender's mail, no further page
+      return Promise.resolve({
+        value: [mockEmail({ id: 'f1' }), mockEmail({ id: 'f2' })],
+      });
+    });
+
+    const result = await handleSearchEmails({
+      from: 'john',
+      to: 'zzzqq',
+      searchAllFolders: true,
+      count: 50,
+    });
+
+    const text = result.content[0].text;
+    expect(result._meta.returned).toBe(0);
+    expect(text).not.toContain(DEFINITIVE);
+    expect(text).toContain('so a match may still exist');
+    expect(text).toContain('A request to Microsoft Graph failed part-way');
+    expect(result._meta.searchMetadata.incomplete).toBe(true);
+  });
+
+  test.each([
+    ['status 502', 'API call failed with status 502: Bad Gateway'],
+    ['status 503', 'API call failed with status 503: Service Unavailable'],
+    ['status 429', 'API call failed with status 429: Too Many Requests'],
+    ['a timeout', 'Request timed out after 60000 ms with no data'],
+    ['a dropped connection', 'socket hang up (ECONNRESET)'],
+  ])('%s on a server-side step softens the wording', async (_name, message) => {
+    callGraphAPIPaginated.mockRejectedValue(new Error(message));
+
+    const result = await handleSearchEmails({
+      subject: 'zzzqqq',
+      searchAllFolders: true,
+    });
+
+    expect(result._meta.returned).toBe(0);
+    expect(result.content[0].text).not.toContain(DEFINITIVE);
+    expect(result.content[0].text).toContain('so a match may still exist');
+  });
+
+  test('a filter Graph rejects outright (400) is not a failed search (control)', async () => {
+    callGraphAPIPaginated.mockImplementation((_t, _m, _e, params) =>
+      (params.$filter || '').includes('toRecipients/any(')
+        ? rejected()
+        : Promise.resolve({ value: [] })
+    );
+
+    const result = await handleSearchEmails({
+      to: 'zzzqq',
+      searchAllFolders: true,
+    });
+
+    expect(result.content[0].text).toContain(DEFINITIVE);
+    expect(result._meta.searchMetadata.incomplete).toBeUndefined();
+  });
+
+  test('a scan that completes with nothing keeps the definitive wording (control)', async () => {
+    callGraphAPIPaginated.mockResolvedValue({ value: [] });
+
+    const result = await handleSearchEmails({
+      from: 'john',
+      subject: 'zzzqqq',
+      searchAllFolders: true,
+    });
+
+    expect(result.content[0].text).toContain(DEFINITIVE);
+  });
+});
+
+// More of N1: what the both-ends read, the held-back scan and the skipped
+// second scan each do.
+describe('handleSearchEmails — narrowing reads both ends and merges (N1)', () => {
+  const at = (y, m, d) => new Date(Date.UTC(y, m - 1, d)).toISOString();
+  const row = (id, date, toAddress, subject = 'Invoice') =>
+    mockEmail({
+      id,
+      subject,
+      bodyPreview: 'invoice attached',
+      receivedDateTime: date,
+      toRecipients: [{ emailAddress: { name: 'X', address: toAddress } }],
+    });
+  const lambdaRejected = () =>
+    Promise.reject(
+      new Error(
+        'API call failed with status 400: {"error":{"code":"ErrorInvalidUrlQueryFilter"}}'
+      )
+    );
+  const isLambda = (p) => (p.$filter || '').includes('toRecipients/any(');
+  const isScan = (p) =>
+    p.$orderby && !/contains\(|from\//.test(p.$filter || '');
+
+  test('a match on the newest page and one on the oldest page both come back, flagged partial', async () => {
+    callGraphAPIPaginated.mockImplementation((_t, _m, _e, params) => {
+      if (isLambda(params)) return lambdaRejected();
+      if (isScan(params)) return Promise.resolve({ value: [] });
+      return Promise.resolve(
+        params.$orderby
+          ? {
+              value: [
+                row('new-hit', at(2026, 5, 1), 'a@empresio.example'),
+                row('new-miss', at(2026, 4, 1), 'me@example.com'),
+              ],
+              hasMore: true,
+            }
+          : {
+              value: [
+                row('old-hit', at(2019, 5, 1), 'b@empresio.example'),
+                row('old-miss', at(2019, 6, 1), 'me@example.com'),
+              ],
+              hasMore: true,
+            }
+      );
+    });
+
+    const result = await handleSearchEmails({
+      subject: 'invoice',
+      to: 'empresio',
+      searchAllFolders: true,
+      count: 2,
+    });
+
+    const text = result.content[0].text;
+    expect(result._meta.returned).toBe(2);
+    expect(text.indexOf('new-hit')).toBeGreaterThan(-1);
+    expect(text.indexOf('old-hit')).toBeGreaterThan(text.indexOf('new-hit'));
+    expect(result._meta.hasMore).toBe(true);
+    expect(result._meta.searchMetadata.partialCoverage).toBe(true);
+    expect(text).toContain('the newest and the oldest');
+  });
+
+  test('a page that was the whole answer is not read twice', async () => {
+    callGraphAPIPaginated.mockImplementation((_t, _m, _e, params) => {
+      if (isLambda(params)) return lambdaRejected();
+      if (isScan(params)) return Promise.resolve({ value: [] });
+      return Promise.resolve({
+        value: [row('only', at(2026, 5, 1), 'a@empresio.example')],
+      });
+    });
+
+    await handleSearchEmails({
+      subject: 'invoice',
+      to: 'empresio',
+      searchAllFolders: true,
+    });
+
+    const subjectRequests = callGraphAPIPaginated.mock.calls.filter(
+      (c) => /contains\(subject/.test(c[3].$filter || '') && !isLambda(c[3])
+    );
+    expect(subjectRequests).toHaveLength(1);
+  });
+
+  test('a scan that hit its limit is merged with the subject step, which reaches further back', async () => {
+    const scanned = Array.from({ length: 500 }, (_, i) =>
+      i === 0
+        ? row('scan-hit', at(2026, 6, 1), 'a@empresio.example')
+        : row(`other-${i}`, at(2026, 5, 1), 'me@example.com', 'Newsletter')
+    );
+    callGraphAPIPaginated.mockImplementation((_t, _m, _e, params) => {
+      if (isLambda(params)) return lambdaRejected();
+      if (isScan(params)) return Promise.resolve({ value: scanned });
+      return Promise.resolve({
+        value: [
+          row('scan-hit', at(2026, 6, 1), 'a@empresio.example'),
+          row('deep-hit', at(2020, 6, 1), 'b@empresio.example'),
+        ],
+      });
+    });
+
+    const result = await handleSearchEmails({
+      subject: 'invoice',
+      to: 'empresio',
+      searchAllFolders: true,
+      count: 50,
+    });
+
+    const text = result.content[0].text;
+    expect(result._meta.returned).toBe(2);
+    expect(text).toContain('scan-hit');
+    expect(text).toContain('deep-hit');
+    expect(result._meta.searchMetadata.truncated).toBe(true);
+  });
+
+  test('a scan that hit its limit still answers when the later step finds nothing', async () => {
+    const scanned = Array.from({ length: 500 }, (_, i) =>
+      i === 0
+        ? row('scan-hit', at(2026, 6, 1), 'a@empresio.example')
+        : row(`other-${i}`, at(2026, 5, 1), 'me@example.com', 'Newsletter')
+    );
+    callGraphAPIPaginated.mockImplementation((_t, _m, _e, params) => {
+      if (isLambda(params)) return lambdaRejected();
+      if (isScan(params)) return Promise.resolve({ value: scanned });
+      return Promise.resolve({ value: [] });
+    });
+
+    const result = await handleSearchEmails({
+      subject: 'invoice',
+      to: 'empresio',
+      searchAllFolders: true,
+    });
+
+    expect(result._meta.returned).toBe(1);
+    expect(result._meta.searchMetadata.finalStrategy).toBe('client-side-to');
+    expect(result._meta.searchMetadata.truncated).toBe(true);
+  });
+
+  test('query + to scans the recent messages once, not twice', async () => {
+    callGraphAPIPaginated.mockImplementation((_t, _m, _e, params) => {
+      if (isLambda(params)) return lambdaRejected();
+      if (params.$search) return Promise.resolve({ value: [] });
+      return Promise.resolve({ value: [] });
+    });
+
+    const result = await handleSearchEmails({
+      query: 'invoice',
+      to: 'zzzqq',
+      searchAllFolders: true,
+    });
+
+    const scans = callGraphAPIPaginated.mock.calls.filter(
+      (c) => c[3].$orderby && !c[3].$filter && !c[3].$search
+    );
+    expect(scans).toHaveLength(1);
+    expect(result._meta.searchMetadata.strategiesAttempted).not.toContain(
+      'client-side-query'
+    );
+  });
+
+  test('a local scan with more matches than count says more are available', async () => {
+    const scanned = Array.from({ length: 30 }, (_, i) =>
+      row(`hit-${i}`, at(2026, 6, 1 + (i % 28)), 'a@empresio.example')
+    );
+    callGraphAPIPaginated.mockImplementation((_t, _m, _e, params) =>
+      isLambda(params) ? lambdaRejected() : Promise.resolve({ value: scanned })
+    );
+
+    const result = await handleSearchEmails({ to: 'empresio', count: 10 });
+
+    expect(result._meta.returned).toBe(10);
+    expect(result._meta.hasMore).toBe(true);
   });
 });

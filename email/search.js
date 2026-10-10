@@ -321,13 +321,28 @@ async function progressiveSearch(
     selectFields,
     scanState
   );
+  let result = response;
+  // A truncated `to` scan was held back while a later step ran: return the
+  // scan's matches if that step found nothing, otherwise both sets together.
+  const scan = scanState.pendingScan;
+  if (scan && !(response?.value?.length > 0)) {
+    result = scan;
+  } else if (scan) {
+    const merged = newestFirstUnique([...response.value, ...scan.value]);
+    response.value = merged.slice(0, maxCount);
+    if (merged.length > maxCount || scan.hasMore) response.hasMore = true;
+    Object.assign(response._searchInfo, {
+      candidatesScanned: scan._searchInfo.candidatesScanned,
+      scanLimit: scan._searchInfo.scanLimit,
+      truncated: scan._searchInfo.truncated,
+    });
+  }
   // `$search` was read to its paging limit without reaching the date window,
   // and a later step answered: say so on whatever that step returned. (#261)
-  if (scanState.searchWindowUnreached && response?._searchInfo) {
-    response._searchInfo.searchWindowUnreached =
-      scanState.searchWindowUnreached;
+  if (scanState.searchWindowUnreached && result?._searchInfo) {
+    result._searchInfo.searchWindowUnreached = scanState.searchWindowUnreached;
   }
-  return response;
+  return result;
 }
 
 /** The ladder itself; see progressiveSearch. */
@@ -548,6 +563,7 @@ async function runSearchLadder(
         return response;
       }
     } catch (error) {
+      noteFailure(scanState, error);
       log.debug(`Combined search failed: ${error.message}`);
     }
   }
@@ -630,11 +646,39 @@ async function runSearchLadder(
         // This $filter carried only `term`. Apply every other supplied search
         // term locally before returning — otherwise we hand back the
         // single-term superset while claiming the filter was applied. (#229)
-        const { matched, secondaryApplied } = applySecondarySearchTerms(
+        const narrowedPage = applySecondarySearchTerms(
           response.value,
           searchTerms,
           term
         );
+        const { secondaryApplied } = narrowedPage;
+        let { matched } = narrowedPage;
+        let examined = response.value.length;
+        let bothEnds = false;
+        // The sorted page is the newest matches, and the other terms are
+        // matched locally, so it can miss a match that sits in old mail.
+        // When Graph had more than this page, also read the unsorted page
+        // this step used to send (the oldest matches) and keep what passes
+        // from either end: one more request for the other end of the range.
+        if (secondaryApplied.length > 0 && sortedParams && hadMore(response)) {
+          try {
+            const oldest = await callGraphAPIPaginated(
+              accessToken,
+              'GET',
+              endpoint,
+              simplifiedParams,
+              maxCount
+            );
+            const rows = oldest.value || [];
+            bothEnds = true;
+            examined += rows.length;
+            const again = applySecondarySearchTerms(rows, searchTerms, term);
+            matched = newestFirstUnique([...matched, ...again.matched]);
+          } catch (oldestError) {
+            noteFailure(scanState, oldestError);
+            log.debug(`Unsorted ${term} page failed: ${oldestError.message}`);
+          }
+        }
         if (matched.length > 0) {
           const narrowing =
             secondaryApplied.length > 0
@@ -643,7 +687,12 @@ async function runSearchLadder(
           log.debug(
             `Search with ${term} successful: found ${matched.length} results${narrowing}`
           );
-          narrowResponse(response, matched);
+          narrowResponse(response, matched.slice(0, maxCount));
+          if (bothEnds) {
+            // Whatever lies between the two pages was not read.
+            response.hasMore = true;
+            response._partialNarrowing = { examined, bothEnds: true };
+          }
           response._searchInfo = {
             attemptsCount: searchAttempts.length,
             strategies: searchAttempts,
@@ -656,16 +705,13 @@ async function runSearchLadder(
           };
           return response;
         }
-        recordNarrowingMiss(
-          scanState,
-          response.value.length,
-          hadMore(response)
-        );
+        recordNarrowingMiss(scanState, examined, hadMore(response), bothEnds);
         log.debug(
           `Search with ${term} found ${response.value.length} results, but none also satisfied ${secondaryApplied.join(', ')} — continuing`
         );
       }
     } catch (error) {
+      noteFailure(scanState, error);
       log.debug(`Search with ${term} failed: ${error.message}`);
       // Fall through to the client-side fallback below.
     }
@@ -675,7 +721,12 @@ async function runSearchLadder(
     // 'query' have a local matcher. Keeping this outside the server-side
     // try/catch prevents the double-scan/double-label a throw inside a
     // success-path fallback would otherwise cause. (#169)
-    if (term === 'to' || term === 'query') {
+    // The `query` scan would read the same candidates as a `to` scan that
+    // already ran and apply the same tests to them (each applies the other
+    // term locally), so it can't find anything new: skip it.
+    const scannedAlready =
+      term === 'query' && scanState.candidatesScanned !== undefined;
+    if ((term === 'to' || term === 'query') && !scannedAlready) {
       log.debug(
         `${term} unsatisfied server-side, trying client-side filtering`
       );
@@ -691,8 +742,27 @@ async function runSearchLadder(
           term,
           scanState
         );
-        if (fallback) return fallback;
+        if (fallback) {
+          // A scan that filled its budget is partial. If a server-side
+          // `subject` or `query` step can still run, it reaches further
+          // back than the scan did, so let it run and merge the two.
+          const moreSelectiveStepLeft =
+            term === 'to' && Boolean(searchTerms.subject || searchTerms.query);
+          if (!(fallback._searchInfo.truncated && moreSelectiveStepLeft)) {
+            return fallback;
+          }
+          scanState.pendingScan = {
+            ...fallback,
+            _searchInfo: {
+              ...fallback._searchInfo,
+              strategies: [...searchAttempts],
+              attemptsCount: searchAttempts.length,
+            },
+          };
+        }
       } catch (fallbackError) {
+        // A scan that stopped part-way has not checked the mailbox.
+        noteFailure(scanState, fallbackError);
         log.debug(
           `Client-side ${term} fallback also failed: ${fallbackError.message}`
         );
@@ -764,6 +834,7 @@ async function runSearchLadder(
         `Boolean filter search found ${response.value.length} results, but none satisfied ${secondaryApplied.join(', ')} — continuing`
       );
     } catch (error) {
+      noteFailure(scanState, error);
       log.debug(`Boolean filter search failed: ${error.message}`);
       // Retry without $orderby if it was the issue
       if (error.message && error.message.includes('InefficientFilter')) {
@@ -813,6 +884,7 @@ async function runSearchLadder(
             `Boolean filter retry found ${response.value.length} results, but none satisfied ${secondaryApplied.join(', ')} — continuing`
           );
         } catch (retryError) {
+          noteFailure(scanState, retryError);
           log.debug(`Boolean filter retry also failed: ${retryError.message}`);
         }
       }
@@ -853,7 +925,11 @@ async function runSearchLadder(
         // the winning filter returned, so say how much that was. (#229)
         ...(scanState.narrowedCandidates !== undefined && {
           narrowedCandidates: scanState.narrowedCandidates,
+          ...(scanState.narrowedBothEnds && { narrowedBothEnds: true }),
         }),
+        // A step failed without answering (a 5xx, a timeout), so nothing
+        // here proves the mailbox holds no match.
+        ...(scanState.incomplete && { incomplete: true }),
       },
     };
   }
@@ -1268,16 +1344,53 @@ function finishNarrowed(response, { kept, scanned, more }, maxCount, sort) {
  * @param {object} scanState - Side-channel carried to the no-results rung
  * @param {number} examined - How many rows the narrowing pass saw
  * @param {boolean} [more] - Whether Graph had rows beyond those examined
+ * @param {boolean} [bothEnds] - The newest and the oldest pages were both read
  */
+/**
+ * Whether an error is Graph or the network failing (5xx, throttling, a
+ * timeout, a dropped connection), as opposed to Graph rejecting the request
+ * (a 400 for a filter it doesn't support), which is an answer.
+ */
+function isTransientFailure(error) {
+  return /status (5\d\d|429)\b|timed? ?out|ECONN|ETIMEDOUT|socket hang up|EAI_AGAIN/i.test(
+    String(error?.message || '')
+  );
+}
+
+/**
+ * Record that a step failed without answering, so a search that then finds
+ * nothing isn't reported as a search of the whole mailbox.
+ */
+function noteFailure(scanState, error) {
+  if (scanState && isTransientFailure(error)) scanState.incomplete = true;
+}
+
+/** Messages newest first, each ID once. */
+function newestFirstUnique(messages) {
+  const time = (m) => Date.parse(m.receivedDateTime) || 0;
+  const seen = new Set();
+  return messages
+    .filter((m) => (seen.has(m.id) ? false : seen.add(m.id)))
+    .sort((a, b) => time(b) - time(a));
+}
+
 /** Whether Graph had rows beyond the page it returned. */
 function hadMore(response) {
   return Boolean(response?.hasMore || response?.['@odata.nextLink']);
 }
 
-function recordNarrowingMiss(scanState, examined, more = true) {
+function recordNarrowingMiss(
+  scanState,
+  examined,
+  more = true,
+  bothEnds = false
+) {
   // With no further page, the pass saw every message the server-side filter
   // matched, so there is nothing "beyond that page" to warn about.
   if (!scanState || !more) return;
+  // The newest and the oldest pages were both read: what's unread lies
+  // between them, which changes the advice.
+  if (bothEnds) scanState.narrowedBothEnds = true;
   scanState.narrowedCandidates = Math.max(
     scanState.narrowedCandidates || 0,
     examined
@@ -1474,20 +1587,60 @@ async function narrowStructuredPage(response, ctx) {
  * @param {number} scanLimit - Max messages to scan
  * @returns {Promise<{messages: Array, candidatesScanned: number, truncated: boolean}>}
  */
-async function fetchRecentCandidates(accessToken, endpoint, scanLimit) {
+async function fetchRecentCandidates(
+  accessToken,
+  endpoint,
+  scanLimit,
+  filterTerms = {}
+) {
   const searchFields = getEmailFields('search');
   const params = {
     $top: Math.min(50, scanLimit),
     $select: searchFields,
     $orderby: 'receivedDateTime desc',
   };
-  const response = await callGraphAPIPaginated(
-    accessToken,
-    'GET',
-    endpoint,
-    params,
-    scanLimit
-  );
+  // Scan inside the caller's date window, not from today backwards: the
+  // budget is then spent on the newest messages the window allows, so mail
+  // older than the 500 most recent can be reached. `receivedDateTime` leads
+  // the filter, as the sort needs.
+  const window = {
+    receivedAfter: validDateOrEmpty(filterTerms.receivedAfter, 'receivedAfter'),
+    receivedBefore: validDateOrEmpty(
+      filterTerms.receivedBefore,
+      'receivedBefore'
+    ),
+  };
+  const windowed =
+    window.receivedAfter || window.receivedBefore
+      ? { ...params, $filter: receivedFirstClauses(window).join(' and ') }
+      : null;
+  let response;
+  if (windowed) {
+    try {
+      response = await callGraphAPIPaginated(
+        accessToken,
+        'GET',
+        endpoint,
+        windowed,
+        scanLimit
+      );
+    } catch (error) {
+      // A failure is a failure; only a refusal falls back to the old scan.
+      if (isTransientFailure(error)) throw error;
+      log.debug(
+        `Windowed scan refused, scanning recent mail: ${error.message}`
+      );
+    }
+  }
+  response =
+    response ||
+    (await callGraphAPIPaginated(
+      accessToken,
+      'GET',
+      endpoint,
+      params,
+      scanLimit
+    ));
   const messages = response.value || [];
   return {
     messages,
@@ -1558,7 +1711,12 @@ async function runClientSideFallback(
   scanState
 ) {
   const { messages, candidatesScanned, truncated } =
-    await fetchRecentCandidates(accessToken, endpoint, CLIENT_SCAN_LIMIT);
+    await fetchRecentCandidates(
+      accessToken,
+      endpoint,
+      CLIENT_SCAN_LIMIT,
+      filterTerms
+    );
   // Record scan coverage even when nothing matches, so the eventual
   // no-results response can still disclose that the scan was bounded. (#169)
   if (scanState) {
@@ -1590,6 +1748,7 @@ async function runClientSideFallback(
   );
   return {
     value: matched.slice(0, maxCount),
+    ...(matched.length > maxCount && { hasMore: true }),
     _searchInfo: {
       attemptsCount: searchAttempts.length,
       strategies: searchAttempts,
@@ -1794,6 +1953,16 @@ function addBooleanFilters(params, filterTerms) {
 }
 
 /**
+ * Candidates are read newest first, so what a bounded read misses is older
+ * mail: the way to reach it is an earlier upper bound, not a lower one.
+ */
+function earlierBeforeAdvice(filterTerms = {}) {
+  return filterTerms.receivedBefore
+    ? 'set an earlier `receivedBefore`'
+    : 'set `receivedBefore`';
+}
+
+/**
  * What to say when `$search` was read to its paging limit and none of it fell
  * in the date window, so a subject-only step answered (or nothing did). (#261)
  * @param {object} searchInfo - `_searchInfo` with `searchWindowUnreached` (rows read)
@@ -1845,7 +2014,9 @@ function buildNoResultsSuggestions(
   // server-side; a local pass over a bounded scan or one page is not proof
   // of absence, and the notes below say how much was examined. (#328)
   const partialCoverage = Boolean(
-    searchInfo.truncated || searchInfo.narrowedCandidates
+    searchInfo.truncated ||
+    searchInfo.narrowedCandidates ||
+    searchInfo.incomplete
   );
   // A `searchExpression` answered by `$search` alone never reached Deleted
   // Items or Junk Email, so it is not proof of absence either. (#333)
@@ -1885,7 +2056,7 @@ function buildNoResultsSuggestions(
     if (searchInfo.candidatesScanned) {
       note += ` — ${searchInfo.candidatesScanned} recent messages examined`;
       if (searchInfo.truncated) {
-        note += `, hitting the ${searchInfo.scanLimit} scan limit, so older matches were not seen (narrow with \`receivedAfter\`)`;
+        note += `, hitting the ${searchInfo.scanLimit} scan limit, so older matches were not seen (${earlierBeforeAdvice(searchInfo.filterTerms)} to reach them)`;
       }
     }
     suggestions.push(note);
@@ -1895,8 +2066,17 @@ function buildNoResultsSuggestions(
   // server-side filter returned — a much weaker basis for "none exists" than
   // the bounded client-side scan, so say so rather than implying otherwise.
   if (searchInfo.narrowedCandidates) {
+    const examined = `${searchInfo.narrowedCandidates} message${searchInfo.narrowedCandidates === 1 ? '' : 's'}`;
     suggestions.push(
-      `The other filters were applied locally to the ${searchInfo.narrowedCandidates} message${searchInfo.narrowedCandidates === 1 ? '' : 's'} the server-side filter returned, so a match beyond that page would not have been seen — ${countAtMax ? '' : 'raise `count`, or '}narrow with \`receivedAfter\``
+      searchInfo.narrowedBothEnds
+        ? `The other filters were applied locally to ${examined} the server-side filter returned, the newest and the oldest, so a match between them would not have been seen — set \`receivedAfter\` and \`receivedBefore\` around the dates you expect`
+        : `The other filters were applied locally to the ${examined} the server-side filter returned, newest first, so an older match beyond that page would not have been seen — ${countAtMax ? '' : 'raise `count`, or '}${earlierBeforeAdvice(searchInfo.filterTerms)}`
+    );
+  }
+
+  if (searchInfo.incomplete) {
+    suggestions.push(
+      'A request to Microsoft Graph failed part-way (a temporary error or a timeout), so not everything was checked — run the search again'
     );
   }
 
@@ -2014,6 +2194,7 @@ function formatSearchResults(
         narrowedCandidates: response._partialNarrowing.examined,
         partialCoverage: true,
       }),
+      ...(response._searchInfo.incomplete && { incomplete: true }),
       // `$search` never reached the date window; a fallback step answered.
       ...(response._searchInfo.searchWindowUnreached && {
         partialCoverage: true,
@@ -2117,7 +2298,9 @@ function formatSearchResults(
         next =
           '`count` is already at its maximum of 50, so narrow the search: add a filter or a date window.';
       }
-      searchNote += `\n\n> **Partial coverage**: these were filtered locally from the first ${examined} message${examined === 1 ? '' : 's'} Graph returned, and more were available beyond them, so other matches may exist. ${next}`;
+      searchNote += response._partialNarrowing.bothEnds
+        ? `\n\n> **Partial coverage**: these were filtered locally from ${examined} messages matching the server-side filter, the newest and the oldest. Other matches may exist between the two; set \`receivedAfter\` and \`receivedBefore\` around the dates you expect.`
+        : `\n\n> **Partial coverage**: these were filtered locally from the first ${examined} message${examined === 1 ? '' : 's'} Graph returned, and more were available beyond them, so other matches may exist. ${next}`;
     }
     if (response._searchInfo.truncated) {
       const scanned = response._searchInfo.candidatesScanned;

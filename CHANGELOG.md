@@ -37,7 +37,20 @@ upgrade steps. #305 (scheduled automatic replies on personal accounts) is
   `narrowedCandidates`, and says other matches may exist (earlier versions
   dropped the "more available" hint). The footer for a `$search` result
   suggests raising `count` or adding words to `query`, not a date window
-  that would re-read the same messages.
+  that would re-read the same messages. The advice matches the real state:
+  nothing says to raise `count` when it is already 50, and an empty result
+  says a match "beyond that page" may exist only when Graph had a further
+  page.
+- **A `query` whose date window lies beyond `$search` paging says so**
+  (#261). Graph returns `$search` results newest first and stops after a
+  few hundred (this server reads 250), so a window older than that is never
+  reached and a subject-only fallback answers. That used to be 50 matches
+  in no date order with nothing to flag it. The result now reports
+  `partialCoverage`, `searchWindowUnreached` and `searchResultsRead`, with
+  a note on what is and isn't included and how to search bodies in that
+  window with a `searchExpression`; the fallback returns the newest
+  matches in the window, in order. Putting the window into the `$search`
+  expression itself is planned for v3.15.0 (#339).
 - **Filtered searches return the newest matches, and a `subject` search no
   longer costs a failed request** (#331). Graph sorts a filtered request
   only when `receivedDateTime` leads the filter, and returns an unsorted
@@ -50,8 +63,10 @@ upgrade steps. #305 (scheduled automatic replies on personal accounts) is
   search does (#263), and is sorted newest first. **This changes which
   messages come back when more than `count` match: the newest, where
   earlier versions returned the oldest.** With `count` or fewer matches the
-  same messages come back. `to` filters are unchanged (still unsorted where
-  Graph accepts them), as are the single-filter fallback steps.
+  same messages come back. The single-filter fallback steps for `from`,
+  `subject` and `query` are sorted the same way, and retry unsorted if
+  Graph refuses the sort. `to` filters are unchanged (still unsorted where
+  Graph accepts them).
 - **`from` with a bare domain label finds the sender's mail** (#328). A
   `from` value with no `@` and no dot (such as `examplecorp`) matched display
   names only, so mail from `someone@examplecorp.com.au` was never found. It
@@ -92,6 +107,13 @@ upgrade steps. #305 (scheduled automatic replies on personal accounts) is
   [KQL reference](docs/how-to/advanced/kql-search-reference.md) are
   corrected, and the reference records the live test matrix. Measured on a
   personal mailbox; not verified on Microsoft 365.
+- **`searchExpression: "to:…"` with a date window finds the mail** (#333).
+  On personal accounts a `to:` term is matched locally, but the
+  `searchExpression` path didn't ask Graph for the recipients, so with
+  `receivedAfter` or `receivedBefore` it returned nothing at `minimal` and
+  `standard` verbosity (as in earlier versions). It now returns what the
+  `to` parameter returns. `searchExpression` results also show the
+  attachment marker.
 - **Search-driven `export` works with a date window** (#263).
   `export target=messages` with `searchQuery` sent `from`/`subject` as one
   quoted `$search` phrase next to a date `$filter`, which Graph rejects. It
@@ -107,6 +129,11 @@ upgrade steps. #305 (scheduled automatic replies on personal accounts) is
   removed from a meeting (who get a cancellation) now count towards
   `notified` and `external`, and rooms or resources added or removed are
   listed and counted, so adding only a room no longer says nobody is emailed.
+  The first line of the preview and `_meta` now state the same numbers (the
+  first line counted only the people still on the event), for example
+  "3 recipients (3 external): 2 attendees, 1 removed (sent a
+  cancellation)". `create-event`, cancel and organiser-delete previews
+  count rooms and resources in `notified` too; `external` covers people.
   A `manage-rules` reorder whose follow-up listing fails now says other rules
   may have been renumbered and to list them.
 - **`find-meeting-rooms` on Microsoft 365** (#240). The fallback called the

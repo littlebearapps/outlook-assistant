@@ -64,9 +64,13 @@ function summariseAttendees(attendees, ownAddress) {
   const ownDomain = emailDomain(own);
   const people = [];
   const resources = [];
+  // An address listed twice (in any letter case) is one recipient.
+  const seen = new Set();
   for (const attendee of attendees || []) {
     const address = attendee?.emailAddress?.address;
     if (!address || address.toLowerCase() === own) continue;
+    if (seen.has(address.toLowerCase())) continue;
+    seen.add(address.toLowerCase());
     if (attendee.type === 'resource') {
       resources.push(address);
     } else {
@@ -268,8 +272,10 @@ async function previewCancelEvent(accessToken, { eventId, comment }) {
     await ownAddressFor(accessToken, event)
   );
   const totals = emailedTotals(summary);
+  // A room or resource is emailed the cancellation too, so an event with
+  // only rooms still notifies someone.
   const lines =
-    summary.people.length > 0
+    totals.notified > 0
       ? [
           `Cancels ${title} and emails a cancellation to ${totals.phrase}.`,
           messageLine(comment),
@@ -278,7 +284,7 @@ async function previewCancelEvent(accessToken, { eventId, comment }) {
 
   return dryRunResult([...lines, ...recipientLines(summary)], {
     ...meta,
-    notified: summary.people.length > 0 ? totals.notified : 0,
+    notified: totals.notified,
     external: summary.external,
   });
 }
@@ -349,7 +355,7 @@ async function previewDeleteEvent(accessToken, { eventId }) {
     event.attendees,
     await ownAddressFor(accessToken, event)
   );
-  if (event.isCancelled || summary.people.length === 0) {
+  if (event.isCancelled || emailedTotals(summary).notified === 0) {
     const why = event.isCancelled
       ? "it's already cancelled"
       : 'it has no attendees';

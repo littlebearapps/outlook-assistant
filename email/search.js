@@ -1352,7 +1352,7 @@ function finishNarrowed(response, { kept, scanned, more }, maxCount, sort) {
  * (a 400 for a filter it doesn't support), which is an answer.
  */
 function isTransientFailure(error) {
-  return /status (5\d\d|429)\b|timed? ?out|ECONN|ETIMEDOUT|socket hang up|EAI_AGAIN/i.test(
+  return /status (5\d\d|429)\b|timed? ?out|ECONN|ETIMEDOUT|socket hang up|EAI_AGAIN|Network error|Error parsing API response/i.test(
     String(error?.message || '')
   );
 }

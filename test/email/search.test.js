@@ -4361,6 +4361,12 @@ describe('handleSearchEmails — a failed request is not proof of absence (N2)',
     ['status 429', 'API call failed with status 429: Too Many Requests'],
     ['a timeout', 'Request timed out after 60000 ms with no data'],
     ['a dropped connection', 'socket hang up (ECONNRESET)'],
+    // What utils/graph-api.js throws once its own retries are used up.
+    ['a network error', 'Network error during API call: injected failure'],
+    [
+      'an unreadable response',
+      'Error parsing API response: Unexpected end of JSON input',
+    ],
   ])('%s on a server-side step softens the wording', async (_name, message) => {
     callGraphAPIPaginated.mockRejectedValue(new Error(message));
 

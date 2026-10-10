@@ -67,6 +67,22 @@ upgrade steps. #305 (scheduled automatic replies on personal accounts) is
   `subject` and `query` are sorted the same way, and retry unsorted if
   Graph refuses the sort. `to` filters are unchanged (still unsorted where
   Graph accepts them).
+- **Filters applied locally keep matches in old mail, and say where the
+  unread part is** (#331). When one filter runs on the server and another
+  is matched locally (on personal accounts, anything with `to`), and Graph
+  had more than the page read, the search now reads the oldest matches as
+  well as the newest and returns what passes from either end, marked as
+  partial. The local `to` scan asks Graph for your date window, so its 500
+  messages are the newest inside the window, and a scan that fills its
+  budget is merged with the `subject` or `query` step, which reaches
+  further back. A second scan of the same messages is no longer made.
+  Advice follows the direction of the read: an earlier `receivedBefore`
+  reaches older mail, or both bounds when both ends were read.
+- **A failed request is not reported as "nothing matches".** If a search
+  step or scan fails without answering (a 5xx, throttling, a timeout or a
+  dropped connection) and nothing is found, the result says a request to
+  Microsoft Graph failed and that a match may still exist, and reports
+  `incomplete: true`.
 - **`from` with a bare domain label finds the sender's mail** (#328). A
   `from` value with no `@` and no dot (such as `examplecorp`) matched display
   names only, so mail from `someone@examplecorp.com.au` was never found. It

@@ -45,6 +45,7 @@ Every search response carries it. Read it before acting on results:
 - `partialCoverage: true` (with `narrowedCandidates`) means filters were applied locally to that many messages and Graph had more: other matches may exist. Narrow the search rather than reading the results as complete.
 - `searchWindowUnreached: true` (with `searchResultsRead`) means a `query`'s date window was older than anything `$search` paging returned, so the results are subject matches only. To search bodies in that window, put the date in a `searchExpression` (`invoice AND received<=2025-10-01`).
 - `droppedFilters` lists filters that could not be honoured. It should be empty. If it isn't, the results are broader than asked: narrow again (tighter dates, a different filter) rather than acting on them.
+- `incomplete: true` means a request to Microsoft Graph failed part-way. "No match" is then not proof of absence; run the search again.
 - `truncated: true` (with `candidatesScanned` and `scanLimit`) means a local scan stopped before the end. "No match" is then not proof of absence; narrow the date window and search again.
 - `kqlTranslatedTo` shows how a `searchExpression` was rewritten as filters after `$search` rejected it or found nothing.
 

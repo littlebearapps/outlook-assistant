@@ -4380,6 +4380,40 @@ describe('handleSearchEmails — a failed request is not proof of absence (N2)',
     expect(result.content[0].text).toContain('so a match may still exist');
   });
 
+  test('results from a fallback after a failed step are marked incomplete', async () => {
+    callGraphAPIPaginated.mockImplementation((_t, _m, _e, params) =>
+      params.$search
+        ? transient()
+        : Promise.resolve({
+            value: [mockEmail({ id: 's1', subject: 'Invoice' })],
+          })
+    );
+
+    const result = await handleSearchEmails({
+      query: 'invoice',
+      searchAllFolders: true,
+    });
+
+    expect(result._meta.returned).toBe(1);
+    expect(result._meta.searchMetadata.finalStrategy).toBe('single-term-query');
+    expect(result._meta.searchMetadata.incomplete).toBe(true);
+    expect(result._meta.searchMetadata.partialCoverage).toBe(true);
+    expect(result.content[0].text).toContain(
+      'A request to Microsoft Graph failed part-way'
+    );
+  });
+
+  test('results with no failed step carry no incomplete flag (control)', async () => {
+    callGraphAPIPaginated.mockResolvedValue({
+      value: [mockEmail({ id: 's1', subject: 'Invoice' })],
+    });
+
+    const result = await handleSearchEmails({ subject: 'invoice' });
+
+    expect(result._meta.searchMetadata.incomplete).toBeUndefined();
+    expect(result.content[0].text).not.toContain('failed part-way');
+  });
+
   test('a filter Graph rejects outright (400) is not a failed search (control)', async () => {
     callGraphAPIPaginated.mockImplementation((_t, _m, _e, params) =>
       (params.$filter || '').includes('toRecipients/any(')

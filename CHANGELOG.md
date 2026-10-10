@@ -82,7 +82,8 @@ upgrade steps. #305 (scheduled automatic replies on personal accounts) is
   step or scan fails without answering (a 5xx, throttling, a timeout or a
   dropped connection) and nothing is found, the result says a request to
   Microsoft Graph failed and that a match may still exist, and reports
-  `incomplete: true`.
+  `incomplete: true`. Results that a fallback step returns after such a
+  failure carry the same flag and a note.
 - **`from` with a bare domain label finds the sender's mail** (#328). A
   `from` value with no `@` and no dot (such as `examplecorp`) matched display
   names only, so mail from `someone@examplecorp.com.au` was never found. It

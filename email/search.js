@@ -342,6 +342,11 @@ async function progressiveSearch(
   if (scanState.searchWindowUnreached && result?._searchInfo) {
     result._searchInfo.searchWindowUnreached = scanState.searchWindowUnreached;
   }
+  // A step failed without answering and a later one answered: its results
+  // are a fallback's, so mark them rather than present them as complete.
+  if (scanState.incomplete && result?._searchInfo) {
+    result._searchInfo.incomplete = true;
+  }
   return result;
 }
 
@@ -2194,7 +2199,10 @@ function formatSearchResults(
         narrowedCandidates: response._partialNarrowing.examined,
         partialCoverage: true,
       }),
-      ...(response._searchInfo.incomplete && { incomplete: true }),
+      ...(response._searchInfo.incomplete && {
+        incomplete: true,
+        partialCoverage: true,
+      }),
       // `$search` never reached the date window; a fallback step answered.
       ...(response._searchInfo.searchWindowUnreached && {
         partialCoverage: true,
@@ -2286,6 +2294,10 @@ function formatSearchResults(
     // says so only when the search returns nothing; a truncated scan that
     // DID match is exactly as incomplete and reads as authoritative. On a
     // large archive that silently caps historical searches.
+    if (response._searchInfo.incomplete) {
+      searchNote +=
+        '\n\n> **Partial coverage**: A request to Microsoft Graph failed part-way (a temporary error or a timeout), so these results come from a fallback step and may be incomplete. Run the search again.';
+    }
     if (response._searchInfo.searchWindowUnreached) {
       searchNote += `\n\n> **Partial coverage**: ${searchWindowNote(response._searchInfo)}`;
     }

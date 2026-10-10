@@ -26,6 +26,18 @@ describe('commitlint config', () => {
       'chore(deps): Bump the dev-dependencies group across 1 directory with 3 updates',
     ],
     ['chore(deps): Bump the dev-dependencies group with 2 updates'],
+    // A single update inside a group, with and without versions.
+    [
+      'chore(deps): Bump eslint from 9.1.0 to 9.2.0 in the dev-dependencies group',
+    ],
+    ['chore(deps): Bump prettier in the dev-dependencies group'],
+    [
+      'chore(deps): Bump eslint from 9.1.0 to 9.2.0 in the dev-dependencies group across 1 directory',
+    ],
+    [
+      'chore(deps): Bump prettier in the dev-dependencies group across 2 directories',
+    ],
+    ['chore(deps): Bump supertest from 7.2.2 to 7.3.1 across 1 directory'],
     [
       'chore(deps): Bump supertest from 7.2.2 to 7.3.1\n\nBumps [supertest](https://github.com/forwardemail/supertest) from 7.2.2 to 7.3.1.\n\nSigned-off-by: dependabot[bot] <support@github.com>',
     ],
@@ -41,6 +53,13 @@ describe('commitlint config', () => {
     ['chore(deps): Bump supertest'],
     ['chore(deps): Update supertest from 7.2.2 to 7.3.1'],
     ['chore(deps): Bump supertest from 7.2.2 to 7.3.1 and rewrite the tests'],
+    ['chore(deps): Bump prettier in the dev-dependencies group and fix lint'],
+    ['chore(deps): Bump prettier in the group'],
+    ['chore(deps): Bump prettier across 1 directory'],
+    ['chore(deps): Bump in the dev-dependencies group'],
+    ['chore(deps): Bump eslint from 9.1.0 in the dev-dependencies group'],
+    ['feat(search): Bump the page size in the narrowing group'],
+    [`chore(deps): Bump ${'a '.repeat(5000)}from 1 to 2 x`],
     ['chore(release): Bump version from 3.14.1 to 3.14.2'],
     ['Bump supertest from 7.2.2 to 7.3.1'],
     ['feat: Add thing\n\nchore(deps): Bump supertest from 7.2.2 to 7.3.1'],

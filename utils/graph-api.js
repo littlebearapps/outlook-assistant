@@ -444,12 +444,21 @@ async function callGraphAPI(
   }
   if (response.status === 401) {
     // Token expired or invalid
-    throw new Error('UNAUTHORIZED');
+    throw Object.assign(new Error('UNAUTHORIZED'), { status: 401 });
   }
   // Truncate response to avoid leaking sensitive data in error messages
-  throw new Error(
+  const failure = new Error(
     `API call failed with status ${response.status}: ${response.text.substring(0, 200)}`
   );
+  // Callers classify failures by these, not by the message text.
+  failure.status = response.status;
+  try {
+    const code = JSON.parse(response.text)?.error?.code;
+    if (typeof code === 'string') failure.graphCode = code;
+  } catch {
+    // Not Graph's JSON error shape: the status is all there is.
+  }
+  throw failure;
 }
 
 /**

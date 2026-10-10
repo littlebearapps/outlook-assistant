@@ -307,6 +307,42 @@ describe('callGraphAPI', () => {
       );
     });
 
+    it('carries the status and the Graph error code on the error', async () => {
+      mockHttpsRequest(
+        403,
+        '{"error":{"code":"ErrorAccessDenied","message":"Access is denied."}}'
+      );
+
+      const error = await callGraphAPI('token', 'GET', 'me/messages').catch(
+        (e) => e
+      );
+
+      expect(error.status).toBe(403);
+      expect(error.graphCode).toBe('ErrorAccessDenied');
+    });
+
+    it('carries the status with no code when the body is not Graph JSON', async () => {
+      mockHttpsRequest(502, '<html>Bad Gateway</html>');
+
+      const error = await callGraphAPI('token', 'GET', 'me/messages').catch(
+        (e) => e
+      );
+
+      expect(error.status).toBe(502);
+      expect(error.graphCode).toBeUndefined();
+    });
+
+    it('marks UNAUTHORIZED with status 401', async () => {
+      mockHttpsRequest(401, '{"error":{"code":"InvalidAuthenticationToken"}}');
+
+      const error = await callGraphAPI('token', 'GET', 'me/messages').catch(
+        (e) => e
+      );
+
+      expect(error.message).toBe('UNAUTHORIZED');
+      expect(error.status).toBe(401);
+    });
+
     it('should reject with status and body on 500', async () => {
       mockHttpsRequest(500, 'Internal Server Error');
 

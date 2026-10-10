@@ -143,7 +143,8 @@ async function handleSearchEmails(args) {
       response,
       scopeLabel,
       verbosity,
-      searchAllFolders
+      searchAllFolders,
+      requestedCount
     );
   } catch (error) {
     // Handle authentication errors
@@ -655,7 +656,11 @@ async function runSearchLadder(
           };
           return response;
         }
-        recordNarrowingMiss(scanState, response.value.length);
+        recordNarrowingMiss(
+          scanState,
+          response.value.length,
+          hadMore(response)
+        );
         log.debug(
           `Search with ${term} found ${response.value.length} results, but none also satisfied ${secondaryApplied.join(', ')} — continuing`
         );
@@ -754,7 +759,7 @@ async function runSearchLadder(
         };
         return response;
       }
-      recordNarrowingMiss(scanState, response.value.length);
+      recordNarrowingMiss(scanState, response.value.length, hadMore(response));
       log.debug(
         `Boolean filter search found ${response.value.length} results, but none satisfied ${secondaryApplied.join(', ')} — continuing`
       );
@@ -799,7 +804,11 @@ async function runSearchLadder(
             };
             return response;
           }
-          recordNarrowingMiss(scanState, response.value.length);
+          recordNarrowingMiss(
+            scanState,
+            response.value.length,
+            hadMore(response)
+          );
           log.debug(
             `Boolean filter retry found ${response.value.length} results, but none satisfied ${secondaryApplied.join(', ')} — continuing`
           );
@@ -1165,6 +1174,9 @@ function narrowResponse(response, matched) {
 /** Page size a narrowing search requests, so a window costs few requests. */
 const NARROW_PAGE_SIZE = 50;
 
+/** The most results one search-emails call returns. */
+const MAX_COUNT = 50;
+
 /**
  * Most messages a narrowing search reads (five full pages) before it stops
  * and reports partial coverage. (#261 follow-up)
@@ -1255,9 +1267,17 @@ function finishNarrowed(response, { kept, scanned, more }, maxCount, sort) {
  *
  * @param {object} scanState - Side-channel carried to the no-results rung
  * @param {number} examined - How many rows the narrowing pass saw
+ * @param {boolean} [more] - Whether Graph had rows beyond those examined
  */
-function recordNarrowingMiss(scanState, examined) {
-  if (!scanState) return;
+/** Whether Graph had rows beyond the page it returned. */
+function hadMore(response) {
+  return Boolean(response?.hasMore || response?.['@odata.nextLink']);
+}
+
+function recordNarrowingMiss(scanState, examined, more = true) {
+  // With no further page, the pass saw every message the server-side filter
+  // matched, so there is nothing "beyond that page" to warn about.
+  if (!scanState || !more) return;
   scanState.narrowedCandidates = Math.max(
     scanState.narrowedCandidates || 0,
     examined
@@ -1351,7 +1371,11 @@ async function narrowSearchPage(response, ctx) {
   );
   if (collected.kept.length === 0) {
     if (collected.scanned > 0) {
-      recordNarrowingMiss(scanState, collected.scanned);
+      recordNarrowingMiss(
+        scanState,
+        collected.scanned,
+        collected.more || collected.scanned >= NARROW_SCAN_LIMIT
+      );
     }
     // Graph's `$search` stream is newest first and stops after a few hundred
     // rows, so a window older than what was read can't be reached by paging.
@@ -1409,7 +1433,11 @@ async function narrowStructuredPage(response, ctx) {
   );
   if (collected.kept.length === 0) {
     if (collected.scanned > 0) {
-      recordNarrowingMiss(scanState, collected.scanned);
+      recordNarrowingMiss(
+        scanState,
+        collected.scanned,
+        collected.more || collected.scanned >= NARROW_SCAN_LIMIT
+      );
     }
     log.debug(
       `Combined $filter returned ${collected.scanned} results, none matching query — continuing`
@@ -1802,7 +1830,12 @@ function searchWindowNote(searchInfo) {
  * @param {boolean} searchAllFolders - Whether the search already spanned all folders
  * @returns {string[]} - Ordered suggestion lines, without the leading bullet
  */
-function buildNoResultsSuggestions(searchInfo, searchAllFolders) {
+function buildNoResultsSuggestions(
+  searchInfo,
+  searchAllFolders,
+  folder = '',
+  countAtMax = false
+) {
   const filters = searchInfo.originalTerms || {};
   const strategies = searchInfo.strategies || [];
   const suggestions = [];
@@ -1831,8 +1864,11 @@ function buildNoResultsSuggestions(searchInfo, searchAllFolders) {
       'All folders were already searched, so no message in this mailbox matches these filters'
     );
   } else {
+    const others = /^archive$/i.test(String(folder).trim())
+      ? 'including the Inbox and Junk Email'
+      : 'including Archive and Junk Email';
     suggestions.push(
-      'Try `searchAllFolders: true` to search across all folders, including Archive and Junk Email (mail from a new sender often lands in Junk)'
+      `Try \`searchAllFolders: true\` to search across all folders, ${others} (mail from a new sender often lands in Junk)`
     );
     suggestions.push(
       'Specify the correct folder if emails have been moved (use the `folders` tool to list folders)'
@@ -1860,7 +1896,7 @@ function buildNoResultsSuggestions(searchInfo, searchAllFolders) {
   // the bounded client-side scan, so say so rather than implying otherwise.
   if (searchInfo.narrowedCandidates) {
     suggestions.push(
-      `The other filters were applied locally to the ${searchInfo.narrowedCandidates} message${searchInfo.narrowedCandidates === 1 ? '' : 's'} the server-side filter returned, so a match beyond that page would not have been seen — raise \`count\`, or narrow with \`receivedAfter\``
+      `The other filters were applied locally to the ${searchInfo.narrowedCandidates} message${searchInfo.narrowedCandidates === 1 ? '' : 's'} the server-side filter returned, so a match beyond that page would not have been seen — ${countAtMax ? '' : 'raise `count`, or '}narrow with \`receivedAfter\``
     );
   }
 
@@ -1910,7 +1946,15 @@ function buildNoResultsSuggestions(searchInfo, searchAllFolders) {
  * @param {boolean} [searchAllFolders] - Whether the search spanned all folders
  * @returns {object} - MCP response object
  */
-function formatSearchResults(response, folder, verbosity, searchAllFolders) {
+function formatSearchResults(
+  response,
+  folder,
+  verbosity,
+  searchAllFolders,
+  requestedCount
+) {
+  // Advice to raise `count` is only useful below the maximum.
+  const countAtMax = requestedCount >= MAX_COUNT;
   // Build metadata
   const meta = {
     returned: (response.value || []).length,
@@ -2001,7 +2045,9 @@ function formatSearchResults(response, folder, verbosity, searchAllFolders) {
 
       const suggestions = buildNoResultsSuggestions(
         response._searchInfo,
-        searchAllFolders
+        searchAllFolders,
+        folder,
+        countAtMax
       );
 
       const bullets = suggestions.map((line) => `- ${line}`).join('\n');
@@ -2064,9 +2110,13 @@ function formatSearchResults(response, folder, verbosity, searchAllFolders) {
     }
     if (response._partialNarrowing) {
       const examined = response._partialNarrowing.examined;
-      const next = response._partialNarrowing.capped
-        ? `A filtered search reads at most ${NARROW_SCAN_LIMIT} messages, so narrow it: add words to \`query\` or a date window.`
-        : 'Raise `count` (up to 50) to read further.';
+      let next = 'Raise `count` (up to 50) to read further.';
+      if (response._partialNarrowing.capped) {
+        next = `A filtered search reads at most ${NARROW_SCAN_LIMIT} messages, so narrow it: add words to \`query\` or a date window.`;
+      } else if (countAtMax) {
+        next =
+          '`count` is already at its maximum of 50, so narrow the search: add a filter or a date window.';
+      }
       searchNote += `\n\n> **Partial coverage**: these were filtered locally from the first ${examined} message${examined === 1 ? '' : 's'} Graph returned, and more were available beyond them, so other matches may exist. ${next}`;
     }
     if (response._searchInfo.truncated) {
@@ -2081,7 +2131,8 @@ function formatSearchResults(response, folder, verbosity, searchAllFolders) {
     response.value,
     `Search Results (${folder})`,
     verbosity,
-    meta
+    meta,
+    { countAtMax }
   );
 
   return {

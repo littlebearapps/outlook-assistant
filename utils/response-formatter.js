@@ -163,18 +163,22 @@ function formatEmailFull(email, index) {
  * @param {string} folder - Folder name
  * @param {string} verbosity - Verbosity level (minimal/standard/full)
  * @param {object} meta - Metadata (totalAvailable, hasMore)
+ * @param {{countAtMax?: boolean}} [options] - countAtMax: `count` is already at its maximum
  * @returns {string} - Formatted Markdown string
  */
 function formatEmailList(
   emails,
   folder,
   verbosity = VERBOSITY.STANDARD,
-  meta = {}
+  meta = {},
+  { countAtMax = false } = {}
 ) {
   if (!emails || emails.length === 0) {
     return `No emails found in ${folder}.`;
   }
 
+  // Raising `count` is only advice worth giving below its maximum.
+  const raise = countAtMax ? '' : 'raise `count` (up to 50) or ';
   const count = emails.length;
   let output = `## Emails in ${folder} (${count}${meta.totalAvailable ? `/${meta.totalAvailable}` : ''})\n\n`;
 
@@ -193,14 +197,14 @@ function formatEmailList(
   // A raw `searchExpression` takes no date window, so pointing at
   // `receivedAfter`/`receivedBefore` there would change nothing. (#329)
   if (meta.hasMore && meta.searchMetadata?.finalStrategy === 'raw-kql') {
-    output += `\n\n---\n_More emails available. To see them, raise \`count\` (up to 50) or add terms to the \`searchExpression\` (it takes no \`receivedAfter\`/\`receivedBefore\`)._`;
+    output += `\n\n---\n_More emails available. To see them, ${raise}add terms to the \`searchExpression\` (it takes no \`receivedAfter\`/\`receivedBefore\`)._`;
   } else if (meta.hasMore && meta.searchMetadata?.orderedWithinPage) {
     // A `query` answered by `$search` already reads past the window it was
     // given, so another `receivedBefore` would re-read the same messages.
     // (#261 follow-up)
-    output += `\n\n---\n_More emails may match. To see them, raise \`count\` (up to 50) or add words to \`query\` to narrow it._`;
+    output += `\n\n---\n_More emails may match. To see them, ${raise}add words to \`query\` to narrow it._`;
   } else if (meta.hasMore) {
-    output += `\n\n---\n_More emails available. To see them, raise \`count\` (up to 50) or narrow the date range with \`receivedAfter\`/\`receivedBefore\` (for older mail, set \`receivedBefore\` to the oldest date shown)._`;
+    output += `\n\n---\n_More emails available. To see them, ${raise}narrow the date range with \`receivedAfter\`/\`receivedBefore\` (for older mail, set \`receivedBefore\` to the oldest date shown)._`;
   }
 
   return output;

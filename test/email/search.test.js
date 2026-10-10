@@ -1672,6 +1672,8 @@ describe('handleSearchEmails — narrowing correctness follow-ups', () => {
           mockEmail({ id: 'd1', subject: 'Lunch', from }),
           mockEmail({ id: 'd2', subject: 'Parking', from }),
         ],
+        // More beyond this page: without that, the pass saw everything.
+        hasMore: true,
       })
       .mockResolvedValue({ value: [] });
 
@@ -2391,8 +2393,9 @@ describe('handleSearchEmails — from with a dotless domain label (#328)', () =>
     callGraphAPIPaginated
       // combined-search → empty (or rejected on a personal account)
       .mockResolvedValueOnce({ value: [] })
-      // single-term-from → this sender's mail, none with the subject
-      .mockResolvedValueOnce({ value: [rows[0], rows[1]] })
+      // single-term-from → a page of this sender's mail, none with the
+      // subject, and more beyond it
+      .mockResolvedValueOnce({ value: [rows[0], rows[1]], hasMore: true })
       // single-term-subject → empty
       .mockResolvedValueOnce({ value: [] });
 
@@ -3899,5 +3902,145 @@ describe('handleSearchEmails — a window beyond $search paging (#261)', () => {
     expect(result.content[0].text).toContain(
       'none fell inside the date window'
     );
+  });
+});
+
+// ──────────────────────────────────────────────────
+// Advice in the result text must match the real state (live-test follow-up):
+// don't say "raise `count`" at the maximum, and don't say a match "beyond that
+// page" could exist when Graph had no further page.
+// ──────────────────────────────────────────────────
+describe('handleSearchEmails — advice matches the real state', () => {
+  const NEXT = 'https://graph.microsoft.com/v1.0/me/messages?$skip=50';
+  const page = (n, extra = {}) => ({
+    value: Array.from({ length: n }, (_, i) =>
+      mockEmail({
+        id: `m${i}`,
+        subject: i % 2 ? 'Invoice' : 'Lunch',
+        isRead: true,
+      })
+    ),
+    ...extra,
+  });
+
+  test.each([
+    [50, false],
+    [25, true],
+  ])(
+    'partial-coverage note at count %i: suggests raising count is %s',
+    async (count, suggestsRaise) => {
+      // single-term-to page with more beyond it, narrowed locally by query
+      callGraphAPIPaginated
+        .mockRejectedValueOnce(new Error('400 ErrorInvalidProperty'))
+        .mockResolvedValueOnce(
+          page(10, { hasMore: true, '@odata.nextLink': NEXT })
+        );
+
+      const result = await handleSearchEmails({
+        query: 'invoice',
+        to: 'jane@example.com',
+        count,
+      });
+
+      const text = result.content[0].text;
+      expect(result._meta.searchMetadata.partialCoverage).toBe(true);
+      expect(text).toContain('**Partial coverage**');
+      expect(/[Rr]aise `count`/.test(text)).toBe(suggestsRaise);
+      if (!suggestsRaise) {
+        expect(text).toContain('`count` is already at its maximum of 50');
+      }
+    }
+  );
+
+  test.each([
+    [{ subject: 'invoice', count: 50 }, false],
+    [{ subject: 'invoice', count: 10 }, true],
+    [{ query: 'invoice', count: 50 }, false],
+    [{ searchExpression: 'invoice OR receipt', count: 50 }, false],
+    [{ searchExpression: 'invoice OR receipt', count: 5 }, true],
+  ])(
+    'more-available footer for %j: suggests raising count is %s',
+    async (args, suggestsRaise) => {
+      callGraphAPIPaginated.mockResolvedValue(
+        page(args.count, { hasMore: true, '@odata.nextLink': NEXT })
+      );
+
+      const result = await handleSearchEmails(args);
+
+      const text = result.content[0].text;
+      expect(result._meta.hasMore).toBe(true);
+      expect(text).toMatch(/More emails (available|may match)/);
+      expect(/raise `count`/.test(text)).toBe(suggestsRaise);
+    }
+  );
+
+  test('no "beyond that page" line when the narrowed page was the whole answer', async () => {
+    callGraphAPIPaginated
+      // combined-search → empty
+      .mockResolvedValueOnce({ value: [] })
+      // single-term-from → everything from that sender, and no further page
+      .mockResolvedValueOnce(page(21))
+      // single-term-subject → empty
+      .mockResolvedValueOnce({ value: [] });
+
+    const result = await handleSearchEmails({
+      from: 'john',
+      subject: 'zzzqqq',
+      searchAllFolders: true,
+    });
+
+    const text = result.content[0].text;
+    expect(result._meta.returned).toBe(0);
+    expect(text).not.toContain('beyond that page');
+    expect(text).toContain(
+      'All folders were already searched, so no message in this mailbox matches these filters'
+    );
+    expect(result._meta.searchMetadata.narrowedCandidates).toBeUndefined();
+  });
+
+  test('the "beyond that page" line stays when Graph had more to read', async () => {
+    callGraphAPIPaginated
+      .mockResolvedValueOnce({ value: [] })
+      .mockResolvedValueOnce(
+        page(21, { hasMore: true, '@odata.nextLink': NEXT })
+      )
+      .mockResolvedValueOnce({ value: [] });
+
+    const result = await handleSearchEmails({
+      from: 'john',
+      subject: 'zzzqqq',
+      searchAllFolders: true,
+    });
+
+    const text = result.content[0].text;
+    expect(text).toContain('beyond that page');
+    expect(text).not.toContain('no message in this mailbox matches');
+  });
+
+  test('a $search that returned every hit, none passing the filter, is not called partial', async () => {
+    callGraphAPIPaginated.mockImplementation((_t, _m, _e, params) =>
+      Promise.resolve(params.$search ? page(19) : { value: [] })
+    );
+
+    const result = await handleSearchEmails({
+      query: 'invoice',
+      unreadOnly: true,
+    });
+
+    expect(result._meta.returned).toBe(0);
+    expect(result.content[0].text).not.toContain('beyond that page');
+  });
+
+  test('a search inside Archive does not suggest searchAllFolders "including Archive"', async () => {
+    callGraphAPIPaginated.mockResolvedValue({ value: [] });
+
+    const result = await handleSearchEmails({
+      subject: 'zzzqqq',
+      folder: 'Archive',
+    });
+
+    const text = result.content[0].text;
+    expect(text).toContain('`searchAllFolders: true`');
+    expect(text).not.toContain('including Archive');
   });
 });

@@ -147,6 +147,12 @@ upgrade steps. #305 (scheduled automatic replies on personal accounts) is
   `commitlint.config.js` skips exactly that header (and the grouped
   `Bump the <name> group … with <n> updates` form); every other commit is
   linted as before, and a test pins both sides.
+- **CI builds the Docker image and smoke-tests it** (#336). A new
+  `Docker Build & Smoke Test` job runs `docker build`, then
+  `scripts/docker-smoke.js` sends `initialize` and `tools/list` to the
+  container over stdio (no network, no credentials) and checks the server
+  name, the version and the 22 tools. The check #320 asked for had only been
+  approximated before. Nothing is pushed or published.
 - **Release workflows** (#319): the website notification fails unless
   GitHub answers HTTP 204 (a 401 used to pass silently); auto-tag compares
   `package.json` with the commit before the push rather than `HEAD~1`, and

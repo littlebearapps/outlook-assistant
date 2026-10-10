@@ -70,6 +70,24 @@ jobs:
       - name: Run security audit (production deps)
         run: npm audit --omit=dev --audit-level=high
 
+  docker:
+    name: Docker Build & Smoke Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+      # The Glama listing builds from this Dockerfile. Nothing is pushed.
+      - name: Build image
+        run: docker build --pull -t outlook-assistant:ci .
+      # initialize + tools/list over stdio: no network, no credentials.
+      - name: Smoke test
+        run: node scripts/docker-smoke.js --image outlook-assistant:ci
+
   dependency-review:
     name: Dependency Review
     runs-on: ubuntu-latest

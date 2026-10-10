@@ -82,7 +82,7 @@ Common issues and their fixes. For getting-started guidance, see [`docs/how-to/g
 | `export` with `searchQuery` and a date window fails with `400 SearchWithFilter` | Fixed in v3.14.2 (#263). The search export now builds one OData filter (`from`, `subject`, dates) instead of mixing `$search` and `$filter`. |
 | Delta sync at `minimal` verbosity shows only counts, or an updated message shows as "(no subject)" | Fixed in v3.14.2 (#322). Each page lists changed messages as `ID \| subject \| sender` and removed ones by ID. Graph returns an updated message with only the properties that changed, so it shows as `ID \| changed: isRead`; read it by ID for the rest. |
 | `find-meeting-rooms` on a Microsoft 365 account says you're on a personal account, or fails with a `404` | Fixed in v3.14.2 (#240). The fallback called the beta-only `findRooms` on v1.0. A 403 from `places` now means `Place.Read.All` is missing (this server doesn't request it yet, #130), and the tool falls back to the beta `findRooms` call (names and addresses, first 100 rooms). On a personal account it returns a plain "Microsoft 365 only" error. |
-| The Docker image exits with `Cannot find module './server'` | Fixed in v3.14.2 (#320). The Dockerfile didn't copy `server.js`, `tools.js` or `request-handler.js`. Rebuild the image from v3.14.2 or later. |
+| The Docker image exits with `Cannot find module './server'` | Fixed in v3.14.2 (#320). The Dockerfile didn't copy `server.js`, `tools.js` or `request-handler.js`. Rebuild the image from v3.14.2 or later. CI now builds the image and checks that it answers `initialize` and `tools/list` (#336). |
 
 ## Client-Specific Issues
 

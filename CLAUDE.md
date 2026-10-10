@@ -79,6 +79,7 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 | `plugins/outlook-assistant/hooks/outlook-gate.js` | Plugin hook for Claude Code (`hooks/hooks.json`), Copilot CLI/VS Code (`com.github.copilot/hooks/hooks.json`, arg `copilot`) and Cursor (`hooks/hooks-cursor.json` via `.cursor-plugin/plugin.json`, arg `cursor`): before outward/destructive/persistent calls, `ask` with a plain-English reason (`describe()`; unknown tool or action asks), after untrusted-content tools a note; classifies with the generated `hooks/risk-map.json` |
 | `plugins/outlook-assistant/skills/using-outlook-assistant/` | Agent skill: SKILL.md hard rules + one `references/` file per surface; risk table (`sync-risk-map.js`) and `metadata.version` (`sync-version.js`) are generated |
 | `scripts/sync-risk-map.js` | Copies `utils/risk-classes.js` into the hook's `risk-map.json` and the SKILL.md risk table; `--check` reports drift |
+| `scripts/docker-smoke.js` | CI smoke test for the Docker image (`docker` job in `ci.yml`): `initialize` + `tools/list` over stdio, checks name, version and 22 tools; `-- node index.js` runs it without Docker; no deps |
 | `scripts/release-check.js` | Version decisions for `auto-tag.yml`/`publish.yml` (tag only a higher version; prereleases go to npm `next`, skip Registry and website); no deps |
 | `scripts/skill-evals.js` | Prompt-injection evals: `claude -p` against test mode's mock mailbox, with skill + hook, hook only, or neither |
 | `utils/server-instructions.js` | Server `instructions` text (hard rules first); read-only note follows `config.READ_ONLY`; names tools a session limit of 0 blocks (`blockedTools`) |
@@ -154,7 +155,7 @@ Common errors (auth, device code, search, timezones) and fixes live in [`docs/tr
 ## Testing
 
 ```bash
-npm test                    # Jest unit tests (104 suites / 3004 tests at v3.14.2)
+npm test                    # Jest unit tests (106 suites / 3140 tests at v3.14.2)
 npm run lint                # ESLint (0 errors expected)
 npm run format:check        # Prettier (CI runs this)
 node scripts/e2e-stdio.js <tool> '<argsJson>'  # Fresh stdio server: initialize + one tools/call

@@ -106,7 +106,7 @@ If you use a manual MCP configuration rather than the plugin, there's no hook; y
 | "wrongplace" page after device code sign-in | Normal — means sign-in completed but Microsoft doesn't know where to redirect | Close the browser tab. The device code flow completed successfully. Call `device-code-complete` to finish. |
 | Device code sign-in redirects to localhost | Cached browser session interfering with device code flow | Use a **private/incognito browser window** for `microsoft.com/devicelogin` |
 | `device-code-complete` hangs silently | The tool is polling Microsoft (not a permission prompt) — sign-in may not have completed | Wait 10-15 seconds. If still hanging, press Escape, get a new code, sign in with incognito browser, and try again |
-| `search-emails` returns no results | Personal account `$search` limitation | Use `subject`, `from`, `to`, `receivedAfter` filters instead of `query` — see [Known Limitations](../../../README.md#known-limitations) |
+| `search-emails` returns no results | The search is scoped to one folder (the inbox by default), or a field-scoped `searchExpression` on a personal account | Try `searchAllFolders: true`, or the `subject`, `from`, `to`, `receivedAfter` filters — see [Known Limitations](../../../README.md#known-limitations) |
 
 ## Tips
 

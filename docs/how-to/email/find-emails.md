@@ -178,7 +178,7 @@ params:
   receivedAfter: "2026-02-24"
 ```
 
-Every filter you supply is honoured. If Microsoft Graph rejects a combined filter, Outlook Assistant applies the remaining terms locally rather than returning the broader single-filter result set, and reports anything it could not honour in `_meta.searchMetadata.droppedFilters` (v3.10.0). That field should always be empty — if it isn't, the results are wider than what you asked for.
+Every filter you supply is honoured. If Microsoft Graph rejects a combined filter, Outlook Assistant applies the remaining terms locally rather than returning the broader single-filter result set, and reports anything it could not honour in `_meta.searchMetadata.droppedFilters` (v3.10.0). That field should be empty — if it isn't, the results are wider than what you asked for. The one expected case is a date or boolean filter passed with a raw `searchExpression` (#329).
 
 ## Control the Number of Results
 

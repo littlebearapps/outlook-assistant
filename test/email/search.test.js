@@ -2231,15 +2231,16 @@ describe('handleSearchEmails — $search request shape (#261)', () => {
     expect(ladderParams.$filter).toContain('receivedDateTime le');
   });
 
-  test('a structured search without query keeps its $filter request unchanged', async () => {
+  test('a structured search without query still goes out as a $filter, never $search', async () => {
     callGraphAPIPaginated.mockResolvedValue({ value: [] });
 
     await handleSearchEmails({ from: 'john@example.com', subject: 'Test' });
 
     const [, , , params] = callGraphAPIPaginated.mock.calls[0];
     expect(params.$search).toBeUndefined();
+    // Sorted since #331, so receivedDateTime leads.
     expect(params.$filter).toBe(
-      "contains(subject, 'Test') and from/emailAddress/address eq 'john@example.com'"
+      "receivedDateTime ge 1900-01-01T00:00:00Z and contains(subject, 'Test') and from/emailAddress/address eq 'john@example.com'"
     );
   });
 });
@@ -2907,16 +2908,130 @@ describe('handleSearchEmails — receivedDateTime leads a sorted $filter (#331)'
     expect(params.$orderby).toBe('receivedDateTime desc');
   });
 
-  test('from and to filters are unchanged: no $orderby, no stand-in bound (control)', async () => {
-    mockGraphEnforcingSortRule(rows);
+  // Follow-on: every other shape that went out unsorted came back oldest
+  // first on a personal mailbox, so a search with more matches than `count`
+  // returned the oldest ones.
+  test.each([
+    [
+      { from: 'john@example.com' },
+      `${EARLIEST} and from/emailAddress/address eq 'john@example.com'`,
+    ],
+    [
+      { from: 'example.com' },
+      `${EARLIEST} and contains(from/emailAddress/address, 'example.com')`,
+    ],
+    [
+      { from: 'john' },
+      `${EARLIEST} and (contains(from/emailAddress/name, 'john') or contains(from/emailAddress/address, 'john'))`,
+    ],
+    [
+      { from: 'john@example.com', subject: 'password' },
+      `${EARLIEST} and contains(subject, 'password') and from/emailAddress/address eq 'john@example.com'`,
+    ],
+    [
+      {
+        from: 'john@example.com',
+        unreadOnly: true,
+        receivedAfter: '2026-01-01T00:00:00Z',
+      },
+      "receivedDateTime ge 2026-01-01T00:00:00.000Z and from/emailAddress/address eq 'john@example.com' and isRead eq false",
+    ],
+  ])(
+    'a from filter is sorted, receivedDateTime first: %j',
+    async (args, filter) => {
+      mockGraphEnforcingSortRule(rows);
 
-    await handleSearchEmails({ from: 'john@example.com', subject: 'password' });
+      const result = await handleSearchEmails(args);
+
+      const [params] = sentParams();
+      expect(params.$filter).toBe(filter);
+      expect(params.$orderby).toBe('receivedDateTime desc');
+      expect(callGraphAPIPaginated).toHaveBeenCalledTimes(1);
+      expect(result._meta.searchMetadata.finalStrategy).toBe('combined-search');
+    }
+  );
+
+  test('a to filter stays unsorted, with the clause order it had (control)', async () => {
+    callGraphAPIPaginated.mockResolvedValue({ value: rows });
+
+    await handleSearchEmails({
+      to: 'jane@example.com',
+      from: 'john@example.com',
+      receivedAfter: '2026-01-01T00:00:00Z',
+    });
 
     const [params] = sentParams();
     expect(params.$orderby).toBeUndefined();
     expect(params.$filter).toBe(
-      "contains(subject, 'password') and from/emailAddress/address eq 'john@example.com'"
+      "from/emailAddress/address eq 'john@example.com' and toRecipients/any(r: r/emailAddress/address eq 'jane@example.com') and receivedDateTime ge 2026-01-01T00:00:00.000Z"
     );
+  });
+
+  test.each([
+    [{ unreadOnly: true }, `${EARLIEST} and isRead eq false`],
+    [{ hasAttachments: true }, `${EARLIEST} and hasAttachments eq true`],
+    [
+      { hasAttachments: true, unreadOnly: true },
+      `${EARLIEST} and hasAttachments eq true and isRead eq false`,
+    ],
+    [
+      { hasAttachments: true, receivedAfter: '2026-09-01T00:00:00Z' },
+      'receivedDateTime ge 2026-09-01T00:00:00.000Z and hasAttachments eq true',
+    ],
+    [
+      { unreadOnly: true, receivedBefore: '2026-09-01T00:00:00Z' },
+      `${EARLIEST} and receivedDateTime le 2026-09-01T00:00:00.000Z and isRead eq false`,
+    ],
+  ])(
+    'a boolean-only search is sorted, receivedDateTime first: %j',
+    async (args, filter) => {
+      mockGraphEnforcingSortRule(rows);
+
+      const result = await handleSearchEmails(args);
+
+      expect(sentParams()).toHaveLength(1);
+      const [params] = sentParams();
+      expect(params.$filter).toBe(filter);
+      expect(params.$orderby).toBe('receivedDateTime desc');
+      expect(result._meta.searchMetadata.finalStrategy).toBe(
+        'boolean-filters-only'
+      );
+      expect(result._meta.returned).toBe(1);
+    }
+  );
+
+  test('the boolean step after an unmatched search term is sorted too', async () => {
+    callGraphAPIPaginated.mockImplementation((_t, _m, _e, params) =>
+      Promise.resolve({
+        value: params.$filter.includes('contains(subject') ? [] : rows,
+      })
+    );
+
+    await handleSearchEmails({ subject: 'password', unreadOnly: true });
+
+    const last = sentParams().at(-1);
+    expect(last.$filter).toBe(`${EARLIEST} and isRead eq false`);
+    expect(last.$orderby).toBe('receivedDateTime desc');
+  });
+
+  test('if Graph refuses the sorted boolean filter, it is retried unsorted', async () => {
+    callGraphAPIPaginated.mockImplementation((_t, _m, _e, params) =>
+      params.$orderby
+        ? Promise.reject(
+            new Error(
+              'API call failed with status 400: {"error":{"code":"InefficientFilter"}}'
+            )
+          )
+        : Promise.resolve({ value: rows })
+    );
+
+    const result = await handleSearchEmails({ unreadOnly: true });
+
+    const params = sentParams();
+    expect(params).toHaveLength(2);
+    expect(params[1].$orderby).toBeUndefined();
+    expect(params[1].$filter).toBe('isRead eq false');
+    expect(result._meta.returned).toBe(1);
   });
 
   test('a plain listing sends $orderby with no $filter at all (control)', async () => {

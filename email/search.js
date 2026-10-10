@@ -658,13 +658,17 @@ async function progressiveSearch(
         $select: selectFields,
       };
 
-      // Add the boolean + date filters
-      addBooleanFilters(filterOnlyParams, filterTerms);
-
-      // Only add $orderby if no $filter (they can conflict on personal accounts)
-      if (!filterOnlyParams.$filter) {
-        filterOnlyParams.$orderby = 'receivedDateTime desc';
-      }
+      // Sorted, with `receivedDateTime` leading the filter as Graph requires.
+      // Unsorted, Graph returned the oldest matches first, so a search with
+      // more matches than `count` showed the oldest ones. If Graph refuses the
+      // sort, the catch below retries the old unsorted shape. (#331)
+      filterOnlyParams.$filter = buildSearchParams(
+        {},
+        filterTerms,
+        filterOnlyParams.$top,
+        selectFields
+      ).$filter;
+      filterOnlyParams.$orderby = 'receivedDateTime desc';
 
       const response = await callGraphAPIPaginated(
         accessToken,
@@ -1547,8 +1551,9 @@ function buildSearchParams(searchTerms, filterTerms, count, selectFields) {
     return params;
   }
 
-  // `from`/`to` filters go out without `$orderby`, as before.
-  let usesEmailFilter = false;
+  // Only the recipient lambda goes out without `$orderby`: personal accounts
+  // reject it outright, and the sorted form is unverified where it is accepted.
+  let usesRecipientFilter = false;
 
   // Build filter conditions array - use $filter for structured fields (more reliable)
   const filterConditions = [];
@@ -1562,12 +1567,11 @@ function buildSearchParams(searchTerms, filterTerms, count, selectFields) {
 
   // Use $filter for from/to email addresses (much more reliable than $search)
   if (searchTerms.from) {
-    usesEmailFilter = true;
     filterConditions.push(buildFromFilter(searchTerms.from));
   }
 
   if (searchTerms.to) {
-    usesEmailFilter = true;
+    usesRecipientFilter = true;
     filterConditions.push(buildToFilter(searchTerms.to));
   }
 
@@ -1588,15 +1592,16 @@ function buildSearchParams(searchTerms, filterTerms, count, selectFields) {
   };
   const hasWindow = Boolean(window.receivedAfter || window.receivedBefore);
 
-  if (usesEmailFilter) {
-    // Unsorted: the window follows the field clauses, as it always has.
+  if (usesRecipientFilter) {
+    // Unsorted (`to`): the window follows the field clauses, as it always has.
     if (hasWindow) {
       filterConditions.push(...receivedWindowClauses(window));
     }
   } else {
     // Sorted. Graph takes `$orderby` next to a `$filter` only when the sorted
     // property leads the filter, otherwise 400 InefficientFilter (which cost
-    // every `subject` search a failed request on personal accounts). (#331)
+    // every `subject` search a failed request on personal accounts). A `from`
+    // filter is sorted too: unsorted, Graph returned its oldest matches. (#331)
     params.$orderby = 'receivedDateTime desc';
     if (filterConditions.length > 0 || hasWindow) {
       filterConditions.unshift(...receivedFirstClauses(window));

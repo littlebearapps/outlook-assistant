@@ -38,18 +38,20 @@ upgrade steps. #305 (scheduled automatic replies on personal accounts) is
   dropped the "more available" hint). The footer for a `$search` result
   suggests raising `count` or adding words to `query`, not a date window
   that would re-read the same messages.
-- **A `subject` search no longer costs a failed request, and returns the
-  newest matches** (#331). With `subject` and no `from`/`to` (also with
-  `query`, a date window, `hasAttachments` or `unreadOnly`), the first
-  request sent `$orderby` with a filter that didn't start with
-  `receivedDateTime`, which Graph rejects on personal accounts
-  (`400 InefficientFilter`). The answer then came from an unsorted fallback
-  request, which Graph returns oldest first, so a search with more matches
-  than `count` showed the oldest ones. The filter now leads with
-  `receivedDateTime` (a lower bound of 1900 when there is no
-  `receivedAfter`), as the export search does (#263), so the first request
-  succeeds and results are newest first. Searches with `from` or `to` are
-  unchanged.
+- **Filtered searches return the newest matches, and a `subject` search no
+  longer costs a failed request** (#331). Graph sorts a filtered request
+  only when `receivedDateTime` leads the filter, and returns an unsorted
+  one **oldest first**. Three kinds of search were affected on personal
+  accounts. With `subject` and no `from`/`to`, the first request was
+  rejected (`400 InefficientFilter`) and an unsorted fallback answered.
+  With `from`, and with only `hasAttachments`/`unreadOnly` and dates, the
+  request was sent unsorted. Each now leads with `receivedDateTime` (a
+  lower bound of 1900 when there is no `receivedAfter`), as the export
+  search does (#263), and is sorted newest first. **This changes which
+  messages come back when more than `count` match: the newest, where
+  earlier versions returned the oldest.** With `count` or fewer matches the
+  same messages come back. `to` filters are unchanged (still unsorted where
+  Graph accepts them), as are the single-filter fallback steps.
 - **`from` with a bare domain label finds the sender's mail** (#328). A
   `from` value with no `@` and no dot (such as `examplecorp`) matched display
   names only, so mail from `someone@examplecorp.com.au` was never found. It

@@ -213,7 +213,7 @@ Through `search-emails` on the same mailbox, v3.14.1 against v3.14.2:
 | `hasattachment:true AND subject:invoice` | `raw-kql-error`, no results | `raw-kql`, 25 results |
 | `from:microsoft.com`, `from:user@example.com`, with and without `receivedAfter`/`receivedBefore` or `unreadOnly` | one 400, then `raw-kql-translated` | the same requests and the same messages |
 | `to:label`, with and without `receivedAfter`; `subject:x` with fewer matches than `count`, with and without a window | one 400, then `raw-kql-translated` | the same messages |
-| `subject:password` (more matches than `count`) | `raw-kql-translated`, the 25 oldest | `raw-kql-translated`, the 25 newest (#331) |
+| `subject:password`, `from:microsoft.com` (more matches than `count`) | `raw-kql-translated`, the 25 oldest | `raw-kql-translated`, the 25 newest (#331) |
 | `from:label` (no dot) | `raw-kql-translated`, display-name matches only | `raw-kql-translated`, name or address matches (#328) |
 | `subject:"reset your password"` | `raw-kql-translated`, 15 results | the same 15 |
 | `from:user@example.com` (all of that sender's mail is in Deleted Items) | `raw-kql-translated`, 6 results | the same 6 |

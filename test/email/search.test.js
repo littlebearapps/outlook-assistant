@@ -835,8 +835,9 @@ describe('handleSearchEmails — cross-folder search (#169 V37-F-2)', () => {
     // The single-term 'query' call (2nd) must AND a contains() per word so
     // "github token" can match "[GitHub] ... token" where words are apart.
     const singleTermParams = callGraphAPIPaginated.mock.calls[1][3];
+    // Sorted since #331, so receivedDateTime leads.
     expect(singleTermParams.$filter).toBe(
-      "contains(subject, 'github') and contains(subject, 'token')"
+      "receivedDateTime ge 1900-01-01T00:00:00Z and contains(subject, 'github') and contains(subject, 'token')"
     );
   });
 
@@ -3734,5 +3735,169 @@ describe('handleSearchEmails — locally matched fields are always requested', (
     });
 
     expect(result.content[0].text).toContain('📎');
+  });
+});
+
+// ──────────────────────────────────────────────────
+// #261 follow-up from the live test: a `query` with a window older than what
+// Graph `$search` paging returns (it stops near 275 rows; we read 250) was
+// answered by the subject-only fallback, 50 matches in no date order, with
+// nothing saying the `$search` results never reached the window.
+// ──────────────────────────────────────────────────
+describe('handleSearchEmails — a window beyond $search paging (#261)', () => {
+  const NEXT = (n) => `https://graph.microsoft.com/v1.0/me/messages?$skip=${n}`;
+  const recentPage = (n) => ({
+    value: Array.from({ length: 50 }, (_, i) =>
+      mockEmail({
+        id: `s${n}-${i}`,
+        subject: 'Invoice (recent)',
+        receivedDateTime: '2026-06-01T00:00:00Z',
+      })
+    ),
+    '@odata.nextLink': NEXT(n + 50),
+  });
+  const old = (id, date) =>
+    mockEmail({ id, subject: `Invoice ${id}`, receivedDateTime: date });
+  // Deliberately not in date order.
+  const subjectMatches = [
+    old('a', '2021-03-01T00:00:00Z'),
+    old('b', '2025-09-01T00:00:00Z'),
+    old('c', '2018-05-01T00:00:00Z'),
+  ];
+  const args = {
+    query: 'invoice',
+    searchAllFolders: true,
+    receivedBefore: '2025-10-01T00:00:00Z',
+    count: 50,
+  };
+
+  function mockSearchStreamNewerThanWindow({ refuseSort = false } = {}) {
+    let page = 0;
+    callGraphAPIPaginated.mockImplementation((_t, _m, endpoint, params) => {
+      if (params.$search || String(endpoint).startsWith('https://')) {
+        page += 50;
+        return Promise.resolve(recentPage(page));
+      }
+      if (refuseSort && params.$orderby) {
+        return Promise.reject(
+          new Error(
+            'API call failed with status 400: {"error":{"code":"InefficientFilter"}}'
+          )
+        );
+      }
+      return Promise.resolve({ value: subjectMatches });
+    });
+  }
+  const order = (result) =>
+    [...result.content[0].text.matchAll(/Invoice ([abc])\*\*/g)].map(
+      (m) => m[1]
+    );
+
+  test('says the window was not reached, and marks the result as partial', async () => {
+    mockSearchStreamNewerThanWindow();
+
+    const result = await handleSearchEmails(args);
+
+    const meta = result._meta.searchMetadata;
+    expect(meta.finalStrategy).toBe('single-term-query');
+    expect(meta.partialCoverage).toBe(true);
+    expect(meta.searchWindowUnreached).toBe(true);
+    expect(meta.searchResultsRead).toBe(250);
+    const text = result.content[0].text;
+    expect(text).toContain('**Partial coverage**');
+    expect(text).toContain(
+      'Graph `$search` returned its 250 newest results and none fell inside the date window'
+    );
+    expect(text).toContain('against the subject, newest first');
+    expect(text).toContain('`<words> AND received<=2025-10-01`');
+    expect(text).not.toContain('Raise `count`');
+  });
+
+  test('the fallback request is sorted, and its results are newest first', async () => {
+    mockSearchStreamNewerThanWindow();
+
+    const result = await handleSearchEmails(args);
+
+    const fallback = callGraphAPIPaginated.mock.calls
+      .map((c) => c[3])
+      .find((params) => params.$filter);
+    expect(fallback.$filter).toBe(
+      "receivedDateTime ge 1900-01-01T00:00:00Z and receivedDateTime le 2025-10-01T00:00:00.000Z and contains(subject, 'invoice')"
+    );
+    expect(fallback.$orderby).toBe('receivedDateTime desc');
+    expect(result._meta.returned).toBe(3);
+  });
+
+  test('if Graph refuses the sorted fallback, the unsorted page is ordered locally', async () => {
+    mockSearchStreamNewerThanWindow({ refuseSort: true });
+
+    const result = await handleSearchEmails(args);
+
+    const filters = callGraphAPIPaginated.mock.calls
+      .map((c) => c[3])
+      .filter((params) => params.$filter);
+    expect(filters.at(-1).$orderby).toBeUndefined();
+    expect(filters.at(-1).$filter).toBe(
+      "contains(subject, 'invoice') and receivedDateTime le 2025-10-01T00:00:00.000Z"
+    );
+    expect(order(result)).toEqual(['b', 'a', 'c']);
+    expect(result._meta.searchMetadata.searchWindowUnreached).toBe(true);
+  });
+
+  test('no flag when $search ran out of results before any cap (control)', async () => {
+    callGraphAPIPaginated.mockImplementation((_t, _m, _e, params) =>
+      Promise.resolve(
+        params.$search
+          ? { value: recentPage(0).value.slice(0, 19) }
+          : { value: subjectMatches }
+      )
+    );
+
+    const result = await handleSearchEmails(args);
+
+    const meta = result._meta.searchMetadata;
+    expect(meta.finalStrategy).toBe('single-term-query');
+    expect(meta.searchWindowUnreached).toBeUndefined();
+    expect(result.content[0].text).not.toContain(
+      'none fell inside the date window'
+    );
+  });
+
+  test('no flag when $search stopped because it passed receivedAfter (control)', async () => {
+    callGraphAPIPaginated.mockImplementation((_t, _m, _e, params) =>
+      Promise.resolve(
+        params.$search
+          ? {
+              value: [old('x', '2020-01-01T00:00:00Z')],
+              '@odata.nextLink': NEXT(50),
+            }
+          : { value: subjectMatches }
+      )
+    );
+
+    const result = await handleSearchEmails({
+      query: 'invoice',
+      receivedAfter: '2026-01-01T00:00:00Z',
+    });
+
+    expect(result._meta.searchMetadata.searchWindowUnreached).toBeUndefined();
+  });
+
+  test('the no-results text also says the window was not reached', async () => {
+    let page = 0;
+    callGraphAPIPaginated.mockImplementation((_t, _m, endpoint, params) => {
+      if (params.$search || String(endpoint).startsWith('https://')) {
+        page += 50;
+        return Promise.resolve(recentPage(page));
+      }
+      return Promise.resolve({ value: [] });
+    });
+
+    const result = await handleSearchEmails(args);
+
+    expect(result._meta.returned).toBe(0);
+    expect(result.content[0].text).toContain(
+      'none fell inside the date window'
+    );
   });
 });

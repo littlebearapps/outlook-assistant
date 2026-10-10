@@ -308,11 +308,39 @@ async function progressiveSearch(
   maxCount,
   selectFields
 ) {
-  // Track search strategies attempted
-  const searchAttempts = [];
   // Populated by the client-side fallback with its scan coverage so the final
   // no-results response can still disclose whether the scan was bounded. (#169)
   const scanState = {};
+  const response = await runSearchLadder(
+    endpoint,
+    accessToken,
+    searchTerms,
+    filterTerms,
+    maxCount,
+    selectFields,
+    scanState
+  );
+  // `$search` was read to its paging limit without reaching the date window,
+  // and a later step answered: say so on whatever that step returned. (#261)
+  if (scanState.searchWindowUnreached && response?._searchInfo) {
+    response._searchInfo.searchWindowUnreached =
+      scanState.searchWindowUnreached;
+  }
+  return response;
+}
+
+/** The ladder itself; see progressiveSearch. */
+async function runSearchLadder(
+  endpoint,
+  accessToken,
+  searchTerms,
+  filterTerms,
+  maxCount,
+  selectFields,
+  scanState
+) {
+  // Track search strategies attempted
+  const searchAttempts = [];
 
   // 0. If raw KQL query provided, use it directly. The kqlQuery branch
   //    *terminates* — if Graph returns 0 (or throws), we surface that
@@ -570,13 +598,30 @@ async function progressiveSearch(
           .join(' and ');
       }
 
-      // Add boolean filters if applicable
+      // Sorted, with `receivedDateTime` leading, so the newest matches come
+      // back: unsorted, Graph returns the oldest first. The recipient lambda
+      // stays unsorted (unverified where Graph accepts it). If Graph refuses
+      // the sort, the unsorted request this step always sent is retried, and
+      // its page is put in date order locally. (#331)
+      const termClause = simplifiedParams.$filter;
       addBooleanFilters(simplifiedParams, filterTerms);
+      const sortedParams =
+        term === 'to'
+          ? null
+          : {
+              ...simplifiedParams,
+              $filter: [
+                buildSearchParams({}, filterTerms, 1, selectFields).$filter ||
+                  receivedFirstClauses()[0],
+                termClause,
+              ].join(' and '),
+              $orderby: 'receivedDateTime desc',
+            };
 
-      const response = await callGraphAPIPaginated(
+      const response = await fetchSortedOrUnsorted(
         accessToken,
-        'GET',
         endpoint,
+        sortedParams,
         simplifiedParams,
         maxCount
       );
@@ -830,6 +875,46 @@ async function progressiveSearch(
     filterTerms: filterTerms,
   };
 
+  return response;
+}
+
+/**
+ * Run `sorted` (a date-first `$filter` with `$orderby`); if Graph refuses the
+ * sort, run `unsorted` and order that page newest first locally.
+ * @param {object|null} sorted - Sorted params, or null to go straight to unsorted
+ */
+async function fetchSortedOrUnsorted(
+  accessToken,
+  endpoint,
+  sorted,
+  unsorted,
+  maxCount
+) {
+  if (sorted) {
+    try {
+      return await callGraphAPIPaginated(
+        accessToken,
+        'GET',
+        endpoint,
+        sorted,
+        maxCount
+      );
+    } catch (error) {
+      if (!String(error.message).includes('InefficientFilter')) throw error;
+      log.debug('Sorted filter refused, retrying unsorted');
+    }
+  }
+  const response = await callGraphAPIPaginated(
+    accessToken,
+    'GET',
+    endpoint,
+    unsorted,
+    maxCount
+  );
+  if (sorted && Array.isArray(response?.value)) {
+    const time = (m) => Date.parse(m.receivedDateTime) || 0;
+    response.value = [...response.value].sort((a, b) => time(b) - time(a));
+  }
   return response;
 }
 
@@ -1268,6 +1353,17 @@ async function narrowSearchPage(response, ctx) {
     if (collected.scanned > 0) {
       recordNarrowingMiss(scanState, collected.scanned);
     }
+    // Graph's `$search` stream is newest first and stops after a few hundred
+    // rows, so a window older than what was read can't be reached by paging.
+    // (Not when the read stopped because it had passed `receivedAfter`:
+    // `more` is false then.)
+    if (
+      scanState &&
+      activeWindowFilters(filterTerms).length > 0 &&
+      (collected.more || collected.scanned >= NARROW_SCAN_LIMIT)
+    ) {
+      scanState.searchWindowUnreached = collected.scanned;
+    }
     log.debug(
       `$search returned ${collected.scanned} results, none passing the other filters — continuing`
     );
@@ -1670,6 +1766,29 @@ function addBooleanFilters(params, filterTerms) {
 }
 
 /**
+ * What to say when `$search` was read to its paging limit and none of it fell
+ * in the date window, so a subject-only step answered (or nothing did). (#261)
+ * @param {object} searchInfo - `_searchInfo` with `searchWindowUnreached` (rows read)
+ * @returns {string}
+ */
+function searchWindowNote(searchInfo) {
+  const read = searchInfo.searchWindowUnreached;
+  const window = searchInfo.filterTerms || {};
+  const day = (value) => new Date(value).toISOString().slice(0, 10);
+  const bounds = [
+    window.receivedAfter && `received>=${day(window.receivedAfter)}`,
+    window.receivedBefore && `received<=${day(window.receivedBefore)}`,
+    window.unreadOnly === true && 'isread:false',
+    window.hasAttachments === true && 'hasattachment:true',
+  ].filter(Boolean);
+  const example =
+    bounds.length > 0
+      ? ` To search bodies there, put the condition in a \`searchExpression\`, e.g. \`<words> AND ${bounds.join(' AND ')}\`.`
+      : '';
+  return `Graph \`$search\` returned its ${read} newest results and none fell inside the date window or passed the other filters, so the window lies beyond what \`$search\` paging can reach. Anything listed here comes from a filter-based fallback that matches \`query\` against the subject, newest first; a message that matches only in its body is not included.${example}`;
+}
+
+/**
  * Build no-results guidance from what the caller actually supplied and what the
  * progressive-search ladder actually attempted, rather than printing the same
  * four lines on every empty search. (#231)
@@ -1747,6 +1866,10 @@ function buildNoResultsSuggestions(searchInfo, searchAllFolders) {
 
   if (searchInfo.ignoredFilters?.length > 0) {
     suggestions.push(ignoredFiltersNote(searchInfo.ignoredFilters));
+  }
+
+  if (searchInfo.searchWindowUnreached) {
+    suggestions.push(searchWindowNote(searchInfo));
   }
 
   if (filters.kqlQuery) {
@@ -1847,6 +1970,12 @@ function formatSearchResults(response, folder, verbosity, searchAllFolders) {
         narrowedCandidates: response._partialNarrowing.examined,
         partialCoverage: true,
       }),
+      // `$search` never reached the date window; a fallback step answered.
+      ...(response._searchInfo.searchWindowUnreached && {
+        partialCoverage: true,
+        searchWindowUnreached: true,
+        searchResultsRead: response._searchInfo.searchWindowUnreached,
+      }),
       // Surface client-side scan coverage so callers can tell when a fallback
       // result may be incomplete (older matches beyond the scan budget). (#169)
       ...(response._searchInfo.candidatesScanned !== undefined && {
@@ -1930,6 +2059,9 @@ function formatSearchResults(response, folder, verbosity, searchAllFolders) {
     // says so only when the search returns nothing; a truncated scan that
     // DID match is exactly as incomplete and reads as authoritative. On a
     // large archive that silently caps historical searches.
+    if (response._searchInfo.searchWindowUnreached) {
+      searchNote += `\n\n> **Partial coverage**: ${searchWindowNote(response._searchInfo)}`;
+    }
     if (response._partialNarrowing) {
       const examined = response._partialNarrowing.examined;
       const next = response._partialNarrowing.capped

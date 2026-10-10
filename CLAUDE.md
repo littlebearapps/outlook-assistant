@@ -155,7 +155,7 @@ Common errors (auth, device code, search, timezones) and fixes live in [`docs/tr
 ## Testing
 
 ```bash
-npm test                    # Jest unit tests (106 suites / 3245 tests at v3.14.2)
+npm test                    # Jest unit tests (107 suites / 3328 tests at v3.14.2)
 npm run lint                # ESLint (0 errors expected)
 npm run format:check        # Prettier (CI runs this)
 node scripts/e2e-stdio.js <tool> '<argsJson>'  # Fresh stdio server: initialize + one tools/call
@@ -164,7 +164,7 @@ node scripts/sync-risk-map.js  # After editing utils/risk-classes.js (--check to
 node scripts/skill-evals.js    # Prompt-injection evals (needs a signed-in claude CLI; spends tokens)
 ```
 
-Mock data defined in `utils/mock-data.js` (includes three prompt-injection emails for the evals). Shared-mailbox suites switch the opt-in on via `test/helpers/shared-mailbox.js`.
+Mock data defined in `utils/mock-data.js` (includes three prompt-injection emails for the evals). Shared-mailbox suites switch the opt-in on via `test/helpers/shared-mailbox.js`. `test/helpers/fake-graph.js` is a fake Graph for search-ladder tests that enforces the measured rules (`$search` alone, `receivedDateTime` leading a sorted filter, no recipient lambda, paging).
 
 ## Graph API Notes
 

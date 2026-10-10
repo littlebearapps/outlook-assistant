@@ -2501,7 +2501,7 @@ function formatSearchResults(
     // DID match is exactly as incomplete and reads as authoritative. On a
     // large archive that silently caps historical searches.
     if (response._searchInfo.incomplete) {
-      searchNote += `\n\n> **Partial coverage**: A request to Microsoft Graph failed (${response._searchInfo.failure || 'no response'}), so these results come from a fallback step and may be incomplete. Run the search again.`;
+      searchNote += `\n\n> **Partial coverage**: A request to Microsoft Graph failed (${response._searchInfo.failure || 'no response'}), so these results may be incomplete. Run the search again.`;
     }
     if (response._searchInfo.searchWindowUnreached) {
       searchNote += `\n\n> **Partial coverage**: ${searchWindowNote(response._searchInfo)}`;

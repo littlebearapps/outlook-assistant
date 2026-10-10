@@ -82,8 +82,22 @@ upgrade steps. #305 (scheduled automatic replies on personal accounts) is
   step or scan fails without answering (a 5xx, throttling, a timeout or a
   dropped connection) and nothing is found, the result says a request to
   Microsoft Graph failed and that a match may still exist, and reports
-  `incomplete: true`. Results that a fallback step returns after such a
-  failure carry the same flag and a note.
+  `incomplete: true`. Results returned after such a failure carry the same
+  flag and a note. Only a 400 by which Graph refuses a request shape
+  (`InefficientFilter`, `ErrorInvalidUrlQueryFilter`, `SearchWith…`, a
+  syntax error) counts as an answer; every other failure, recognised or
+  not, leaves the search incomplete and is named by status and code. The
+  same goes for a `searchExpression` and for a failed `$search` page.
+- **A 401 or 403 during a search is an error, not an empty result.** They
+  used to be absorbed and come back as "No emails found". A 401 now asks
+  you to sign in; a 403 says Graph refused the search (for a shared
+  mailbox, with the usual causes) and to check `auth action=about`.
+- **A search with only date or boolean filters never lists unfiltered
+  mail.** If the request that applies `unreadOnly`, `hasAttachments` or the
+  dates did not answer, the search fell back to recent mail and reported
+  the filter as applied. It now returns an error.
+- **A `searchExpression` Graph rejects says so, with Graph's reason**,
+  where it used to end in a plain "No emails found".
 - **`from` with a bare domain label finds the sender's mail** (#328). A
   `from` value with no `@` and no dot (such as `examplecorp`) matched display
   names only, so mail from `someone@examplecorp.com.au` was never found. It
@@ -150,7 +164,9 @@ upgrade steps. #305 (scheduled automatic replies on personal accounts) is
   first line counted only the people still on the event), for example
   "3 recipients (3 external): 2 attendees, 1 removed (sent a
   cancellation)". `create-event`, cancel and organiser-delete previews
-  count rooms and resources in `notified` too; `external` covers people.
+  count rooms and resources in `notified` too (an event with only a room
+  no longer says nobody is emailed); `external` covers people. An address
+  listed twice in different letter case counts once.
   A `manage-rules` reorder whose follow-up listing fails now says other rules
   may have been renumbered and to list them.
 - **`find-meeting-rooms` on Microsoft 365** (#240). The fallback called the

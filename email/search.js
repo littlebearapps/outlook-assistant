@@ -151,10 +151,55 @@ async function handleSearchEmails(args) {
     if (error.message === 'Authentication required') {
       return authRequiredError();
     }
+    const abort = error instanceof SearchAbort ? error : null;
+    const cause = abort?.cause || error;
+    const kind = abort?.kind || classifyFailure(error);
+    if (kind === 'auth') return authRequiredError();
+    if (kind === 'forbidden') return forbiddenError(cause, sharedMailbox);
+    if (kind === 'unfilterable') return unfilterableError(abort);
 
     // General error response
     return toolError(`Error searching emails: ${error.message}`);
   }
+}
+
+/**
+ * Graph answered 403: a permission or policy decision the caller has to see.
+ * It used to be absorbed by the ladder and come back as "no emails found".
+ */
+function forbiddenError(error, sharedMailbox) {
+  const label = failureLabel(error);
+  const nextStep =
+    'Run `auth` with action=about to check the signed-in account and the granted scopes. A 403 is a permission or policy decision: report it, and do not retry through another tool or address.';
+  if (sharedMailbox) {
+    return toolError(
+      `Access denied to shared mailbox "${sharedMailbox}" (${label}).\n\n**Possible causes:**\n- You don't have access to this shared mailbox\n- The Mail.Read.Shared permission is not granted\n- The shared mailbox address is incorrect`,
+      { nextStep }
+    );
+  }
+  return toolError(`Microsoft Graph refused this search (${label}).`, {
+    nextStep,
+  });
+}
+
+/**
+ * Only date or boolean filters were given and the one request that applies
+ * them did not succeed. Listing recent mail without them would present
+ * unfiltered mail as a filtered result, so say what happened.
+ */
+function unfilterableError(abort) {
+  const filters = listParams(abort.filters);
+  const why =
+    abort.cause && classifyFailure(abort.cause) === 'refusal'
+      ? `Microsoft Graph refused the request (${failureLabel(abort.cause)})`
+      : `the request to Microsoft Graph failed (${abort.cause ? failureLabel(abort.cause) : 'no response'})`;
+  return toolError(
+    `The search could not be completed: ${why}, so ${filters} could not be applied. No results are shown, because recent mail without ${abort.filters.length === 1 ? 'that filter' : 'those filters'} would not be what was asked for.`,
+    {
+      nextStep:
+        'Run the search again. If it keeps failing, add `from` or `subject`, which use a different request.',
+    }
+  );
 }
 
 /** Field prefixes a `searchExpression` can be translated into OData filters. */
@@ -346,6 +391,8 @@ async function progressiveSearch(
   // are a fallback's, so mark them rather than present them as complete.
   if (scanState.incomplete && result?._searchInfo) {
     result._searchInfo.incomplete = true;
+    result._searchInfo.failure =
+      result._searchInfo.failure || scanState.failure;
   }
   return result;
 }
@@ -451,6 +498,7 @@ async function runSearchLadder(
           const retry = await retryFieldScopedExpression(translationContext);
           if (retry) return retry;
         } catch (retryError) {
+          if (retryError instanceof SearchAbort) throw retryError;
           log.debug(`Translated retry failed: ${retryError.message}`);
         }
       }
@@ -459,6 +507,10 @@ async function runSearchLadder(
       // would ignore kqlQuery and return unrelated emails.
       return response;
     } catch (error) {
+      // A 401 or 403 stops here; a failure (not a refusal) leaves the search
+      // incomplete whatever the translated retry finds.
+      noteFailure(scanState, error);
+      const refused = classifyFailure(error) === 'refusal';
       log.debug(`Raw KQL search failed: ${error.message}`);
       searchAttempts.push('raw-kql-error');
 
@@ -473,6 +525,7 @@ async function runSearchLadder(
           return retry;
         }
       } catch (retryError) {
+        if (retryError instanceof SearchAbort) throw retryError;
         log.debug(`Translated retry also failed: ${retryError.message}`);
       }
 
@@ -485,9 +538,15 @@ async function runSearchLadder(
           originalTerms: searchTerms,
           filterTerms: filterTerms,
           kqlError: error.message,
+          // Graph's own reason, when it rejected the expression itself.
+          ...(refused && { kqlRejected: graphErrorMessage(error) }),
           appliedTerms: ['kqlQuery'],
           ignoredFilters: activeWindowFilters(filterTerms),
           noResults: true,
+          ...(scanState.incomplete && {
+            incomplete: true,
+            failure: scanState.failure,
+          }),
         },
       };
     }
@@ -665,7 +724,16 @@ async function runSearchLadder(
         // When Graph had more than this page, also read the unsorted page
         // this step used to send (the oldest matches) and keep what passes
         // from either end: one more request for the other end of the range.
-        if (secondaryApplied.length > 0 && sortedParams && hadMore(response)) {
+        // Not when the unsorted shape is what answered (that page already is
+        // the oldest matches), nor when the newest page fills `count`.
+        const oldestOnly = Boolean(response._unsortedPage);
+        if (
+          secondaryApplied.length > 0 &&
+          sortedParams &&
+          !oldestOnly &&
+          matched.length < maxCount &&
+          hadMore(response)
+        ) {
           try {
             const oldest = await callGraphAPIPaginated(
               accessToken,
@@ -710,7 +778,13 @@ async function runSearchLadder(
           };
           return response;
         }
-        recordNarrowingMiss(scanState, examined, hadMore(response), bothEnds);
+        recordNarrowingMiss(
+          scanState,
+          examined,
+          hadMore(response),
+          bothEnds,
+          oldestOnly
+        );
         log.debug(
           `Search with ${term} found ${response.value.length} results, but none also satisfied ${secondaryApplied.join(', ')} — continuing`
         );
@@ -839,6 +913,7 @@ async function runSearchLadder(
         `Boolean filter search found ${response.value.length} results, but none satisfied ${secondaryApplied.join(', ')} — continuing`
       );
     } catch (error) {
+      scanState.lastStepError = error;
       noteFailure(scanState, error);
       log.debug(`Boolean filter search failed: ${error.message}`);
       // Retry without $orderby if it was the issue
@@ -889,6 +964,7 @@ async function runSearchLadder(
             `Boolean filter retry found ${response.value.length} results, but none satisfied ${secondaryApplied.join(', ')} — continuing`
           );
         } catch (retryError) {
+          scanState.lastStepError = retryError;
           noteFailure(scanState, retryError);
           log.debug(`Boolean filter retry also failed: ${retryError.message}`);
         }
@@ -931,12 +1007,28 @@ async function runSearchLadder(
         ...(scanState.narrowedCandidates !== undefined && {
           narrowedCandidates: scanState.narrowedCandidates,
           ...(scanState.narrowedBothEnds && { narrowedBothEnds: true }),
+          ...(scanState.narrowedOldestOnly &&
+            !scanState.narrowedBothEnds && { narrowedOldestOnly: true }),
         }),
         // A step failed without answering (a 5xx, a timeout), so nothing
         // here proves the mailbox holds no match.
-        ...(scanState.incomplete && { incomplete: true }),
+        ...(scanState.incomplete && {
+          incomplete: true,
+          failure: scanState.failure,
+        }),
       },
     };
+  }
+
+  // Only date or boolean filters were given, and the step that applies them
+  // did not answer (it returns even when empty). Recent mail without them
+  // would be presented as a filtered result, so stop with an error.
+  if (hasBooleanFilters || hasDateFilters) {
+    throw new SearchAbort(
+      'unfilterable',
+      scanState.lastStepError,
+      activeWindowFilters(filterTerms)
+    );
   }
 
   // No search filters specified — return recent emails (list mode)
@@ -990,7 +1082,7 @@ async function fetchSortedOrUnsorted(
         maxCount
       );
     } catch (error) {
-      if (!String(error.message).includes('InefficientFilter')) throw error;
+      if (classifyFailure(error) !== 'refusal') throw error;
       log.debug('Sorted filter refused, retrying unsorted');
     }
   }
@@ -1004,6 +1096,8 @@ async function fetchSortedOrUnsorted(
   if (sorted && Array.isArray(response?.value)) {
     const time = (m) => Date.parse(m.receivedDateTime) || 0;
     response.value = [...response.value].sort((a, b) => time(b) - time(a));
+    // The page is Graph's unsorted one (its oldest matches), in date order.
+    response._unsortedPage = true;
   }
   return response;
 }
@@ -1277,6 +1371,7 @@ async function collectNarrowed(first, narrow, ctx, stopBefore) {
   let rows = first.value || [];
   let scanned = rows.length;
   let pages = 1;
+  let failed = false;
   const kept = narrow(rows);
   let nextLink = first['@odata.nextLink'];
   let more = Boolean(first.hasMore || nextLink);
@@ -1301,6 +1396,9 @@ async function collectNarrowed(first, narrow, ctx, stopBefore) {
         ctx.pageSize
       );
     } catch (error) {
+      // The read stopped early: that is a failure, not the end of the stream.
+      noteFailure(ctx.scanState, error);
+      failed = true;
       log.debug(`Narrowing stopped on a failed page: ${error.message}`);
       break;
     }
@@ -1312,8 +1410,9 @@ async function collectNarrowed(first, narrow, ctx, stopBefore) {
     more = Boolean(next?.hasMore || nextLink);
   }
   // `$search` is newest first: rows past the window's start can't match.
-  if (pastWindow(rows)) more = false;
-  return { kept, scanned, pages, more };
+  const crossed = pastWindow(rows);
+  if (crossed) more = false;
+  return { kept, scanned, pages, more, crossed, failed };
 }
 
 /**
@@ -1356,18 +1455,99 @@ function finishNarrowed(response, { kept, scanned, more }, maxCount, sort) {
  * timeout, a dropped connection), as opposed to Graph rejecting the request
  * (a 400 for a filter it doesn't support), which is an answer.
  */
-function isTransientFailure(error) {
-  return /status (5\d\d|429)\b|timed? ?out|ECONN|ETIMEDOUT|socket hang up|EAI_AGAIN|Network error|Error parsing API response/i.test(
-    String(error?.message || '')
-  );
+/**
+ * The 400s by which Graph says "I don't support this request shape": an
+ * answer, after which the next step of the ladder is the right move.
+ */
+const REFUSAL_CODES = new Set([
+  'InefficientFilter',
+  'ErrorInvalidUrlQueryFilter',
+  'SearchWithFilter',
+  'SearchWithOrderBy',
+]);
+
+/** HTTP status and Graph error code of a failed call, where it has them. */
+function failureDetails(error) {
+  const message = String(error?.message || '');
+  let status = Number(error?.status) || null;
+  if (!status) {
+    const match = /status (\d{3})\b/.exec(message);
+    if (match) status = Number(match[1]);
+    else if (message === 'UNAUTHORIZED') status = 401;
+  }
+  let code = error?.graphCode || null;
+  if (!code) {
+    const match = /"code"\s*:\s*"([A-Za-z0-9_.-]+)"/.exec(message);
+    code = match ? match[1] : error?.code || null;
+  }
+  return { status, code, message };
 }
 
 /**
- * Record that a step failed without answering, so a search that then finds
- * nothing isn't reported as a search of the whole mailbox.
+ * What a failed request means for the search:
+ * - `refusal`: a recognised 400 for an unsupported shape. Graph answered.
+ * - `auth` (401) and `forbidden` (403): the caller has to act; the search
+ *   must stop with an error, not come back empty.
+ * - `failure`: everything else (5xx, throttling, 404, a timeout, a network
+ *   error, anything unrecognised). Nothing was learned, so the search is
+ *   incomplete. Unknown errors land here on purpose: treating them as an
+ *   answer is how a failure used to become "no message matches".
+ * @returns {'refusal'|'auth'|'forbidden'|'failure'}
+ */
+function classifyFailure(error) {
+  const { status, code, message } = failureDetails(error);
+  if (status === 401) return 'auth';
+  if (status === 403) return 'forbidden';
+  if (status === 400) {
+    if (REFUSAL_CODES.has(code)) return 'refusal';
+    if (/syntax error/i.test(message)) return 'refusal';
+  }
+  return 'failure';
+}
+
+/** Graph's `error.message` from a failed call, trimmed; '' when there is none. */
+function graphErrorMessage(error) {
+  const text = String(error?.message || '');
+  const match = /"message"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(text);
+  return (match ? match[1].replace(/\\(.)/g, '$1') : '').slice(0, 300);
+}
+
+/** "503 ServiceUnavailable": status and code only, never the response body. */
+function failureLabel(error) {
+  const { status, code } = failureDetails(error);
+  return [status, code].filter(Boolean).join(' ') || 'no response';
+}
+
+/** A failure the ladder must not absorb: the handler turns it into a tool error. */
+class SearchAbort extends Error {
+  /**
+   * @param {'auth'|'forbidden'|'unfilterable'} kind
+   * @param {Error} [cause]
+   * @param {string[]} [filters] - for `unfilterable`: the filters left unapplied
+   */
+  constructor(kind, cause, filters = []) {
+    super(`search aborted: ${kind}`);
+    this.kind = kind;
+    this.cause = cause;
+    this.filters = filters;
+  }
+}
+
+/**
+ * Record what a failed step means. A refusal is an answer and is ignored. A
+ * 401 or 403 stops the search. Anything else marks the search incomplete, so
+ * a search that then finds nothing isn't reported as a search of the mailbox.
  */
 function noteFailure(scanState, error) {
-  if (scanState && isTransientFailure(error)) scanState.incomplete = true;
+  if (error instanceof SearchAbort) throw error;
+  const kind = classifyFailure(error);
+  if (kind === 'auth' || kind === 'forbidden') {
+    throw new SearchAbort(kind, error);
+  }
+  if (kind === 'failure' && scanState) {
+    scanState.incomplete = true;
+    scanState.failure = failureLabel(error);
+  }
 }
 
 /** Messages newest first, each ID once. */
@@ -1379,6 +1559,16 @@ function newestFirstUnique(messages) {
     .sort((a, b) => time(b) - time(a));
 }
 
+/**
+ * Whether a narrowing read left rows unread that could still match. Not when
+ * it crossed `receivedAfter`: everything after that is outside the window,
+ * whichever page it was crossed on, the capped one included.
+ */
+function unreadBeyond(collected) {
+  if (collected.crossed) return false;
+  return Boolean(collected.more || collected.scanned >= NARROW_SCAN_LIMIT);
+}
+
 /** Whether Graph had rows beyond the page it returned. */
 function hadMore(response) {
   return Boolean(response?.hasMore || response?.['@odata.nextLink']);
@@ -1388,7 +1578,8 @@ function recordNarrowingMiss(
   scanState,
   examined,
   more = true,
-  bothEnds = false
+  bothEnds = false,
+  oldestOnly = false
 ) {
   // With no further page, the pass saw every message the server-side filter
   // matched, so there is nothing "beyond that page" to warn about.
@@ -1396,6 +1587,8 @@ function recordNarrowingMiss(
   // The newest and the oldest pages were both read: what's unread lies
   // between them, which changes the advice.
   if (bothEnds) scanState.narrowedBothEnds = true;
+  // Graph refused the sort, so the page read was its oldest matches.
+  if (oldestOnly) scanState.narrowedOldestOnly = true;
   scanState.narrowedCandidates = Math.max(
     scanState.narrowedCandidates || 0,
     examined
@@ -1492,17 +1685,20 @@ async function narrowSearchPage(response, ctx) {
       recordNarrowingMiss(
         scanState,
         collected.scanned,
-        collected.more || collected.scanned >= NARROW_SCAN_LIMIT
+        unreadBeyond(collected)
       );
     }
     // Graph's `$search` stream is newest first and stops after a few hundred
     // rows, so a window older than what was read can't be reached by paging.
     // (Not when the read stopped because it had passed `receivedAfter`:
     // `more` is false then.)
+    // Nor when a page failed: the read was cut short, which says nothing
+    // about where the window is.
     if (
       scanState &&
       activeWindowFilters(filterTerms).length > 0 &&
-      (collected.more || collected.scanned >= NARROW_SCAN_LIMIT)
+      !collected.failed &&
+      unreadBeyond(collected)
     ) {
       scanState.searchWindowUnreached = collected.scanned;
     }
@@ -1554,7 +1750,7 @@ async function narrowStructuredPage(response, ctx) {
       recordNarrowingMiss(
         scanState,
         collected.scanned,
-        collected.more || collected.scanned >= NARROW_SCAN_LIMIT
+        unreadBeyond(collected)
       );
     }
     log.debug(
@@ -1631,7 +1827,7 @@ async function fetchRecentCandidates(
       );
     } catch (error) {
       // A failure is a failure; only a refusal falls back to the old scan.
-      if (isTransientFailure(error)) throw error;
+      if (classifyFailure(error) !== 'refusal') throw error;
       log.debug(
         `Windowed scan refused, scanning recent mail: ${error.message}`
       );
@@ -2027,7 +2223,12 @@ function buildNoResultsSuggestions(
   // Items or Junk Email, so it is not proof of absence either. (#333)
   const answeredBySearchOnly =
     Boolean(filters.kqlQuery) && !strategies.includes('raw-kql-translated');
-  if (searchAllFolders && partialCoverage) {
+  if (searchInfo.kqlRejected !== undefined) {
+    // Graph refused the expression itself, so no mail was searched at all.
+    suggestions.push(
+      `Microsoft Graph rejected the \`searchExpression\`, so nothing was searched${searchInfo.kqlRejected ? `: ${searchInfo.kqlRejected}` : ''}. Check the KQL (operators are upper-case, phrases need their own quotes) and try again`
+    );
+  } else if (searchAllFolders && partialCoverage) {
     suggestions.push(
       'All folders were searched, but some filters could only be checked against part of the mailbox (see below), so a match may still exist'
     );
@@ -2072,16 +2273,21 @@ function buildNoResultsSuggestions(
   // the bounded client-side scan, so say so rather than implying otherwise.
   if (searchInfo.narrowedCandidates) {
     const examined = `${searchInfo.narrowedCandidates} message${searchInfo.narrowedCandidates === 1 ? '' : 's'}`;
+    let narrowedNote;
+    if (searchInfo.narrowedBothEnds) {
+      narrowedNote = `The other filters were applied locally to ${examined} the server-side filter returned, the newest and the oldest, so a match between them would not have been seen — set \`receivedAfter\` and \`receivedBefore\` around the dates you expect`;
+    } else if (searchInfo.narrowedOldestOnly) {
+      narrowedNote = `The other filters were applied locally to the ${examined} the server-side filter returned, oldest first (Graph refused to sort them), so a newer match beyond that page would not have been seen — ${countAtMax ? '' : 'raise `count`, or '}set \`receivedAfter\``;
+    }
     suggestions.push(
-      searchInfo.narrowedBothEnds
-        ? `The other filters were applied locally to ${examined} the server-side filter returned, the newest and the oldest, so a match between them would not have been seen — set \`receivedAfter\` and \`receivedBefore\` around the dates you expect`
-        : `The other filters were applied locally to the ${examined} the server-side filter returned, newest first, so an older match beyond that page would not have been seen — ${countAtMax ? '' : 'raise `count`, or '}${earlierBeforeAdvice(searchInfo.filterTerms)}`
+      narrowedNote ||
+        `The other filters were applied locally to the ${examined} the server-side filter returned, newest first, so an older match beyond that page would not have been seen — ${countAtMax ? '' : 'raise `count`, or '}${earlierBeforeAdvice(searchInfo.filterTerms)}`
     );
   }
 
   if (searchInfo.incomplete) {
     suggestions.push(
-      'A request to Microsoft Graph failed part-way (a temporary error or a timeout), so not everything was checked — run the search again'
+      `A request to Microsoft Graph failed (${searchInfo.failure || 'no response'}), so not everything was checked — run the search again`
     );
   }
 
@@ -2295,8 +2501,7 @@ function formatSearchResults(
     // DID match is exactly as incomplete and reads as authoritative. On a
     // large archive that silently caps historical searches.
     if (response._searchInfo.incomplete) {
-      searchNote +=
-        '\n\n> **Partial coverage**: A request to Microsoft Graph failed part-way (a temporary error or a timeout), so these results come from a fallback step and may be incomplete. Run the search again.';
+      searchNote += `\n\n> **Partial coverage**: A request to Microsoft Graph failed (${response._searchInfo.failure || 'no response'}), so these results come from a fallback step and may be incomplete. Run the search again.`;
     }
     if (response._searchInfo.searchWindowUnreached) {
       searchNote += `\n\n> **Partial coverage**: ${searchWindowNote(response._searchInfo)}`;

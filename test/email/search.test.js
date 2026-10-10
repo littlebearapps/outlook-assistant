@@ -3562,7 +3562,9 @@ describe('handleSearchEmails — whole-quoted searchExpression (#333)', () => {
     callGraphAPIPaginated.mockImplementation((_t, _m, _e, params) =>
       params.$search
         ? Promise.reject(
-            new Error('API call failed with status 400: BadRequest')
+            new Error(
+              'API call failed with status 400: {"error":{"code":"BadRequest","message":"Syntax error: character \':\' is not valid"}}'
+            )
           )
         : Promise.resolve({ value: [] })
     );
@@ -4060,7 +4062,7 @@ describe('handleSearchEmails — local narrowing keeps old-mail matches (N1)', (
   const to = (address) => [{ emailAddress: { name: 'X', address } }];
 
   /** 600 recent non-matching messages, then invoices through 2021. */
-  function buildMailbox({ oldestAreTheMatches }) {
+  function buildMailbox() {
     const rows = [];
     for (let i = 0; i < 600; i++) {
       rows.push(
@@ -4084,10 +4086,8 @@ describe('handleSearchEmails — local narrowing keeps old-mail matches (N1)', (
         })
       );
     }
-    const matchDates = oldestAreTheMatches
-      ? [iso(2021, 6, 10), iso(2021, 6, 11)]
-      : [iso(2021, 6, 10), iso(2021, 6, 11)];
-    matchDates.forEach((date, i) =>
+    // The two recipient matches are the oldest invoices in the mailbox.
+    [iso(2021, 6, 10), iso(2021, 6, 11)].forEach((date, i) =>
       rows.push(
         mockEmail({
           id: `match-${i}`,
@@ -4171,7 +4171,7 @@ describe('handleSearchEmails — local narrowing keeps old-mail matches (N1)', (
       .sort();
 
   test('subject + to + receivedBefore: finds the old mail (v3.14.1 found 2)', async () => {
-    mockPersonalMailbox(buildMailbox({ oldestAreTheMatches: true }));
+    mockPersonalMailbox(buildMailbox());
 
     const result = await handleSearchEmails({
       subject: 'invoice',
@@ -4186,7 +4186,7 @@ describe('handleSearchEmails — local narrowing keeps old-mail matches (N1)', (
   });
 
   test('subject + to, no window: finds the old mail (v3.14.1 found 2)', async () => {
-    mockPersonalMailbox(buildMailbox({ oldestAreTheMatches: true }));
+    mockPersonalMailbox(buildMailbox());
 
     const result = await handleSearchEmails({
       subject: 'invoice',
@@ -4204,7 +4204,7 @@ describe('handleSearchEmails — local narrowing keeps old-mail matches (N1)', (
   });
 
   test('query + to + receivedBefore: finds the old mail without a second scan', async () => {
-    mockPersonalMailbox(buildMailbox({ oldestAreTheMatches: true }));
+    mockPersonalMailbox(buildMailbox());
 
     const result = await handleSearchEmails({
       query: 'invoice',
@@ -4224,7 +4224,7 @@ describe('handleSearchEmails — local narrowing keeps old-mail matches (N1)', (
   });
 
   test('the local scan asks Graph for the window, receivedDateTime first', async () => {
-    mockPersonalMailbox(buildMailbox({ oldestAreTheMatches: true }));
+    mockPersonalMailbox(buildMailbox());
 
     await handleSearchEmails({
       to: 'empresio',
@@ -4242,7 +4242,7 @@ describe('handleSearchEmails — local narrowing keeps old-mail matches (N1)', (
   });
 
   test('the local scan without a window is unchanged: no $filter (control)', async () => {
-    mockPersonalMailbox(buildMailbox({ oldestAreTheMatches: true }));
+    mockPersonalMailbox(buildMailbox());
 
     await handleSearchEmails({ to: 'empresio', searchAllFolders: true });
 
@@ -4264,7 +4264,7 @@ describe('handleSearchEmails — local narrowing keeps old-mail matches (N1)', (
   ])(
     'no match with window %j: both ends were read, so it says %s',
     async (window, advice) => {
-      mockPersonalMailbox(buildMailbox({ oldestAreTheMatches: true }));
+      mockPersonalMailbox(buildMailbox());
 
       const result = await handleSearchEmails({
         subject: 'invoice',
@@ -4293,7 +4293,7 @@ describe('handleSearchEmails — local narrowing keeps old-mail matches (N1)', (
   ])(
     'a scan that hit its limit with window %j says to %s',
     async (window, advice) => {
-      mockPersonalMailbox(buildMailbox({ oldestAreTheMatches: true }));
+      mockPersonalMailbox(buildMailbox());
 
       const result = await handleSearchEmails({
         to: 'nobody-at-all',
@@ -4351,7 +4351,9 @@ describe('handleSearchEmails — a failed request is not proof of absence (N2)',
     expect(result._meta.returned).toBe(0);
     expect(text).not.toContain(DEFINITIVE);
     expect(text).toContain('so a match may still exist');
-    expect(text).toContain('A request to Microsoft Graph failed part-way');
+    expect(text).toContain(
+      'A request to Microsoft Graph failed (502 UnknownError)'
+    );
     expect(result._meta.searchMetadata.incomplete).toBe(true);
   });
 
@@ -4399,7 +4401,7 @@ describe('handleSearchEmails — a failed request is not proof of absence (N2)',
     expect(result._meta.searchMetadata.incomplete).toBe(true);
     expect(result._meta.searchMetadata.partialCoverage).toBe(true);
     expect(result.content[0].text).toContain(
-      'A request to Microsoft Graph failed part-way'
+      'A request to Microsoft Graph failed (502 UnknownError)'
     );
   });
 

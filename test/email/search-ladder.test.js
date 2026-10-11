@@ -443,12 +443,55 @@ describe('searchExpression failures', () => {
     );
 
     expect(meta.finalStrategy).toBe('raw-kql-error');
-    expect(meta.incomplete).toBeUndefined();
     expect(text).toContain('Microsoft Graph rejected the `searchExpression`');
     expect(text).toContain(
       "Syntax error: character '(' is not valid at position 12"
     );
     expect(text).not.toContain(DEFINITIVE);
+  });
+
+  // #340: nothing was searched, so `_meta` must not read as an ordinary
+  // empty result.
+  test('a rejected expression is marked incomplete in _meta, with the same text', async () => {
+    const { text, meta, result, calls } = await run(
+      { searchExpression: 'invoice AND (note' },
+      {
+        fail: (_i, p) =>
+          p.$search
+            ? graphError(
+                400,
+                'BadRequest',
+                "Syntax error: character '(' is not valid at position 12"
+              )
+            : null,
+      }
+    );
+
+    expect(result.isError).toBeUndefined();
+    expect(result._meta.returned).toBe(0);
+    expect(meta.incomplete).toBe(true);
+    expect(meta.partialCoverage).toBe(true);
+    expect(meta.filterApplied).toBe(false);
+    expect(calls).toHaveLength(1);
+    expect(text).toBe(
+      'No emails found matching your filters in "all folders" (filters: searchExpression).\n\n' +
+        '**Suggestions:**\n' +
+        "- Microsoft Graph rejected the `searchExpression`, so nothing was searched: Syntax error: character '(' is not valid at position 12. Check the KQL (operators are upper-case, phrases need their own quotes) and try again\n" +
+        '- `searchExpression` is a Graph `$search`: it matches whole words or their beginnings. The structured filters (`from`, `to`, `subject`) match substrings'
+    );
+  });
+
+  test('a rejection with no reason from Graph is marked incomplete as well', async () => {
+    const { text, meta } = await run(
+      { searchExpression: 'invoice OR note' },
+      { fail: () => graphError(400, 'SearchWithFilter', '') }
+    );
+
+    expect(meta.incomplete).toBe(true);
+    expect(text).toContain(
+      'Microsoft Graph rejected the `searchExpression`, so nothing was searched.'
+    );
+    expect(text).not.toContain('A request to Microsoft Graph failed');
   });
 
   test('a pure field-scoped expression: the rejected as-written request is not a failure', async () => {

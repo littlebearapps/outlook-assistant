@@ -97,7 +97,9 @@ upgrade steps. #305 (scheduled automatic replies on personal accounts) is
   dates did not answer, the search fell back to recent mail and reported
   the filter as applied. It now returns an error.
 - **A `searchExpression` Graph rejects says so, with Graph's reason**,
-  where it used to end in a plain "No emails found".
+  where it used to end in a plain "No emails found". The result also
+  reports `incomplete: true` in `_meta.searchMetadata`, because nothing was
+  searched (#340).
 - **`from` with a bare domain label finds the sender's mail** (#328). A
   `from` value with no `@` and no dot (such as `examplecorp`) matched display
   names only, so mail from `someone@examplecorp.com.au` was never found. It

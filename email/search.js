@@ -539,7 +539,11 @@ async function runSearchLadder(
           filterTerms: filterTerms,
           kqlError: error.message,
           // Graph's own reason, when it rejected the expression itself.
-          ...(refused && { kqlRejected: graphErrorMessage(error) }),
+          // Nothing was searched then, so the result is incomplete too. (#340)
+          ...(refused && {
+            kqlRejected: graphErrorMessage(error),
+            incomplete: true,
+          }),
           appliedTerms: ['kqlQuery'],
           ignoredFilters: activeWindowFilters(filterTerms),
           noResults: true,
@@ -2285,7 +2289,9 @@ function buildNoResultsSuggestions(
     );
   }
 
-  if (searchInfo.incomplete) {
+  // Not for a rejected `searchExpression`: Graph answered, the first line
+  // says so, and running the same expression again would not help.
+  if (searchInfo.incomplete && searchInfo.kqlRejected === undefined) {
     suggestions.push(
       `A request to Microsoft Graph failed (${searchInfo.failure || 'no response'}), so not everything was checked — run the search again`
     );

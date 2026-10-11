@@ -1444,21 +1444,6 @@ function finishNarrowed(response, { kept, scanned, more }, maxCount, sort) {
   }
 }
 
-/**
- * Note that a narrowing pass examined rows and matched none of them, so the
- * eventual no-results response can say how much was actually looked at rather
- * than implying the mailbox was exhausted. (#229)
- *
- * @param {object} scanState - Side-channel carried to the no-results rung
- * @param {number} examined - How many rows the narrowing pass saw
- * @param {boolean} [more] - Whether Graph had rows beyond those examined
- * @param {boolean} [bothEnds] - The newest and the oldest pages were both read
- */
-/**
- * Whether an error is Graph or the network failing (5xx, throttling, a
- * timeout, a dropped connection), as opposed to Graph rejecting the request
- * (a 400 for a filter it doesn't support), which is an answer.
- */
 /** Graph's `error.message` from a failed call, trimmed; '' when there is none. */
 function graphErrorMessage(error) {
   const text = String(error?.message || '');
@@ -1522,6 +1507,17 @@ function hadMore(response) {
   return Boolean(response?.hasMore || response?.['@odata.nextLink']);
 }
 
+/**
+ * Note that a narrowing pass examined rows and matched none of them, so the
+ * eventual no-results response can say how much was actually looked at rather
+ * than implying the mailbox was exhausted. (#229)
+ *
+ * @param {object} scanState - Side-channel carried to the no-results rung
+ * @param {number} examined - How many rows the narrowing pass saw
+ * @param {boolean} [more] - Whether Graph had rows beyond those examined
+ * @param {boolean} [bothEnds] - The newest and the oldest pages were both read
+ * @param {boolean} [oldestOnly] - The page read was Graph's unsorted one
+ */
 function recordNarrowingMiss(
   scanState,
   examined,

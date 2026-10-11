@@ -16,18 +16,33 @@ const REFUSAL_CODES = new Set([
   'SearchWithOrderBy',
 ]);
 
-/** HTTP status and Graph error code of a failed call, where it has them. */
+/**
+ * The messages the Graph client (`utils/graph-api.js`) gives a failed
+ * response: `API call failed with status NNN: <body>` and, for a MIME export,
+ * `MIME export failed with status NNN: <body>`. A 401 is the bare
+ * `UNAUTHORIZED`.
+ */
+const CLIENT_FAILURE = /^(?:API call|MIME export) failed with status (\d{3}):/;
+
+/**
+ * HTTP status and Graph error code of a failed call, where it has them. The
+ * error's own `status`/`graphCode` come first. They are read from the message
+ * only when it is one of the client's own (an older path or a mock without
+ * the properties), never from other text: a folder-not-found message quotes
+ * the caller's folder name, and a folder called "status 403" is not a 403.
+ */
 function failureDetails(error) {
   const message = String(error?.message || '');
+  const fromClient = CLIENT_FAILURE.exec(message);
   let status = Number(error?.status) || null;
   if (!status) {
-    const match = /status (\d{3})\b/.exec(message);
-    if (match) status = Number(match[1]);
+    if (fromClient) status = Number(fromClient[1]);
     else if (message === 'UNAUTHORIZED') status = 401;
   }
   let code = error?.graphCode || null;
   if (!code) {
-    const match = /"code"\s*:\s*"([A-Za-z0-9_.-]+)"/.exec(message);
+    const match =
+      fromClient && /"code"\s*:\s*"([A-Za-z0-9_.-]+)"/.exec(message);
     code = match ? match[1] : error?.code || null;
   }
   return { status, code, message };

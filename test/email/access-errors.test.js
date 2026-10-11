@@ -311,3 +311,128 @@ describe('export: the search behind a batch export', () => {
     );
   });
 });
+
+// A status is read from the error's own properties, or from a message in the
+// Graph client's own shape, never from text that quotes the caller's input:
+// a missing folder called "status 403" is a missing folder.
+describe('a folder name that looks like a status is not one', () => {
+  const NAMES = ['status 401', 'status 403', 'Reports status 401 archive'];
+  const notFound = (name) => `Folder "${name}" not found.`;
+  const expectNotFound = (result, name) => {
+    const text = result.content[0].text;
+    expect(result.isError).toBe(true);
+    expect(text).toContain(notFound(name));
+    expect(text).not.toContain('Authentication required');
+    expect(text).not.toContain('refused');
+    expect(text).not.toContain('action=about');
+  };
+
+  beforeEach(() => {
+    // No folder has that name: the top-level list comes back empty.
+    callGraphAPI.mockResolvedValue({ value: [] });
+  });
+
+  test.each(NAMES)('accessError leaves "%s" not found alone', (name) => {
+    expect(accessError(new Error(notFound(name)), null, 'listing')).toBeNull();
+  });
+
+  test.each(NAMES)('a listing of "%s"', async (folder) => {
+    expectNotFound(await searchEmails({ folder, count: 5 }), folder);
+  });
+
+  test.each(NAMES)('a conversation listing of "%s"', async (folder) => {
+    expectNotFound(
+      await searchEmails({ folder, groupByConversation: true }),
+      folder
+    );
+  });
+
+  test.each(NAMES)('a search with a filter in "%s"', async (folder) => {
+    const result = await searchEmails({ folder, subject: 'x' });
+
+    expectNotFound(result, folder);
+    expect(result.content[0].text).toMatch(/^Error searching emails: /);
+    expect(callGraphAPIPaginated).not.toHaveBeenCalled();
+  });
+
+  describe('export', () => {
+    let outputDir;
+    beforeEach(() => {
+      outputDir = fs.mkdtempSync(path.join(os.tmpdir(), 'oa-access-'));
+    });
+    afterEach(() => {
+      fs.rmSync(outputDir, { recursive: true, force: true });
+    });
+
+    test.each(NAMES)('searchQuery.folder "%s"', async (folder) => {
+      const result = await handleBatchExportEmails({
+        outputDir,
+        searchQuery: { subject: 'invoice', folder },
+      });
+
+      expectNotFound(result, folder);
+      expect(result.content[0].text).toMatch(/^Batch export failed: /);
+    });
+  });
+
+  test('an ambiguous folder and an invalid path keep their own messages', async () => {
+    callGraphAPI.mockResolvedValue({
+      value: [
+        { id: 'a', displayName: 'status 403', childFolderCount: 0 },
+        { id: 'b', displayName: 'status 403', childFolderCount: 0 },
+      ],
+    });
+    const ambiguous = await searchEmails({ folder: 'status 403' });
+    const invalid = await searchEmails({ folder: 'status 401//x' });
+
+    expect(ambiguous.content[0].text).toContain(
+      'Folder "status 403" is ambiguous'
+    );
+    expect(invalid.content[0].text).toContain(
+      'Invalid folder path "status 401//x": empty path segment.'
+    );
+    for (const result of [ambiguous, invalid]) {
+      expect(result.content[0].text).toMatch(/^Error listing emails: /);
+      expect(result.content[0].text).not.toContain('action=about');
+    }
+  });
+
+  test('a real failure wrapped around such a name keeps its own status', async () => {
+    callGraphAPI.mockRejectedValue(serverError());
+
+    const result = await searchEmails({ folder: 'status 403' });
+
+    expect(result.content[0].text).toContain(
+      'Error resolving folder "status 403": API call failed with status 500'
+    );
+    expect(result.content[0].text).not.toContain('refused');
+  });
+
+  test.each([
+    [
+      'API call failed with status 403: {"error":{"code":"ErrorAccessDenied"}}',
+      'Microsoft Graph refused this listing (403 ErrorAccessDenied).',
+    ],
+    [
+      'MIME export failed with status 403: Forbidden',
+      'Microsoft Graph refused this listing (403).',
+    ],
+  ])(
+    'the client’s own message without the properties still counts: %s',
+    (message, expected) => {
+      expect(
+        accessError(new Error(message), null, 'listing').content[0].text
+      ).toContain(expected);
+    }
+  );
+
+  test('the client’s messages are matched from their start only', () => {
+    expect(
+      accessError(
+        new Error('Folder "API call failed with status 403: x" not found.'),
+        null,
+        'listing'
+      )
+    ).toBeNull();
+  });
+});

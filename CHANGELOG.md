@@ -111,7 +111,14 @@ upgrade steps. #305 (scheduled automatic replies on personal accounts) is
   conversation listing (`groupByConversation`), a search and a
   search-driven `export` now ask you to sign in on a 401, and on a 403 say
   Graph refused the request (status and error code only) and to check
-  `auth action=about`. Successful calls are unchanged.
+  `auth action=about`. Successful calls are unchanged. Covered: the plain
+  listing, the `groupByConversation` listing, a search, and `export` with
+  `searchQuery`, each on its own request and on the folder lookup. Not
+  covered, still the raw text: delta sync, `internetMessageId` and
+  `conversationId` lookups, `read-email`, single-message `export` and the
+  `folders` tool. A status is taken from Graph's response only, so a
+  missing folder whose name contains "status 403" is still reported as a
+  folder that was not found (searches with a filter reported it as a 403).
 - **A search with only date or boolean filters never lists unfiltered
   mail.** If the request that applies `unreadOnly`, `hasAttachments` or the
   dates did not answer, the search fell back to recent mail and reported

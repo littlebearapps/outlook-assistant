@@ -32,6 +32,7 @@ const {
   OutputPathError,
 } = require('../utils/safe-write');
 const { toolError, authRequiredError } = require('../utils/tool-error');
+const { accessError } = require('../utils/graph-failure');
 const { log } = require('../utils/logger');
 
 // Export format constants
@@ -483,6 +484,8 @@ async function handleBatchExportEmails(args) {
     if (error.message === 'Authentication required') {
       return authRequiredError();
     }
+    const denied = accessError(error, mailbox, 'export');
+    if (denied) return denied;
 
     return toolError(`Batch export failed: ${error.message}`);
   }

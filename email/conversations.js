@@ -30,6 +30,7 @@ const {
   DEFAULT_LIMITS,
 } = require('../utils/response-formatter');
 const { toolError, authRequiredError } = require('../utils/tool-error');
+const { accessError } = require('../utils/graph-failure');
 // Note: buildFromFilter/buildToFilter from search.js use OData $filter which causes
 // InefficientFilter on personal accounts with $orderby. Client-side filtering used instead.
 
@@ -245,6 +246,8 @@ async function handleListConversations(args) {
     if (error.message === 'Authentication required') {
       return authRequiredError();
     }
+    const denied = accessError(error, sharedMailbox, 'listing');
+    if (denied) return denied;
     return toolError(`Error listing conversations: ${error.message}`);
   }
 }

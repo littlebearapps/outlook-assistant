@@ -3,6 +3,7 @@
  */
 const { resolveFolder, looksLikeFolderId } = require('../folder/resolve');
 const { buildMailboxPrefix } = require('../utils/mailbox');
+const { classifyFailure } = require('../utils/graph-failure');
 const { log } = require('../utils/logger');
 
 /**
@@ -102,6 +103,12 @@ async function resolveFolderPath(accessToken, folderName, mailbox = null) {
       error.message.includes('not found') ||
       error.message.includes('ambiguous')
     ) {
+      throw error;
+    }
+    // A 401 or 403 is not a folder problem, and the `folders` tool would fail
+    // the same way: pass it on as it is for the handler to classify. (#341)
+    const kind = classifyFailure(error);
+    if (kind === 'auth' || kind === 'forbidden') {
       throw error;
     }
     throw new Error(

@@ -58,6 +58,7 @@ utils/
   ├── server-instructions.js # initialize `instructions`: hard rules first, read-only note, blocked-tool note
   ├── logger.js           # Stderr logger: one line per tool call, OUTLOOK_DEBUG detail, redact()
   ├── tool-error.js       # toolError()/authRequiredError(): every handler error returns isError
+  ├── graph-failure.js    # classifyFailure() by status and Graph error code; accessError() for a 401 or 403
   ├── safety.js           # Session limits (resolveSessionLimit), recipient allowlist, dry-run previews (dryRunResult)
   ├── safe-write.js       # Output-path confinement (absolute or ~ paths inside temp, ~/Downloads, ~/Documents, OUTLOOK_EXPORT_DIR) and exclusive file writes with -1, -2, … suffixes; savePath replaced only with overwrite; files 0600, new folders 0700
   ├── field-presets.js    # Field selections for token efficiency

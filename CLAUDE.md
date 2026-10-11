@@ -86,6 +86,7 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 | `utils/read-only.js` | `OUTLOOK_READ_ONLY` gate: refusal for any non-`read` call (`auth` sign-in actions exempt) |
 | `utils/logger.js` | Stderr logger: `log.info`/`log.debug`, per-call notes, `redact()`, `isDebugEnabled()` (`OUTLOOK_DEBUG`) |
 | `utils/tool-error.js` | `toolError(message, { nextStep })` and `authRequiredError()`: every handler error returns `isError: true` |
+| `utils/graph-failure.js` | What a failed Graph call means (`classifyFailure`: refusal, auth, forbidden, failure) and `accessError()`: the tool error for a 401 or 403, used by the search ladder, listings and the search export |
 | `config.js` | API endpoint, auth settings, defaults |
 | `utils/schema-coerce.js` | MCP-boundary param coercion + validation (string→array/boolean/number, `additionalProperties: false`, required, enums) |
 | `auth/client-config.js` | Runtime client ID: GUID validation, `~/.outlook-assistant-config.json` read/save, env → saved resolution (must not require `config.js`) |

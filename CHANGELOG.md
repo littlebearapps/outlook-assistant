@@ -92,6 +92,15 @@ upgrade steps. #305 (scheduled automatic replies on personal accounts) is
   used to be absorbed and come back as "No emails found". A 401 now asks
   you to sign in; a 403 says Graph refused the search (for a shared
   mailbox, with the usual causes) and to check `auth action=about`.
+- **A plain listing and a folder lookup give the same 401 and 403 errors as
+  a search** (#341). With no filters, `search-emails` answered a 401 with
+  "Error listing emails: UNAUTHORIZED" and a 403 with Graph's raw response,
+  and a 401 or 403 while a named folder was being resolved ended in "Use
+  the folders tool", which would fail the same way. A listing, a
+  conversation listing (`groupByConversation`), a search and a
+  search-driven `export` now ask you to sign in on a 401, and on a 403 say
+  Graph refused the request (status and error code only) and to check
+  `auth action=about`. Successful calls are unchanged.
 - **A search with only date or boolean filters never lists unfiltered
   mail.** If the request that applies `unreadOnly`, `hasAttachments` or the
   dates did not answer, the search fell back to recent mail and reported

@@ -203,6 +203,10 @@ function formatEmailList(
     // given, so another `receivedBefore` would re-read the same messages.
     // (#261 follow-up)
     output += `\n\n---\n_More emails may match. To see them, ${raise}add words to \`query\` to narrow it._`;
+  } else if (meta.hasMore && meta.searchMetadata?.sortRefused) {
+    // The page is Graph's unsorted one, usually its oldest matches, so
+    // paging back from the oldest date shown would skip mail. (#342)
+    output += `\n\n---\n_More emails available. Graph refused to sort this search, so the ones shown are in date order but may not be the newest matches (an unsorted request usually returns the oldest). To see the rest, ${raise}set \`receivedAfter\`/\`receivedBefore\` around the dates you want._`;
   } else if (meta.hasMore) {
     output += `\n\n---\n_More emails available. To see them, ${raise}narrow the date range with \`receivedAfter\`/\`receivedBefore\` (for older mail, set \`receivedBefore\` to the oldest date shown)._`;
   }

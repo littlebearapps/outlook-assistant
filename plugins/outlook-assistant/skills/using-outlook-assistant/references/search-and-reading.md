@@ -46,6 +46,7 @@ Every search response carries it. Read it before acting on results:
 - `searchWindowUnreached: true` (with `searchResultsRead`) means a `query`'s date window was older than anything `$search` paging returned, so the results are subject matches only. To search bodies in that window, put the date in a `searchExpression` (`invoice AND received<=2025-10-01`).
 - `droppedFilters` lists filters that could not be honoured. It should be empty. If it isn't, the results are broader than asked: narrow again (tighter dates, a different filter) rather than acting on them.
 - `incomplete: true` means a request to Microsoft Graph failed part-way, or Graph rejected the `searchExpression` (the text gives its reason). "No match" is then not proof of absence; run the search again, or correct the expression.
+- `sortRefused: true` means Graph refused to sort the search, so the results are in date order but, when more are available, may be the oldest matches and not the newest. Set `receivedAfter`/`receivedBefore` around the dates you want; don't page back from the oldest date shown.
 - `truncated: true` (with `candidatesScanned` and `scanLimit`) means a local scan stopped before the end. "No match" is then not proof of absence; narrow the date window and search again.
 - `kqlTranslatedTo` shows how a `searchExpression` was rewritten as filters after `$search` rejected it or found nothing.
 

@@ -67,6 +67,17 @@ upgrade steps. #305 (scheduled automatic replies on personal accounts) is
   `subject` and `query` are sorted the same way, and retry unsorted if
   Graph refuses the sort. `to` filters are unchanged (still unsorted where
   Graph accepts them).
+- **Results from an unsorted retry are in date order and say what they
+  are** (#342). When Graph refuses the sort, the page comes from an
+  unsorted request, which usually returns the oldest matches. The search
+  with only `hasAttachments`/`unreadOnly` and dates returned that page in
+  Graph's order; it is now put in date order, newest first, as the
+  `from`/`subject`/`query` steps already did. With more matches than
+  `count`, the footer no longer says "for older mail, set `receivedBefore`
+  to the oldest date shown", which would skip mail: it says Graph refused
+  the sort and that the messages shown may not be the newest, and
+  `_meta.searchMetadata` reports `sortRefused: true`. Searches that Graph
+  sorts are unchanged.
 - **Filters applied locally keep matches in old mail, and say where the
   unread part is** (#331). When one filter runs on the server and another
   is matched locally (on personal accounts, anything with `to`), and Graph

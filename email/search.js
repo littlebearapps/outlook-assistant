@@ -915,12 +915,16 @@ async function runSearchLadder(
             $select: selectFields,
           };
           addBooleanFilters(retryParams, filterTerms);
-          const response = await callGraphAPIPaginated(
-            accessToken,
-            'GET',
-            endpoint,
-            retryParams,
-            maxCount
+          // Graph returns this page in its own order, so it is put in date
+          // order here, as the single-term steps do. (#342)
+          const response = orderUnsortedPage(
+            await callGraphAPIPaginated(
+              accessToken,
+              'GET',
+              endpoint,
+              retryParams,
+              maxCount
+            )
           );
           const { matched, secondaryApplied } = applySecondarySearchTerms(
             response.value || [],
@@ -948,7 +952,9 @@ async function runSearchLadder(
           recordNarrowingMiss(
             scanState,
             response.value.length,
-            hadMore(response)
+            hadMore(response),
+            false,
+            true
           );
           log.debug(
             `Boolean filter retry found ${response.value.length} results, but none satisfied ${secondaryApplied.join(', ')} — continuing`
@@ -1083,10 +1089,18 @@ async function fetchSortedOrUnsorted(
     unsorted,
     maxCount
   );
-  if (sorted && Array.isArray(response?.value)) {
+  return sorted ? orderUnsortedPage(response) : response;
+}
+
+/**
+ * Put the page Graph returned for an unsorted request in date order, newest
+ * first, and mark it: it is whichever matches Graph chose to return (usually
+ * its oldest), not the newest, and the advice in the result has to say so.
+ */
+function orderUnsortedPage(response) {
+  if (Array.isArray(response?.value)) {
     const time = (m) => Date.parse(m.receivedDateTime) || 0;
     response.value = [...response.value].sort((a, b) => time(b) - time(a));
-    // The page is Graph's unsorted one (its oldest matches), in date order.
     response._unsortedPage = true;
   }
   return response;
@@ -2345,6 +2359,9 @@ function formatSearchResults(
         incomplete: true,
         partialCoverage: true,
       }),
+      // Graph refused the sort, so the page is its unsorted one, put in date
+      // order locally: not necessarily the newest matches. (#342)
+      ...(response._unsortedPage && { sortRefused: true }),
       // `$search` never reached the date window; a fallback step answered.
       ...(response._searchInfo.searchWindowUnreached && {
         partialCoverage: true,

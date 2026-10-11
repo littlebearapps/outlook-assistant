@@ -593,6 +593,143 @@ describe('when Graph refuses the sort', () => {
   });
 });
 
+// #342: a page that came from an unsorted request is in date order, and the
+// advice with it does not assume it holds the newest matches.
+describe('a page from an unsorted request (#342)', () => {
+  const OLD_FOOTER = 'set `receivedBefore` to the oldest date shown';
+  const NEW_FOOTER =
+    '_More emails available. Graph refused to sort this search, so the ones shown are in date order but may not be the newest matches (an unsorted request usually returns the oldest). To see the rest, raise `count` (up to 50) or set `receivedAfter`/`receivedBefore` around the dates you want._';
+  const newestFirst = (ids) =>
+    [...ids].sort((a, b) => Number(b.slice(1)) - Number(a.slice(1)));
+  const sortRefused = failWhen(
+    (p) => Boolean(p.$filter && p.$orderby),
+    graphError(400, 'InefficientFilter')
+  );
+
+  test('single-term step: the footer does not say to page back from the oldest date shown', async () => {
+    const { ids, text, meta, calls, result } = await run(
+      { subject: 'invoice', count: 10 },
+      { noSort: true }
+    );
+
+    // The ten oldest invoices (every third day from day 0), newest first.
+    expect(ids).toEqual([
+      'd27',
+      'd24',
+      'd21',
+      'd18',
+      'd15',
+      'd12',
+      'd9',
+      'd6',
+      'd3',
+      'd0',
+    ]);
+    expect(result._meta.hasMore).toBe(true);
+    expect(meta.sortRefused).toBe(true);
+    expect(text).toContain(NEW_FOOTER);
+    expect(text).not.toContain(OLD_FOOTER);
+    // Two refused sorted requests and the one unsorted read, as before.
+    expect(calls.map((c) => Boolean(c.$orderby))).toEqual([true, true, false]);
+  });
+
+  test('single-term step at count 50: no advice to raise count', async () => {
+    const { text } = await run(
+      { subject: 'invoice', count: 50 },
+      { noSort: true }
+    );
+
+    expect(text).toContain('Graph refused to sort this search');
+    expect(text).not.toContain('raise `count`');
+    expect(text).not.toContain(OLD_FOOTER);
+  });
+
+  test('single-term step, narrowed locally: the same footer', async () => {
+    const { text, meta } = await run(
+      { subject: 'invoice', to: 'me@live.com', count: 10 },
+      { noSort: true }
+    );
+
+    expect(meta.sortRefused).toBe(true);
+    expect(text).toContain(NEW_FOOTER);
+    expect(text).not.toContain(OLD_FOOTER);
+  });
+
+  test('every match fits on the page: in order, with no footer', async () => {
+    const { ids, text, meta, result } = await run(
+      { subject: 'Invoice 30', count: 10 },
+      { noSort: true }
+    );
+
+    expect(ids).toEqual(['d309', 'd306', 'd303', 'd300', 'd30']);
+    expect(result._meta.hasMore).toBe(false);
+    expect(meta.sortRefused).toBe(true);
+    expect(text).not.toContain('More emails');
+  });
+
+  test('boolean step: the unsorted retry is put in date order, and says so', async () => {
+    const { ids, text, meta, calls, result } = await run(
+      { hasAttachments: true, count: 10 },
+      sortRefused
+    );
+
+    // Graph's unsorted page is its ten oldest (every thirteenth day).
+    expect(ids).toHaveLength(10);
+    expect(ids).toEqual(newestFirst(ids));
+    expect(ids[9]).toBe('d0');
+    expect(result.isError).toBeUndefined();
+    expect(meta.finalStrategy).toBe('boolean-filters-only');
+    expect(meta.filterApplied).toBe(true);
+    expect(meta.sortRefused).toBe(true);
+    expect(text).toContain(NEW_FOOTER);
+    expect(text).not.toContain(OLD_FOOTER);
+    // The sorted request and its one retry: nothing added.
+    expect(calls.map((c) => Boolean(c.$orderby))).toEqual([true, false]);
+  });
+
+  test('boolean step with a date window: still in date order', async () => {
+    const { ids, meta } = await run(
+      { unreadOnly: true, receivedAfter: day(1000), count: 25 },
+      sortRefused
+    );
+
+    expect(ids).toHaveLength(25);
+    expect(ids).toEqual(newestFirst(ids));
+    expect(meta.sortRefused).toBe(true);
+  });
+
+  test('boolean step that finds nothing after the retry: "oldest first", not "newest first"', async () => {
+    const { text, result } = await run(
+      { subject: 'no such subject', unreadOnly: true, count: 10 },
+      { noSort: true }
+    );
+
+    expect(result._meta.returned).toBe(0);
+    expect(text).toContain('oldest first (Graph refused to sort them)');
+    expect(text).not.toContain('newest first, so an older match');
+    expect(text).not.toContain(DEFINITIVE);
+  });
+
+  test.each([
+    [{ subject: 'invoice', count: 10 }],
+    [{ hasAttachments: true, count: 10 }],
+    [{ unreadOnly: true, receivedAfter: day(1000), count: 25 }],
+    [{ from: 'bob@corp.com', count: 10 }],
+  ])(
+    '%j sorted by Graph: the footer and _meta are unchanged (control)',
+    async (args) => {
+      const { ids, text, meta, calls } = await run(args);
+
+      expect(ids).toEqual(newestFirst(ids));
+      expect(meta.sortRefused).toBeUndefined();
+      expect(text).toContain(
+        '_More emails available. To see them, raise `count` (up to 50) or narrow the date range with `receivedAfter`/`receivedBefore` (for older mail, set `receivedBefore` to the oldest date shown)._'
+      );
+      expect(calls).toHaveLength(1);
+    }
+  );
+});
+
 describe('the oldest page is read only when it can add something', () => {
   test('not when the newest page already fills count', async () => {
     // `from` answers before the recipient scan; Bob's newest ten all pass.

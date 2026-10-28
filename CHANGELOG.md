@@ -17,6 +17,9 @@ upgrade steps. #305 (scheduled automatic replies on personal accounts) is
 
 ### Fixed
 
+- **`read-email` description** (#358, PR #359): it said the body comes back as
+  Markdown, but HTML bodies are returned as plain text with the tags removed,
+  so formatting and link addresses are lost. The description now says so.
 - **`query` searches run Graph `$search` again** (#261). Graph rejects
   `$search` together with `$orderby` (`400 SearchWithOrderBy`) or `$filter`
   (`400 SearchWithFilter`), and every `query` search sent `$orderby`, so it

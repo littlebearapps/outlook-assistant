@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`read-email` description** (#358): it said the body comes back as
+  Markdown, but HTML bodies are returned as plain text with the tags removed,
+  so formatting and link addresses are lost. The description now says so.
+
 ## [3.14.1] - 2026-10-05
 
 Patch release with the fixes from a live test of all 22 tools on v3.14.0.

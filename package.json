@@ -105,7 +105,7 @@
     "hono": "^4.13.7",
     "@hono/node-server": "^1.19.17",
     "fast-uri": "^3.1.8",
-    "ip-address": "^10.7.2",
+    "ip-address": "^10.7.5",
     "qs": "^6.16.0",
     "body-parser": "^2.3.0"
   }

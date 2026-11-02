@@ -743,15 +743,36 @@ async function runSearchLadder(
           hadMore(response)
         ) {
           try {
-            const oldest = await callGraphAPIPaginated(
-              accessToken,
-              'GET',
-              endpoint,
-              simplifiedParams,
-              maxCount
-            );
-            const rows = oldest.value || [];
-            bothEnds = true;
+            // Ask for the oldest matches outright. Unsorted, Graph usually
+            // returns them, but not always: for the name-or-address `from`
+            // filter it returned recent mail, so the "other end" was read
+            // from the wrong place (#377). Only if Graph refuses the
+            // ascending sort is the unsorted page used, and it counts as the
+            // other end only when it really is older than the newest page.
+            let rows;
+            try {
+              const oldest = await callGraphAPIPaginated(
+                accessToken,
+                'GET',
+                endpoint,
+                { ...sortedParams, $orderby: 'receivedDateTime asc' },
+                maxCount
+              );
+              rows = oldest.value || [];
+              bothEnds = true;
+            } catch (ascError) {
+              if (classifyFailure(ascError) !== 'refusal') throw ascError;
+              log.debug('Ascending sort refused, reading the unsorted page');
+              const unsorted = await callGraphAPIPaginated(
+                accessToken,
+                'GET',
+                endpoint,
+                simplifiedParams,
+                maxCount
+              );
+              rows = unsorted.value || [];
+              bothEnds = isOlderPage(rows, response.value);
+            }
             examined += rows.length;
             const again = applySecondarySearchTerms(rows, searchTerms, term);
             matched = newestFirstUnique([...matched, ...again.matched]);
@@ -773,6 +794,10 @@ async function runSearchLadder(
             // Whatever lies between the two pages was not read.
             response.hasMore = true;
             response._partialNarrowing = { examined, bothEnds: true };
+          } else if (examined > response.value.length) {
+            // A second page was read, but not provably the oldest.
+            response.hasMore = true;
+            response._partialNarrowing = { examined };
           }
           response._searchInfo = {
             attemptsCount: searchAttempts.length,
@@ -1079,6 +1104,20 @@ async function runSearchLadder(
  * sort, run `unsorted` and order that page newest first locally.
  * @param {object|null} sorted - Sorted params, or null to go straight to unsorted
  */
+/**
+ * Whether every row of `page` is older than every row of `newest`, i.e. the
+ * page really is the other end of a newest-first read (#377).
+ * @param {Array} page
+ * @param {Array} newest
+ * @returns {boolean}
+ */
+function isOlderPage(page, newest) {
+  if (!page.length || !newest?.length) return false;
+  const time = (m) => Date.parse(m.receivedDateTime) || 0;
+  const oldestOfNewest = Math.min(...newest.map(time));
+  return page.every((m) => time(m) < oldestOfNewest);
+}
+
 /**
  * A request's parameters as a comparable string, key order ignored (#364).
  * @param {object} params - Graph query parameters

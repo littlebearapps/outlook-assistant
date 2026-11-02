@@ -4153,8 +4153,11 @@ describe('handleSearchEmails — local narrowing keeps old-mail matches (N1)', (
               throw new Error(`unsupported clause: ${c}`);
             })
         );
+        // Newest first for `desc`; oldest first for `asc` and unsorted.
         value = [...value].sort(
-          params.$orderby ? (a, b) => byDate(b, a) : byDate
+          params.$orderby && !/ asc$/.test(params.$orderby)
+            ? (a, b) => byDate(b, a)
+            : byDate
         );
         const limit = maxCount || params.$top;
         return Promise.resolve({
@@ -4472,7 +4475,7 @@ describe('handleSearchEmails — narrowing reads both ends and merges (N1)', () 
       if (isLambda(params)) return lambdaRejected();
       if (isScan(params)) return Promise.resolve({ value: [] });
       return Promise.resolve(
-        params.$orderby
+        params.$orderby && !/ asc$/.test(params.$orderby)
           ? {
               value: [
                 row('new-hit', at(2026, 5, 1), 'a@empresio.example'),

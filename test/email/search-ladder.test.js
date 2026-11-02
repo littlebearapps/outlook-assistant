@@ -761,7 +761,8 @@ describe('the oldest page is read only when it can add something', () => {
       (c) => /from\//.test(c.$filter || '') && !/toRecipients/.test(c.$filter)
     );
     expect(fromOnly).toHaveLength(2);
-    expect(fromOnly[1].$orderby).toBeUndefined();
+    // The other end is asked for oldest first, not left to Graph (#377).
+    expect(fromOnly[1].$orderby).toBe('receivedDateTime asc');
     expect(ids.length).toBeGreaterThan(0);
   });
 });
@@ -829,5 +830,52 @@ describe('an empty combined step is not sent again by the single-term step (#364
   test('a match is still found', async () => {
     const { ids } = await run({ from: 'bob', count: 5 });
     expect(ids).toHaveLength(5);
+  });
+});
+
+describe('the other end of a narrowed single-term search is the oldest (#377)', () => {
+  // Bob every fifth message; the recipient matches only on days 0–60, so the
+  // newest Bob page has none and the oldest has ten.
+  const box = BOX.map((m, i) => ({
+    ...m,
+    toRecipients: [
+      {
+        emailAddress: {
+          name: 'X',
+          address: i <= 60 ? 'x@empresio.com' : 'me@live.com',
+        },
+      },
+    ],
+  }));
+  const isOld = (ids) => ids.every((id) => Number(id.slice(1)) <= 60);
+
+  test('asks Graph for the oldest page, so old matches are found even when the unsorted page is recent', async () => {
+    const { ids, calls } = await run(
+      { from: 'bob@corp.com', to: 'empresio', count: 10 },
+      { unsortedNewest: true },
+      box
+    );
+    expect(ids).toHaveLength(10);
+    expect(isOld(ids)).toBe(true);
+    expect(calls.some((c) => c.$orderby === 'receivedDateTime asc')).toBe(true);
+  });
+
+  test('when Graph refuses the ascending sort, the unsorted page is not called the oldest', async () => {
+    const { text } = await run(
+      { from: 'bob@corp.com', to: 'empresio', count: 10 },
+      { unsortedNewest: true, noAsc: true },
+      box
+    );
+    expect(text).not.toContain('the newest and the oldest');
+  });
+
+  test('when Graph refuses it but the unsorted page is the oldest, both ends still count', async () => {
+    const { ids } = await run(
+      { from: 'bob@corp.com', to: 'empresio', count: 10 },
+      { noAsc: true },
+      box
+    );
+    expect(ids).toHaveLength(10);
+    expect(isOld(ids)).toBe(true);
   });
 });

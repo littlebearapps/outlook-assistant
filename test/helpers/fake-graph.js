@@ -5,7 +5,9 @@
  *   returns newest first and stops after `searchCap` rows (275 live);
  * - `$orderby` needs `receivedDateTime` to lead the `$filter` (400 InefficientFilter);
  * - the recipient lambda is refused (400 ErrorInvalidUrlQueryFilter) unless `lambdaOk`;
- * - an unsorted filtered request comes back oldest first;
+ * - `$orderby=receivedDateTime asc|desc` sorts (refused for asc with `noAsc`);
+ * - an unsorted filtered request comes back oldest first, or newest first with
+ *   `unsortedNewest` (what the name-or-address `from` filter did live, #377);
  * - date windows are evaluated, and results page by `@odata.nextLink`.
  *
  * `opts.fail(n, params, endpoint)` may return an Error to throw for request `n`.
@@ -121,15 +123,18 @@ function makeGraph(mailbox, opts = {}) {
       }
       if (
         params.$orderby &&
-        (!/^receivedDateTime /.test(clauses[0]) || opts.noSort)
+        (!/^receivedDateTime /.test(clauses[0]) ||
+          opts.noSort ||
+          (opts.noAsc && / asc$/.test(params.$orderby)))
       ) {
         throw bad('InefficientFilter');
       }
       rows = rows.filter((m) => clauses.every((c) => evalClause(c, m)));
     }
-    rows = [...rows].sort((a, b) =>
-      params.$orderby ? t(b) - t(a) : t(a) - t(b)
-    ); // unsorted = oldest first (live)
+    const newestFirst = params.$orderby
+      ? !/ asc$/.test(params.$orderby)
+      : Boolean(opts.unsortedNewest); // unsorted = oldest first (live)
+    rows = [...rows].sort((a, b) => (newestFirst ? t(b) - t(a) : t(a) - t(b)));
     return page(rows, top, max);
   };
   // Rejections, not synchronous throws, as the real client gives.

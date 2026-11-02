@@ -37,6 +37,17 @@ upgrade steps.
   sorted shape (#331) takes about 2.3 s per request on a personal account,
   so such a search took 4–6 s (v3.14.1: 0.5 s). The repeat is skipped;
   results and wording are unchanged.
+- **The "other end" of a narrowed search is really the oldest mail**
+  (#377). When a `from` or `subject` search also had a filter matched
+  locally (such as `to`), the second page it read for older matches was
+  requested unsorted, on the assumption that Graph returns the oldest
+  first. For the name-or-address `from` filter (#328) it returned recent
+  mail, so old matches were missed and the "newest and the oldest" note was
+  wrong (`from:"github"` + `to` at `count` 10: 1 result, where v3.14.1 found
+  9 with its narrower name-only filter). The page is now requested
+  `receivedDateTime asc`; if Graph refuses that, the unsorted page is used
+  and called the oldest only when its dates show it is. Live: 5 results,
+  the newest and oldest matches of the wider filter.
 - **Automatic replies on personal accounts** (#305). Live tests on a
   personal Outlook.com account found that replies set through Graph are
   saved but not sent, whether scheduled (also with a 15-minute lead) or

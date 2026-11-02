@@ -135,6 +135,7 @@ async function handleExportEmail(args) {
     // Export based on format
     let content;
     let attachmentsSaved = [];
+    let attachmentOutcome = { skipped: [] };
 
     if (format === EXPORT_FORMATS.MIME || format === EXPORT_FORMATS.EML) {
       // MIME export - raw RFC822 format
@@ -195,13 +196,14 @@ async function handleExportEmail(args) {
 
     // Handle attachments
     if (includeAttachments && email.hasAttachments) {
-      attachmentsSaved = await saveAttachments(
+      attachmentOutcome = await saveAttachments(
         accessToken,
         emailId,
         path.dirname(finalPath),
         prefix,
         claimedPaths
       );
+      attachmentsSaved = attachmentOutcome.saved;
     }
 
     // Build response
@@ -222,6 +224,7 @@ async function handleExportEmail(args) {
         resultText += `- \`${att.filename}\` (${att.size.toLocaleString()} bytes)\n`;
       }
     }
+    resultText += attachmentProblemsText(attachmentOutcome);
 
     return {
       content: [
@@ -236,6 +239,12 @@ async function handleExportEmail(args) {
         format: format,
         sizeBytes: content.length,
         attachmentsSaved: attachmentsSaved.length,
+        ...(attachmentOutcome.error && {
+          attachmentsError: attachmentOutcome.error,
+        }),
+        ...(attachmentOutcome.skipped.length > 0 && {
+          attachmentsSkipped: attachmentOutcome.skipped,
+        }),
         emailId: emailId,
       },
     };
@@ -453,6 +462,30 @@ async function handleBatchExportEmails(args) {
       resultText += `\n> ${disambiguated.length} file name(s) were disambiguated with a numeric suffix — messages sharing a timestamp and subject, or names already present in the output directory. Nothing was overwritten.\n`;
     }
 
+    const attachmentsSaved = successful.reduce(
+      (sum, r) => sum + (r.attachments || 0),
+      0
+    );
+    const attachmentErrors = successful
+      .filter((r) => r.attachmentError)
+      .map((r) => ({ emailId: r.emailId, error: r.attachmentError }));
+    const attachmentsSkipped = successful.reduce(
+      (sum, r) => sum + (r.attachmentsSkipped || []).length,
+      0
+    );
+    if (includeAttachments) {
+      resultText += `| Attachments Saved | ${attachmentsSaved} |\n`;
+    }
+    if (attachmentErrors.length > 0) {
+      resultText += `\n> For ${attachmentErrors.length} message(s), some or all attachments were not saved (the messages themselves were exported). To get them, use the \`attachments\` tool:\n`;
+      for (const a of attachmentErrors.slice(0, 10)) {
+        resultText += `> - ID \`${a.emailId}\`: ${a.error}\n`;
+      }
+    }
+    if (attachmentsSkipped > 0) {
+      resultText += `\n> ${attachmentsSkipped} attachment(s) were not saved because they aren't files (a forwarded item or a cloud link).\n`;
+    }
+
     if (failed.length > 0) {
       resultText += `\n### Failed Exports\n\n`;
       for (const f of failed.slice(0, 10)) {
@@ -477,6 +510,8 @@ async function handleBatchExportEmails(args) {
         successful: successful.length,
         failed: failed.length,
         totalBytes: totalBytes,
+        ...(includeAttachments && { attachmentsSaved }),
+        ...(attachmentErrors.length > 0 && { attachmentErrors }),
         manifest,
       },
     };
@@ -657,16 +692,15 @@ async function exportSingleForBatch(
     );
 
     // Handle attachments if requested
-    let attachmentCount = 0;
+    let attachmentOutcome = { saved: [], skipped: [] };
     if (includeAttachments && email.hasAttachments) {
-      const saved = await saveAttachments(
+      attachmentOutcome = await saveAttachments(
         accessToken,
         emailId,
         outputDir,
         prefix,
         claimedPaths
       );
-      attachmentCount = saved.length;
     }
 
     return {
@@ -674,7 +708,11 @@ async function exportSingleForBatch(
       emailId: emailId,
       filePath: filePath,
       sizeBytes: content.length,
-      attachments: attachmentCount,
+      attachments: attachmentOutcome.saved.length,
+      attachmentsSkipped: attachmentOutcome.skipped,
+      ...(attachmentOutcome.error && {
+        attachmentError: attachmentOutcome.error,
+      }),
     };
   } catch (error) {
     return {
@@ -691,6 +729,10 @@ async function exportSingleForBatch(
  * @param {string} emailId
  * @param {string} outputDir
  * @param {string} [prefix] - Mailbox resource prefix (`me` or `users/{email}`)
+ * @returns {Promise<{saved: object[], skipped: string[], error?: string}>}
+ *   `skipped` names attachments that aren't files (forwarded items, cloud
+ *   links); `error` is set when the list couldn't be read or a file couldn't
+ *   be written (#365)
  */
 async function saveAttachments(
   accessToken,
@@ -700,20 +742,23 @@ async function saveAttachments(
   claimedPaths
 ) {
   const saved = [];
+  const skipped = [];
 
   try {
+    // No $select: `contentBytes` exists only on fileAttachment, and Graph
+    // rejects it on the base attachment type with a 400 (#365).
     const response = await callGraphAPI(
       accessToken,
       'GET',
-      `${prefix}/messages/${emailId}/attachments`,
-      null,
-      { $select: 'id,name,contentBytes,size,contentType' }
+      `${prefix}/messages/${emailId}/attachments`
     );
 
-    if (!response.value) return saved;
+    if (!response.value) return { saved, skipped };
 
     for (const att of response.value) {
-      if (att.contentBytes) {
+      if (!att.contentBytes) {
+        skipped.push(att.name || att.id || 'unnamed attachment');
+      } else {
         // The attachment name is sender-controlled (GHSA-755c-c45g-69rv):
         // reduce it to a safe basename. The per-message tag is derived from a
         // hash of the id, never the raw caller-supplied id, so it can't carry
@@ -737,9 +782,26 @@ async function saveAttachments(
     }
   } catch (error) {
     log.debug(`Failed to save attachments: ${error.message}`);
+    return { saved, skipped, error: error.message };
   }
 
-  return saved;
+  return { saved, skipped };
+}
+
+/**
+ * Markdown lines saying which attachments are missing from an export (#365).
+ * @param {{skipped: string[], error?: string}} outcome
+ * @returns {string} '' when every attachment was saved
+ */
+function attachmentProblemsText({ skipped = [], error } = {}) {
+  let text = '';
+  if (error) {
+    text += `\n> Some or all attachments were not saved: ${error}. The message itself was exported. To get them, use the \`attachments\` tool.\n`;
+  }
+  if (skipped.length > 0) {
+    text += `\n> ${skipped.length} attachment(s) were not saved because they aren't files (a forwarded item or a cloud link): ${skipped.map((n) => `\`${n}\``).join(', ')}.\n`;
+  }
+  return text;
 }
 
 /**

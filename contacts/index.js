@@ -429,33 +429,76 @@ async function handleCreateContact(args) {
  * Update contact handler
  */
 async function handleUpdateContact(args) {
-  const { id, displayName, email, mobilePhone, companyName, jobTitle, notes } =
-    args;
+  const {
+    id,
+    displayName,
+    firstName,
+    lastName,
+    email,
+    emails,
+    mobilePhone,
+    companyName,
+    jobTitle,
+    notes,
+  } = args;
 
   if (!id) {
     return toolError('Contact ID is required.');
   }
 
+  // Every field the schema offers for update is applied; a call that would
+  // send an empty PATCH is refused rather than reported as an update (#366).
+  const contactData = {};
+  const updatedFields = [];
+
+  if (displayName !== undefined) {
+    contactData.displayName = displayName;
+    if (displayName && displayName.includes(' ')) {
+      const parts = displayName.split(' ');
+      contactData.givenName = parts[0];
+      contactData.surname = parts.slice(1).join(' ');
+    }
+    updatedFields.push('displayName');
+  }
+  // Explicit names win over the split of displayName.
+  if (firstName !== undefined) {
+    contactData.givenName = firstName;
+    updatedFields.push('firstName');
+  }
+  if (lastName !== undefined) {
+    contactData.surname = lastName;
+    updatedFields.push('lastName');
+  }
+  // `email` and `emails` together replace the contact's addresses, `email`
+  // first; an empty list clears them.
+  if (email !== undefined || emails !== undefined) {
+    const allEmails = [];
+    if (email) allEmails.push(email);
+    if (Array.isArray(emails)) allEmails.push(...emails);
+    contactData.emailAddresses = allEmails.map((address) => ({ address }));
+    updatedFields.push('emails');
+  }
+  for (const [field, value, graphField] of [
+    ['mobilePhone', mobilePhone, 'mobilePhone'],
+    ['companyName', companyName, 'companyName'],
+    ['jobTitle', jobTitle, 'jobTitle'],
+    ['notes', notes, 'personalNotes'],
+  ]) {
+    if (value !== undefined) {
+      contactData[graphField] = value;
+      updatedFields.push(field);
+    }
+  }
+
+  if (updatedFields.length === 0) {
+    return toolError('Nothing to update: no contact field was given.', {
+      nextStep:
+        'Pass at least one of displayName, firstName, lastName, email, emails, mobilePhone, companyName, jobTitle or notes.',
+    });
+  }
+
   try {
     const accessToken = await ensureAuthenticated();
-
-    const contactData = {};
-
-    if (displayName !== undefined) {
-      contactData.displayName = displayName;
-      if (displayName && displayName.includes(' ')) {
-        const parts = displayName.split(' ');
-        contactData.givenName = parts[0];
-        contactData.surname = parts.slice(1).join(' ');
-      }
-    }
-    if (email !== undefined) {
-      contactData.emailAddresses = email ? [{ address: email }] : [];
-    }
-    if (mobilePhone !== undefined) contactData.mobilePhone = mobilePhone;
-    if (companyName !== undefined) contactData.companyName = companyName;
-    if (jobTitle !== undefined) contactData.jobTitle = jobTitle;
-    if (notes !== undefined) contactData.personalNotes = notes;
 
     const endpoint = `me/contacts/${id}`;
     const contact = await callGraphAPI(
@@ -472,7 +515,7 @@ async function handleUpdateContact(args) {
           text: `# Contact Updated\n\n${formatContact(contact, 'full')}`,
         },
       ],
-      _meta: { contactId: contact.id },
+      _meta: { contactId: contact.id, updatedFields },
     };
   } catch (error) {
     if (error.message === 'Authentication required') {

@@ -359,6 +359,68 @@ describe('handleUpdateContact', () => {
       'Error updating contact: Update failed'
     );
   });
+
+  describe('every offered field is applied (#366)', () => {
+    const patchBody = () => callGraphAPI.mock.calls[0][3];
+
+    beforeEach(() => callGraphAPI.mockResolvedValue(mockContact));
+
+    it('applies firstName and lastName', async () => {
+      await handleUpdateContact({
+        id: 'contact-1',
+        firstName: 'Jane',
+        lastName: 'Doe',
+      });
+      expect(patchBody()).toEqual({ givenName: 'Jane', surname: 'Doe' });
+    });
+
+    it('lets firstName/lastName win over a split displayName', async () => {
+      await handleUpdateContact({
+        id: 'contact-1',
+        displayName: 'J. R. Doe',
+        firstName: 'Jane',
+      });
+      expect(patchBody()).toEqual({
+        displayName: 'J. R. Doe',
+        givenName: 'Jane',
+        surname: 'R. Doe',
+      });
+    });
+
+    it('applies emails, first entry first, together with email', async () => {
+      await handleUpdateContact({
+        id: 'contact-1',
+        email: 'a@example.invalid',
+        emails: ['b@example.invalid', 'c@example.invalid'],
+      });
+      expect(patchBody().emailAddresses.map((e) => e.address)).toEqual([
+        'a@example.invalid',
+        'b@example.invalid',
+        'c@example.invalid',
+      ]);
+    });
+
+    it('clears the addresses with an empty emails list', async () => {
+      await handleUpdateContact({ id: 'contact-1', emails: [] });
+      expect(patchBody()).toEqual({ emailAddresses: [] });
+    });
+
+    it('refuses an update with nothing to change, without a request', async () => {
+      const result = await handleUpdateContact({ id: 'contact-1' });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toMatch(/Nothing to update/);
+      expect(callGraphAPI).not.toHaveBeenCalled();
+    });
+
+    it('names the changed fields in _meta', async () => {
+      const result = await handleUpdateContact({
+        id: 'contact-1',
+        jobTitle: 't',
+        emails: ['a@example.invalid'],
+      });
+      expect(result._meta.updatedFields).toEqual(['emails', 'jobTitle']);
+    });
+  });
 });
 
 describe('handleDeleteContact', () => {

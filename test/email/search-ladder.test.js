@@ -793,3 +793,41 @@ describe('a window that $search crossed is fully read', () => {
     expect(text).not.toContain('beyond what `$search` paging can reach');
   });
 });
+
+describe('an empty combined step is not sent again by the single-term step (#364)', () => {
+  const key = (p) =>
+    JSON.stringify(
+      Object.keys(p)
+        .sort()
+        .map((k) => [k, p[k]])
+    );
+  const duplicates = (calls) => {
+    const seen = new Set();
+    let dupes = 0;
+    for (const c of calls) {
+      const k = key(c);
+      if (seen.has(k)) dupes++;
+      seen.add(k);
+    }
+    return dupes;
+  };
+
+  test.each([
+    [{ from: 'nobody-here' }],
+    [{ subject: 'zzqqnomatch', count: 5 }],
+    [{ from: 'nobody-here', receivedAfter: day(2000) }],
+    [{ subject: 'zzqqnomatch', unreadOnly: true }],
+  ])('%j sends each request once and still reports no match', async (args) => {
+    const { calls, text, ids } = await run(args);
+    expect(ids).toEqual([]);
+    expect(duplicates(calls)).toBe(0);
+    expect(text).toMatch(
+      new RegExp(`${DEFINITIVE}|No emails found matching your filters`)
+    );
+  });
+
+  test('a match is still found', async () => {
+    const { ids } = await run({ from: 'bob', count: 5 });
+    expect(ids).toHaveLength(5);
+  });
+});

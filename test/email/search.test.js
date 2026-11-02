@@ -650,16 +650,17 @@ describe('handleSearchEmails — client-side to filter', () => {
     });
 
     callGraphAPIPaginated
-      // First call: combined search returns empty
+      // First call: combined search returns empty. The single-term 'to'
+      // step would send the same request, so it isn't sent again (#364).
       .mockResolvedValueOnce({ value: [] })
-      // Second call: single-term 'to' with lambda filter returns empty
-      .mockResolvedValueOnce({ value: [] })
-      // Third call: client-side fallback fetch returns all messages
+      // Second call: client-side fallback fetch returns all messages
       .mockResolvedValueOnce({ value: [bristaxEmail, otherEmail] });
 
     const result = await handleSearchEmails({
       to: 'sblake@bristax.com.au',
     });
+
+    expect(callGraphAPIPaginated).toHaveBeenCalledTimes(2);
 
     // Should have filtered client-side and found the Bristax email
     expect(result._meta.returned).toBe(1);
@@ -1399,9 +1400,8 @@ describe('handleSearchEmails — field-scoped searchExpression (#217)', () => {
     callGraphAPIPaginated
       // raw-kql → 0
       .mockResolvedValueOnce({ value: [] })
-      // translated combined-search → 0 (personal account rejects the lambda)
-      .mockResolvedValueOnce({ value: [] })
-      // translated single-term-to → 0
+      // translated combined-search → 0 (personal account rejects the lambda);
+      // single-term-to would repeat that request, so it isn't sent (#364)
       .mockResolvedValueOnce({ value: [] })
       // client-side-to candidate scan
       .mockResolvedValueOnce({ value: [addressed] });

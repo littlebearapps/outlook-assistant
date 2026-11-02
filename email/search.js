@@ -549,6 +549,12 @@ async function runSearchLadder(
     searchTerms.to ||
     searchTerms.subject;
 
+  // The combined step's request when it answered with no rows. A single-term
+  // step that would send exactly the same request (only `from` or `subject`
+  // given) can't find anything else, so it isn't sent again: on an empty
+  // result the sorted shape costs about 2 s per request (#364).
+  let emptyCombinedRequest = null;
+
   // 1. Try combined search (most specific) — skip if only boolean filters
   if (
     !hasSearchTerms &&
@@ -615,6 +621,8 @@ async function runSearchLadder(
           appliedTerms: SEARCH_TERM_KEYS.filter((t) => searchTerms[t]),
         };
         return response;
+      } else if (!params.$search && !structuredQuery) {
+        emptyCombinedRequest = requestKey(params);
       }
     } catch (error) {
       noteFailure(scanState, error);
@@ -689,13 +697,23 @@ async function runSearchLadder(
               $orderby: 'receivedDateTime desc',
             };
 
-      const response = await fetchSortedOrUnsorted(
-        accessToken,
-        endpoint,
-        sortedParams,
-        simplifiedParams,
-        maxCount
-      );
+      const sameAsCombined =
+        emptyCombinedRequest !== null &&
+        requestKey(sortedParams || simplifiedParams) === emptyCombinedRequest;
+      if (sameAsCombined) {
+        log.debug(
+          `Search with only ${term} is the request combined-search already sent, with no results; not sending it again`
+        );
+      }
+      const response = sameAsCombined
+        ? { value: [] }
+        : await fetchSortedOrUnsorted(
+            accessToken,
+            endpoint,
+            sortedParams,
+            simplifiedParams,
+            maxCount
+          );
       if (response.value && response.value.length > 0) {
         // This $filter carried only `term`. Apply every other supplied search
         // term locally before returning — otherwise we hand back the
@@ -1061,6 +1079,19 @@ async function runSearchLadder(
  * sort, run `unsorted` and order that page newest first locally.
  * @param {object|null} sorted - Sorted params, or null to go straight to unsorted
  */
+/**
+ * A request's parameters as a comparable string, key order ignored (#364).
+ * @param {object} params - Graph query parameters
+ * @returns {string}
+ */
+function requestKey(params) {
+  return JSON.stringify(
+    Object.keys(params)
+      .sort()
+      .map((k) => [k, params[k]])
+  );
+}
+
 async function fetchSortedOrUnsorted(
   accessToken,
   endpoint,

@@ -12,11 +12,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Patch release: the v3.14.2 fix queue (milestone #10). Search, export, delta
 sync and meeting-room fixes, more accurate calendar previews, a Docker image
 that starts again, dependency updates and release-workflow hardening. No
-upgrade steps. #305 (scheduled automatic replies on personal accounts) is
-**not** in this release: it stays open until a live mail re-test.
+upgrade steps.
 
 ### Fixed
 
+- **`export` saves attachments again** (#365). The attachment list was
+  requested with `$select=…,contentBytes,…`, which Graph rejects on the base
+  attachment type (400); the error was swallowed and the export reported
+  success with no attachment files, in every earlier version. The list is
+  now requested without `$select`, attachments that aren't files (forwarded
+  items, cloud links) are named as skipped, and a failed read is reported in
+  the text and `_meta` (`attachmentsError`, `attachmentsSkipped`; batch:
+  `attachmentsSaved`, `attachmentErrors`).
+- **`manage-contact` update applies every field it offers** (#366).
+  `emails`, `firstName` and `lastName` were dropped, so an update with only
+  those sent an empty PATCH and still said "Contact Updated". They are now
+  applied (explicit names win over a split `displayName`; `email` and
+  `emails` together replace the addresses, and an empty list clears them),
+  an update with nothing to change is refused before any request, and
+  `_meta.updatedFields` names what changed.
+- **A "nothing found" `from`, `subject` or `to` search is about twice as
+  fast** (#364). With only one of them given, the single-term step sent the
+  request the combined step had just sent, and on an empty result the
+  sorted shape (#331) takes about 2.3 s per request on a personal account,
+  so such a search took 4–6 s (v3.14.1: 0.5 s). The repeat is skipped;
+  results and wording are unchanged.
+- **Automatic replies on personal accounts** (#305). Live tests on a
+  personal Outlook.com account found that replies set through Graph are
+  saved but not sent, whether scheduled (also with a 15-minute lead) or
+  always on. Every `set-auto-replies` result and dry run that switches them
+  on now says so and points to Outlook on the web or the app. The claim that
+  personal accounts accept scheduled replies only is corrected (the test
+  account accepted `alwaysEnabled`), and a stale "Scheduled Start/End" is no
+  longer shown for an always-on setting. The how-to, troubleshooting table,
+  FAQ and plugin skill say the same.
 - **`read-email` description** (#358, PR #359): it said the body comes back as
   Markdown, but HTML bodies are returned as plain text with the tags removed,
   so formatting and link addresses are lost. The description now says so.

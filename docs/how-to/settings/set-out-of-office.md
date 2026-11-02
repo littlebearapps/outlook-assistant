@@ -130,7 +130,8 @@ This shows whether auto-replies are enabled, the schedule (UTC plus a labelled l
 
 - Omit `startDateTime` and `endDateTime` to enable immediately (always-on mode)
 - Include `startDateTime` and `endDateTime` for scheduled auto-activate/deactivate
-- Personal Outlook.com accounts accept scheduled replies only: `enabled: true` with no `startDateTime`/`endDateTime` is turned off by Microsoft Graph, and the result warns you. Whether a scheduled window set this way always sends replies on a personal account is still being checked ([#305](https://github.com/littlebearapps/outlook-assistant/issues/305))
+- **Personal Outlook.com accounts: replies set this way may not be sent.** Microsoft Graph saves the setting and `get` reads it back, but in live tests on a personal account neither a scheduled window (starting 15 minutes ahead) nor always-on mode produced a reply ([#305](https://github.com/littlebearapps/outlook-assistant/issues/305)). The result and the dry run say so. To be sure replies go out, check or switch them on in Outlook on the web (**Settings > Mail > Automatic replies**) or the Outlook app
+- Some personal accounts turn `enabled: true` with no `startDateTime`/`endDateTime` off; the result warns when the applied status differs from the one you asked for
 - You can include HTML in your reply messages for formatting
 - Check your current status with `action: "get"` before making changes
 - `mailbox-settings` is marked destructive because automatic replies go to other people, so clients that honour MCP annotations ask before running it, even for `get`

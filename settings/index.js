@@ -83,12 +83,14 @@ function formatAutomaticReplies(settings) {
   );
 
   if (settings.status !== 'disabled') {
-    if (settings.scheduledStartDateTime) {
+    // Graph keeps a start and end even for alwaysEnabled; they only apply
+    // to a scheduled status (#305).
+    if (settings.status === 'scheduled' && settings.scheduledStartDateTime) {
       lines.push(
         `**Scheduled Start**: ${formatScheduleTime(settings.scheduledStartDateTime)}`
       );
     }
-    if (settings.scheduledEndDateTime) {
+    if (settings.status === 'scheduled' && settings.scheduledEndDateTime) {
       lines.push(
         `**Scheduled End**: ${formatScheduleTime(settings.scheduledEndDateTime)}`
       );
@@ -113,6 +115,15 @@ function formatAutomaticReplies(settings) {
 
   return lines.join('\n');
 }
+
+/**
+ * Shown whenever automatic replies are switched on. On a personal
+ * Outlook.com account, replies set through Graph were stored but never sent,
+ * scheduled or always on (#305, live-tested 2026-10-05 and 2026-11-02). The
+ * server can't tell a personal account from a work one, so it always shows.
+ */
+const PERSONAL_DELIVERY_NOTE =
+  'Note for personal Outlook.com accounts: Graph saves these automatic replies, but Outlook.com may not send them (in live tests neither a scheduled window nor "always on" set this way produced a reply). To be sure they go out, check them in Outlook on the web (Settings > Mail > Automatic replies) or the Outlook app.';
 
 /** Who gets the external reply, for each externalAudience value. */
 const EXTERNAL_AUDIENCE_LABELS = {
@@ -184,12 +195,7 @@ function previewAutomaticReplies(changes, current) {
     );
   }
 
-  if (changes.status === 'alwaysEnabled') {
-    lines.push(
-      '',
-      'Note: Personal Outlook.com accounts only support scheduled replies, and Graph may leave them off. Pass `startDateTime` + `endDateTime` there instead.'
-    );
-  }
+  lines.push('', PERSONAL_DELIVERY_NOTE);
 
   return dryRunResult(lines, { settings: effective });
 }
@@ -428,11 +434,15 @@ async function handleSetAutomaticReplies(args) {
         updated.status === 'disabled'
       ) {
         hint =
-          ' Personal Outlook.com accounts only support `scheduled` mode — provide `startDateTime` + `endDateTime` instead of `enabled: true` alone.';
+          ' Some personal Outlook.com accounts turn `enabled: true` alone off: provide `startDateTime` + `endDateTime` instead.';
       }
       output.push(
         `\n**⚠ Warning**: Requested status \`${requestedStatus}\` but Graph applied \`${updated.status}\`.${hint}`
       );
+    }
+
+    if (updated.status !== 'disabled') {
+      output.push(`\n**${PERSONAL_DELIVERY_NOTE.replace(': ', '**: ')}`);
     }
 
     // Warn if enabling without messages

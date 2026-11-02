@@ -343,7 +343,9 @@ describe('handleSetAutomaticReplies', () => {
     });
 
     expect(result.content[0].text).not.toContain('Warning');
-    expect(result.content[0].text).not.toContain('Note');
+    expect(result.content[0].text).not.toContain(
+      'previously configured message'
+    );
   });
 
   it('should clear schedule timestamps when disabling (F-6)', async () => {
@@ -379,7 +381,7 @@ describe('handleSetAutomaticReplies', () => {
     expect(result.content[0].text).toMatch(/Requested status `alwaysEnabled`/);
     expect(result.content[0].text).toMatch(/Graph applied `disabled`/);
     expect(result.content[0].text).toMatch(
-      /Personal Outlook\.com accounts only support `scheduled` mode/
+      /Some personal Outlook\.com accounts turn `enabled: true` alone off/
     );
   });
 
@@ -647,9 +649,7 @@ describe('set-auto-replies dryRun', () => {
     expect(text).toContain(
       'External senders: only senders in your contacts (externalAudience=contactsOnly; unchanged) — no reply message is set (unchanged)'
     );
-    expect(text).toMatch(
-      /Personal Outlook\.com accounts only support scheduled/
-    );
+    expect(text).toMatch(/Outlook\.com may not send them/);
   });
 
   it('says nobody outside gets a reply when externalAudience is none', async () => {
@@ -760,5 +760,77 @@ describe('scheduled auto-reply times (#304)', () => {
     expect(result.content[0].text).toContain(
       '**Scheduled Start**: 2026-10-05T12:45:00.0000000 (AUS Eastern Standard Time)'
     );
+  });
+});
+
+describe('personal-account delivery note and schedule display (#305)', () => {
+  const SCHEDULE = {
+    scheduledStartDateTime: {
+      dateTime: '2026-11-02T01:00:00.0000000',
+      timeZone: 'UTC',
+    },
+    scheduledEndDateTime: {
+      dateTime: '2026-11-03T01:00:00.0000000',
+      timeZone: 'UTC',
+    },
+  };
+  const NOTE = /Outlook\.com may not send them/;
+
+  it('shows no schedule for alwaysEnabled (Graph keeps stale defaults)', async () => {
+    callGraphAPI.mockResolvedValueOnce({}).mockResolvedValueOnce({
+      status: 'alwaysEnabled',
+      internalReplyMessage: 'Away',
+      ...SCHEDULE,
+    });
+    const result = await handleSetAutomaticReplies({
+      enabled: true,
+      internalReplyMessage: 'Away',
+    });
+    expect(result.content[0].text).toContain('Always Enabled');
+    expect(result.content[0].text).not.toContain('Scheduled Start');
+  });
+
+  it.each([
+    ['alwaysEnabled', { enabled: true, internalReplyMessage: 'Away' }],
+    [
+      'scheduled',
+      {
+        startDateTime: '2026-11-02T01:00:00Z',
+        endDateTime: '2026-11-03T01:00:00Z',
+        internalReplyMessage: 'Away',
+      },
+    ],
+  ])(
+    'a real %s change carries the personal-account delivery note',
+    async (status, args) => {
+      callGraphAPI.mockResolvedValueOnce({}).mockResolvedValueOnce({
+        status,
+        internalReplyMessage: 'Away',
+        ...SCHEDULE,
+      });
+      const result = await handleSetAutomaticReplies(args);
+      expect(result.content[0].text).toMatch(NOTE);
+      expect(result.content[0].text).toMatch(/Outlook on the web/);
+    }
+  );
+
+  it('turning replies off carries no note', async () => {
+    callGraphAPI
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ status: 'disabled' });
+    const result = await handleSetAutomaticReplies({ enabled: false });
+    expect(result.content[0].text).not.toMatch(NOTE);
+  });
+
+  it('the dry run carries the note, and no longer says enabled alone is unsupported', async () => {
+    callGraphAPI.mockResolvedValueOnce({ status: 'disabled' });
+    const result = await handleSetAutomaticReplies({
+      enabled: true,
+      internalReplyMessage: 'Away',
+      dryRun: true,
+    });
+    const text = result.content[0].text;
+    expect(text).toMatch(NOTE);
+    expect(text).not.toMatch(/only support scheduled/);
   });
 });

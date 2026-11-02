@@ -53,7 +53,7 @@ If the user reports odd mail behaviour (missing messages, replies they didn't se
 - Leaving `externalAudience` out keeps the current setting, which may already be `all`. Check it with `mailbox-settings` action=`get`, `section: "automaticRepliesSetting"`, and state it in your confirmation.
 - Prefer a schedule (`startDateTime` and `endDateTime`) over `enabled: true` with no end, so replies stop on their own.
 - Keep external messages short: no itinerary, phone numbers, colleague names or reasons for absence unless the user wrote them.
-- Personal Outlook.com accounts support scheduled replies only. `enabled: true` alone may be left off by Graph; the result warns when the applied status differs. Use a schedule there.
+- On a personal Outlook.com account, Graph saves automatic replies but Outlook.com may not send them (live-tested: neither a schedule nor always-on produced a reply). Tell the user so, and suggest checking them in Outlook on the web (Settings > Mail > Automatic replies) or the Outlook app. Some personal accounts also turn `enabled: true` alone off; the result warns when the applied status differs.
 - Turn them off with `enabled: false`.
 
 ## Working hours

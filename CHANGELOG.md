@@ -9,14 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.14.2] - 2026-10-08
 
-Patch release: the v3.14.2 fix queue (milestone #10). Search, export, delta
-sync and meeting-room fixes, more accurate calendar previews, a Docker image
-that starts again, dependency updates and release-workflow hardening. No
-upgrade steps.
+Patch release: the v3.14.2 fix queue (milestone #10). Search, export,
+contact-update, delta sync and meeting-room fixes, more accurate calendar
+previews, a warning that personal accounts may not send automatic replies,
+a Docker image that starts again, dependency and security updates and
+release-workflow hardening. A filtered search with more matches than
+`count` now returns the newest of them (#331). No upgrade steps.
 
 ### Fixed
 
-- **`export` saves attachments again** (#365). The attachment list was
+- **`export` saves attachments** (#365). The attachment list was
   requested with `$select=…,contentBytes,…`, which Graph rejects on the base
   attachment type (400); the error was swallowed and the export reported
   success with no attachment files, in every earlier version. The list is
@@ -31,33 +33,17 @@ upgrade steps.
   `emails` together replace the addresses, and an empty list clears them),
   an update with nothing to change is refused before any request, and
   `_meta.updatedFields` names what changed.
-- **A "nothing found" `from`, `subject` or `to` search is about twice as
-  fast** (#364). With only one of them given, the single-term step sent the
-  request the combined step had just sent, and on an empty result the
-  sorted shape (#331) takes about 2.3 s per request on a personal account,
-  so such a search took 4–6 s (v3.14.1: 0.5 s). The repeat is skipped;
-  results and wording are unchanged.
-- **The "other end" of a narrowed search is really the oldest mail**
-  (#377). When a `from` or `subject` search also had a filter matched
-  locally (such as `to`), the second page it read for older matches was
-  requested unsorted, on the assumption that Graph returns the oldest
-  first. For the name-or-address `from` filter (#328) it returned recent
-  mail, so old matches were missed and the "newest and the oldest" note was
-  wrong (`from:"github"` + `to` at `count` 10: 1 result, where v3.14.1 found
-  9 with its narrower name-only filter). The page is now requested
-  `receivedDateTime asc`; if Graph refuses that, the unsorted page is used
-  and called the oldest only when its dates show it is. Live: 5 results,
-  the newest and oldest matches of the wider filter.
-- **Automatic replies on personal accounts** (#305). Live tests on a
-  personal Outlook.com account found that replies set through Graph are
-  saved but not sent, whether scheduled (also with a 15-minute lead) or
-  always on. Every `set-auto-replies` result and dry run that switches them
-  on now says so and points to Outlook on the web or the app. The claim that
-  personal accounts accept scheduled replies only is corrected (the test
+- **`mailbox-settings` warns that personal accounts may not send
+  automatic replies** (#305). Live tests on a personal Outlook.com
+  account found that replies set through Graph are saved but not sent,
+  whether scheduled (also with a 15-minute lead) or always on. Every
+  `set-auto-replies` result and dry run that switches them on now says so
+  and points to Outlook on the web or the app. The claim that personal
+  accounts accept scheduled replies only is corrected (the test
   account accepted `alwaysEnabled`), and a stale "Scheduled Start/End" is no
   longer shown for an always-on setting. The how-to, troubleshooting table,
   FAQ and plugin skill say the same.
-- **`read-email` description** (#358, PR #359): it said the body comes back as
+- **`read-email` description** (PR #359): it said the body comes back as
   Markdown, but HTML bodies are returned as plain text with the tags removed,
   so formatting and link addresses are lost. The description now says so.
 - **`query` searches run Graph `$search` again** (#261). Graph rejects
@@ -74,9 +60,9 @@ upgrade steps.
   back as before. The `query` and `searchExpression` descriptions no longer
   say `$search` is unavailable on personal accounts or that its results
   aren't in date order.
-- **Locally filtered results say when coverage was partial.** Whenever a
-  filter is applied locally and drops messages while Graph had more to read,
-  the result keeps `hasMore`, reports `partialCoverage` and
+- **Locally filtered results say when coverage was partial** (#261).
+  Whenever a filter is applied locally and drops messages while Graph had
+  more to read, the result keeps `hasMore`, reports `partialCoverage` and
   `narrowedCandidates`, and says other matches may exist (earlier versions
   dropped the "more available" hint). The footer for a `$search` result
   suggests raising `count` or adding words to `query`, not a date window
@@ -109,7 +95,9 @@ upgrade steps.
   same messages come back. The single-filter fallback steps for `from`,
   `subject` and `query` are sorted the same way, and retry unsorted if
   Graph refuses the sort. `to` filters are unchanged (still unsorted where
-  Graph accepts them).
+  Graph accepts them). On a personal account the sorted request is slower
+  when nothing matches: a `from` or `subject` search with no match takes
+  about 2–3 s (v3.14.1: about 0.5 s), sending the request once (#364).
 - **Results from an unsorted retry are in date order and say what they
   are** (#342). When Graph refuses the sort, the page comes from an
   unsorted request, which usually returns the oldest matches. The search
@@ -124,48 +112,47 @@ upgrade steps.
 - **Filters applied locally keep matches in old mail, and say where the
   unread part is** (#331). When one filter runs on the server and another
   is matched locally (on personal accounts, anything with `to`), and Graph
-  had more than the page read, the search now reads the oldest matches as
-  well as the newest and returns what passes from either end, marked as
-  partial. The local `to` scan asks Graph for your date window, so its 500
+  had more than the page read, the search now reads the oldest matches
+  (requested oldest first; if Graph refuses that sort, an unsorted page
+  counts as the oldest only when its dates show it is, #377) as well as the
+  newest and returns what passes from either end, marked as partial. The
+  local `to` scan asks Graph for your date window, so its 500
   messages are the newest inside the window, and a scan that fills its
   budget is merged with the `subject` or `query` step, which reaches
   further back. A second scan of the same messages is no longer made.
   Advice follows the direction of the read: an earlier `receivedBefore`
   reaches older mail, or both bounds when both ends were read.
-- **A failed request is not reported as "nothing matches".** If a search
-  step or scan fails without answering (a 5xx, throttling, a timeout or a
-  dropped connection) and nothing is found, the result says a request to
-  Microsoft Graph failed and that a match may still exist, and reports
-  `incomplete: true`. Results returned after such a failure carry the same
-  flag and a note. Only a 400 by which Graph refuses a request shape
-  (`InefficientFilter`, `ErrorInvalidUrlQueryFilter`, `SearchWith…`, a
-  syntax error) counts as an answer; every other failure, recognised or
-  not, leaves the search incomplete and is named by status and code. The
-  same goes for a `searchExpression` and for a failed `$search` page.
-- **A 401 or 403 during a search is an error, not an empty result.** They
-  used to be absorbed and come back as "No emails found". A 401 now asks
-  you to sign in; a 403 says Graph refused the search (for a shared
-  mailbox, with the usual causes) and to check `auth action=about`.
+- **A failed request is not reported as "nothing matches"** (#331). If a
+  search step or scan fails without answering (a 5xx, throttling, a
+  timeout or a dropped connection) and nothing is found, the result says
+  a request to Microsoft Graph failed and that a match may still exist,
+  and reports `incomplete: true`. Results returned after such a failure
+  carry the same flag and a note. Only a 400 by which Graph refuses a
+  request shape (`InefficientFilter`, `ErrorInvalidUrlQueryFilter`,
+  `SearchWith…`, a syntax error) counts as an answer; every other failure,
+  recognised or not, leaves the search incomplete and is named by status
+  and code. The same goes for a `searchExpression` and for a failed
+  `$search` page.
+- **A 401 or 403 during a search is an error, not an empty result**
+  (#331). They used to be absorbed and come back as "No emails found". A
+  401 now asks you to sign in; a 403 says Graph refused the search (for a
+  shared mailbox, with the usual causes) and to check `auth action=about`.
 - **A plain listing and a folder lookup give the same 401 and 403 errors as
-  a search** (#341). With no filters, `search-emails` answered a 401 with
-  "Error listing emails: UNAUTHORIZED" and a 403 with Graph's raw response,
-  and a 401 or 403 while a named folder was being resolved ended in "Use
-  the folders tool", which would fail the same way. A listing, a
-  conversation listing (`groupByConversation`), a search and a
-  search-driven `export` now ask you to sign in on a 401, and on a 403 say
-  Graph refused the request (status and error code only) and to check
-  `auth action=about`. Successful calls are unchanged. Covered: the plain
-  listing, the `groupByConversation` listing, a search, and `export` with
-  `searchQuery`, each on its own request and on the folder lookup. Not
-  covered, still the raw text: delta sync, `internetMessageId` and
-  `conversationId` lookups, `read-email`, single-message `export` and the
-  `folders` tool. A status is taken from Graph's response only, so a
-  missing folder whose name contains "status 403" is still reported as a
-  folder that was not found (searches with a filter reported it as a 403).
+  a search** (#341). A listing (also with `groupByConversation`), a search
+  and a search-driven `export` now ask you to sign in on a 401, and on a
+  403 say Graph refused the request (status and error code only) and to
+  check `auth action=about`, on their own request and while a named folder
+  is resolved. Before, a listing showed "Error listing emails:
+  UNAUTHORIZED" or Graph's raw 403 text, and a folder lookup said "Use the
+  folders tool", which would fail the same way. Still the raw text: delta
+  sync, `internetMessageId` and `conversationId` lookups, `read-email`,
+  single-message `export` and the `folders` tool. A status is taken from
+  Graph's response only, so a missing folder whose name contains "status
+  403" is reported as not found.
 - **A search with only date or boolean filters never lists unfiltered
-  mail.** If the request that applies `unreadOnly`, `hasAttachments` or the
-  dates did not answer, the search fell back to recent mail and reported
-  the filter as applied. It now returns an error.
+  mail** (#331). If the request that applies `unreadOnly`,
+  `hasAttachments` or the dates did not answer, the search fell back to
+  recent mail and reported the filter as applied. It now returns an error.
 - **A `searchExpression` Graph rejects says so, with Graph's reason**,
   where it used to end in a plain "No emails found". The result also
   reports `incomplete: true` in `_meta.searchMetadata`, because nothing was
@@ -188,8 +175,9 @@ upgrade steps.
   `receivedAfter`/`receivedBefore` (and `hasAttachments`/`unreadOnly`) never
   reach a raw `$search` expression. They are now listed in `droppedFilters`
   (so `filterApplied` is `false`) with a visible note showing how to put a
-  date in the expression itself (`invoice AND received>=2026-01-01`). The "more results" footer for these searches no longer
-  suggests the date parameters. Results are unchanged.
+  date in the expression itself (`invoice AND received>=2026-01-01`). The
+  "more results" footer for these searches no longer suggests the date
+  parameters. Results are unchanged.
 - **A `searchExpression` with operators or several words is sent to Graph
   as one quoted string** (#333). Graph reads KQL (`AND`/`OR`/`NOT`,
   `received>=…`) only when the whole expression is one double-quoted
@@ -239,13 +227,13 @@ upgrade steps.
   count rooms and resources in `notified` too (an event with only a room
   no longer says nobody is emailed); `external` covers people. An address
   listed twice in different letter case counts once.
-  A `manage-rules` reorder whose follow-up listing fails now says other rules
-  may have been renumbered and to list them.
+- **A `manage-rules` reorder whose follow-up listing fails says so** (#323):
+  other rules may have been renumbered, so list them.
 - **`find-meeting-rooms` on Microsoft 365** (#240). The fallback called the
   beta-only `findRooms` on v1.0 (always a 404) and any 404 was reported as a
   personal account. Rooms are now read page by page (up to 1,000); a refused
   `places` call (403, missing `Place.Read.All`, which this server doesn't
-  request yet, #130) falls back to the beta `findRooms` call (names and
+  request yet, #337) falls back to the beta `findRooms` call (names and
   addresses, first 100 rooms) and says so; a personal account gets a plain
   "Microsoft 365 only" error without a second call. The scope name in
   messages is now `Place.Read.All`.
@@ -258,40 +246,39 @@ upgrade steps.
 
 - **Dependencies:** `proxy-addr` 2.0.8 clears the critical
   [GHSA-jqcg-44mw-7w3h](https://github.com/advisories/GHSA-jqcg-44mw-7w3h)
-  advisory, and `@modelcontextprotocol/sdk` moves to 1.32.1 (#321, #326).
-  The old `proxy-addr` 2.0.7 reached the production tree through the SDK's
-  `express` dependency. The stdio server never loads `express`, but the
-  Docker image installs from the lockfile, and
-  `npm audit --omit=dev --audit-level=high` (CI and the weekly scheduled
+  advisory (#321, #326). The old `proxy-addr` 2.0.7 reached the
+  production tree through the SDK's `express` dependency. The stdio server
+  never loads `express`, but the Docker image installs from the lockfile,
+  and `npm audit --omit=dev --audit-level=high` (CI and the weekly scheduled
   audit) now passes again.
 - **Production audit gate passes again** (#357). Raised `overrides` floors
   clear the high `body-parser`
   ([GHSA-27r3-jxmh-p828](https://github.com/advisories/GHSA-27r3-jxmh-p828),
   now 2.4.0) and `zod` (now 4.6.7) advisories and the moderate `fast-uri`
-  (3.1.9), `hono` (4.13.13), `ip-address` (10.7.5) and `qs` (6.17.1) ones;
+  (3.1.9), `hono` (4.13.16), `ip-address` (10.7.5) and `qs` (6.17.1) ones;
   `@modelcontextprotocol/sdk` moves to 1.32.2 (Dependabot #356, #361–#363).
-  All of them reach the production tree only through the SDK's HTTP
-  transports, which the stdio server never loads. `@hono/node-server` stays
-  on 1.19.x: its only fixed release (2.1.3) needs Node 20, the advisory is
-  moderate and covers `serveStatic`, which nothing here uses.
+  The stdio server loads `zod` (the SDK's message validation) and
+  `fast-uri` (through `ajv`); the others reach the production tree only
+  through the SDK's HTTP transports, which it never loads.
+  `@hono/node-server` stays on 1.19.x: its only fixed release (2.1.3) needs
+  Node 20, the advisory is moderate and covers `serveStatic`, which nothing
+  here uses.
 - **Dev-only advisories cleared:** `@modelcontextprotocol/inspector` 2.13.0
   brings `@modelcontextprotocol/client` and `server` 2.4.0 and `undici`
   8.12.3, and `vite` moves to 8.3.5 (Dependabot #351, #353–#355, #360).
 
 ### Changed
 
-- **Dependencies** (Dependabot #312–#318, applied as our own conventional
+- **Dependencies** (Dependabot updates, applied as our own conventional
   commits because Dependabot's `Bump …` subjects fail commitlint):
-  `dotenv` 18.0.5 (#313; used only by the browser auth server, whose
+  `dotenv` 18.0.9 (#313, #352; used only by the browser auth server, whose
   "injected env" line now goes to stderr), `supertest` 7.3.1 (#316),
   `@commitlint/cli` and `@commitlint/config-conventional` 21.2.3 (#314,
   #315; the CI Commit Lint job moves to Node 22, which commitlint 21
-  needs), `actions/setup-node` 7.0.0 (#317), `actions/github-script` 9.0.0
-  (#312) and `anthropics/claude-code-action` 1.0.240 (#318). Later
-  Dependabot updates, applied the same way: `dotenv` 18.0.8 (#352),
-  `eslint` 10.12.0 and `prettier` 3.9.10 (#348), `actions/setup-node`
-  7.1.0 (#350), `github/codeql-action` 4.38.3 (#347, #349) and
-  `anthropics/claude-code-action` 1.0.248 (#343).
+  needs), `eslint` 10.14.0 and `prettier` 3.9.10 (#348),
+  `actions/setup-node` 7.1.0 (#317, #350), `actions/github-script` 9.0.0
+  (#312), `github/codeql-action` 4.38.3 (#347, #349) and
+  `anthropics/claude-code-action` 1.0.248 (#318, #343).
 - **Commit Lint accepts Dependabot's commits** (#335). Dependabot now
   writes `chore(deps): Bump <package> from <a> to <b>`, and the capital
   letter failed `subject-case` on every one of its pull requests.
@@ -318,19 +305,19 @@ upgrade steps.
 ### Documentation
 
 - The `access-shared-mailbox` description, the shared-mailbox guide, the
-  tools reference, `SECURITY.md` and the plugin skill now say plainly that
-  this one tool still sends its read to Microsoft Graph with the existing
-  sign-in while `OUTLOOK_SHARED_MAILBOX` is unset (a well-known folder or
-  folder ID only), and adds the setup steps on a 403 or 404. Every other
-  tool's `sharedMailbox` parameter is refused before any request. Behaviour
-  is unchanged (#338).
+  tools reference, the FAQ, `SECURITY.md` and the plugin skill now say
+  plainly that this one tool still sends its read to Microsoft Graph with
+  the existing sign-in while `OUTLOOK_SHARED_MAILBOX` is unset (a
+  well-known folder or folder ID only), and give the setup steps on a 403
+  or 404. Every other tool's `sharedMailbox` parameter is refused before
+  any request. Behaviour is unchanged (#338).
 - `docs/troubleshooting.md` notes Microsoft's Mail-Advanced.ReadWrite
   enforcement from 31 December 2026 and why it doesn't affect Outlook
   Assistant (#131).
 - `CITATION.cff` ("Cite this repository" on GitHub) and a README link to the
   [product page](https://littlebearapps.com/builds/outlook-assistant/)
   (#119).
-- The roadmap lists #328 and #329 under v3.14.2 (#330). The search guides,
+- The roadmap lists the v3.14.2 issues (#330). The search guides,
   tools reference, README, FAQ and llms.txt describe the new `query`
   behaviour.
 

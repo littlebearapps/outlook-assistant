@@ -6,7 +6,7 @@ For shipped work, see [`CHANGELOG.md`](CHANGELOG.md).
 
 ## v3.14.2 — Fix queue
 
-The next patch after v3.14.1: user-facing bug fixes that are small and safe to ship alone. Everything below except #305 is fixed for v3.14.2; see `[3.14.2]` in [`CHANGELOG.md`](CHANGELOG.md).
+The next patch after v3.14.1: user-facing bug fixes that are small and safe to ship alone. Everything below is fixed for v3.14.2 (#332 and #333 still need their Microsoft 365 check, #334); see `[3.14.2]` in [`CHANGELOG.md`](CHANGELOG.md).
 
 - **#261** fix(search): query search sends $orderby with $search, so Graph rejects it (SearchWithOrderBy) and falls back
 - **#263** fix(export): search export wraps from:/subject: in one quoted phrase, so field scopes are ignored
@@ -21,7 +21,12 @@ The next patch after v3.14.1: user-facing bug fixes that are small and safe to s
 - **#332** fix(search): `to` with a dotless domain label matches recipient names only on the server-side path
 - **#333** research(search): whole-quoted KQL works on a personal account — a `searchExpression` is now sent as one quoted string, with the live matrix in the KQL reference
 - **#131** docs: confirm Mail-Advanced.ReadWrite enforcement (31 Dec 2026) doesn't affect Outlook Assistant — a troubleshooting note, no code change; due before Microsoft's 31 December 2026 deadline.
-- **#305** question(settings): scheduled auto-replies set via Graph may not fire on personal accounts — likely docs and success-message wording after a manual re-test. **Not in v3.14.2**: it stays open until that re-test.
+- **#305** fix(settings): say Graph-set automatic replies are saved but may not be sent on personal accounts — live re-test done 2026-11-02 (no reply sent, scheduled or always on); the result, dry run, how-to, troubleshooting, FAQ and plugin skill now say so.
+- **#338** docs(shared): say access-shared-mailbox reads with the existing sign-in while the opt-in is off — docs and skill only; refuse-first is reconsidered for v4.0.0.
+- **#340, #341, #342** fix(search): follow-ups from the October live test — a rejected `searchExpression` is marked incomplete, 401/403 on listings and folder lookups get a next step, and the footer and page order are right after a refused sort.
+- **#357** Security audit gate failing on main — raised `overrides` floors (high `body-parser` and `zod` advisories) and SDK 1.32.2.
+- **#364, #365, #366, #377** from the 2026-11-02 full live test — a no-match `from`/`subject` search no longer sends its request twice, `export` saves attachments, `manage-contact` update applies `emails`/`firstName`/`lastName`, and a `from` + `to` search reads the real oldest page.
+- **#334** test: Microsoft 365 live verification of the v3.14.2 changes — the merge gate (needs a Microsoft 365 Business Basic trial).
 
 **Repo-only** (no npm release needed; they land before v3.14.2 so the release exercises them):
 
@@ -47,6 +52,7 @@ Machine-readable results and real paging, Hermes Agent support, and the v3.14.0 
 - **#324** test(evals): skill-evals grading can pass vacuously; sync-version --check misses a missing metadata.version — fixed before the Hermes work relies on the evals.
 - **#299** v3.14.0 follow-ups: hook prompt review and manual client checks — still open: a focused review of the hook's prompt text against the server's argument handling, and hand checks in VS Code with Copilot (Local agent), the Cursor desktop app, Claude Desktop, Gemini CLI, MCP Inspector and a local model.
 - **#290** ci: supply-chain hardening (image digests, SBOM, OpenSSF Scorecard)
+- **#367–#376, #378** follow-ups from the v3.14.2 live test (2026-11-02), all pre-existing in v3.14.1: attachment marker at standard verbosity, "raise `count`" advice, `folders create` refusals, newsletter preheader padding, slow no-match `query`, rule sequence reporting, safety-belt wording, the read-only `export` refusal text, double event reads in previews, `read-email` 404 text, and cosmetic notes (#376).
 
 ## v3.16.0 — Calendar, tasks & contacts
 

@@ -647,6 +647,10 @@ describe('handleAbout — F-1/F-2/F-48', () => {
     jest.clearAllMocks();
     process.env = { ...originalEnv };
     delete process.env.OUTLOOK_MAX_EMAILS_PER_SESSION;
+    delete process.env.OUTLOOK_MAX_SEND_EMAIL_PER_SESSION;
+    delete process.env.OUTLOOK_MAX_DRAFT_PER_SESSION;
+    delete process.env.OUTLOOK_MAX_CREATE_EVENT_PER_SESSION;
+    delete process.env.OUTLOOK_MAX_MANAGE_RULES_PER_SESSION;
     delete process.env.OUTLOOK_ALLOWED_RECIPIENTS;
   });
 
@@ -676,6 +680,48 @@ describe('handleAbout — F-1/F-2/F-48', () => {
     expect(result.content[0].text).toMatch(/Safety Belts Not Configured/);
     expect(result.content[0].text).toMatch(/OUTLOOK_MAX_EMAILS_PER_SESSION/);
     expect(result.content[0].text).toMatch(/OUTLOOK_ALLOWED_RECIPIENTS/);
+  });
+
+  test.each(['10', '0'])(
+    'warns only about the missing allowlist when a rate limit is set to %s (#373)',
+    async (limit) => {
+      process.env.OUTLOOK_MAX_EMAILS_PER_SESSION = limit;
+      callGraphAPI.mockResolvedValue({ userPrincipalName: 'u@example.com' });
+
+      const text = (await handleAbout()).content[0].text;
+
+      expect(text).toMatch(/No recipient allowlist is set/);
+      expect(text).not.toMatch(/No rate limit or recipient allowlist is set/);
+      expect(text).not.toMatch(/No rate limit is set/);
+      expect(text).toMatch(/OUTLOOK_ALLOWED_RECIPIENTS=your-domain.com/);
+      expect(text).not.toMatch(/OUTLOOK_MAX_EMAILS_PER_SESSION=10\s+#/);
+    }
+  );
+
+  test('treats a comma-only allowlist as unconfigured (#373)', async () => {
+    process.env.OUTLOOK_MAX_EMAILS_PER_SESSION = '10';
+    process.env.OUTLOOK_ALLOWED_RECIPIENTS = ' , ';
+    callGraphAPI.mockResolvedValue({ userPrincipalName: 'u@example.com' });
+
+    const text = (await handleAbout()).content[0].text;
+
+    expect(text).toMatch(
+      /\| Recipient Allowlist \| None \(all recipients allowed\) \|/
+    );
+    expect(text).toMatch(/No recipient allowlist is set/);
+    expect(text).not.toMatch(/No rate limit is set/);
+  });
+
+  test('warns only about the missing rate limit when an allowlist is set (#373)', async () => {
+    process.env.OUTLOOK_ALLOWED_RECIPIENTS = 'example.com';
+    callGraphAPI.mockResolvedValue({ userPrincipalName: 'u@example.com' });
+
+    const text = (await handleAbout()).content[0].text;
+
+    expect(text).toMatch(/No rate limit is set/);
+    expect(text).not.toMatch(/No rate limit or recipient allowlist is set/);
+    expect(text).toMatch(/OUTLOOK_MAX_EMAILS_PER_SESSION=10\s+#/);
+    expect(text).not.toMatch(/OUTLOOK_ALLOWED_RECIPIENTS=your-domain.com/);
   });
 
   test('shows a session limit of 0 as BLOCKED, not unlimited (#302)', async () => {

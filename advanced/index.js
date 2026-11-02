@@ -605,7 +605,7 @@ const ROOM_PAGE_CAP = 10;
 const FIND_ROOMS_BETA_URL = 'https://graph.microsoft.com/beta/me/findRooms';
 
 const PLACE_SCOPE_NOTE =
-  "Listing rooms through Graph `places` needs the Place.Read.All permission (admin consent), and this server doesn't request that scope yet (tracked in #130)";
+  "Listing rooms through Graph `places` needs the Place.Read.All permission (admin consent), and this server doesn't request that scope yet (tracked in #337)";
 
 /** HTTP status from a callGraphAPI error message, or null. */
 function graphErrorStatus(error) {
@@ -905,7 +905,7 @@ const advancedTools = [
   {
     name: 'find-meeting-rooms',
     description:
-      "List bookable meeting rooms in the user's Microsoft 365 organisation (read-only). Reads Graph `places` (all pages, up to 1,000 rooms): name, email address, building, floor, capacity and devices. `places` needs the Place.Read.All permission, which this server doesn't request yet (#130); when Graph refuses it, the tool falls back to the beta `findRooms` call (User.Read; names and addresses only, first 100 rooms), and says so in the result. A room's email address works as a `create-event` attendee with type `resource`. Filter by `query` (name or address), `building`, `floor` or minimum `capacity`; filters run on the returned list, and `findRooms` results can't be filtered by building, floor or capacity. Personal Microsoft accounts (Outlook.com) have no rooms: the call returns an error saying so. `outputVerbosity` controls field count.",
+      "List bookable meeting rooms in the user's Microsoft 365 organisation (read-only). Reads Graph `places` (all pages, up to 1,000 rooms): name, email address, building, floor, capacity and devices. `places` needs the Place.Read.All permission, which this server doesn't request yet (#337); when Graph refuses it, the tool falls back to the beta `findRooms` call (User.Read; names and addresses only, first 100 rooms), and says so in the result. A room's email address works as a `create-event` attendee with type `resource`. Filter by `query` (name or address), `building`, `floor` or minimum `capacity`; filters run on the returned list, and `findRooms` results can't be filtered by building, floor or capacity. Personal Microsoft accounts (Outlook.com) have no rooms: the call returns an error saying so. `outputVerbosity` controls field count.",
     ...toolMetadata('find-meeting-rooms', 'Meeting Rooms'),
     inputSchema: {
       type: 'object',

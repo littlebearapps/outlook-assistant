@@ -1001,7 +1001,7 @@ describe('handleFindMeetingRooms errors, paging and the beta fallback (#240)', (
     expect(result.content[0].text).toMatch(/`capacity` was not applied/);
   });
 
-  it('on M365 with both calls failing, names Place.Read.All and says it is not requested yet (#130)', async () => {
+  it('on M365 with both calls failing, names Place.Read.All and says it is not requested yet (#337)', async () => {
     callGraphAPI
       .mockRejectedValueOnce(FORBIDDEN_403)
       .mockRejectedValueOnce(new Error('API call failed with status 500'));
@@ -1013,7 +1013,7 @@ describe('handleFindMeetingRooms errors, paging and the beta fallback (#240)', (
     expect(text).toMatch(/Place\.Read\.All/);
     expect(text).not.toMatch(/Places\.Read\.All/);
     expect(text).toMatch(/doesn't request (that|this) (scope|permission) yet/);
-    expect(text).toMatch(/#130/);
+    expect(text).toMatch(/#337/);
     expect(text).not.toMatch(/personal/i);
   });
 

@@ -265,10 +265,14 @@ async function handleAbout() {
   // sending is significantly safer with a session rate limit and a
   // recipient allowlist; both are off by default.
   if (!rateLimitConfigured || !allowlistConfigured) {
+    const missingSafeguards = [
+      ...(!rateLimitConfigured ? ['rate limit'] : []),
+      ...(!allowlistConfigured ? ['recipient allowlist'] : []),
+    ];
     lines.push('');
     lines.push('## ⚠ Safety Belts Not Configured\n');
     lines.push(
-      'No rate limit or recipient allowlist is set. For safer AI-assisted sending, add to your `.mcp.json` env block:'
+      `No ${missingSafeguards.join(' or ')} is set. For safer AI-assisted sending, add to your \`.mcp.json\` env block:`
     );
     lines.push('```');
     if (!rateLimitConfigured) {

@@ -678,6 +678,30 @@ describe('handleAbout — F-1/F-2/F-48', () => {
     expect(result.content[0].text).toMatch(/OUTLOOK_ALLOWED_RECIPIENTS/);
   });
 
+  test('warns only about the missing allowlist when a rate limit is set (#373)', async () => {
+    process.env.OUTLOOK_MAX_EMAILS_PER_SESSION = '10';
+    callGraphAPI.mockResolvedValue({ userPrincipalName: 'u@example.com' });
+
+    const text = (await handleAbout()).content[0].text;
+
+    expect(text).toMatch(/No recipient allowlist is set/);
+    expect(text).not.toMatch(/No rate limit or recipient allowlist is set/);
+    expect(text).toMatch(/OUTLOOK_ALLOWED_RECIPIENTS=your-domain.com/);
+    expect(text).not.toMatch(/OUTLOOK_MAX_EMAILS_PER_SESSION=10\s+#/);
+  });
+
+  test('warns only about the missing rate limit when an allowlist is set (#373)', async () => {
+    process.env.OUTLOOK_ALLOWED_RECIPIENTS = 'example.com';
+    callGraphAPI.mockResolvedValue({ userPrincipalName: 'u@example.com' });
+
+    const text = (await handleAbout()).content[0].text;
+
+    expect(text).toMatch(/No rate limit is set/);
+    expect(text).not.toMatch(/No rate limit or recipient allowlist is set/);
+    expect(text).toMatch(/OUTLOOK_MAX_EMAILS_PER_SESSION=10\s+#/);
+    expect(text).not.toMatch(/OUTLOOK_ALLOWED_RECIPIENTS=your-domain.com/);
+  });
+
   test('shows a session limit of 0 as BLOCKED, not unlimited (#302)', async () => {
     process.env.OUTLOOK_MAX_EMAILS_PER_SESSION = '0';
     callGraphAPI.mockResolvedValue({ userPrincipalName: 'u@example.com' });

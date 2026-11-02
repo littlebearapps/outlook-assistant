@@ -76,6 +76,12 @@ describe('blocked-tools note (#302)', () => {
     expect(text.length).toBeLessThan(MAX_LENGTH);
   });
 
+  test('does not say all blocked tools necessarily have a zero limit (#373)', () => {
+    const text = serverInstructions({ blockedTools: ['send-email'] });
+    expect(text).toMatch(/0 or invalid/);
+    expect(text).not.toMatch(/PER_SESSION is 0\)/);
+  });
+
   test('is left out when nothing is blocked', () => {
     expect(serverInstructions()).not.toMatch(/Session limits block/);
   });

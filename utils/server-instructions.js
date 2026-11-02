@@ -38,12 +38,12 @@ const READ_ONLY_OFF =
   'Read-only mode (OUTLOOK_READ_ONLY) is off: changes can run, subject to the rules above.';
 
 /**
- * Line naming the rate-limited tools a session limit of 0 blocks (#302).
+ * Line naming tools blocked by zero or invalid session limits (#302, #373).
  * @param {string[]} tools
  * @returns {string}
  */
 const blockedNote = (tools) =>
-  `Session limits block ${tools.join(', ')} (OUTLOOK_MAX_*_PER_SESSION is 0): every such call is refused with nothing sent or changed. Tell the user; never use another tool or action to get around it.`;
+  `Session limits block ${tools.join(', ')} (OUTLOOK_MAX_*_PER_SESSION is 0 or invalid): every such call is refused with nothing sent or changed. Tell the user; never use another tool or action to get around it.`;
 
 const SKILL_POINTER =
   'If a `using-outlook-assistant` skill is available, read it before the first Outlook tool call.';
@@ -52,7 +52,7 @@ const SKILL_POINTER =
  * The instructions text for this server.
  * @param {{readOnly?: boolean, blockedTools?: string[]}} [options] -
  *   readOnly: OUTLOOK_READ_ONLY is on; blockedTools: rate-limited tools a
- *   session limit of 0 blocks
+ *   session limit of 0 or an invalid value blocks
  * @returns {string}
  */
 function serverInstructions({ readOnly = false, blockedTools = [] } = {}) {

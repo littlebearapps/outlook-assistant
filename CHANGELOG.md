@@ -221,6 +221,19 @@ upgrade steps. #305 (scheduled automatic replies on personal accounts) is
   Docker image installs from the lockfile, and
   `npm audit --omit=dev --audit-level=high` (CI and the weekly scheduled
   audit) now passes again.
+- **Production audit gate passes again** (#357). Raised `overrides` floors
+  clear the high `body-parser`
+  ([GHSA-27r3-jxmh-p828](https://github.com/advisories/GHSA-27r3-jxmh-p828),
+  now 2.4.0) and `zod` (now 4.6.7) advisories and the moderate `fast-uri`
+  (3.1.9), `hono` (4.13.13), `ip-address` (10.7.5) and `qs` (6.17.1) ones;
+  `@modelcontextprotocol/sdk` moves to 1.32.2 (Dependabot #356, #361–#363).
+  All of them reach the production tree only through the SDK's HTTP
+  transports, which the stdio server never loads. `@hono/node-server` stays
+  on 1.19.x: its only fixed release (2.1.3) needs Node 20, the advisory is
+  moderate and covers `serveStatic`, which nothing here uses.
+- **Dev-only advisories cleared:** `@modelcontextprotocol/inspector` 2.13.0
+  brings `@modelcontextprotocol/client` and `server` 2.4.0 and `undici`
+  8.12.3, and `vite` moves to 8.3.5 (Dependabot #351, #353–#355, #360).
 
 ### Changed
 
@@ -231,7 +244,11 @@ upgrade steps. #305 (scheduled automatic replies on personal accounts) is
   `@commitlint/cli` and `@commitlint/config-conventional` 21.2.3 (#314,
   #315; the CI Commit Lint job moves to Node 22, which commitlint 21
   needs), `actions/setup-node` 7.0.0 (#317), `actions/github-script` 9.0.0
-  (#312) and `anthropics/claude-code-action` 1.0.240 (#318).
+  (#312) and `anthropics/claude-code-action` 1.0.240 (#318). Later
+  Dependabot updates, applied the same way: `dotenv` 18.0.8 (#352),
+  `eslint` 10.12.0 and `prettier` 3.9.10 (#348), `actions/setup-node`
+  7.1.0 (#350), `github/codeql-action` 4.38.3 (#347, #349) and
+  `anthropics/claude-code-action` 1.0.248 (#343).
 - **Commit Lint accepts Dependabot's commits** (#335). Dependabot now
   writes `chore(deps): Bump <package> from <a> to <b>`, and the capital
   letter failed `subject-case` on every one of its pull requests.

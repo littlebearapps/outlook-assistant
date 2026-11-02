@@ -47,12 +47,13 @@ let outDir;
 
 /** Routes the message GET and the attachments GET; records the calls. */
 function mockGraph({ attachments, attachmentsError } = {}) {
-  callGraphAPI.mockImplementation(async (token, method, endpoint) => {
+  callGraphAPI.mockImplementation((token, method, endpoint) => {
     if (endpoint.endsWith('/attachments')) {
-      if (attachmentsError) throw attachmentsError;
-      return { value: attachments };
+      return attachmentsError
+        ? Promise.reject(attachmentsError)
+        : Promise.resolve({ value: attachments });
     }
-    return MESSAGE;
+    return Promise.resolve(MESSAGE);
   });
 }
 

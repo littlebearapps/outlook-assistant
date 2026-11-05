@@ -34,6 +34,10 @@ async function handleCreateFolder(args) {
       mailbox: sharedMailbox,
     });
 
+    if (!result.success) {
+      return toolError(result.message, { nextStep: result.nextStep });
+    }
+
     return {
       content: [
         {
@@ -76,6 +80,8 @@ async function createMailFolder(accessToken, folderName, parentSpec) {
         return {
           success: false,
           message: `Parent folder could not be resolved: ${resolveError.message}`,
+          nextStep:
+            'Use `folders` action=list to identify an unambiguous parentFolderId, then retry.',
         };
       }
     }
@@ -95,6 +101,8 @@ async function createMailFolder(accessToken, folderName, parentSpec) {
         message: `A folder named "${folderName}" already exists ${
           parent ? `under "${parent.path}"` : 'at the root level'
         }.`,
+        nextStep:
+          'Use `folders` action=list to find the existing folder or choose a different name.',
       };
     }
 
@@ -131,6 +139,8 @@ async function createMailFolder(accessToken, folderName, parentSpec) {
         success: false,
         message:
           "Failed to create folder. The server didn't return a folder ID.",
+        nextStep:
+          'List folders to check whether the folder was created before attempting another write.',
       };
     }
   } catch (error) {

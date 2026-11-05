@@ -37,7 +37,7 @@ const {
 } = require('./attendees');
 const { toolError, authRequiredError } = require('../utils/tool-error');
 const { dryRunResult } = require('../utils/safety');
-const { describeUpdateRecipients } = require('./preview');
+const { describeUpdateRecipients, fetchEvent } = require('./preview');
 
 const SENSITIVITY_VALUES = new Set([
   'normal',
@@ -190,6 +190,7 @@ async function handleUpdateEvent(args) {
 
   try {
     let accessToken;
+    let previewEvent;
 
     // Keep the type of attendees already on the event: an entry without an
     // explicit type takes its current type, so a room or optional attendee
@@ -197,13 +198,15 @@ async function handleUpdateEvent(args) {
     // preview shows the resolved types.
     if (untypedAttendees) {
       accessToken = await ensureAuthenticated();
-      const current = await callGraphAPI(
-        accessToken,
-        'GET',
-        `me/events/${eventId}`,
-        null,
-        { $select: 'attendees' }
-      );
+      // A dry run needs the full event for the recipient preview as well.
+      // Reuse that read to resolve attendee types rather than fetching the
+      // same event again. Actual updates retain their minimal lookup.
+      const current = dryRun
+        ? await fetchEvent(accessToken, eventId)
+        : await callGraphAPI(accessToken, 'GET', `me/events/${eventId}`, null, {
+            $select: 'attendees',
+          });
+      if (dryRun) previewEvent = current;
       patch.attendees = buildAttendees(untypedAttendees, current?.attendees);
     }
 
@@ -215,6 +218,7 @@ async function handleUpdateEvent(args) {
       const recipients = await describeUpdateRecipients(accessToken, {
         eventId,
         patch,
+        event: previewEvent,
       });
       return dryRunResult(
         [

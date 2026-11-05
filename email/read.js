@@ -16,6 +16,16 @@ const { buildMailboxPrefix } = require('../utils/mailbox');
 const { toolError, authRequiredError } = require('../utils/tool-error');
 const { log } = require('../utils/logger');
 
+function messageNotFoundError() {
+  return toolError(
+    'That message was not found; it may have been moved or deleted.',
+    {
+      nextStep:
+        'Use `search-emails` to find a current message ID, then retry. If the message belongs to a shared mailbox, pass the same `sharedMailbox`.',
+    }
+  );
+}
+
 /**
  * Get field preset based on verbosity and options
  * @param {string} verbosity - Verbosity level
@@ -82,7 +92,7 @@ async function handleReadEmail(args) {
       );
 
       if (!email) {
-        return toolError(`Email with ID ${emailId} not found.`);
+        return messageNotFoundError();
       }
 
       // Format using shared formatter (returns Markdown)
@@ -115,6 +125,12 @@ async function handleReadEmail(args) {
         return toolError(
           `The email ID seems invalid or doesn't belong to your mailbox. Please try with a different email ID.`
         );
+      } else if (
+        error.status === 404 ||
+        error.statusCode === 404 ||
+        /\b(?:status|HTTP)\s+404\b/i.test(error.message)
+      ) {
+        return messageNotFoundError();
       } else {
         return toolError(`Failed to read email: ${error.message}`);
       }

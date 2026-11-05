@@ -339,15 +339,21 @@ const PERSONAL_FIELDS = new Set([
  * Who a manage-event update would email (#303): the attendees of an event
  * you organise, plus who is added or removed when `attendees` is replaced.
  * @param {string} accessToken
- * @param {{eventId: string, patch: object}} options - the PATCH body
+ * @param {{eventId: string, patch: object, event?: object}} options
+ *   The PATCH body, plus an optional event read for attendee type resolution.
  * @returns {Promise<{lines: string[], notified: number, external: (number|null)}>}
  */
-async function describeUpdateRecipients(accessToken, { eventId, patch }) {
-  let event = null;
-  try {
-    event = await fetchEvent(accessToken, eventId);
-  } catch (_error) {
-    // Fall through to the cautious wording below.
+async function describeUpdateRecipients(
+  accessToken,
+  { eventId, patch, event: prefetchedEvent }
+) {
+  let event = prefetchedEvent;
+  if (event === undefined) {
+    try {
+      event = await fetchEvent(accessToken, eventId);
+    } catch (_error) {
+      // Fall through to the cautious wording below.
+    }
   }
   if (!event || typeof event !== 'object') {
     return {
@@ -454,6 +460,7 @@ module.exports = {
   emailDomain,
   summariseAttendees,
   describeUpdateRecipients,
+  fetchEvent,
   previewCreateEvent,
   previewCancelEvent,
   previewDeclineEvent,

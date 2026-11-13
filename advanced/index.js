@@ -15,7 +15,6 @@ const config = require('../config');
 const { DEFAULT_TIMEZONE } = config;
 const {
   buildMailboxPrefix,
-  validateMailboxPrefix,
   SHARED_MAILBOX_DISABLED_MESSAGE,
 } = require('../utils/mailbox');
 const { resolveFolder } = require('../folder/resolve');
@@ -67,11 +66,8 @@ const ENABLE_SHARED_HINT =
 /**
  * Access shared mailbox handler.
  *
- * With OUTLOOK_SHARED_MAILBOX off this behaves exactly as before the opt-in
- * flag existed: `folder` (or `folderId`) is used as given — a well-known name
- * or a folder ID — with whatever scopes the token already has. With the flag
- * on, custom/localized names and nested paths are resolved, and
- * `listFolders` is available.
+ * Every shared-mailbox request requires the explicit OUTLOOK_SHARED_MAILBOX
+ * opt-in, including direct reads using a well-known folder or folder ID.
  */
 async function handleAccessSharedMailbox(args) {
   // F-46: accept `email` as alias for `sharedMailbox`. The original
@@ -85,13 +81,11 @@ async function handleAccessSharedMailbox(args) {
     );
   }
 
-  // Validate up front, through the same helper every other tool uses. The
-  // ungated variant keeps this tool's pre-opt-in behaviour when
-  // OUTLOOK_SHARED_MAILBOX is off; with it on, buildMailboxPrefix and
-  // validateMailboxPrefix agree.
+  // Enforce the opt-in before authentication, folder resolution or any Graph
+  // request, exactly as the other mailbox-taking tools do.
   let mailboxPrefix;
   try {
-    mailboxPrefix = validateMailboxPrefix(sharedMailbox);
+    mailboxPrefix = buildMailboxPrefix(sharedMailbox);
   } catch (error) {
     return toolError(error.message);
   }
@@ -748,7 +742,7 @@ const advancedTools = [
   {
     name: 'access-shared-mailbox',
     description:
-      "List emails or folders in a shared mailbox the signed-in user can access (read-only). Returns messages from `sharedMailbox` (alias `email`) and `folder` (default `inbox`) with id/subject/from/receivedDateTime/preview, the same shape as `search-emails` list mode. `folder` takes a well-known name (inbox, sent, archive…), a custom/localized display name (e.g. `Archiv`), a nested path (e.g. `Inbox/Vendors/Acme`), or pass a raw `folderId`. `listFolders: true` enumerates the shared mailbox's folder tree (names, paths, IDs, counts), to find custom subfolders before reading them. Needs the mailbox delegated to the signed-in user in Exchange (admin-configured). `outputVerbosity` sets field count and `count` (default 25, max 50) page size. For search and filters over a shared mailbox, use `search-emails` with `sharedMailbox` set. Custom/localized names, nested paths and `listFolders` need the server opt-in setting OUTLOOK_SHARED_MAILBOX (work/school only); without it `folder` must be a well-known name or a folder ID.",
+      "List emails or folders in a shared mailbox the signed-in user can access (read-only). Returns messages from `sharedMailbox` (alias `email`) and `folder` (default `inbox`) with id/subject/from/receivedDateTime/preview, the same shape as `search-emails` list mode. `folder` takes a well-known name (inbox, sent, archive…), a custom/localized display name (e.g. `Archiv`), a nested path (e.g. `Inbox/Vendors/Acme`), or pass a raw `folderId`. `listFolders: true` enumerates the shared mailbox's folder tree (names, paths, IDs, counts), to find custom subfolders before reading them. Needs the mailbox delegated to the signed-in user in Exchange (admin-configured). `outputVerbosity` sets field count and `count` (default 25, max 50) page size. For search and filters over a shared mailbox, use `search-emails` with `sharedMailbox` set. All shared-mailbox reads require the server opt-in setting OUTLOOK_SHARED_MAILBOX (work/school only).",
     ...toolMetadata('access-shared-mailbox', 'Shared Mailbox'),
     inputSchema: {
       type: 'object',

@@ -111,20 +111,17 @@ test('folders stats points folders over 50 items at delta sync', async () => {
   expect(text).not.toMatch(/Small folder/);
 });
 
-test('access-shared-mailbox 404 adds the enable hint while the opt-in is off', async () => {
+test('access-shared-mailbox refuses before Graph when the opt-in is off', async () => {
   const saved = config.SHARED_MAILBOX_MODE;
   config.SHARED_MAILBOX_MODE = 'off';
   try {
-    graph.callGraphAPI.mockRejectedValue(
-      new Error('API call failed with status 404: ErrorItemNotFound')
-    );
     const result = await run('access-shared-mailbox', {
       sharedMailbox: 'team@example.com',
       count: 1,
     });
     expect(result.isError).toBe(true);
-    expect(textOf(result)).toMatch(/not found, or you can't access it/);
     expect(textOf(result)).toMatch(/OUTLOOK_SHARED_MAILBOX=read/);
+    expect(graph.callGraphAPI).not.toHaveBeenCalled();
   } finally {
     config.SHARED_MAILBOX_MODE = saved;
   }

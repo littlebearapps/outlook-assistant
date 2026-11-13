@@ -29,8 +29,8 @@ const SHARED_MAILBOX_DISABLED_MESSAGE =
 
 /**
  * Validate a mailbox and build its Graph resource prefix, WITHOUT checking
- * whether shared-mailbox support is enabled. Only for paths that worked
- * before the opt-in flag existed (access-shared-mailbox's direct read).
+ * whether shared-mailbox support is enabled. Only use at validation sites;
+ * any tool making Graph requests must call buildMailboxPrefix instead.
  * @param {string|null} [mailbox] - Shared mailbox email address, or null/empty for the signed-in user
  * @returns {string} - `me` or `users/{mailbox}`
  * @throws {Error} If `mailbox` is non-empty but not a plausible email address

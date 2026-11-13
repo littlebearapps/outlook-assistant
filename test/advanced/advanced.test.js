@@ -317,7 +317,7 @@ describe('handleAccessSharedMailbox', () => {
   });
 });
 
-describe('handleAccessSharedMailbox — OUTLOOK_SHARED_MAILBOX off (pre-opt-in behaviour)', () => {
+describe('handleAccessSharedMailbox — OUTLOOK_SHARED_MAILBOX off', () => {
   const config = require('../../config');
   let saved;
   beforeEach(() => {
@@ -328,35 +328,31 @@ describe('handleAccessSharedMailbox — OUTLOOK_SHARED_MAILBOX off (pre-opt-in b
     config.SHARED_MAILBOX_MODE = saved;
   });
 
-  it('reads the folder as given, with a single Graph call (no resolution)', async () => {
-    callGraphAPI.mockResolvedValue({ value: [] });
-    await handleAccessSharedMailbox({
+  it('refuses before authentication or any Graph call', async () => {
+    const result = await handleAccessSharedMailbox({
       sharedMailbox: 'shared@company.com',
       folder: 'sentitems',
     });
-    expect(callGraphAPI).toHaveBeenCalledTimes(1);
-    expect(callGraphAPI.mock.calls[0][2]).toBe(
-      'users/shared@company.com/mailFolders/sentitems/messages'
-    );
+    expect(result.content[0].text).toContain('OUTLOOK_SHARED_MAILBOX=read');
+    expect(ensureAuthenticated).not.toHaveBeenCalled();
+    expect(callGraphAPI).not.toHaveBeenCalled();
   });
 
-  it('defaults to inbox and accepts the email alias', async () => {
+  it('refuses the email alias before any Graph call', async () => {
+    const result = await handleAccessSharedMailbox({
+      email: 'shared@company.com',
+    });
+    expect(result.content[0].text).toContain('OUTLOOK_SHARED_MAILBOX=read');
+    expect(callGraphAPI).not.toHaveBeenCalled();
+  });
+
+  it('refuses even when the mailbox token would otherwise have access', async () => {
     callGraphAPI.mockResolvedValue({ value: [] });
-    await handleAccessSharedMailbox({ email: 'shared@company.com' });
-    expect(callGraphAPI.mock.calls[0][2]).toBe(
-      'users/shared@company.com/mailFolders/inbox/messages'
-    );
-  });
-
-  it('points at the opt-in flag when access is denied', async () => {
-    callGraphAPI.mockRejectedValue(
-      new Error('API call failed with status 403: Access is denied')
-    );
     const result = await handleAccessSharedMailbox({
       sharedMailbox: 'shared@company.com',
     });
-    expect(result.content[0].text).toContain('Access denied');
     expect(result.content[0].text).toContain('OUTLOOK_SHARED_MAILBOX=read');
+    expect(callGraphAPI).not.toHaveBeenCalled();
   });
 
   it('listFolders explains how to enable shared-mailbox support', async () => {

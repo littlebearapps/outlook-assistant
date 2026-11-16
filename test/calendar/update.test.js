@@ -261,11 +261,19 @@ describe('handleUpdateEvent', () => {
       dryRun: true,
     });
 
-    // Reads only: the attendee types, then the event for the recipients
-    // line (#303). Never a PATCH.
+    // A single full event read supplies both attendee types and the preview.
+    // Never a PATCH.
     expect(
       callGraphAPI.mock.calls.every(([, method]) => method === 'GET')
     ).toBe(true);
+    const eventReads = callGraphAPI.mock.calls.filter(
+      ([, method, path]) => method === 'GET' && path === 'me/events/evt_1'
+    );
+    expect(eventReads).toHaveLength(1);
+    expect(eventReads[0][4]).toEqual({
+      $select: 'subject,start,end,isOrganizer,isCancelled,organizer,attendees',
+    });
+    expect(eventReads[0][5]).toEqual({ Prefer: 'outlook.timezone="UTC"' });
     expect(result.content[0].text).toMatch(/^DRY RUN — nothing was changed\./);
     expect(result.content[0].text).toMatch(/"type": "optional"/);
     expect(result.content[0].text).toMatch(/"type": "resource"/);
@@ -590,6 +598,34 @@ describe('handleUpdateEvent dryRun recipients (#303)', () => {
       if (path === 'me') return Promise.resolve({ mail: 'me@corp.com' });
       return Promise.resolve(EVENT);
     });
+  });
+
+  test('untyped attendees reuse the one event read without changing notification counts', async () => {
+    const result = await handleUpdateEvent({
+      eventId: 'evt_1',
+      attendees: ['colleague@corp.com', 'guest@gmail.com', 'new@corp.com'],
+      dryRun: true,
+    });
+
+    const eventReads = callGraphAPI.mock.calls.filter(
+      ([, method, path]) => method === 'GET' && path === 'me/events/evt_1'
+    );
+    expect(eventReads).toHaveLength(1);
+    expect(
+      callGraphAPI.mock.calls.filter(([, , path]) => path === 'me')
+    ).toHaveLength(1);
+    expect(
+      callGraphAPI.mock.calls.every(([, method]) => method === 'GET')
+    ).toBe(true);
+    expect(result._meta.patch.attendees).toEqual([
+      { emailAddress: { address: 'colleague@corp.com' }, type: 'required' },
+      { emailAddress: { address: 'guest@gmail.com' }, type: 'required' },
+      { emailAddress: { address: 'new@corp.com' }, type: 'required' },
+    ]);
+    expect(result._meta).toMatchObject({ notified: 1, external: 0 });
+    expect(result.content[0].text).toMatch(
+      /Added \(sent an invitation\): new@corp\.com/
+    );
   });
 
   test('names the attendees an organiser update emails, with the external count', async () => {

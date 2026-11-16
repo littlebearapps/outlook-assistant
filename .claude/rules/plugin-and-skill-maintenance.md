@@ -56,5 +56,5 @@ In Copilot and Cursor modes the gate also fails closed on naming: any tool (or C
 
 ## After a release
 
-- Move the awesome-copilot listing to the new tag and SHA. Before approval, edit #4455; after approval, open a PR to `plugins/external.json` there.
+- Move the awesome-copilot listing to the new tag and SHA. Until it is approved, edit the open submission (github/awesome-copilot#6447; #4455 was closed as stale after a maintainer question went unanswered, so reply to maintainer comments there within days); after approval, open a PR to `plugins/external.json` there.
 - Directory listings and how they refresh: `docs/promotion/marketplace-listings.md` (gitignored, local only).

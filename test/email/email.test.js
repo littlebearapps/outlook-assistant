@@ -199,7 +199,38 @@ describe('handleReadEmail', () => {
     callGraphAPI.mockResolvedValue(null);
 
     const result = await handleReadEmail({ id: 'bad-id' });
+    expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('not found');
+    expect(result.content[0].text).toContain('Next step:');
+  });
+
+  it('explains a Graph 404 without exposing the raw error JSON', async () => {
+    callGraphAPI.mockRejectedValue(
+      new Error(
+        'API call failed with status 404: {"error":{"code":"ErrorItemNotFound","message":"The specified object was not found in the store."}}'
+      )
+    );
+
+    const result = await handleReadEmail({ id: 'moved-id' });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/may have been moved or deleted/i);
+    expect(result.content[0].text).toContain('Next step:');
+    expect(result.content[0].text).toContain('sharedMailbox');
+    expect(result.content[0].text).not.toContain('ErrorItemNotFound');
+    expect(result.content[0].text).not.toContain('API call failed');
+  });
+
+  it('classifies a structured Graph 404 even without a status string', async () => {
+    callGraphAPI.mockRejectedValue(
+      Object.assign(new Error('Not Found'), { status: 404 })
+    );
+
+    const result = await handleReadEmail({ id: 'deleted-id' });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/may have been moved or deleted/i);
+    expect(result.content[0].text).toContain('Next step:');
   });
 
   it('should require email ID', async () => {

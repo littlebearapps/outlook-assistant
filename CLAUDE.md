@@ -82,7 +82,7 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 | `scripts/docker-smoke.js` | CI smoke test for the Docker image (`docker` job in `ci.yml`): `initialize` + `tools/list` over stdio, checks name, version and 22 tools; `-- node index.js` runs it without Docker; no deps |
 | `scripts/release-check.js` | Version decisions for `auto-tag.yml`/`publish.yml` (tag only a higher version; prereleases go to npm `next`, skip Registry and website); no deps |
 | `scripts/skill-evals.js` | Prompt-injection evals: `claude -p` against test mode's mock mailbox, with skill + hook, hook only, or neither |
-| `utils/server-instructions.js` | Server `instructions` text (hard rules first); read-only note follows `config.READ_ONLY`; names tools a session limit of 0 blocks (`blockedTools`) |
+| `utils/server-instructions.js` | Server `instructions` text (hard rules first); read-only note follows `config.READ_ONLY`; names tools a session limit of 0 or an invalid value blocks (`blockedTools`) |
 | `utils/read-only.js` | `OUTLOOK_READ_ONLY` gate: refusal for any non-`read` call (`auth` sign-in actions exempt) |
 | `utils/logger.js` | Stderr logger: `log.info`/`log.debug`, per-call notes, `redact()`, `isDebugEnabled()` (`OUTLOOK_DEBUG`) |
 | `utils/tool-error.js` | `toolError(message, { nextStep })` and `authRequiredError()`: every handler error returns `isError: true` |
@@ -156,7 +156,7 @@ Common errors (auth, device code, search, timezones) and fixes live in [`docs/tr
 ## Testing
 
 ```bash
-npm test                    # Jest unit tests (108 suites / 3389 tests at v3.14.2)
+npm test                    # Jest unit tests (109 suites / 3426 tests at v3.14.2)
 npm run lint                # ESLint (0 errors expected)
 npm run format:check        # Prettier (CI runs this)
 node scripts/e2e-stdio.js <tool> '<argsJson>'  # Fresh stdio server: initialize + one tools/call

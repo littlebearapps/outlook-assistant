@@ -1,39 +1,8 @@
 # Roadmap
 
-Active milestones for the Outlook Assistant MCP server. Items may shift or be cut as priorities evolve. The authoritative source is the [GitHub milestones page](https://github.com/littlebearapps/outlook-assistant/milestones); this document is a periodic snapshot (last synced 2026-11-16, with v3.14.1 live). Issues are listed under their current titles.
+Active milestones for the Outlook Assistant MCP server. Items may shift or be cut as priorities evolve. The authoritative source is the [GitHub milestones page](https://github.com/littlebearapps/outlook-assistant/milestones); this document is a periodic snapshot (last synced 2026-11-16, with v3.14.2 live). Issues are listed under their current titles.
 
 For shipped work, see [`CHANGELOG.md`](CHANGELOG.md).
-
-## v3.14.2 — Fix queue
-
-The next patch after v3.14.1: user-facing bug fixes that are small and safe to ship alone. Everything below is fixed for v3.14.2 and was tested live on a personal Outlook.com account. It ships without the Microsoft 365 live test: that check (#334, covering the Microsoft 365 halves of #240, #331, #332 and #333) moves to v3.15.0. See `[3.14.2]` in [`CHANGELOG.md`](CHANGELOG.md).
-
-- **#261** fix(search): query search sends $orderby with $search, so Graph rejects it (SearchWithOrderBy) and falls back
-- **#263** fix(export): search export wraps from:/subject: in one quoted phrase, so field scopes are ignored
-- **#240** fix(calendar): find-meeting-rooms fallback calls beta-only findRooms on v1.0 and misreports M365 users as personal
-- **#320** fix(docker): image fails at start because the Dockerfile omits server.js, tools.js and request-handler.js
-- **#321** chore(deps): clear critical proxy-addr advisory (GHSA-jqcg-44mw-7w3h) before the CI audit gate fails
-- **#322** fix(delta): minimal verbosity lists no message IDs, so callers cannot act on changes
-- **#323** fix(calendar): update preview undercounts notified attendees; rule reorder hides a failed follow-up listing
-- **#328** search-emails: dotless domain label in `from` matches display name only, and zero-results guidance falsely says nothing in the mailbox matches
-- **#329** search-emails: raw searchExpression silently ignores receivedAfter/receivedBefore, and the pagination footer tells callers to use them
-- **#331** fix(search): a `subject` filter in the combined step sends `$orderby` and gets `400 InefficientFilter` on personal accounts
-- **#332** fix(search): `to` with a dotless domain label matches recipient names only on the server-side path
-- **#333** research(search): whole-quoted KQL works on a personal account — a `searchExpression` is now sent as one quoted string, with the live matrix in the KQL reference
-- **#131** docs: confirm Mail-Advanced.ReadWrite enforcement (31 Dec 2026) doesn't affect Outlook Assistant — a troubleshooting note, no code change; due before Microsoft's 31 December 2026 deadline.
-- **#305** fix(settings): say Graph-set automatic replies are saved but may not be sent on personal accounts — live re-test done 2026-11-02 (no reply sent, scheduled or always on); the result, dry run, how-to, troubleshooting, FAQ and plugin skill now say so.
-- **#338** access-shared-mailbox refuses before any Graph request while the opt-in is off, like every other tool (PR #387 by @jdotc1).
-- **#340, #341, #342** fix(search): follow-ups from the October live test — a rejected `searchExpression` is marked incomplete, 401/403 on listings and folder lookups get a next step, and the footer and page order are right after a refused sort.
-- **#357** Security audit gate failing on main — raised `overrides` floors (high `body-parser` and `zod` advisories) and SDK 1.32.2.
-- **#364, #365, #366, #377** from the 2026-11-02 full live test — a no-match `from`/`subject` search no longer sends its request twice, `export` saves attachments, `manage-contact` update applies `emails`/`firstName`/`lastName`, and a `from` + `to` search reads the real oldest page.
-- **#369, #373, #374, #375, #378** from the same live test, fixed by @jdotc1 (PRs #379, #381–#384): `folders create` refusals are tool errors, `auth action=about` names only the missing safety belt, the read-only `export` refusal says it writes local files, attendee-update previews read the event once, and `read-email` explains a missing message.
-
-**Repo-only** (no npm release needed; they land before v3.14.2 so the release exercises them):
-
-- **#319** ci(release): notify-website hid 401s as green; harden curl, auto-tag diff and prerelease publishing
-- **#119** Add CITATION.cff + README cross-link to product page
-- **#335** ci: Commit Lint fails every Dependabot PR (`Bump …` subjects)
-- **#336** ci(docker): build the image and smoke-test it in CI
 
 ## v3.15.0 — Structured outputs, paging & Hermes
 
@@ -91,6 +60,16 @@ Later backlog, after the v4.0.0 SDK move and tool split. Larger or Microsoft 365
 
 ## Recently shipped
 
+- **v3.14.2** (Nov 2026) — **Fix queue** (milestone #10, 31 issues). `query`
+  searches run Graph `$search` again (#261), and filtered, `from`/`to` and
+  KQL searches are more accurate (#328, #329, #331–#333, #340–#342, #364,
+  #377). `export` saves attachments (#365), `manage-contact` update applies
+  every field (#366), delta sync lists IDs at minimal verbosity (#322), the
+  meeting-room fallback works on v1.0 (#240), and the Docker image starts
+  again (#320). Seven community PRs from @jdotc1 (#369, #373–#375, #378 and
+  #338). **Upgrade note:** `access-shared-mailbox` now refuses unless
+  `OUTLOOK_SHARED_MAILBOX` is set (#338). Live-tested on a personal
+  Outlook.com account only; the Microsoft 365 check (#334) moved to v3.15.0.
 - **v3.14.1** (Oct 2026) — **Live-test fixes** (milestone #9), from the
   2026-10-05 live test of all 22 tools on v3.14.0:
   - **A session limit of `0` now blocks the tool** instead of meaning "no

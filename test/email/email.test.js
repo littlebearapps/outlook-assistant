@@ -233,6 +233,59 @@ describe('handleReadEmail', () => {
     expect(result.content[0].text).toContain('Next step:');
   });
 
+  it('explains a malformed Graph message ID without exposing the raw JSON', async () => {
+    callGraphAPI.mockRejectedValue(
+      new Error(
+        'API call failed with status 400: {"error":{"code":"ErrorInvalidIdMalformed","message":"The Id is malformed."}}'
+      )
+    );
+
+    const result = await handleReadEmail({ id: 'bad/id' });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('message ID is invalid');
+    expect(result.content[0].text).toContain('search-emails');
+    expect(result.content[0].text).toContain('sharedMailbox');
+    expect(result.content[0].text).not.toContain('ErrorInvalidIdMalformed');
+    expect(result.content[0].text).not.toContain('API call failed');
+  });
+
+  it('recognizes a structured malformed-ID error', async () => {
+    callGraphAPI.mockRejectedValue(
+      Object.assign(new Error('Invalid ID'), {
+        status: 400,
+        graphCode: 'ErrorInvalidIdMalformed',
+      })
+    );
+    const result = await handleReadEmail({ id: 'bad/id' });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('message ID is invalid');
+  });
+
+  it.each([401, 403])(
+    'classifies Graph %i without echoing its response body',
+    async (status) => {
+      callGraphAPI.mockRejectedValue(
+        new Error(
+          `API call failed with status ${status}: {"error":{"code":"Denied","message":"PRIVATE_GRAPH_ERROR_BODY"}}`
+        )
+      );
+
+      const result = await handleReadEmail({ id: 'mail-1' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Next step:');
+      expect(result.content[0].text).not.toContain('PRIVATE_GRAPH_ERROR_BODY');
+      expect(result.content[0].text).not.toContain('API call failed');
+      if (status === 401) {
+        expect(result.content[0].text).toContain('authenticate');
+      } else {
+        expect(result.content[0].text).toContain('refused this read');
+        expect(result.content[0].text).toContain('action=about');
+      }
+    }
+  );
+
   it('reads the 404 from the Graph error, not from other text in the message', async () => {
     callGraphAPI.mockRejectedValue(new Error('socket hang up near status 404'));
 

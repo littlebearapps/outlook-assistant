@@ -171,10 +171,9 @@ OUTLOOK_ALLOWED_RECIPIENTS=mycompany.com,partner@example.com
   `0600`), and folders the server creates with mode `0700`. A file replaced
   with `overwrite: true` keeps its previous mode.
 - Shared-mailbox addresses must be printable-ASCII email addresses, and
-  shared-mailbox access is off unless `OUTLOOK_SHARED_MAILBOX` is set. One
-  exception: `access-shared-mailbox` still sends its read to Microsoft Graph
-  with the existing sign-in while the setting is off (a well-known folder or
-  folder ID only); every other tool refuses before any request.
+  shared-mailbox access is off unless `OUTLOOK_SHARED_MAILBOX` is set. While
+  it is off, every call for another mailbox, `access-shared-mailbox`
+  included, is refused before any request to Microsoft Graph.
 
 ### Logging
 

@@ -22,7 +22,7 @@ The next patch after v3.14.1: user-facing bug fixes that are small and safe to s
 - **#333** research(search): whole-quoted KQL works on a personal account — a `searchExpression` is now sent as one quoted string, with the live matrix in the KQL reference
 - **#131** docs: confirm Mail-Advanced.ReadWrite enforcement (31 Dec 2026) doesn't affect Outlook Assistant — a troubleshooting note, no code change; due before Microsoft's 31 December 2026 deadline.
 - **#305** fix(settings): say Graph-set automatic replies are saved but may not be sent on personal accounts — live re-test done 2026-11-02 (no reply sent, scheduled or always on); the result, dry run, how-to, troubleshooting, FAQ and plugin skill now say so.
-- **#338** docs(shared): say access-shared-mailbox reads with the existing sign-in while the opt-in is off — docs and skill only; refuse-first is reconsidered for v4.0.0.
+- **#338** access-shared-mailbox refuses before any Graph request while the opt-in is off, like every other tool (PR #387 by @jdotc1).
 - **#340, #341, #342** fix(search): follow-ups from the October live test — a rejected `searchExpression` is marked incomplete, 401/403 on listings and folder lookups get a next step, and the footer and page order are right after a refused sort.
 - **#357** Security audit gate failing on main — raised `overrides` floors (high `body-parser` and `zod` advisories) and SDK 1.32.2.
 - **#364, #365, #366, #377** from the 2026-11-02 full live test — a no-match `from`/`subject` search no longer sends its request twice, `export` saves attachments, `manage-contact` update applies `emails`/`firstName`/`lastName`, and a `from` + `to` search reads the real oldest page.

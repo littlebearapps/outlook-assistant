@@ -1,12 +1,12 @@
 # Roadmap
 
-Active milestones for the Outlook Assistant MCP server. Items may shift or be cut as priorities evolve. The authoritative source is the [GitHub milestones page](https://github.com/littlebearapps/outlook-assistant/milestones); this document is a periodic snapshot (last synced 2026-10-07, with v3.14.1 live). Issues are listed under their current titles.
+Active milestones for the Outlook Assistant MCP server. Items may shift or be cut as priorities evolve. The authoritative source is the [GitHub milestones page](https://github.com/littlebearapps/outlook-assistant/milestones); this document is a periodic snapshot (last synced 2026-11-16, with v3.14.1 live). Issues are listed under their current titles.
 
 For shipped work, see [`CHANGELOG.md`](CHANGELOG.md).
 
 ## v3.14.2 — Fix queue
 
-The next patch after v3.14.1: user-facing bug fixes that are small and safe to ship alone. Everything below is fixed for v3.14.2 (#332 and #333 still need their Microsoft 365 check, #334); see `[3.14.2]` in [`CHANGELOG.md`](CHANGELOG.md).
+The next patch after v3.14.1: user-facing bug fixes that are small and safe to ship alone. Everything below is fixed for v3.14.2 and was tested live on a personal Outlook.com account. It ships without the Microsoft 365 live test: that check (#334, covering the Microsoft 365 halves of #240, #331, #332 and #333) moves to v3.15.0. See `[3.14.2]` in [`CHANGELOG.md`](CHANGELOG.md).
 
 - **#261** fix(search): query search sends $orderby with $search, so Graph rejects it (SearchWithOrderBy) and falls back
 - **#263** fix(export): search export wraps from:/subject: in one quoted phrase, so field scopes are ignored
@@ -26,7 +26,7 @@ The next patch after v3.14.1: user-facing bug fixes that are small and safe to s
 - **#340, #341, #342** fix(search): follow-ups from the October live test — a rejected `searchExpression` is marked incomplete, 401/403 on listings and folder lookups get a next step, and the footer and page order are right after a refused sort.
 - **#357** Security audit gate failing on main — raised `overrides` floors (high `body-parser` and `zod` advisories) and SDK 1.32.2.
 - **#364, #365, #366, #377** from the 2026-11-02 full live test — a no-match `from`/`subject` search no longer sends its request twice, `export` saves attachments, `manage-contact` update applies `emails`/`firstName`/`lastName`, and a `from` + `to` search reads the real oldest page.
-- **#334** test: Microsoft 365 live verification of the v3.14.2 changes — the merge gate (needs a Microsoft 365 Business Basic trial).
+- **#369, #373, #374, #375, #378** from the same live test, fixed by @jdotc1 (PRs #379, #381–#384): `folders create` refusals are tool errors, `auth action=about` names only the missing safety belt, the read-only `export` refusal says it writes local files, attendee-update previews read the event once, and `read-email` explains a missing message.
 
 **Repo-only** (no npm release needed; they land before v3.14.2 so the release exercises them):
 
@@ -52,7 +52,8 @@ Machine-readable results and real paging, Hermes Agent support, and the v3.14.0 
 - **#324** test(evals): skill-evals grading can pass vacuously; sync-version --check misses a missing metadata.version — fixed before the Hermes work relies on the evals.
 - **#299** v3.14.0 follow-ups: hook prompt review and manual client checks — still open: a focused review of the hook's prompt text against the server's argument handling, and hand checks in VS Code with Copilot (Local agent), the Cursor desktop app, Claude Desktop, Gemini CLI, MCP Inspector and a local model.
 - **#290** ci: supply-chain hardening (image digests, SBOM, OpenSSF Scorecard)
-- **#367–#376, #378** follow-ups from the v3.14.2 live test (2026-11-02), all pre-existing in v3.14.1: attachment marker at standard verbosity, "raise `count`" advice, `folders create` refusals, newsletter preheader padding, slow no-match `query`, rule sequence reporting, safety-belt wording, the read-only `export` refusal text, double event reads in previews, `read-email` 404 text, and cosmetic notes (#376).
+- **#334** test: Microsoft 365 live verification of the v3.14.2 changes — moved from v3.14.2, which shipped after a personal-account test only (needs a Microsoft 365 Business Basic trial).
+- **#367, #368, #370–#372, #376** follow-ups from the v3.14.2 live test (2026-11-02), all pre-existing in v3.14.1: attachment marker at standard verbosity, "raise `count`" advice, newsletter preheader padding, slow no-match `query`, rule sequence reporting, and cosmetic notes (#376). The rest of that batch (#369, #373–#375, #378) shipped in v3.14.2.
 
 ## v3.16.0 — Calendar, tasks & contacts
 

@@ -7,16 +7,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [3.14.2] - 2026-10-08
+## [3.14.2] - 2026-11-16
 
 Patch release: the v3.14.2 fix queue (milestone #10). Search, export,
 contact-update, delta sync and meeting-room fixes, more accurate calendar
 previews, a warning that personal accounts may not send automatic replies,
 a Docker image that starts again, dependency and security updates and
 release-workflow hardening. A filtered search with more matches than
-`count` now returns the newest of them (#331). No upgrade steps.
+`count` now returns the newest of them (#331). Seven community pull
+requests from **@jdotc1** (#379, #381–#385, #387). Thanks! Read the
+upgrade note if you read a shared mailbox.
+
+Everything was tested live on a personal Outlook.com account. The parts
+that apply only to Microsoft 365 work or school accounts (meeting rooms,
+server-side `to` filters, sorted filters and quoted KQL there) follow
+Microsoft's documentation and are unit-tested, but haven't been tested on
+a Microsoft 365 tenant yet (#334).
+
+### Upgrade notes
+
+- **Reading a shared mailbox now needs `OUTLOOK_SHARED_MAILBOX`** (#338).
+  While the setting was unset, `access-shared-mailbox` still read a
+  well-known folder or folder ID with your existing sign-in; it now refuses
+  before any request. Set `OUTLOOK_SHARED_MAILBOX=read` (or `true` to
+  organise mail as well), restart the server and run
+  `auth action=authenticate force=true`.
 
 ### Fixed
+
+- **`access-shared-mailbox` refuses before any request while shared-mailbox
+  support is off** (#338, PR #387 by @jdotc1). With `OUTLOOK_SHARED_MAILBOX`
+  unset it was the one tool that still sent its read to Microsoft Graph
+  with the existing sign-in (a well-known folder or folder ID). It now
+  refuses with the setup steps before signing in or making any request,
+  like every other tool that takes `sharedMailbox`. The tool description,
+  guide, FAQ, tools reference, troubleshooting, `SECURITY.md` and the
+  plugin skill say so.
+- **`auth action=about` names only the missing safety belt** (#373, PR #379
+  by @jdotc1). With a session limit set (including 0) and no allowlist, it
+  said "No rate limit or recipient allowlist is set"; it now names only what
+  is missing and suggests only that setting. An allowlist of separators
+  alone (`" , "`) counts as none, as it does when recipients are checked.
+  The server `instructions` say a tool is blocked when its session limit is
+  "0 or invalid", not only 0.
+- **`folders create` refusals are tool errors** (#369, PR #381 by @jdotc1).
+  A name that already exists, a parent that is missing or ambiguous, and a
+  response with no folder ID came back with `isError` false, so only the
+  text said nothing was created. They now return `isError` true with a next
+  step; nothing is written.
+- **`read-email` explains a missing message** (#378, PR #382 by @jdotc1).
+  A Graph 404 used to come back as the raw JSON error. It now says the
+  message wasn't found and may have been moved or deleted, and suggests
+  searching again for a current ID (with the same `sharedMailbox` for a
+  shared mailbox). The status is read from the Graph error, never from other
+  text in the message, as on the search paths (#341).
+- **Read-only mode describes `export` correctly** (#374, PR #383 by
+  @jdotc1). The refusal said `export` "would delete something that may not
+  be recoverable"; it now says it would write files on this computer and may
+  overwrite an existing local file. `export` is still refused in read-only
+  mode.
 
 - **`export` saves attachments** (#365). The attachment list was
   requested with `$select=…,contentBytes,…`, which Graph rejects on the base
@@ -236,7 +285,8 @@ release-workflow hardening. A filtered search with more matches than
   request yet, #337) falls back to the beta `findRooms` call (names and
   addresses, first 100 rooms) and says so; a personal account gets a plain
   "Microsoft 365 only" error without a second call. The scope name in
-  messages is now `Place.Read.All`.
+  messages is now `Place.Read.All`. Tested live on a personal account only;
+  the Microsoft 365 paths are unit-tested (#334).
 - **The Docker image starts again** (#320). The Dockerfile didn't copy
   `server.js`, `tools.js` or `request-handler.js`, so the container failed
   with `Cannot find module './server'`. It now copies every runtime entry in
@@ -256,19 +306,29 @@ release-workflow hardening. A filtered search with more matches than
   ([GHSA-27r3-jxmh-p828](https://github.com/advisories/GHSA-27r3-jxmh-p828),
   now 2.4.0) and `zod` (now 4.6.7) advisories and the moderate `fast-uri`
   (3.1.9), `hono` (4.13.16), `ip-address` (10.7.5) and `qs` (6.17.1) ones;
-  `@modelcontextprotocol/sdk` moves to 1.32.2 (Dependabot #356, #361–#363).
-  The stdio server loads `zod` (the SDK's message validation) and
+  `@modelcontextprotocol/sdk` moves to 1.32.2 (Dependabot #356, #361–#363,
+  #380; PR #385 by @jdotc1 proposed the same `body-parser` and `zod`
+  floors). The stdio server loads `zod` (the SDK's message validation) and
   `fast-uri` (through `ajv`); the others reach the production tree only
   through the SDK's HTTP transports, which it never loads.
-  `@hono/node-server` stays on 1.19.x: its only fixed release (2.1.3) needs
-  Node 20, the advisory is moderate and covers `serveStatic`, which nothing
-  here uses.
+- **`@hono/node-server` 1.19.19** clears the moderate
+  [GHSA-jpvv-r467-5p4w](https://github.com/advisories/GHSA-jpvv-r467-5p4w)
+  (a backslash in the request path bypasses path rules at a reverse proxy).
+  It stays on 1.x with one moderate advisory open,
+  [GHSA-rmxm-3fg6-px4f](https://github.com/advisories/GHSA-rmxm-3fg6-px4f):
+  it covers `serveStatic`, which nothing here uses, and its only fix (2.1.3)
+  needs Node 20. The stdio server never loads `@hono/node-server`.
 - **Dev-only advisories cleared:** `@modelcontextprotocol/inspector` 2.13.0
   brings `@modelcontextprotocol/client` and `server` 2.4.0 and `undici`
   8.12.3, and `vite` moves to 8.3.5 (Dependabot #351, #353–#355, #360).
 
 ### Changed
 
+- **Attendee-update previews read the event once** (#375, PR #384 by
+  @jdotc1). A `manage-event` update dry run with attendees that have no
+  `type` read the same event twice; it now reuses one read for the attendee
+  types and the preview (3 requests down to 2; about 1.8 s to 1.2 s live).
+  Real updates are unchanged.
 - **Dependencies** (Dependabot updates, applied as our own conventional
   commits because Dependabot's `Bump …` subjects fail commitlint):
   `dotenv` 18.0.9 (#313, #352; used only by the browser auth server, whose
@@ -304,13 +364,6 @@ release-workflow hardening. A filtered search with more matches than
 
 ### Documentation
 
-- The `access-shared-mailbox` description, the shared-mailbox guide, the
-  tools reference, the FAQ, `SECURITY.md` and the plugin skill now say
-  plainly that this one tool still sends its read to Microsoft Graph with
-  the existing sign-in while `OUTLOOK_SHARED_MAILBOX` is unset (a
-  well-known folder or folder ID only), and give the setup steps on a 403
-  or 404. Every other tool's `sharedMailbox` parameter is refused before
-  any request. Behaviour is unchanged (#338).
 - `docs/troubleshooting.md` notes Microsoft's Mail-Advanced.ReadWrite
   enforcement from 31 December 2026 and why it doesn't affect Outlook
   Assistant (#131).

@@ -144,7 +144,7 @@ Flag dates: a `dueDateTime`/`startDateTime` with `Z` or a ±hh:mm offset is kept
 | Tool | Description | Safety | Key Parameters |
 |------|-------------|--------|----------------|
 | `access-shared-mailbox` | Read shared mailbox (incl. custom subfolders) or enumerate its folder tree — no send/draft/reply/forward | read-only | `sharedMailbox` (or alias `email`), `folder` (name/path), `folderId`, `listFolders`, `count` (default 25, max 50), `outputVerbosity` |
-| `find-meeting-rooms` | Search meeting rooms (Microsoft 365 work or school only; a personal account gets an error saying so). Reads Graph `places` (up to 1,000 rooms, needs `Place.Read.All`, not requested yet, #130); when that's refused, falls back to the beta `findRooms` call (names and addresses, first 100 rooms; `building`/`floor`/`capacity` not applied) and says so | read-only | `query`, `building`, `floor`, `capacity`, `outputVerbosity` |
+| `find-meeting-rooms` | Search meeting rooms (Microsoft 365 work or school only; a personal account gets an error saying so). Reads Graph `places` (up to 1,000 rooms, needs `Place.Read.All`, not requested yet, #337); when that's refused, falls back to the beta `findRooms` call (names and addresses, first 100 rooms; `building`/`floor`/`capacity` not applied) and says so | read-only | `query`, `building`, `floor`, `capacity`, `outputVerbosity` |
 
 ## Safety Annotations
 

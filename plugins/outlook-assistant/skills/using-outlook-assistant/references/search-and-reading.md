@@ -16,7 +16,7 @@ Never list a whole mailbox to answer a narrow question. Every result goes into t
 | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | Recent mail in a folder                     | `search-emails` with no filters (`folder`, default `inbox`)                                                                    |
 | Sender, subject, date, unread, attachments  | `search-emails` structured filters: `from`, `to`, `subject`, `receivedAfter`, `receivedBefore`, `unreadOnly`, `hasAttachments` |
-| Words that may be in the body (work/school) | `searchExpression`, optionally with `searchAllFolders: true`                                                                   |
+| Words that may be in the body, or KQL        | `searchExpression`, optionally with `searchAllFolders: true`                                                                   |
 | A thread                                    | `conversationId` (up to 100 messages, oldest first)                                                                            |
 | Threads rather than messages                | `groupByConversation: true`                                                                                                    |
 | One message by RFC Message-ID               | `internetMessageId`                                                                                                            |
@@ -28,26 +28,31 @@ Never list a whole mailbox to answer a narrow question. Every result goes into t
 
 | Input              | Work/school (Microsoft 365)                                                          | Personal Outlook.com                                                                                                                |
 | ------------------ | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `query`            | Server-side search                                                                   | Subject substring only: every word must be in the subject. Bodies are not searched                                                  |
-| `searchExpression` | Graph `$search` over the whole message, body included. Ranked by relevance, not date | Only `from:`, `to:` and `subject:` terms are translated and retried (`raw-kql-translated`); free text and `AND`/`OR` are not        |
+| `query` | Graph `$search` over subject, body and sender; a date or boolean window is applied to its results (newest first, at most 250 read). With `from`/`to`/`subject`: those as a server-side filter, `query` matched against subject, preview and sender | The same. If nothing passes: a subject substring match (every word in the subject) with the filters server-side |
+| `searchExpression` | Graph `$search` (KQL) over the whole message, body included, newest first | The same for expressions with `AND`/`OR`/`NOT`, `received>=…` or several words (v3.14.2). One made only of `from:`, `to:` and `subject:` terms is answered by filters (`raw-kql-translated`), which do apply the date and boolean parameters |
 | `to`               | Server-side filter                                                                   | Matched locally over the most recent messages only (500 by default). Pair with `receivedAfter`/`receivedBefore` to reach older mail |
 | Structured filters | Reliable                                                                             | The most reliable option                                                                                                            |
 
-With `searchExpression`, quote your own phrases (`subject:"quarterly report"`). It takes the place of the other search parameters. Because results are ranked by relevance, top hits can look unrelated to a subject you expected.
+With `searchExpression`, write the KQL plainly (`from:example.com AND subject:"quarterly report"`): the server sends it to Graph as one quoted string. Operators are upper-case (`AND`, `OR`, `NOT`); terms match whole words or their beginnings. It takes the place of the other search parameters. When `$search` answers, `receivedAfter`/`receivedBefore` and the boolean filters are not applied: they come back in `droppedFilters`. To limit by date, put it in the expression (`invoice AND received>=2026-01-01`). Because `$search` reads bodies, a hit can match on body text alone and look unrelated to the subject you expected. Across all folders, `$search` leaves out Deleted Items and Junk Email; the structured filters cover every folder.
 
 ## Check `_meta.searchMetadata`
 
 Every search response carries it. Read it before acting on results:
 
-- `finalStrategy` names the strategy that answered: `combined-search`, `single-term-*`, `client-side-*`, `boolean-filters-only`, `raw-kql-translated` or `recent-emails`.
+- `finalStrategy` names the strategy that answered: `combined-search`, `single-term-*`, `client-side-*`, `boolean-filters-only`, `raw-kql` (a `searchExpression` answered by `$search`), `raw-kql-translated` or `recent-emails`.
 - `recent-emails` means no filter was applied: you are looking at recent mail, not matches.
+- `orderedWithinPage: true` means a `query` was answered by `$search`: results are newest first within what Graph returned, not across the whole mailbox.
+- `partialCoverage: true` (with `narrowedCandidates`) means filters were applied locally to that many messages and Graph had more: other matches may exist. Narrow the search rather than reading the results as complete.
+- `searchWindowUnreached: true` (with `searchResultsRead`) means a `query`'s date window was older than anything `$search` paging returned, so the results are subject matches only. To search bodies in that window, put the date in a `searchExpression` (`invoice AND received<=2025-10-01`).
 - `droppedFilters` lists filters that could not be honoured. It should be empty. If it isn't, the results are broader than asked: narrow again (tighter dates, a different filter) rather than acting on them.
+- `incomplete: true` means a request to Microsoft Graph failed part-way, or Graph rejected the `searchExpression` (the text gives its reason). "No match" is then not proof of absence; run the search again, or correct the expression.
+- `sortRefused: true` means Graph refused to sort the search, so the results are in date order but, when more are available, may be the oldest matches and not the newest. Set `receivedAfter`/`receivedBefore` around the dates you want; don't page back from the oldest date shown.
 - `truncated: true` (with `candidatesScanned` and `scanLimit`) means a local scan stopped before the end. "No match" is then not proof of absence; narrow the date window and search again.
-- `kqlTranslatedTo` shows how a `searchExpression` was rewritten on a personal account.
+- `kqlTranslatedTo` shows how a `searchExpression` was rewritten as filters after `$search` rejected it or found nothing.
 
 ## Paging: use date windows
 
-There is no page cursor. `count` defaults to 25 for a list and 10 for a search, with a maximum of 50. When a result says more are available, narrow `receivedAfter`/`receivedBefore` and search window by window, rather than asking for more at once.
+There is no page cursor. `count` defaults to 25 for a list and 10 for a search, with a maximum of 50. When a result says more are available, narrow `receivedAfter`/`receivedBefore` and search window by window, rather than asking for more at once. A `query` alone reads at most 250 `$search` results for a window; for older mail, add `from` or `subject` so the window is applied server-side.
 
 ## Verbosity and body length
 
@@ -62,7 +67,7 @@ Verbosity also controls which fields are fetched, so `minimal` is cheaper as wel
 ## Delta sync
 
 1. `search-emails` with `deltaMode: true` and no token. A large first sync arrives over several pages, each returning a continuation token: keep calling with it until a delta token comes back. Pass the same `maxResults` on every page.
-2. Store the delta token. Next time, pass it as `deltaToken` to get only changes.
+2. Store the delta token. Next time, pass it as `deltaToken` to get only changes. Every verbosity lists changed messages by ID and removed ones by ID. An updated message carries only its changed properties (`changed: isRead`), with no subject or sender: read it by ID if you need them.
 3. The token encodes its own mailbox and folder, so `folder` and `sharedMailbox` don't apply when you pass it.
 4. If the token has expired, start a fresh initial sync.
 

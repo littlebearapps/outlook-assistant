@@ -14,7 +14,18 @@ const {
 const { getEmailFields } = require('../utils/field-presets');
 const { buildMailboxPrefix } = require('../utils/mailbox');
 const { toolError, authRequiredError } = require('../utils/tool-error');
+const { failureDetails } = require('../utils/graph-failure');
 const { log } = require('../utils/logger');
+
+function messageNotFoundError() {
+  return toolError(
+    'That message was not found; it may have been moved or deleted.',
+    {
+      nextStep:
+        'Use `search-emails` to find a current message ID, then retry. If the message belongs to a shared mailbox, pass the same `sharedMailbox`.',
+    }
+  );
+}
 
 /**
  * Get field preset based on verbosity and options
@@ -82,7 +93,7 @@ async function handleReadEmail(args) {
       );
 
       if (!email) {
-        return toolError(`Email with ID ${emailId} not found.`);
+        return messageNotFoundError();
       }
 
       // Format using shared formatter (returns Markdown)
@@ -115,6 +126,10 @@ async function handleReadEmail(args) {
         return toolError(
           `The email ID seems invalid or doesn't belong to your mailbox. Please try with a different email ID.`
         );
+      } else if (failureDetails(error).status === 404) {
+        // The status comes from the Graph client's error, never from other
+        // text in the message (#341).
+        return messageNotFoundError();
       } else {
         return toolError(`Failed to read email: ${error.message}`);
       }

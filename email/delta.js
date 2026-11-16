@@ -6,7 +6,11 @@
  */
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
-const { formatEmailList, VERBOSITY } = require('../utils/response-formatter');
+const {
+  formatEmailList,
+  formatEmailMinimal,
+  VERBOSITY,
+} = require('../utils/response-formatter');
 const { getEmailFields } = require('../utils/field-presets');
 const { buildMailboxPrefix } = require('../utils/mailbox');
 const { resolveFolder, looksLikeFolderId } = require('../folder/resolve');
@@ -116,6 +120,49 @@ function syncPhase(deltaToken) {
   // restart) can't be placed; any other token is a delta token.
   if (/[?&](\$|%24)skiptoken=/i.test(deltaToken)) return 'unknown';
   return 'incremental';
+}
+
+/**
+ * Graph sends an incremental update with only the properties that changed
+ * (live, 2026-10-08: `{ id, parentFolderId, isRead }` after a mark-unread), so
+ * subject and sender may be missing. Absent is not empty: don't print
+ * "(no subject)" or "unknown" for them.
+ * @param {object} email - Delta item
+ * @returns {boolean} - True when neither subject nor sender came back
+ */
+function isPartialItem(email) {
+  return !('subject' in email) && !('from' in email);
+}
+
+const BOOKKEEPING_FIELDS = new Set(['id', 'parentFolderId', 'changeKey']);
+
+/**
+ * Names of the properties a partial delta item carries, minus bookkeeping.
+ * @param {object} email - Delta item
+ * @returns {string} - e.g. "isRead", or a fallback when nothing is named
+ */
+function changedFields(email) {
+  const fields = Object.keys(email).filter(
+    (k) => !k.startsWith('@') && !BOOKKEEPING_FIELDS.has(k)
+  );
+  return fields.length > 0 ? fields.join(', ') : 'properties not returned';
+}
+
+const PARTIAL_NOTE =
+  'Graph returns only the changed properties of an updated message, so items marked `changed:` have no subject or sender here; read one by ID for the rest.';
+
+/**
+ * One minimal line per changed item: the search-emails minimal format, or
+ * the ID and changed fields for a partial update.
+ * @param {object} email - Delta item
+ * @param {number} index - 1-based position
+ * @returns {string}
+ */
+function formatDeltaMinimal(email, index) {
+  if (isPartialItem(email)) {
+    return `${index}. ${email.id} | changed: ${changedFields(email)}`;
+  }
+  return formatEmailMinimal(email, index);
 }
 
 const PHASE_LABEL = {
@@ -249,6 +296,28 @@ async function handleListEmailsDelta(args) {
       resultText += `| Items | ${processedEmails.length} |\n`;
       resultText += `| Type | ${PHASE_LABEL[phase]} |\n`;
       resultText += `| More | ${hasMoreChanges ? 'Yes' : 'No'} |\n`;
+      // List what changed (#322): without IDs the caller can't read, move or
+      // flag anything. One line per item, as search-emails prints at minimal.
+      const changed = processedEmails.filter((e) => !e.removed);
+      const removed = processedEmails.filter((e) => e.removed);
+      if (changed.length > 0) {
+        resultText += `\n**${isInitialSync ? 'Synced' : 'Created/Updated'} (${changed.length})**:\n`;
+        resultText += changed
+          .map((e, i) => formatDeltaMinimal(e, i + 1))
+          .join('\n');
+        resultText += '\n';
+        if (changed.some(isPartialItem)) {
+          resultText += `\n${PARTIAL_NOTE}\n`;
+        }
+      }
+      if (removed.length > 0) {
+        resultText += `\n**Removed (${removed.length})**: `;
+        resultText += removed.map((e) => `\`${e.id}\``).join(', ');
+        resultText += '\n';
+      }
+      if (processedEmails.length === 0) {
+        resultText += '\nNo changes on this page.\n';
+      }
       if (newDeltaToken) {
         const label = tokenIsContinuation
           ? 'Continuation Token (more pages — call again to keep paging)'
@@ -271,7 +340,9 @@ async function handleListEmailsDelta(args) {
       resultText += `| Total | ${processedEmails.length} |\n`;
 
       // Emails list (non-deleted only)
-      const activeEmails = processedEmails.filter((e) => !e.removed);
+      const activeEmails = processedEmails.filter(
+        (e) => !e.removed && !isPartialItem(e)
+      );
       if (activeEmails.length > 0) {
         resultText += `\n### Emails\n\n`;
         // formatEmailList takes (emails, folder, verbosity): the verbosity
@@ -281,6 +352,18 @@ async function handleListEmailsDelta(args) {
           deltaToken ? 'this sync page' : folder,
           verbosity === 'full' ? VERBOSITY.FULL : VERBOSITY.STANDARD
         );
+      }
+
+      // Updates that came back with only their changed properties (#322)
+      const partialEmails = processedEmails.filter(
+        (e) => !e.removed && isPartialItem(e)
+      );
+      if (partialEmails.length > 0) {
+        resultText += `\n### Changed Items (${partialEmails.length})\n\n`;
+        for (const item of partialEmails) {
+          resultText += `- ID: \`${item.id}\` (changed: ${changedFields(item)})\n`;
+        }
+        resultText += `\n${PARTIAL_NOTE}\n`;
       }
 
       // Deleted items

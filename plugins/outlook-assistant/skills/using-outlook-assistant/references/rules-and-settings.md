@@ -20,7 +20,7 @@ Rules and automatic replies are persistent: they keep acting on every future ema
 
 - Rules apply to the signed-in user's own inbox.
 - Preview with `dryRun: true` on `create` and `update`. Show the user the conditions, actions, exceptions and sequence from the preview.
-- `reorder` and `delete` have no preview. Name the rule (`ruleName` or `ruleId`) and its effect, and get a yes. A `reorder` result lists the new rule order and names any rule Exchange renumbered (old → new); tell the user if it did.
+- `reorder` and `delete` have no preview. Name the rule (`ruleName` or `ruleId`) and its effect, and get a yes. A `reorder` result lists the new rule order and names any rule Exchange renumbered (old → new); tell the user if it did. If it says it couldn't list the rules afterwards, run action=`list` and tell the user the order.
 - On `update`, passing any condition replaces all conditions, and passing any action replaces all actions. They are not merged. Run `list` with `includeDetails: true` first, then pass the complete set you want.
 - `deleteMessage: true` moves matches to Deleted Items. There is no permanent-delete action.
 - Lower `sequence` runs first. `stopProcessingRules: true` stops later rules from running on that message.
@@ -53,7 +53,7 @@ If the user reports odd mail behaviour (missing messages, replies they didn't se
 - Leaving `externalAudience` out keeps the current setting, which may already be `all`. Check it with `mailbox-settings` action=`get`, `section: "automaticRepliesSetting"`, and state it in your confirmation.
 - Prefer a schedule (`startDateTime` and `endDateTime`) over `enabled: true` with no end, so replies stop on their own.
 - Keep external messages short: no itinerary, phone numbers, colleague names or reasons for absence unless the user wrote them.
-- Personal Outlook.com accounts support scheduled replies only. `enabled: true` alone may be left off by Graph; the result warns when the applied status differs. Use a schedule there.
+- On a personal Outlook.com account, Graph saves automatic replies but Outlook.com may not send them (live-tested: neither a schedule nor always-on produced a reply). Tell the user so, and suggest checking them in Outlook on the web (Settings > Mail > Automatic replies) or the Outlook app. Some personal accounts also turn `enabled: true` alone off; the result warns when the applied status differs.
 - Turn them off with `enabled: false`.
 
 ## Working hours

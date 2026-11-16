@@ -236,35 +236,115 @@ describe('handleBatchExportEmails with CSV format', () => {
 });
 
 // ──────────────────────────────────────────────────
-// handleBatchExportEmails — searchQuery $search escaping (#251)
+// handleBatchExportEmails — searchQuery request (#263)
+//
+// The search used to send `from:`/`subject:` as one quoted `$search` phrase,
+// so Graph matched the literal text "from:alice subject:invoice" rather than
+// the two fields, and a date window added a `$filter` that Graph rejects next
+// to `$search` (400 SearchWithFilter). It now builds one `$filter`, the same
+// predicates search-emails uses, with the date first so `$orderby` is allowed.
 // ──────────────────────────────────────────────────
-describe('handleBatchExportEmails searchQuery $search escaping (#251)', () => {
-  function searchParam() {
-    const call = callGraphAPI.mock.calls.find(([, , , , p]) => p && p.$search);
-    return call && call[4].$search;
+describe('handleBatchExportEmails searchQuery request (#263)', () => {
+  function searchParams() {
+    const call = callGraphAPI.mock.calls.find(
+      ([, , endpoint, , p]) => p && p.$select === 'id' && endpoint
+    );
+    return call && call[4];
   }
 
-  it('backslash-escapes quotes and backslashes inside the search phrase', async () => {
+  it('matches from and subject as separate fields, never as one $search phrase', async () => {
     callGraphAPI.mockResolvedValue({ value: [] });
 
     await handleBatchExportEmails({
-      searchQuery: { subject: 'say "hi" a\\b' },
+      searchQuery: { from: 'alice@example.com', subject: 'big invoice' },
       format: 'csv',
       outputDir: tmpDir,
     });
 
-    expect(searchParam()).toBe('"subject:say \\"hi\\" a\\\\b"');
+    const params = searchParams();
+    expect(params.$search).toBeUndefined();
+    expect(params.$filter).toBe(
+      "receivedDateTime ge 1900-01-01T00:00:00Z and from/emailAddress/address eq 'alice@example.com' and contains(subject, 'big invoice')"
+    );
+    expect(params.$orderby).toBe('receivedDateTime desc');
   });
 
-  it('leaves a plain search phrase unchanged', async () => {
+  it('puts the date window first and keeps it with the field filters', async () => {
     callGraphAPI.mockResolvedValue({ value: [] });
 
     await handleBatchExportEmails({
-      searchQuery: { from: 'alice@example.com', subject: 'Invoice' },
+      searchQuery: {
+        from: 'alice',
+        subject: 'Invoice',
+        receivedAfter: '2026-01-01T00:00:00Z',
+        receivedBefore: '2026-02-01T00:00:00Z',
+      },
       format: 'csv',
       outputDir: tmpDir,
     });
 
-    expect(searchParam()).toBe('"from:alice@example.com subject:Invoice"');
+    const params = searchParams();
+    expect(params.$search).toBeUndefined();
+    expect(params.$filter).toBe(
+      'receivedDateTime ge 2026-01-01T00:00:00.000Z and receivedDateTime le 2026-02-01T00:00:00.000Z' +
+        " and (contains(from/emailAddress/name, 'alice') or contains(from/emailAddress/address, 'alice'))" +
+        " and contains(subject, 'Invoice')"
+    );
+  });
+
+  it('matches a bare domain sender by address', async () => {
+    callGraphAPI.mockResolvedValue({ value: [] });
+
+    await handleBatchExportEmails({
+      searchQuery: { from: 'example.com' },
+      format: 'csv',
+      outputDir: tmpDir,
+    });
+
+    expect(searchParams().$filter).toContain(
+      "contains(from/emailAddress/address, 'example.com')"
+    );
+  });
+
+  it('escapes single quotes in the values', async () => {
+    callGraphAPI.mockResolvedValue({ value: [] });
+
+    await handleBatchExportEmails({
+      searchQuery: { from: "o'brien@example.com", subject: "it's due" },
+      format: 'csv',
+      outputDir: tmpDir,
+    });
+
+    const filter = searchParams().$filter;
+    expect(filter).toContain(
+      "from/emailAddress/address eq 'o''brien@example.com'"
+    );
+    expect(filter).toContain("contains(subject, 'it''s due')");
+  });
+
+  it('exports exactly the messages the search returned', async () => {
+    callGraphAPI.mockImplementation((_t, _m, endpoint, _d, params) => {
+      if (params && params.$select === 'id') {
+        return Promise.resolve({ value: [{ id: 'email-2' }] });
+      }
+      return Promise.resolve(
+        endpoint.includes('email-2') ? mockEmail2 : mockEmail
+      );
+    });
+
+    const result = await handleBatchExportEmails({
+      searchQuery: { from: 'alice@example.com', subject: 'Second' },
+      format: 'csv',
+      outputDir: tmpDir,
+    });
+
+    expect(result.isError).toBeUndefined();
+    const csv = fs
+      .readdirSync(tmpDir)
+      .filter((f) => f.endsWith('.csv'))
+      .map((f) => fs.readFileSync(path.join(tmpDir, f), 'utf8'))
+      .join('\n');
+    expect(csv).toContain('Second Email');
+    expect(csv).not.toContain('Test Subject');
   });
 });

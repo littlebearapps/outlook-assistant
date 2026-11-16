@@ -214,7 +214,10 @@ describe('handleCreateFolder', () => {
 
     const result = await handleCreateFolder({ name: 'Existing' });
 
+    expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('already exists');
+    expect(result.content[0].text).toContain('Next step:');
+    expect(callGraphAPI).not.toHaveBeenCalled();
   });
 
   it('should handle missing parent folder', async () => {
@@ -227,7 +230,35 @@ describe('handleCreateFolder', () => {
       parentFolder: 'NonExistent',
     });
 
+    expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('not found');
+    expect(result.content[0].text).toContain('Next step:');
+    expect(callGraphAPI).not.toHaveBeenCalled();
+  });
+
+  it('marks an ambiguous parent as a refusal, without attempting a write', async () => {
+    resolveFolder.mockRejectedValue(new Error('Folder name is ambiguous'));
+
+    const result = await handleCreateFolder({
+      name: 'Child',
+      parentFolder: 'Archive',
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('ambiguous');
+    expect(result.content[0].text).toContain('Next step:');
+    expect(callGraphAPI).not.toHaveBeenCalled();
+  });
+
+  it('marks a create response without a folder ID as an error', async () => {
+    listChildFolders.mockResolvedValue([]);
+    callGraphAPI.mockResolvedValue({});
+
+    const result = await handleCreateFolder({ name: 'NoId' });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("didn't return a folder ID");
+    expect(result._meta?.folderId).toBeUndefined();
   });
 
   it('should require folder name', async () => {

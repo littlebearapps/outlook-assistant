@@ -317,7 +317,7 @@ describe('handleAccessSharedMailbox', () => {
   });
 });
 
-describe('handleAccessSharedMailbox — OUTLOOK_SHARED_MAILBOX off (pre-opt-in behaviour)', () => {
+describe('handleAccessSharedMailbox — OUTLOOK_SHARED_MAILBOX off', () => {
   const config = require('../../config');
   let saved;
   beforeEach(() => {
@@ -328,35 +328,28 @@ describe('handleAccessSharedMailbox — OUTLOOK_SHARED_MAILBOX off (pre-opt-in b
     config.SHARED_MAILBOX_MODE = saved;
   });
 
-  it('reads the folder as given, with a single Graph call (no resolution)', async () => {
-    callGraphAPI.mockResolvedValue({ value: [] });
-    await handleAccessSharedMailbox({
-      sharedMailbox: 'shared@company.com',
-      folder: 'sentitems',
-    });
-    expect(callGraphAPI).toHaveBeenCalledTimes(1);
-    expect(callGraphAPI.mock.calls[0][2]).toBe(
-      'users/shared@company.com/mailFolders/sentitems/messages'
-    );
-  });
+  it.each([
+    [{ sharedMailbox: 'shared@company.com', folder: 'sentitems' }],
+    [{ email: 'shared@company.com' }],
+    [{ sharedMailbox: 'shared@company.com', folderId: 'AAMkAD=' }],
+  ])(
+    'refuses before authentication or any Graph call: %j (#338)',
+    async (args) => {
+      const result = await handleAccessSharedMailbox(args);
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('OUTLOOK_SHARED_MAILBOX=read');
+      expect(ensureAuthenticated).not.toHaveBeenCalled();
+      expect(callGraphAPI).not.toHaveBeenCalled();
+    }
+  );
 
-  it('defaults to inbox and accepts the email alias', async () => {
+  it('refuses even when the mailbox token would otherwise have access', async () => {
     callGraphAPI.mockResolvedValue({ value: [] });
-    await handleAccessSharedMailbox({ email: 'shared@company.com' });
-    expect(callGraphAPI.mock.calls[0][2]).toBe(
-      'users/shared@company.com/mailFolders/inbox/messages'
-    );
-  });
-
-  it('points at the opt-in flag when access is denied', async () => {
-    callGraphAPI.mockRejectedValue(
-      new Error('API call failed with status 403: Access is denied')
-    );
     const result = await handleAccessSharedMailbox({
       sharedMailbox: 'shared@company.com',
     });
-    expect(result.content[0].text).toContain('Access denied');
     expect(result.content[0].text).toContain('OUTLOOK_SHARED_MAILBOX=read');
+    expect(callGraphAPI).not.toHaveBeenCalled();
   });
 
   it('listFolders explains how to enable shared-mailbox support', async () => {
@@ -889,7 +882,12 @@ describe('handleFindMeetingRooms', () => {
   it('should fall back to /me/findRooms when /places fails', async () => {
     callGraphAPI
       .mockRejectedValueOnce(new Error('Forbidden')) // /places fails
-      .mockResolvedValueOnce({ value: mockRooms }); // /me/findRooms succeeds
+      .mockResolvedValueOnce({
+        value: mockRooms.map((r) => ({
+          name: r.displayName,
+          address: r.emailAddress,
+        })),
+      }); // beta /me/findRooms succeeds ({name, address} per room)
 
     const result = await handleFindMeetingRooms({});
 
@@ -903,7 +901,7 @@ describe('handleFindMeetingRooms', () => {
 
     const result = await handleFindMeetingRooms({});
 
-    expect(result.content[0].text).toContain('Unable to find meeting rooms');
+    expect(result.content[0].text).toContain("Couldn't list meeting rooms");
     expect(result.content[0].text).toContain('Not supported');
   });
 
@@ -913,5 +911,126 @@ describe('handleFindMeetingRooms', () => {
     const result = await handleFindMeetingRooms({});
 
     expect(result.content[0].text).toContain('Authentication required');
+  });
+});
+
+// #240: page through places, call the beta findRooms explicitly, classify the
+// primary error, and name the right scope.
+describe('handleFindMeetingRooms errors, paging and the beta fallback (#240)', () => {
+  const BETA = 'https://graph.microsoft.com/beta/me/findRooms';
+  const room = (n) => ({
+    displayName: `Room ${n}`,
+    emailAddress: `room${n}@corp.com`,
+  });
+  // Live on a personal account (2026-10-08):
+  const MSA_400 = new Error(
+    'API call failed with status 400: {"error":{"code":"BadRequest","message":"This API is not supported for MSA accounts (no addressUrl for Microsoft.Exchange.Places,False)."}}'
+  );
+  const FORBIDDEN_403 = new Error(
+    'API call failed with status 403: {"error":{"code":"ErrorAccessDenied","message":"Access is denied. Check credentials and try again."}}'
+  );
+
+  it('follows @odata.nextLink through every page of places', async () => {
+    const next = (n) =>
+      `https://graph.microsoft.com/v1.0/places/microsoft.graph.room?$skip=${n}`;
+    callGraphAPI
+      .mockResolvedValueOnce({
+        value: [room(1), room(2)],
+        '@odata.nextLink': next(2),
+      })
+      .mockResolvedValueOnce({ value: [room(3)], '@odata.nextLink': next(3) })
+      .mockResolvedValueOnce({ value: [room(4)] });
+
+    const result = await handleFindMeetingRooms({});
+
+    expect(result._meta.count).toBe(4);
+    expect(callGraphAPI).toHaveBeenCalledTimes(3);
+    expect(callGraphAPI.mock.calls[1][2]).toBe(next(2));
+    expect(callGraphAPI.mock.calls[2][2]).toBe(next(3));
+  });
+
+  it('stops paging at the cap and says the list may be incomplete', async () => {
+    callGraphAPI.mockImplementation(() =>
+      Promise.resolve({
+        value: [room(1)],
+        '@odata.nextLink':
+          'https://graph.microsoft.com/v1.0/places/microsoft.graph.room?$skip=1',
+      })
+    );
+
+    const result = await handleFindMeetingRooms({});
+
+    expect(callGraphAPI).toHaveBeenCalledTimes(10);
+    expect(result.content[0].text).toMatch(/first 10 pages/);
+    expect(result._meta.truncated).toBe(true);
+  });
+
+  it('falls back to findRooms on the beta URL when places is refused (403)', async () => {
+    callGraphAPI.mockRejectedValueOnce(FORBIDDEN_403).mockResolvedValueOnce({
+      value: [{ name: 'Conf Room Adams', address: 'adams@corp.com' }],
+    });
+
+    const result = await handleFindMeetingRooms({ outputVerbosity: 'minimal' });
+
+    expect(callGraphAPI.mock.calls[1][2]).toBe(BETA);
+    expect(result.isError).toBeFalsy();
+    expect(result.content[0].text).toContain(
+      'Conf Room Adams (adams@corp.com)'
+    );
+    expect(result.content[0].text).toMatch(/beta `findRooms`/);
+    expect(result.content[0].text).toMatch(/Place\.Read\.All/);
+    expect(result.content[0].text).not.toMatch(/Places\.Read\.All/);
+    expect(result._meta).toMatchObject({ source: 'findRooms-beta', count: 1 });
+  });
+
+  it('does not apply building/floor/capacity to findRooms results, and says so', async () => {
+    callGraphAPI.mockRejectedValueOnce(FORBIDDEN_403).mockResolvedValueOnce({
+      value: [{ name: 'Conf Room Adams', address: 'adams@corp.com' }],
+    });
+
+    const result = await handleFindMeetingRooms({ capacity: 10 });
+
+    expect(result._meta.count).toBe(1);
+    expect(result.content[0].text).toMatch(/`capacity` was not applied/);
+  });
+
+  it('on M365 with both calls failing, names Place.Read.All and says it is not requested yet (#337)', async () => {
+    callGraphAPI
+      .mockRejectedValueOnce(FORBIDDEN_403)
+      .mockRejectedValueOnce(new Error('API call failed with status 500'));
+
+    const result = await handleFindMeetingRooms({});
+    const text = result.content[0].text;
+
+    expect(result.isError).toBe(true);
+    expect(text).toMatch(/Place\.Read\.All/);
+    expect(text).not.toMatch(/Places\.Read\.All/);
+    expect(text).toMatch(/doesn't request (that|this) (scope|permission) yet/);
+    expect(text).toMatch(/#337/);
+    expect(text).not.toMatch(/personal/i);
+  });
+
+  it('on a personal account, says rooms are a Microsoft 365 feature without trying the fallback', async () => {
+    callGraphAPI.mockRejectedValueOnce(MSA_400);
+
+    const result = await handleFindMeetingRooms({});
+    const text = result.content[0].text;
+
+    expect(result.isError).toBe(true);
+    expect(callGraphAPI).toHaveBeenCalledTimes(1);
+    expect(text).toMatch(/personal Microsoft account/i);
+    expect(text).toMatch(/Microsoft 365/);
+    expect(text).not.toMatch(/Place\.Read\.All/);
+  });
+
+  it('does not call a v1.0 404 a personal account', async () => {
+    callGraphAPI
+      .mockRejectedValueOnce(new Error('API call failed with status 404'))
+      .mockRejectedValueOnce(new Error('API call failed with status 404'));
+
+    const result = await handleFindMeetingRooms({});
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).not.toMatch(/personal/i);
   });
 });

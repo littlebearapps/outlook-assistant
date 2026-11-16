@@ -86,6 +86,37 @@ test('manage-rules reorder names each rule Exchange renumbered, old to new', asy
   expect(text).not.toMatch(/"New" 5/);
 });
 
+// #323: a failed follow-up listing used to drop the renumbering note silently.
+test('manage-rules reorder says other rules may be renumbered when it cannot list them', async () => {
+  let reads = 0;
+  graph.callGraphAPI.mockImplementation((_t, method) => {
+    if (method !== 'GET') return Promise.resolve({});
+    reads++;
+    return reads === 1
+      ? Promise.resolve({
+          value: [
+            { id: 'a', displayName: 'First', sequence: 1 },
+            { id: 'b', displayName: 'New', sequence: 5 },
+          ],
+        })
+      : Promise.reject(new Error('API call failed with status 503'));
+  });
+
+  const result = await run('manage-rules', {
+    action: 'reorder',
+    ruleName: 'New',
+    sequence: 1,
+  });
+  const text = textOf(result);
+
+  // The reorder itself succeeded, so this is not an error.
+  expect(result.isError).toBeFalsy();
+  expect(text).toMatch(/to 1\./);
+  expect(text).toMatch(/couldn't list the rules afterwards/i);
+  expect(text).toMatch(/other rules may have been renumbered/i);
+  expect(text).toMatch(/manage-rules.*action=`list`/);
+});
+
 test('folders stats points folders over 50 items at delta sync', async () => {
   graph.callGraphAPI.mockImplementation((_t, _m, path) =>
     Promise.resolve(
@@ -111,20 +142,17 @@ test('folders stats points folders over 50 items at delta sync', async () => {
   expect(text).not.toMatch(/Small folder/);
 });
 
-test('access-shared-mailbox 404 adds the enable hint while the opt-in is off', async () => {
+test('access-shared-mailbox refuses before Graph when the opt-in is off', async () => {
   const saved = config.SHARED_MAILBOX_MODE;
   config.SHARED_MAILBOX_MODE = 'off';
   try {
-    graph.callGraphAPI.mockRejectedValue(
-      new Error('API call failed with status 404: ErrorItemNotFound')
-    );
     const result = await run('access-shared-mailbox', {
       sharedMailbox: 'team@example.com',
       count: 1,
     });
     expect(result.isError).toBe(true);
-    expect(textOf(result)).toMatch(/not found, or you can't access it/);
     expect(textOf(result)).toMatch(/OUTLOOK_SHARED_MAILBOX=read/);
+    expect(graph.callGraphAPI).not.toHaveBeenCalled();
   } finally {
     config.SHARED_MAILBOX_MODE = saved;
   }

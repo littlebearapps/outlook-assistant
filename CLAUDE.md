@@ -1,6 +1,6 @@
 # CLAUDE.md - Outlook Assistant
 
-MCP server for Microsoft Outlook via Graph API (v3.14.1). 22 tools across 9 modules. Runtime Node ≥ 18.18; dev tooling (lint-staged hook, `npm run inspect`) needs Node ≥ 22.22.1.
+MCP server for Microsoft Outlook via Graph API (v3.14.2). 22 tools across 9 modules. Runtime Node ≥ 18.18; dev tooling (lint-staged hook, `npm run inspect`) needs Node ≥ 22.22.1.
 
 ## Commands
 
@@ -38,7 +38,7 @@ Full walkthrough: [`docs/how-to/getting-started/connect-outlook-to-claude.md`](d
 
 **Token refresh**: Tokens auto-refresh when expired (via `token-storage.js`). Re-authentication only needed when the refresh token expires (~90 days). Refresh re-requests only the **granted** scopes (persisted as `granted_scopes`, falling back to the stored `scope`) plus `offline_access`, not the full configured set.
 
-**Shared-mailbox scopes are opt-in**: `OUTLOOK_SHARED_MAILBOX` (`read` → `Mail.Read.Shared`; `true`/`readwrite`/`1` → both `.Shared` scopes; unset → sign-in requests `BASE_SCOPES` only, unchanged). Parsed in `config.js` (`SHARED_MAILBOX_MODE`, `SHARED_SCOPES`); `utils/mailbox.js` `buildMailboxPrefix` refuses non-`me` mailboxes while it's off. With it on, the device-code path in `auth/tools.js` (at code request or in `handleDeviceCodeComplete`) falls back once to `AUTH_CONFIG.fallbackScopes` when `isScopeConsentError` (`auth/device-code.js`) matches; AADSTS65001 surfaces remediation instead. The browser auth server (`outlook-auth-server.js`) has no fallback. `auth action=about` reports configured vs granted scopes and shared-mailbox status. `sharedMailbox` (alias `email`) is accepted by `search-emails`, `read-email`, `attachments`, `update-email`, `apply-category`, `export` and `folders`; `send-email`/`draft` deliberately have no such param.
+**Shared-mailbox scopes are opt-in**: `OUTLOOK_SHARED_MAILBOX` (`read` → `Mail.Read.Shared`; `true`/`readwrite`/`1` → both `.Shared` scopes; unset → sign-in requests `BASE_SCOPES` only, unchanged). Parsed in `config.js` (`SHARED_MAILBOX_MODE`, `SHARED_SCOPES`); `utils/mailbox.js` `buildMailboxPrefix` refuses non-`me` mailboxes while it's off, before sign-in or any Graph request, for every tool including `access-shared-mailbox` (#338). With it on, the device-code path in `auth/tools.js` (at code request or in `handleDeviceCodeComplete`) falls back once to `AUTH_CONFIG.fallbackScopes` when `isScopeConsentError` (`auth/device-code.js`) matches; AADSTS65001 surfaces remediation instead. The browser auth server (`outlook-auth-server.js`) has no fallback. `auth action=about` reports configured vs granted scopes and shared-mailbox status. `sharedMailbox` (alias `email`) is accepted by `search-emails`, `read-email`, `attachments`, `update-email`, `apply-category`, `export` and `folders`; `send-email`/`draft` deliberately have no such param.
 
 ## Architecture
 
@@ -58,7 +58,7 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 - **create-event**: recipient allowlist on every attendee (rooms included; the whole call is refused, dry runs report it; `checkAttendeeAllowlist` in `calendar/attendees.js`), rate limiting (`OUTLOOK_MAX_CREATE_EVENT_PER_SESSION`, else `OUTLOOK_MAX_EMAILS_PER_SESSION`; real creates only); each call sends a fresh Graph `transactionId`, so a 429 retry can't book the meeting twice (#280)
 - **Recipient allowlist scope** (`findBlockedRecipients` in `utils/safety.js`): send-email to/cc/bcc; draft create/update/forward/reply/reply-all and the draft's current to/cc/bcc on send; rule forwardTo/redirectTo; create-event attendees; the attendee list set by manage-event update. With an allowlist set, anything that isn't one plain address (exactly one `@`; no `;`, `,`, `<>`, quotes, brackets, whitespace or control/format characters) is blocked. Not covered: manage-event cancel/decline messages and organiser deletes, updates sent to attendees already on an event when other fields change, and `mailbox-settings` automatic replies
 - **manage-event**: every action is `outward` (updates, declines, cancellations and organiser deletes notify attendees). `update` with `attendees` checks the whole new list against the recipient allowlist. `accept` is deliberately omitted — Microsoft Graph doesn't expose an `accept` verb in a way that works across personal/M365 reliably; use the Outlook UI to accept invitations.
-- **Shared mailboxes**: off unless `OUTLOOK_SHARED_MAILBOX` is set (`read` = read-only shared access); addresses must be printable-ASCII emails (`utils/mailbox.js`); sending from a shared mailbox is never supported (`Mail.Send.Shared` not requested)
+- **Shared mailboxes**: off unless `OUTLOOK_SHARED_MAILBOX` is set (`read` = read-only shared access); while it is off every `sharedMailbox` call, `access-shared-mailbox` included, is refused before any request (#338); addresses must be printable-ASCII emails (`utils/mailbox.js`); sending from a shared mailbox is never supported (`Mail.Send.Shared` not requested)
 - **Path/ID hardening** (`utils/graph-api.js`): `.`/`..` segments in resource paths (incl. percent-encoded, `$batch`, relative delta tokens) are refused before any request; full URLs (deltaToken/nextLink) must be `https://graph.microsoft.com`, so the token never leaves Graph
 - **File writes** (`attachments` download, `export` incl. conversations; all via `utils/safe-write.js`): caller paths must be absolute or start with `~`/`~/` (relative paths are refused); every output path is resolved (realpath of the parent; a last-component symlink is followed only to a directory, otherwise kept and refused) and must sit inside the system tmpdir (default), `~/Downloads`, `~/Documents` or `OUTLOOK_EXPORT_DIR`, with no dot-prefixed segment below them (`confineOutputPath`); server-chosen names are sanitised and written with exclusive create (no overwrite, no symlink following, `-1`, `-2`, … suffixes) inside that directory; an explicit single-message `export` `savePath` file is created exclusively and replaced only with `overwrite: true`, never if it is a symlink, hard-linked or has a dotted segment below its allowed directory (`writeExplicitFile`, temp file + rename keeping the original mode); files are created 0600 and server-created directories 0700 (explicit fchmod/chmod, umask-independent; `ensureOutputDir`); a write that fails part-way removes the partial file
 - **Logs** (`utils/logger.js`, #278): stderr only. By default one line per tool call (tool, action, outcome, ms; never arguments); `OUTLOOK_DEBUG` adds detail. `redact()` masks addresses, long IDs and credentials at every level. New logging goes through `log.info` (PII-free lines only) or `log.debug`, not `console.*`
@@ -79,11 +79,14 @@ Module layout, file organisation, and the v1→v3 tool-consolidation map live in
 | `plugins/outlook-assistant/hooks/outlook-gate.js` | Plugin hook for Claude Code (`hooks/hooks.json`), Copilot CLI/VS Code (`com.github.copilot/hooks/hooks.json`, arg `copilot`) and Cursor (`hooks/hooks-cursor.json` via `.cursor-plugin/plugin.json`, arg `cursor`): before outward/destructive/persistent calls, `ask` with a plain-English reason (`describe()`; unknown tool or action asks), after untrusted-content tools a note; classifies with the generated `hooks/risk-map.json` |
 | `plugins/outlook-assistant/skills/using-outlook-assistant/` | Agent skill: SKILL.md hard rules + one `references/` file per surface; risk table (`sync-risk-map.js`) and `metadata.version` (`sync-version.js`) are generated |
 | `scripts/sync-risk-map.js` | Copies `utils/risk-classes.js` into the hook's `risk-map.json` and the SKILL.md risk table; `--check` reports drift |
+| `scripts/docker-smoke.js` | CI smoke test for the Docker image (`docker` job in `ci.yml`): `initialize` + `tools/list` over stdio, checks name, version and 22 tools; `-- node index.js` runs it without Docker; no deps |
+| `scripts/release-check.js` | Version decisions for `auto-tag.yml`/`publish.yml` (tag only a higher version; prereleases go to npm `next`, skip Registry and website); no deps |
 | `scripts/skill-evals.js` | Prompt-injection evals: `claude -p` against test mode's mock mailbox, with skill + hook, hook only, or neither |
-| `utils/server-instructions.js` | Server `instructions` text (hard rules first); read-only note follows `config.READ_ONLY`; names tools a session limit of 0 blocks (`blockedTools`) |
+| `utils/server-instructions.js` | Server `instructions` text (hard rules first); read-only note follows `config.READ_ONLY`; names tools a session limit of 0 or an invalid value blocks (`blockedTools`) |
 | `utils/read-only.js` | `OUTLOOK_READ_ONLY` gate: refusal for any non-`read` call (`auth` sign-in actions exempt) |
 | `utils/logger.js` | Stderr logger: `log.info`/`log.debug`, per-call notes, `redact()`, `isDebugEnabled()` (`OUTLOOK_DEBUG`) |
 | `utils/tool-error.js` | `toolError(message, { nextStep })` and `authRequiredError()`: every handler error returns `isError: true` |
+| `utils/graph-failure.js` | What a failed Graph call means (`classifyFailure`: refusal, auth, forbidden, failure) and `accessError()`: the tool error for a 401 or 403, used by the search ladder, listings and the search export |
 | `config.js` | API endpoint, auth settings, defaults |
 | `utils/schema-coerce.js` | MCP-boundary param coercion + validation (string→array/boolean/number, `additionalProperties: false`, required, enums) |
 | `auth/client-config.js` | Runtime client ID: GUID validation, `~/.outlook-assistant-config.json` read/save, env → saved resolution (must not require `config.js`) |
@@ -144,6 +147,7 @@ OUTLOOK_CONFIRM_LEVEL=outward              # Plugin hook only, not read by the s
 5. Description ≤ 1,024 characters, stating facts and boundaries without steering between tools (`test/tools-registry.test.js` enforces both)
 6. Add test in `test/[module]/`
 7. Keep the plugin in step: see [`.claude/rules/plugin-and-skill-maintenance.md`](.claude/rules/plugin-and-skill-maintenance.md) (risk class, skill reference, hook map)
+8. A new action that edits a delivered (non-draft) message's subject, body or recipients needs `Mail-Advanced.ReadWrite` from 31 Dec 2026 (#131): check Microsoft's list first and classify it in `utils/risk-classes.js`
 
 ## Common Issues
 
@@ -152,7 +156,7 @@ Common errors (auth, device code, search, timezones) and fixes live in [`docs/tr
 ## Testing
 
 ```bash
-npm test                    # Jest unit tests (103 suites / 2908 tests at v3.14.1)
+npm test                    # Jest unit tests (109 suites / 3427 tests at v3.14.2)
 npm run lint                # ESLint (0 errors expected)
 npm run format:check        # Prettier (CI runs this)
 node scripts/e2e-stdio.js <tool> '<argsJson>'  # Fresh stdio server: initialize + one tools/call
@@ -161,7 +165,7 @@ node scripts/sync-risk-map.js  # After editing utils/risk-classes.js (--check to
 node scripts/skill-evals.js    # Prompt-injection evals (needs a signed-in claude CLI; spends tokens)
 ```
 
-Mock data defined in `utils/mock-data.js` (includes three prompt-injection emails for the evals). Shared-mailbox suites switch the opt-in on via `test/helpers/shared-mailbox.js`.
+Mock data defined in `utils/mock-data.js` (includes three prompt-injection emails for the evals). Shared-mailbox suites switch the opt-in on via `test/helpers/shared-mailbox.js`. `test/helpers/fake-graph.js` is a fake Graph for search-ladder tests that enforces the measured rules (`$search` alone, `receivedDateTime` leading a sorted filter, no recipient lambda, paging).
 
 ## Graph API Notes
 

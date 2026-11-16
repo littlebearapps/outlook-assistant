@@ -17,6 +17,7 @@ const {
 } = require('../utils/response-formatter');
 const { getEmailFields } = require('../utils/field-presets');
 const { toolError, authRequiredError } = require('../utils/tool-error');
+const { accessError } = require('../utils/graph-failure');
 
 /**
  * Maps verbosity level to field preset
@@ -127,6 +128,10 @@ async function handleListEmails(args) {
     if (error.message === 'Authentication required') {
       return authRequiredError();
     }
+    // A 401 or 403 from Graph, on the listing or while resolving the folder,
+    // gets the same error and next step as in a search. (#341)
+    const denied = accessError(error, sharedMailbox, 'listing');
+    if (denied) return denied;
 
     return toolError(`Error listing emails: ${error.message}`);
   }

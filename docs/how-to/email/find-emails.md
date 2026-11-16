@@ -60,9 +60,9 @@ params:
   query: "budget approval"
 ```
 
-The `query` parameter searches across subject, body, and other fields **on work/school Microsoft 365 accounts**. On personal Outlook.com accounts Graph `$search` is unavailable, so `query` falls back to a subject substring match (every word must appear in the subject) — precise, but it does not read message bodies. Use `searchExpression` when you need body content there.
+The `query` parameter goes to Graph `$search`, which matches subject, body and sender on both work/school Microsoft 365 and personal Outlook.com accounts. `$search` takes no other filters, so a date or boolean window is applied to its results, sorted newest first (`_meta.searchMetadata.orderedWithinPage`), reading at most 250 messages; `partialCoverage` says when more remained. With `from`, `to` or `subject`, those go to Graph as a filter instead and `query` is matched against each result's subject, preview and sender.
 
-> **Personal accounts**: Free-text `query` search uses Microsoft's `$search` API, which has limited support on personal Outlook.com accounts. Outlook Assistant handles this automatically — if `$search` returns no results, it progressively falls back to OData filters (`from`, `subject`, `to`), then boolean filters, then recent message listing. For the most direct results on personal accounts, use the structured filter parameters below. See [Account Compatibility](../../../README.md#account-compatibility) for details.
+> **Personal accounts**: Microsoft's `$search` API takes no other filters. Outlook Assistant handles this automatically — if `$search` fails or nothing passes your other filters, it progressively falls back to OData filters (`from`, `subject`, `to`), then boolean filters, then recent message listing. For the most direct results on personal accounts, use the structured filter parameters below. See [Account Compatibility](../../../README.md#account-compatibility) for details.
 
 ## Filter by Date Range
 
@@ -161,7 +161,7 @@ params:
 
 Cross-folder search is a strict **superset** of an inbox-only search — it never returns fewer results than searching the inbox alone (v3.9.0). Multi-word queries also match when the words aren't adjacent in the subject, and if nothing turns up the result explicitly reports that it searched **all folders**.
 
-> **Personal accounts**: `searchAllFolders` uses the same `$search` API, so pair it with a plain-text `query` (which falls back to filters) or the structured filters for the most reliable coverage. Field-scoped `searchExpression` works too as of v3.10.0 — `from:`/`to:`/`subject:` expressions are translated to the equivalent filters and retried — but expressions using `AND`/`OR`, grouping or other field prefixes are not translated there.
+> **`$search` and all folders**: a `query` or `searchExpression` answered by Graph `$search` across all folders leaves out Deleted Items and Junk Email (measured on a personal mailbox); name the folder to search inside one of them. The structured filters (`from`, `to`, `subject`, dates) do cover every folder. Since v3.14.2 a boolean `searchExpression` (`invoice OR receipt`, `subject:… AND received>=…`) works on personal accounts; one made only of `from:`/`to:`/`subject:` terms is answered by filters there, as before.
 
 ## Combine Filters
 
@@ -178,7 +178,7 @@ params:
   receivedAfter: "2026-02-24"
 ```
 
-Every filter you supply is honoured. If Microsoft Graph rejects a combined filter, Outlook Assistant applies the remaining terms locally rather than returning the broader single-filter result set, and reports anything it could not honour in `_meta.searchMetadata.droppedFilters` (v3.10.0). That field should always be empty — if it isn't, the results are wider than what you asked for.
+Every filter you supply is honoured. If Microsoft Graph rejects a combined filter, Outlook Assistant applies the remaining terms locally rather than returning the broader single-filter result set, and reports anything it could not honour in `_meta.searchMetadata.droppedFilters` (v3.10.0). That field should be empty — if it isn't, the results are wider than what you asked for. The one expected case is a date or boolean filter passed with a raw `searchExpression` (#329).
 
 ## Control the Number of Results
 
@@ -193,7 +193,7 @@ params:
 | List (no query) | 25 | 50 |
 | Search | 10 | 50 |
 
-There is no page cursor. When the result says more emails are available, raise `count` (up to 50) or narrow the date range with `receivedAfter`/`receivedBefore`.
+There is no page cursor. When the result says more emails are available, raise `count` (up to 50) or narrow the date range with `receivedAfter`/`receivedBefore`. A raw `searchExpression` ignores those two parameters (the response lists them in `droppedFilters`), so put the date in the expression instead: `invoice AND received>=2026-01-01`.
 
 ![Search results with email list](../../assets/screenshots/find-emails-01.png)
 
@@ -224,7 +224,7 @@ Delta sync is useful for inbox monitoring workflows, audit trails, and notificat
 
 | Parameter | What it does | Example |
 |-----------|-------------|---------|
-| `query` | Free-text search across all fields (subject-only on personal accounts — see above) | `"budget approval"` |
+| `query` | Free-text search over subject, body and sender (see above for how it combines with other filters) | `"budget approval"` |
 | `from` | Filter by sender email or name | `"sarah@company.com"` |
 | `to` | Filter by recipient | `"team@company.com"` |
 | `subject` | Filter by subject line | `"quarterly report"` |
@@ -246,7 +246,7 @@ Delta sync is useful for inbox monitoring workflows, audit trails, and notificat
 - For advanced queries, see the [KQL Search Reference](../advanced/kql-search-reference.md)
 - Combine `from` + `receivedAfter` for the most targeted searches
 - To search a shared mailbox, add `sharedMailbox` — every mode works, including `folder` paths and `searchAllFolders`. It needs the opt-in `OUTLOOK_SHARED_MAILBOX` setting; see [Access Shared Mailboxes](../advanced/access-shared-mailboxes.md)
-- **Personal accounts (Outlook.com)**: Outlook Assistant automatically tries multiple search strategies if `$search` is unavailable, but `subject`, `from`, `to`, and date range filters give the most direct results. See [Account Compatibility](../../../README.md#account-compatibility)
+- **Personal accounts (Outlook.com)**: Outlook Assistant automatically tries multiple search strategies if `$search` fails or nothing passes your filters, but `subject`, `from`, `to`, and date range filters give the most direct results. See [Account Compatibility](../../../README.md#account-compatibility)
 
 ## Related
 

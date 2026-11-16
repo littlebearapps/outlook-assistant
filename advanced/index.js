@@ -13,11 +13,7 @@ const { ensureAuthenticated } = require('../auth');
 const { FIELD_PRESETS } = require('../utils/field-presets');
 const config = require('../config');
 const { DEFAULT_TIMEZONE } = config;
-const {
-  buildMailboxPrefix,
-  validateMailboxPrefix,
-  SHARED_MAILBOX_DISABLED_MESSAGE,
-} = require('../utils/mailbox');
+const { buildMailboxPrefix } = require('../utils/mailbox');
 const { resolveFolder } = require('../folder/resolve');
 const { getAllFoldersHierarchy } = require('../folder/list');
 const {
@@ -58,20 +54,12 @@ function formatEmail(email, verbosity = 'standard') {
 }
 
 /**
- * Shared-mailbox hint appended to access errors while OUTLOOK_SHARED_MAILBOX
- * is off (the token then carries no `.Shared` scope).
- */
-const ENABLE_SHARED_HINT =
-  '\n\nShared-mailbox scopes are not enabled. Reading a mailbox other than your own normally needs `Mail.Read.Shared`: set OUTLOOK_SHARED_MAILBOX=read (work/school accounts only), restart the server, and run `auth action=authenticate force=true`.';
-
-/**
  * Access shared mailbox handler.
  *
- * With OUTLOOK_SHARED_MAILBOX off this behaves exactly as before the opt-in
- * flag existed: `folder` (or `folderId`) is used as given — a well-known name
- * or a folder ID — with whatever scopes the token already has. With the flag
- * on, custom/localized names and nested paths are resolved, and
- * `listFolders` is available.
+ * Refuses before signing in or any Graph request while OUTLOOK_SHARED_MAILBOX
+ * is off (#338), through buildMailboxPrefix like every other tool that takes
+ * a mailbox. With it on, `folder` takes a well-known name, a custom/localized
+ * name, a nested path or a folder ID, and `listFolders` is available.
  */
 async function handleAccessSharedMailbox(args) {
   // F-46: accept `email` as alias for `sharedMailbox`. The original
@@ -85,13 +73,11 @@ async function handleAccessSharedMailbox(args) {
     );
   }
 
-  // Validate up front, through the same helper every other tool uses. The
-  // ungated variant keeps this tool's pre-opt-in behaviour when
-  // OUTLOOK_SHARED_MAILBOX is off; with it on, buildMailboxPrefix and
-  // validateMailboxPrefix agree.
+  // Enforce the opt-in before authentication, folder resolution or any Graph
+  // request, exactly as the other mailbox-taking tools do.
   let mailboxPrefix;
   try {
-    mailboxPrefix = validateMailboxPrefix(sharedMailbox);
+    mailboxPrefix = buildMailboxPrefix(sharedMailbox);
   } catch (error) {
     return toolError(error.message);
   }
@@ -103,12 +89,7 @@ async function handleAccessSharedMailbox(args) {
 
   // listFolders mode: enumerate the shared mailbox's folder tree so callers
   // can discover custom subfolder names/IDs to read from.
-  const sharedEnabled = config.SHARED_MAILBOX_MODE !== 'off';
-
   if (listFolders) {
-    if (!sharedEnabled) {
-      return toolError(SHARED_MAILBOX_DISABLED_MESSAGE);
-    }
     return handleListSharedMailboxFolders(sharedMailbox, args);
   }
 
@@ -123,31 +104,26 @@ async function handleAccessSharedMailbox(args) {
     // shared mailbox. A raw `folderId` (from `listFolders`) is used as-is;
     // otherwise custom and localized folder names are resolved via the tree.
     let resolvedFolder;
-    if (!sharedEnabled) {
-      // Pre-opt-in behaviour: no folder resolution.
-      resolvedFolder = folderId || mailFolder;
-    } else {
-      try {
-        const resolved = await resolveFolder(accessToken, {
-          id: folderId,
-          name: mailFolder,
-          mailbox: sharedMailbox,
-        });
-        resolvedFolder = resolved.id;
-      } catch (resolveError) {
-        // Only resolution failures get the discovery hint — a Graph error
-        // (access denied, 5xx) must fall through to the generic handler below
-        // rather than masquerading as "folder not found".
-        if (!/not found|ambiguous/i.test(resolveError.message)) {
-          throw resolveError;
-        }
-        return toolError(
-          `${resolveError.message}\n\n` +
-            `Searched in ${sharedMailbox}. List its folders first to get exact names/IDs:\n` +
-            '- `access-shared-mailbox` with `listFolders: true`, or\n' +
-            `- \`folders\` tool with \`action: list\`, \`sharedMailbox: "${sharedMailbox}"\``
-        );
+    try {
+      const resolved = await resolveFolder(accessToken, {
+        id: folderId,
+        name: mailFolder,
+        mailbox: sharedMailbox,
+      });
+      resolvedFolder = resolved.id;
+    } catch (resolveError) {
+      // Only resolution failures get the discovery hint — a Graph error
+      // (access denied, 5xx) must fall through to the generic handler below
+      // rather than masquerading as "folder not found".
+      if (!/not found|ambiguous/i.test(resolveError.message)) {
+        throw resolveError;
       }
+      return toolError(
+        `${resolveError.message}\n\n` +
+          `Searched in ${sharedMailbox}. List its folders first to get exact names/IDs:\n` +
+          '- `access-shared-mailbox` with `listFolders: true`, or\n' +
+          `- \`folders\` tool with \`action: list\`, \`sharedMailbox: "${sharedMailbox}"\``
+      );
     }
 
     // Build endpoint for shared mailbox
@@ -236,13 +212,13 @@ async function handleAccessSharedMailbox(args) {
       error.message.includes('403')
     ) {
       return toolError(
-        `Access denied to shared mailbox "${sharedMailbox}".\n\n**Possible causes:**\n- You don't have access to this shared mailbox\n- The Mail.Read.Shared permission is not granted\n- The shared mailbox address is incorrect${sharedEnabled ? '' : ENABLE_SHARED_HINT}`
+        `Access denied to shared mailbox "${sharedMailbox}".\n\n**Possible causes:**\n- You don't have access to this shared mailbox\n- The Mail.Read.Shared permission is not granted\n- The shared mailbox address is incorrect`
       );
     }
 
     if (error.message.includes('not found') || error.message.includes('404')) {
       return toolError(
-        `Shared mailbox "${sharedMailbox}" not found, or you can't access it. Please verify the email address.${sharedEnabled ? '' : ENABLE_SHARED_HINT}`
+        `Shared mailbox "${sharedMailbox}" not found, or you can't access it. Please verify the email address.`
       );
     }
 
@@ -590,8 +566,73 @@ async function handleClearMessageFlag(args) {
   }
 }
 
+/** Most pages of `places/microsoft.graph.room` read (100 rooms per page). */
+const ROOM_PAGE_CAP = 10;
+
 /**
- * Find meeting rooms handler
+ * `findRooms` exists only on the beta endpoint (v1.0 always 404s), so the
+ * fallback names the beta URL in full. Beta APIs can change without notice.
+ * It needs only User.Read but returns at most the first 100 rooms, as
+ * `{ name, address }` pairs with no building, floor or capacity.
+ */
+const FIND_ROOMS_BETA_URL = 'https://graph.microsoft.com/beta/me/findRooms';
+
+const PLACE_SCOPE_NOTE =
+  "Listing rooms through Graph `places` needs the Place.Read.All permission (admin consent), and this server doesn't request that scope yet (tracked in #337)";
+
+/** HTTP status from a callGraphAPI error message, or null. */
+function graphErrorStatus(error) {
+  const match = /status (\d{3})/.exec(error?.message || '');
+  return match ? Number(match[1]) : null;
+}
+
+/**
+ * Graph says so outright for a personal account (live, 2026-10-08):
+ * `400 … This API is not supported for MSA accounts`.
+ */
+function isPersonalAccountError(error) {
+  return /not supported for MSA accounts/i.test(error?.message || '');
+}
+
+/** A refusal for want of permission: missing Place.Read.All consent. */
+function isPermissionError(error) {
+  return (
+    graphErrorStatus(error) === 403 ||
+    /ErrorAccessDenied|Authorization_RequestDenied|Forbidden/i.test(
+      error?.message || ''
+    )
+  );
+}
+
+/**
+ * Every room from `places/microsoft.graph.room`, following `@odata.nextLink`
+ * up to ROOM_PAGE_CAP pages.
+ * @returns {Promise<{rooms: object[], truncated: boolean}>}
+ */
+async function listPlacesRooms(accessToken) {
+  let response = await callGraphAPI(
+    accessToken,
+    'GET',
+    'places/microsoft.graph.room'
+  );
+  const rooms = [...(response?.value || [])];
+  let pages = 1;
+  while (response?.['@odata.nextLink'] && pages < ROOM_PAGE_CAP) {
+    response = await callGraphAPI(
+      accessToken,
+      'GET',
+      response['@odata.nextLink']
+    );
+    rooms.push(...(response?.value || []));
+    pages++;
+  }
+  return { rooms, truncated: Boolean(response?.['@odata.nextLink']) };
+}
+
+/**
+ * Find meeting rooms handler (#240): `places` first, paged; the beta
+ * `findRooms` when that fails, except on a personal account, where Graph
+ * has no rooms to offer.
  */
 async function handleFindMeetingRooms(args) {
   const { query, building, floor, capacity, outputVerbosity } = args;
@@ -600,44 +641,74 @@ async function handleFindMeetingRooms(args) {
   try {
     const accessToken = await ensureAuthenticated();
 
-    // Try the findRooms endpoint first (may not be available in all tenants)
     let rooms = [];
+    let source = 'places';
+    let truncated = false;
+    const notes = [];
 
     try {
-      // Try /places endpoint for room lists
-      const placesResponse = await callGraphAPI(
-        accessToken,
-        'GET',
-        'places/microsoft.graph.room'
-      );
-      rooms = placesResponse.value || [];
-    } catch (_placesError) {
-      // Fall back to findRooms
+      ({ rooms, truncated } = await listPlacesRooms(accessToken));
+    } catch (placesError) {
+      if (isPersonalAccountError(placesError)) {
+        return toolError(
+          "Meeting rooms are a Microsoft 365 (work or school) feature. Graph doesn't support room lookup for personal Microsoft accounts (Outlook.com, Hotmail, Live), so there are no rooms to find.",
+          {
+            nextStep:
+              'Sign in with a Microsoft 365 work or school account to look up rooms.',
+          }
+        );
+      }
+      const placesWhy = isPermissionError(placesError)
+        ? `${PLACE_SCOPE_NOTE}, so Graph refused it.`
+        : `Graph \`places\` failed: ${placesError.message}`;
       try {
         const roomsResponse = await callGraphAPI(
           accessToken,
           'GET',
-          'me/findRooms'
+          FIND_ROOMS_BETA_URL
         );
-        rooms = roomsResponse.value || [];
+        rooms = (roomsResponse?.value || []).map((r) => ({
+          displayName: r.name,
+          emailAddress: r.address,
+        }));
+        source = 'findRooms-beta';
+        notes.push(
+          `_Listed with the beta \`findRooms\` call (names and addresses only, at most the first 100 rooms in the organisation). ${placesWhy}_`
+        );
       } catch (findRoomsError) {
-        // F-47: distinguish "feature not available on personal account"
-        // from generic permission errors. Personal Outlook.com accounts
-        // surface a 404 here; organizational accounts surface
-        // permission errors. Both look similar in Graph but mean very
-        // different things to the caller.
-        const errMsg = findRoomsError.message || '';
-        const isLikelyPersonal =
-          errMsg.includes('404') ||
-          errMsg.includes('Not Found') ||
-          errMsg.includes('NotFound');
-        const explanation = isLikelyPersonal
-          ? 'Meeting room search is M365-only. Personal Outlook.com accounts cannot use this feature — there are no rooms to find. Connect a Microsoft 365 work/school account to enable.'
-          : 'This feature requires:\n- Places.Read.All permission\n- Meeting rooms configured in your organization';
+        const explanation = isPermissionError(placesError)
+          ? `Couldn't list meeting rooms. ${PLACE_SCOPE_NOTE}, so Graph refused it (403).`
+          : `Couldn't list meeting rooms. ${placesWhy}`;
         return toolError(
-          `Unable to find meeting rooms.\n\n**Note**: ${explanation}\n\nError: ${errMsg}`
+          `${explanation}\n\nThe fallback, the beta \`findRooms\` call (needs only User.Read), also failed: ${findRoomsError.message}`,
+          {
+            nextStep:
+              "If you know the room's email address, add it to `create-event` as an attendee with type `resource`.",
+          }
         );
       }
+    }
+
+    if (source === 'findRooms-beta') {
+      // findRooms carries no building, floor or capacity, so filtering on
+      // them would drop every room. Say so rather than return nothing.
+      const unchecked = [
+        ['building', building],
+        ['floor', floor],
+        ['capacity', capacity],
+      ]
+        .filter(([, value]) => value !== undefined && value !== null)
+        .map(([name]) => `\`${name}\``);
+      if (unchecked.length > 0) {
+        notes.push(
+          `_${unchecked.join(', ')} ${unchecked.length === 1 ? 'was' : 'were'} not applied: \`findRooms\` returns no building, floor or capacity._`
+        );
+      }
+    }
+    if (truncated) {
+      notes.push(
+        `_Only the first ${ROOM_PAGE_CAP} pages of rooms were read, so the list may be incomplete._`
+      );
     }
 
     // Apply filters
@@ -651,16 +722,18 @@ async function handleFindMeetingRooms(args) {
       );
     }
 
-    if (building) {
+    const placeFilters = source === 'places';
+
+    if (building && placeFilters) {
       const b = building.toLowerCase();
       rooms = rooms.filter((r) => r.building?.toLowerCase().includes(b));
     }
 
-    if (floor !== undefined) {
+    if (floor !== undefined && placeFilters) {
       rooms = rooms.filter((r) => r.floorNumber === floor);
     }
 
-    if (capacity) {
+    if (capacity && placeFilters) {
       rooms = rooms.filter((r) => r.capacity >= capacity);
     }
 
@@ -669,9 +742,13 @@ async function handleFindMeetingRooms(args) {
         content: [
           {
             type: 'text',
-            text: 'No meeting rooms found matching your criteria.\n\nTry broadening your search or check if rooms are configured in your organization.',
+            text: [
+              'No meeting rooms found matching your criteria.\n\nTry broadening your search or check if rooms are configured in your organisation.',
+              ...notes,
+            ].join('\n\n'),
           },
         ],
+        _meta: { count: 0, rooms: [], source, truncated },
       };
     }
 
@@ -723,6 +800,10 @@ async function handleFindMeetingRooms(args) {
       });
     }
 
+    if (notes.length > 0) {
+      output.push('', ...notes);
+    }
+
     return {
       content: [
         {
@@ -733,6 +814,8 @@ async function handleFindMeetingRooms(args) {
       _meta: {
         count: rooms.length,
         rooms: rooms,
+        source,
+        truncated,
       },
     };
   } catch (error) {
@@ -748,7 +831,7 @@ const advancedTools = [
   {
     name: 'access-shared-mailbox',
     description:
-      "List emails or folders in a shared mailbox the signed-in user can access (read-only). Returns messages from `sharedMailbox` (alias `email`) and `folder` (default `inbox`) with id/subject/from/receivedDateTime/preview, the same shape as `search-emails` list mode. `folder` takes a well-known name (inbox, sent, archive…), a custom/localized display name (e.g. `Archiv`), a nested path (e.g. `Inbox/Vendors/Acme`), or pass a raw `folderId`. `listFolders: true` enumerates the shared mailbox's folder tree (names, paths, IDs, counts), to find custom subfolders before reading them. Needs the mailbox delegated to the signed-in user in Exchange (admin-configured). `outputVerbosity` sets field count and `count` (default 25, max 50) page size. For search and filters over a shared mailbox, use `search-emails` with `sharedMailbox` set. Custom/localized names, nested paths and `listFolders` need the server opt-in setting OUTLOOK_SHARED_MAILBOX (work/school only); without it `folder` must be a well-known name or a folder ID.",
+      "List emails or folders in a shared mailbox the signed-in user can access (read-only). Needs the server setting OUTLOOK_SHARED_MAILBOX (work/school only); while it is unset, every call is refused before any request to Microsoft Graph. Returns messages from `sharedMailbox` (alias `email`) and `folder` (default `inbox`) with id/subject/from/receivedDateTime/preview. `folder` takes a well-known name (inbox, sent, archive…), a custom/localized display name (e.g. `Archiv`), a nested path (e.g. `Inbox/Vendors/Acme`), or pass a raw `folderId`. `listFolders: true` enumerates the mailbox's folder tree (names, paths, IDs, counts). Needs the mailbox delegated to the signed-in user in Exchange (admin-configured). `outputVerbosity` sets field count and `count` (default 25, max 50) page size. `search-emails` with `sharedMailbox` searches and filters a shared mailbox.",
     ...toolMetadata('access-shared-mailbox', 'Shared Mailbox'),
     inputSchema: {
       type: 'object',
@@ -795,7 +878,7 @@ const advancedTools = [
   {
     name: 'find-meeting-rooms',
     description:
-      "Discover bookable meeting rooms in the user's organisation via the Graph rooms endpoint (read-only). Returns room resources with displayName, emailAddress, building, floor, capacity, and bookingType — suitable for piping into `create-event` as attendees. Filter by `query` (matches name/email), `building`, `floor`, or minimum `capacity`. Returns empty list on personal accounts (the rooms endpoint is M365-only). Use `outputVerbosity` to control field count.",
+      "List bookable meeting rooms in the user's Microsoft 365 organisation (read-only). Reads Graph `places` (all pages, up to 1,000 rooms): name, email address, building, floor, capacity and devices. `places` needs the Place.Read.All permission, which this server doesn't request yet (#337); when Graph refuses it, the tool falls back to the beta `findRooms` call (User.Read; names and addresses only, first 100 rooms), and says so in the result. A room's email address works as a `create-event` attendee with type `resource`. Filter by `query` (name or address), `building`, `floor` or minimum `capacity`; filters run on the returned list, and `findRooms` results can't be filtered by building, floor or capacity. Personal Microsoft accounts (Outlook.com) have no rooms: the call returns an error saying so. `outputVerbosity` controls field count.",
     ...toolMetadata('find-meeting-rooms', 'Meeting Rooms'),
     inputSchema: {
       type: 'object',

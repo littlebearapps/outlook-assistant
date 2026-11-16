@@ -32,6 +32,12 @@ const EFFECTS = {
     'set up something that keeps acting after this call (rules, forwarding or automatic replies)',
 };
 
+/** Explain tools whose specific effect differs from their broad risk class. */
+const TOOL_EFFECTS = {
+  export:
+    'write files on this computer (and may overwrite an existing local file)',
+};
+
 const NEXT_STEP =
   'Tell the user this change is blocked by read-only mode; do not retry it or try another tool. To allow changes, the user can unset OUTLOOK_READ_ONLY in the MCP server configuration and restart the server.';
 
@@ -49,7 +55,10 @@ function readOnlyRefusal(toolName, args = {}) {
   // Name the action that would run, including a tool's default action.
   const action = args.action ?? TOOL_RISK[toolName]?.defaultAction;
   const call = action ? `${toolName} action=${action}` : toolName;
-  const effect = EFFECTS[riskClass] || 'make a change that is not classified';
+  const effect =
+    TOOL_EFFECTS[toolName] ||
+    EFFECTS[riskClass] ||
+    'make a change that is not classified';
   return toolError(
     `Outlook Assistant is in read-only mode (OUTLOOK_READ_ONLY). ${call} would ${effect}; nothing was changed.`,
     { nextStep: NEXT_STEP }

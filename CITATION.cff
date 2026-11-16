@@ -1,0 +1,21 @@
+# Citation metadata, rendered by GitHub as "Cite this repository".
+# No version or date-released: both are optional, and leaving them out keeps
+# this file out of the release version sync (scripts/sync-version.js).
+cff-version: 1.2.0
+message: 'If you use this software, please cite it as below.'
+title: 'Outlook Assistant'
+abstract: 'MCP server for Microsoft Outlook email, calendar, contacts and mailbox settings via the Microsoft Graph API.'
+type: software
+authors:
+  - family-names: Schram
+    given-names: Nathan
+repository-code: 'https://github.com/littlebearapps/outlook-assistant'
+url: 'https://littlebearapps.com/builds/outlook-assistant/'
+license: MIT
+keywords:
+  - mcp
+  - model-context-protocol
+  - outlook
+  - microsoft-graph
+  - email
+  - calendar

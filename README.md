@@ -21,6 +21,8 @@ Outlook Assistant connects AI assistants to your Microsoft Outlook account throu
 
 **Works with personal Outlook.com and work/school Microsoft 365 accounts.**
 
+**[Help docs, roadmap and community on the Outlook Assistant product page →](https://littlebearapps.com/builds/outlook-assistant/)**
+
 <div align="center">
   <br />
   <a href="https://github.com/littlebearapps/outlook-assistant/blob/main/docs/demo/outlook-assistant-demo.mp4">
@@ -44,7 +46,7 @@ Outlook Assistant connects AI assistants to your Microsoft Outlook account throu
 - 👥 **Manage contacts** — search your contact book and organisational directory, create and update contact records
 - ⚙️ **Configure settings** — set out-of-office auto-replies, working hours, and time zone
 - 📬 **Access shared mailboxes** — read and organise team inboxes and service accounts, including custom subfolders and nested folder paths; enumerate, read, and search the folder tree (best-effort — listings flag any branches skipped due to depth limits or per-folder errors), move/flag/categorise messages, and manage folders (work/school Microsoft 365 accounts; opt-in via `OUTLOOK_SHARED_MAILBOX`). Sending, drafts, replies, and forwards from a shared mailbox are not supported — those operations always act on the signed-in user's own mailbox
-- 🏢 **Find meeting rooms** — search by building, floor, capacity, AV equipment, and wheelchair accessibility (Microsoft 365)
+- 🏢 **Find meeting rooms** — search by name, building, floor and capacity; AV equipment and wheelchair access at full verbosity (Microsoft 365 work or school accounts)
 
 ### Why Outlook Assistant?
 
@@ -100,14 +102,14 @@ Outlook Assistant works with both personal and work/school Microsoft accounts, b
 | Contacts CRUD | Full support | Full support |
 | Inbox rules | Full support | Full support |
 | Folders | Full support | Full support |
-| Free-text `query` search | Limited — progressive fallback; `subject`, `from`, `to` filters are more direct | Full `$search` support |
+| Free-text `query` search | `$search` over subject, body and sender (with `from`/`to`/`subject`: those as the filter, `query` matched locally), with a progressive fallback | Full `$search` support |
 | Categories | Full support | Full support |
 | Mailbox settings | Full support | Full support |
 | Focused Inbox | API works (overrides stored) but mail routing not affected | Full support |
 | Shared mailboxes | Not available | Opt-in (`OUTLOOK_SHARED_MAILBOX`). Read + organise only. Read: `Mail.Read.Shared`; organise (move/categorise/flag/create folders): `Mail.ReadWrite.Shared`. No sending/drafts/replies/forwards |
-| Meeting room search | Not available | Requires `Place.Read.All` + admin consent |
+| Meeting room search | Not available (returns an error saying so) | Full list with `Place.Read.All` + admin consent; otherwise a beta fallback (names and addresses, first 100 rooms) |
 
-> **Note**: On personal accounts, Microsoft's `$search` API has limited support for free-text queries. Outlook Assistant handles this automatically with progressive search — if your query returns no results, it falls back through OData filters, boolean filters, and recent message listing to find your emails. For the most direct results on personal accounts, use the structured filter parameters (`from`, `subject`, `to`, `receivedAfter`).
+> **Note**: Microsoft's `$search` API takes no other filters, and reads field scopes and operators only when the whole expression is one quoted string. Outlook Assistant handles both automatically — a `query` runs `$search` on its own and applies any date window to its results (with `from`, `to` or `subject`, those go to Graph as a filter and `query` is matched locally), and if nothing passes it falls back through OData filters, boolean filters, and recent message listing to find your emails. Since v3.14.2 a raw `searchExpression` with operators or comparisons (`invoice OR receipt`, `subject:x AND received>=…`) is sent as one quoted string, so it works on personal accounts too; one made only of `from:`/`to:`/`subject:` terms is still answered by OData filters there. For the most direct results on personal accounts, use the structured filter parameters (`from`, `subject`, `to`, `receivedAfter`).
 
 ### What Makes This Different
 
@@ -180,7 +182,7 @@ npx @littlebearapps/outlook-assistant
 To check which version you have, or to see the available options:
 
 ```bash
-outlook-assistant --version     # prints e.g. 3.14.1
+outlook-assistant --version     # prints e.g. 3.14.2
 outlook-assistant --help        # usage, options and key environment variables
 ```
 
@@ -396,7 +398,7 @@ a server that would ignore it.
 3. Optionally add **org-only** permissions (work/school accounts only):
    - `Mail.Read.Shared` — shared mailbox read access (requested only when `OUTLOOK_SHARED_MAILBOX=read` or `=true`)
    - `Mail.ReadWrite.Shared` — shared mailbox writes (move/categorise/flag/mark-read; requested only when `OUTLOOK_SHARED_MAILBOX=true`)
-   - `Place.Read.All` — meeting room search (requires admin consent)
+   - `Place.Read.All` — full meeting room list (requires admin consent; the server doesn't request it at sign-in yet, [#337](https://github.com/littlebearapps/outlook-assistant/issues/337))
 4. Click **Add permissions**
 
 ### Create a Client Secret
@@ -620,7 +622,7 @@ USE_TEST_MODE=true npm start
 | [Supported Clients](docs/how-to/getting-started/supported-clients.md) | Install per client, what the skill and safety hook do in each, and known limits |
 | [Azure Setup Guide](docs/guides/azure-setup.md) | Azure account creation, app registration, permissions, and secrets |
 | [How-To Guides](docs/how-to/index.md) | 30 practical guides for email, calendar, contacts, and settings |
-| [Roadmap](ROADMAP.md) | Active milestones (v3.14.1, v3.15.0, v4.0.0, v3.8.x, v3.16.0+) and recent releases |
+| [Roadmap](ROADMAP.md) | Active milestones (v3.14.2, v3.15.0, v3.16.0, v4.0.0, v4.1.0+) and recent releases |
 | [Troubleshooting](docs/troubleshooting.md) | Known errors and fixes, including auth, search, export and shared mailboxes |
 | [FAQ](docs/faq/faq.md) | Install, accounts, permissions, tokens, updates, uninstall |
 | [Tools Reference](docs/quickrefs/tools-reference.md) | All 22 tools with parameters |
@@ -630,11 +632,11 @@ Full documentation: [docs/](docs/README.md)
 
 ## Known Limitations
 
-- **Personal account search**: Free-text `query` and the raw `searchExpression` (formerly `kqlQuery`) rely on Microsoft's `$search` API, which has limited support on personal Outlook.com accounts. `query` mitigates this with progressive fallback (OData filters, boolean filters, then a client-side scan). Field-scoped `$search` (e.g. `subject:"…"`) is rejected outright there; since v3.10.0 `from:`/`to:`/`subject:` expressions are translated into the closest equivalent OData filters and retried, but boolean operators, grouping, wildcards and other field prefixes are not — those still terminate with an explicit no-results rather than a silent broader search. Structured filters (`from`, `subject`, `to`, `receivedAfter`) remain the most direct route. Cross-folder search (`searchAllFolders: true`) returns a superset of inbox-only results. Note that `query` and `searchExpression` are not interchangeable there: `searchExpression` goes to `$search`, which matches the whole message including the body and ranks by relevance rather than date, while `query` falls back to a subject substring match that never reads bodies.
+- **Personal account search**: Free-text `query` goes to Microsoft's `$search` API on its own (since v3.14.2; Graph rejects `$search` combined with `$orderby` or `$filter`), so it matches subject, body and sender on personal Outlook.com accounts too. A date or boolean window is applied to its results, newest first, reading at most 250 (a partial result says so); with `from`, `to` or `subject`, those go to Graph as a filter and `query` is matched against subject, preview and sender. If nothing passes, `query` falls back to a subject match with the filters applied server-side. Since v3.14.2 a raw `searchExpression` (formerly `kqlQuery`) that uses `AND`/`OR`/`NOT`, grouping, `received>=…`, `hasattachment:` or several words is sent to Graph as one quoted string, the form Graph reads as KQL, so it works there (#333; unquoted, Graph rejected it or returned recent mail unfiltered). An expression made only of `from:`/`to:`/`subject:` terms is unchanged: it is sent as written, and where Graph rejects it (personal accounts do) or finds nothing it is run as OData filters (`raw-kql-translated`, v3.10.0), which match substrings and apply `receivedAfter`/`receivedBefore` and the boolean filters. Anything else that finds nothing ends with an explicit no-results, never a silent broader search. `$search` matches whole words or their beginnings and, across all folders, leaves out Deleted Items and Junk Email. A raw `searchExpression` takes no `receivedAfter`/`receivedBefore`; the response lists them in `droppedFilters` and shows how to put a date in the expression itself. Structured filters (`from`, `subject`, `to`, `receivedAfter`) remain the most direct route. Cross-folder search (`searchAllFolders: true`) returns a superset of inbox-only results.
 - **`to` search depth on personal accounts**: the server-side recipient filter is rejected, so `to` is matched locally over the 500 most recent messages (`OUTLOOK_SEARCH_SCAN_LIMIT`, max 5000). On a large archive that excludes older mail — pair `to` with `receivedAfter`/`receivedBefore`. Since v3.11.1 the response says so whenever the scan was truncated, whether or not it matched.
 - **Focused Inbox**: Only available on work/school Microsoft 365 accounts.
-- **Shared mailboxes**: Require a work/school account and are **opt-in**: set `OUTLOOK_SHARED_MAILBOX=read` (read) or `=true` (read and organise), restart the server, then re-authenticate with `auth action=authenticate force=true`. Until then, `sharedMailbox` calls are refused with setup guidance (`access-shared-mailbox` keeps its previous well-known-folder behaviour). `auth action=about` shows whether the shared scopes were actually granted. Support covers reading and organising only. Reading needs `Mail.Read.Shared`; organising (move/categorise/flag/mark-read/create folders via `sharedMailbox`) needs `Mail.ReadWrite.Shared` — add it in Azure and re-authenticate (until then, shared-scoped writes fail with 403; they never fall back to your own mailbox). Custom subfolders are supported — pass `folder` as a display name or nested path (e.g. `Inbox/Vendors/Acme`), a raw `folderId`, or use `listFolders: true` (or `folders action=list, sharedMailbox: …`) to discover them. **Sending, drafts, replies, and forwards from a shared mailbox are not supported** — `send-email` and `draft` (including reply/reply-all/forward) always act on the signed-in user's own mailbox, and `Mail.Send.Shared` is not requested.
-- **Meeting room search**: Requires `Place.Read.All` permission with admin consent (work/school accounts only).
+- **Shared mailboxes**: Require a work/school account and are **opt-in**: set `OUTLOOK_SHARED_MAILBOX=read` (read) or `=true` (read and organise), restart the server, then re-authenticate with `auth action=authenticate force=true`. Until then, `sharedMailbox` calls and `access-shared-mailbox` are refused with setup guidance before any request is made. `auth action=about` shows whether the shared scopes were actually granted. Support covers reading and organising only. Reading needs `Mail.Read.Shared`; organising (move/categorise/flag/mark-read/create folders via `sharedMailbox`) needs `Mail.ReadWrite.Shared` — add it in Azure and re-authenticate (until then, shared-scoped writes fail with 403; they never fall back to your own mailbox). Custom subfolders are supported — pass `folder` as a display name or nested path (e.g. `Inbox/Vendors/Acme`), a raw `folderId`, or use `listFolders: true` (or `folders action=list, sharedMailbox: …`) to discover them. **Sending, drafts, replies, and forwards from a shared mailbox are not supported** — `send-email` and `draft` (including reply/reply-all/forward) always act on the signed-in user's own mailbox, and `Mail.Send.Shared` is not requested.
+- **Meeting room search**: Work/school accounts only. The full room list (building, floor, capacity) needs `Place.Read.All` with admin consent, which the server doesn't request at sign-in yet ([#337](https://github.com/littlebearapps/outlook-assistant/issues/337)); without it, `find-meeting-rooms` falls back to the beta `findRooms` call (names and addresses, first 100 rooms) and says so.
 - **Export default path**: Exports and attachment downloads save to the system temp directory by default (a batch `export` with `target=messages` needs an `outputDir`). Use `outputDir` (or `savePath`) with an absolute path (or one starting with `~/`) inside the system temp directory, `~/Downloads`, `~/Documents` or `OUTLOOK_EXPORT_DIR`; relative paths and other folders are refused. An existing `savePath` file is replaced only with `overwrite: true`.
 - **`list-events` date filters**: `startAfter`/`startBefore` must include `Z` or a ±hh:mm offset; zone-less and date-only values are rejected rather than guessed.
 

@@ -28,12 +28,57 @@ function escapeSearchPhrase(str) {
 
 /**
  * Wraps user text as a double-quoted Graph `$search` phrase, escaping it.
- * Not for caller-written `$search` expressions, which pass through as-is.
+ * For caller-written `$search` expressions use quoteSearchExpression.
  * @param {string} str - Raw user text
  * @returns {string} - e.g. `Sam "the man" Lee` → `"Sam \"the man\" Lee"`
  */
 function quoteSearchPhrase(str) {
   return `"${escapeSearchPhrase(str)}"`;
+}
+
+/**
+ * Whether a `$search` expression is already one double-quoted string: it
+ * opens and closes with `"` and every `"` in between is backslash-escaped.
+ * `"a" OR "b"` is not (two strings), nor is `"a\"` (the last quote is escaped).
+ * @param {string} expr - Trimmed expression
+ * @returns {boolean}
+ */
+function isWholeQuotedSearch(expr) {
+  if (
+    !expr ||
+    expr.length < 2 ||
+    !expr.startsWith('"') ||
+    !expr.endsWith('"')
+  ) {
+    return false;
+  }
+  const inner = expr.slice(1, -1);
+  for (let i = 0; i < inner.length; i++) {
+    if (inner[i] === '\\') {
+      // A backslash escapes the next character; a trailing one would escape
+      // the closing quote.
+      if (i === inner.length - 1) return false;
+      i++;
+    } else if (inner[i] === '"') {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Puts a caller-written `$search` expression in the one form Graph reads as
+ * KQL: a single double-quoted string. Unquoted, a field scope or comparison
+ * (`from:x`, `received>=…`) is a 400 syntax error, and a multi-word
+ * expression (`invoice OR receipt`) is answered with recent mail, unfiltered
+ * (measured on a personal mailbox, #333). An expression that is already one
+ * quoted string is returned as written; anything else is wrapped, with the
+ * caller's own `"` and `\` escaped so they stay inside it.
+ * @param {string} expr - Trimmed expression
+ * @returns {string} - e.g. `subject:"a b"` → `"subject:\"a b\""`
+ */
+function quoteSearchExpression(expr) {
+  return isWholeQuotedSearch(expr) ? expr : quoteSearchPhrase(expr);
 }
 
 /**
@@ -53,5 +98,7 @@ module.exports = {
   escapeODataString,
   escapeSearchPhrase,
   quoteSearchPhrase,
+  isWholeQuotedSearch,
+  quoteSearchExpression,
   buildODataFilter,
 };

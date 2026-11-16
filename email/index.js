@@ -35,7 +35,7 @@ const emailTools = [
   {
     name: 'search-emails',
     description:
-      'Search, list, delta-sync or thread-group emails (read-only); parameters set the mode. No params: recent emails in `folder` (default `inbox`). `query`/`from`/`to`/`subject`/date filters: search, combined as an OData filter. `searchExpression` (deprecated alias `kqlQuery`): a raw Graph `$search` expression. `deltaMode: true`: current state plus a `deltaToken` to pass back next time for changes only. `groupByConversation: true`: conversation threads. `conversationId`: every message in one thread. `internetMessageId`: the message with that RFC Message-ID. `sharedMailbox` (alias `email`) searches a shared/delegated mailbox, custom folders and nested paths included. Personal Outlook.com accounts have limited `$search`, so the tool falls back to OData filters and a recent listing automatically; structured filters (`from`/`subject`/`receivedAfter`/`hasAttachments`/`unreadOnly`) give cleaner results there. Returns up to `count` messages (id/subject/from/receivedDateTime/preview); `outputVerbosity` expands them.',
+      'Search, list, delta-sync or thread-group emails (read-only); parameters set the mode. No params: recent emails in `folder` (default `inbox`). `query`/`from`/`to`/`subject`/date filters: search, combined as an OData filter. `searchExpression` (deprecated alias `kqlQuery`): a raw Graph `$search` expression. `deltaMode: true`: current state plus a `deltaToken` to pass back next time for changes only. `groupByConversation: true`: conversation threads. `conversationId`: every message in one thread. `internetMessageId`: the message with that RFC Message-ID. `sharedMailbox` (alias `email`) searches a shared/delegated mailbox, custom folders and nested paths included. Graph `$search` takes no other filter: a `query` that needs one is answered by OData filters or local matching, and a `searchExpression` reports the filters it could not apply. `_meta.searchMetadata` names the strategy that answered. Returns up to `count` messages (id/subject/from/receivedDateTime/preview); `outputVerbosity` expands them.',
     ...toolMetadata('search-emails', 'Search Emails'),
     inputSchema: {
       type: 'object',
@@ -65,12 +65,12 @@ const emailTools = [
         query: {
           type: 'string',
           description:
-            'Search query text. Omit for list mode. On personal Outlook.com accounts Graph `$search` is unavailable, so this falls back to a subject substring match (all words must appear in the subject) — precise, but it does NOT search message bodies. Use `searchExpression` when you need body content.',
+            "Free-text search. Omit for list mode. Alone or with only date and boolean filters, it is sent to Graph `$search`, which matches subject, body and sender. `$search` takes no other filters, so those are applied to its results, newest first, reading at most 250. With `from`, `to` or `subject`, those go to Graph as a filter and `query` is matched against each result's subject, preview and sender. If nothing passes, this falls back to a subject substring match (all words must appear in the subject) with the filters applied server-side. The response names the strategy used and says when coverage was partial.",
         },
         searchExpression: {
           type: 'string',
           description:
-            'Raw Microsoft Graph `$search` expression for advanced server-side search, e.g. `subject:"invoice"`, `from:github.com`, or `foo OR bar`. Quote your own phrases, escaping any `"` or `\\` inside them with a backslash; a single bare token is auto-quoted and escaped for you. Pair with `searchAllFolders: true` for cross-folder search. Bypasses other search params. NOTE: personal Outlook.com accounts reject field-scoped `$search` outright; since v3.10.0 recognised `from:`/`to:`/`subject:` expressions are translated into the closest equivalent OData filters and retried automatically (a `subject:` term becomes a substring match, so it is close but not identical) (reported as strategy `raw-kql-translated`). Expressions that cannot be translated exactly — free text, `AND`/`OR`, unknown prefixes — are not retried, so use `query` for those there. RELEVANCE, NOT RECENCY: an untranslated expression is answered by Graph `$search` over the whole message including the body, ranked by relevance and not sorted by date, so top hits can look unrelated to a caller expecting a subject match. `query` is the more predictable choice for a term you expect in a subject line; `searchExpression` is the one that reaches body text.',
+            'Raw Microsoft Graph `$search` expression (KQL), e.g. `subject:"quarterly report" AND received>=2026-01-01`, `invoice OR receipt`. It takes the place of the other search params. It is sent to Graph as one double-quoted string, the form Graph reads as KQL (as written when it already is one, otherwise wrapped with its `"` and `\\` escaped); `receivedAfter`/`receivedBefore`/`hasAttachments`/`unreadOnly` are then not applied (they come back in `droppedFilters`), so dates go in the expression. Operators are upper-case (`AND`, `OR`, `NOT`). Terms match whole words or their beginnings; results are newest first; with `searchAllFolders: true` Graph leaves out Deleted Items and Junk Email. Exception: an expression made only of `from:`/`to:`/`subject:` terms is sent as written, and when Graph rejects it (personal accounts do) or finds nothing it is run as OData filters: substring match, date and boolean params applied, strategy `raw-kql-translated`. Any other expression that finds nothing ends with no results.',
         },
         kqlQuery: {
           type: 'string',
@@ -196,7 +196,7 @@ const emailTools = [
   {
     name: 'read-email',
     description:
-      'Read a single email by id (read-only). Returns subject, from/to/cc, date and the body as Markdown (HTML stripped to text): up to 2,000 characters by default, up to 40,000 with `outputVerbosity: full`; a cut body ends with a note on how to get the rest. With `headersMode: true`: returns RFC-822 forensic headers in place of the body (DKIM, SPF, DMARC, Received chain, Message-ID, Authentication-Results) — `importantOnly: true` for the security-relevant subset, `groupByType: true` for a category-bucketed view, `raw: true` for JSON. With `includeHeaders: true` (non-headers-mode): adds basic headers alongside the body. **If the id came from a shared/delegated mailbox (e.g. via `search-emails` or `access-shared-mailbox` with `sharedMailbox` set), you MUST pass the same `sharedMailbox` (or alias `email`) here** — message IDs are mailbox-scoped, and reading a shared-mailbox id without it fails with 404 ErrorInvalidMailboxItemId.',
+      'Read a single email by id (read-only). Returns subject, from/to/cc, date and the body as plain text (HTML tags removed, so formatting and link addresses are lost): up to 2,000 characters by default, up to 40,000 with `outputVerbosity: full`; a cut body ends with a note on how to get the rest. With `headersMode: true`: returns RFC-822 forensic headers in place of the body (DKIM, SPF, DMARC, Received chain, Message-ID, Authentication-Results) — `importantOnly: true` for the security-relevant subset, `groupByType: true` for a category-bucketed view, `raw: true` for JSON. With `includeHeaders: true` (non-headers-mode): adds basic headers alongside the body. **If the id came from a shared/delegated mailbox (e.g. via `search-emails` or `access-shared-mailbox` with `sharedMailbox` set), you MUST pass the same `sharedMailbox` (or alias `email`) here** — message IDs are mailbox-scoped, and reading a shared-mailbox id without it fails with 404 ErrorInvalidMailboxItemId.',
     ...toolMetadata('read-email', 'Read Email'),
     inputSchema: {
       type: 'object',
@@ -593,11 +593,12 @@ const emailTools = [
             },
             from: {
               type: 'string',
-              description: 'Sender address or name to match (Graph `$search`)',
+              description:
+                'Sender to match: a full address (exact), a domain such as `example.com`, or a name or other text matched against the sender name and address',
             },
             subject: {
               type: 'string',
-              description: 'Subject text to match (Graph `$search`)',
+              description: 'Text the subject must contain',
             },
             receivedAfter: {
               type: 'string',
@@ -612,7 +613,7 @@ const emailTools = [
             maxResults: {
               type: 'number',
               description:
-                'Most messages to export (default: 25, max: 100 per call). Newest first, or by relevance when `from`/`subject` is set.',
+                'Most messages to export (default: 25, max: 100 per call), newest first.',
             },
           },
           description:

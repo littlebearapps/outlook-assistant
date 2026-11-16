@@ -8,13 +8,13 @@ Shared-mailbox support is work/school only and off by default. The user (not you
 
 | `OUTLOOK_SHARED_MAILBOX`     | Allows                                                                      |
 | ---------------------------- | --------------------------------------------------------------------------- |
-| unset (default)              | Nothing beyond `access-shared-mailbox` on well-known folders or a folder ID |
+| unset (default)              | Nothing: every call for another mailbox is refused                          |
 | `read`                       | Search, read, export and attachments in shared mailboxes                    |
 | `true` (or `readwrite`, `1`) | Also organise them: move, flag, categorise, mark read, manage folders       |
 
 After changing it, the user restarts the server and you run `auth action=authenticate force=true`, so the new token carries the shared scopes. A token refresh never adds them on its own. `auth action=about` (Shared mailboxes row) shows whether each shared scope was actually granted. If the organisation blocks consent, an administrator has to grant it; that is final for you.
 
-When the setting is off, any `sharedMailbox` parameter is refused with these steps. Relay them; don't retry the call without `sharedMailbox` on the same ID.
+When the setting is off, any `sharedMailbox` parameter, and every `access-shared-mailbox` call, is refused with these steps before any request is made. Relay them; don't retry the call without `sharedMailbox` on the same ID.
 
 ## Which tools accept it
 

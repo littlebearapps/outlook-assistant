@@ -8,7 +8,7 @@ Read this when you are listing, creating, changing, declining, cancelling or del
 | -------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
 | `create-event` with `attendees`  | Every attendee gets an invitation on save                                                           | Subject, time and zone, every attendee, external count |
 | `create-event` without attendees | Nobody                                                                                              | Subject and time                                       |
-| `manage-event` action=`update`   | As organiser, attendees are sent the change                                                         | The fields that change, and who sees them              |
+| `manage-event` action=`update`   | As organiser, attendees are sent the change; anyone removed (people or rooms) gets a cancellation | The fields that change, and who sees them              |
 | `manage-event` action=`decline`  | The organiser, unless `sendResponse: false`                                                         | Whether to tell the organiser, and the `comment`       |
 | `manage-event` action=`cancel`   | Every attendee gets a cancellation (organiser only)                                                 | The attendee list and the `comment`                    |
 | `manage-event` action=`delete`   | As organiser of a meeting with attendees, they get a cancellation with no message; otherwise nobody | That it can't be undone, and who is emailed            |
@@ -67,7 +67,7 @@ All of these are outward. Get the user's go-ahead with exact details (hard rules
 
 ## Meeting rooms
 
-`find-meeting-rooms` is work/school only and needs room-lookup permission granted by an admin; personal accounts get an empty list. Add a room to `attendees` as `{email, type: "resource"}`. See [accounts-personal-vs-m365](accounts-personal-vs-m365.md).
+`find-meeting-rooms` is work/school only; on a personal account it returns an error saying so. Without an admin-granted `Place.Read.All` it lists names and addresses only (beta `findRooms`, first 100 rooms) and says so; `building`, `floor` and `capacity` aren't applied then. Add a room to `attendees` as `{email, type: "resource"}`. See [accounts-personal-vs-m365](accounts-personal-vs-m365.md).
 
 ## Execute once
 

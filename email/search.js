@@ -16,10 +16,16 @@ const {
 const { getEmailFields } = require('../utils/field-presets');
 const {
   escapeODataString,
-  escapeSearchPhrase,
   quoteSearchPhrase,
+  isWholeQuotedSearch,
+  quoteSearchExpression,
 } = require('../utils/odata-helpers');
 const { toolError, authRequiredError } = require('../utils/tool-error');
+const {
+  classifyFailure,
+  failureLabel,
+  forbiddenError,
+} = require('../utils/graph-failure');
 const { log } = require('../utils/logger');
 
 // Upper bound on how many recent messages the client-side fallback scans
@@ -96,8 +102,15 @@ async function handleSearchEmails(args) {
   // `undefined` on every row and drop the entire result set.
   const searchTermCount = [query, from, to, subject].filter(Boolean).length;
   const needsMatcherFields = Boolean(to) || Boolean(query);
+  // A `searchExpression` needs it as well: a translated `to:` term is matched
+  // locally wherever Graph rejects the recipient filter, and the lean preset
+  // also left `hasAttachments` out, so its results never showed the
+  // attachment marker. (#333)
   const selectFields = getEmailFields(
-    verbosity === VERBOSITY.FULL || searchTermCount > 1 || needsMatcherFields
+    verbosity === VERBOSITY.FULL ||
+      searchTermCount > 1 ||
+      needsMatcherFields ||
+      Boolean(kqlQuery)
       ? 'search'
       : 'list'
   );
@@ -135,17 +148,44 @@ async function handleSearchEmails(args) {
       response,
       scopeLabel,
       verbosity,
-      searchAllFolders
+      searchAllFolders,
+      requestedCount
     );
   } catch (error) {
     // Handle authentication errors
     if (error.message === 'Authentication required') {
       return authRequiredError();
     }
+    const abort = error instanceof SearchAbort ? error : null;
+    const cause = abort?.cause || error;
+    const kind = abort?.kind || classifyFailure(error);
+    if (kind === 'auth') return authRequiredError();
+    if (kind === 'forbidden') return forbiddenError(cause, sharedMailbox);
+    if (kind === 'unfilterable') return unfilterableError(abort);
 
     // General error response
     return toolError(`Error searching emails: ${error.message}`);
   }
+}
+
+/**
+ * Only date or boolean filters were given and the one request that applies
+ * them did not succeed. Listing recent mail without them would present
+ * unfiltered mail as a filtered result, so say what happened.
+ */
+function unfilterableError(abort) {
+  const filters = listParams(abort.filters);
+  const why =
+    abort.cause && classifyFailure(abort.cause) === 'refusal'
+      ? `Microsoft Graph refused the request (${failureLabel(abort.cause)})`
+      : `the request to Microsoft Graph failed (${abort.cause ? failureLabel(abort.cause) : 'no response'})`;
+  return toolError(
+    `The search could not be completed: ${why}, so ${filters} could not be applied. No results are shown, because recent mail without ${abort.filters.length === 1 ? 'that filter' : 'those filters'} would not be what was asked for.`,
+    {
+      nextStep:
+        'Run the search again. If it keeps failing, add `from` or `subject`, which use a different request.',
+    }
+  );
 }
 
 /** Field prefixes a `searchExpression` can be translated into OData filters. */
@@ -239,7 +279,13 @@ async function retryFieldScopedExpression(ctx) {
     searchAttempts,
   } = ctx;
 
-  const translated = parseFieldScopedExpression(trimmedKql);
+  // A caller who already quoted the whole expression gets the same retry as
+  // one who didn't: translate what is inside the quotes. (#333)
+  const translated = parseFieldScopedExpression(
+    isWholeQuotedSearch(trimmedKql)
+      ? trimmedKql.slice(1, -1).replace(/\\(.)/g, '$1')
+      : trimmedKql
+  );
   if (!translated) return null;
 
   log.debug(
@@ -294,11 +340,61 @@ async function progressiveSearch(
   maxCount,
   selectFields
 ) {
-  // Track search strategies attempted
-  const searchAttempts = [];
   // Populated by the client-side fallback with its scan coverage so the final
   // no-results response can still disclose whether the scan was bounded. (#169)
   const scanState = {};
+  const response = await runSearchLadder(
+    endpoint,
+    accessToken,
+    searchTerms,
+    filterTerms,
+    maxCount,
+    selectFields,
+    scanState
+  );
+  let result = response;
+  // A truncated `to` scan was held back while a later step ran: return the
+  // scan's matches if that step found nothing, otherwise both sets together.
+  const scan = scanState.pendingScan;
+  if (scan && !(response?.value?.length > 0)) {
+    result = scan;
+  } else if (scan) {
+    const merged = newestFirstUnique([...response.value, ...scan.value]);
+    response.value = merged.slice(0, maxCount);
+    if (merged.length > maxCount || scan.hasMore) response.hasMore = true;
+    Object.assign(response._searchInfo, {
+      candidatesScanned: scan._searchInfo.candidatesScanned,
+      scanLimit: scan._searchInfo.scanLimit,
+      truncated: scan._searchInfo.truncated,
+    });
+  }
+  // `$search` was read to its paging limit without reaching the date window,
+  // and a later step answered: say so on whatever that step returned. (#261)
+  if (scanState.searchWindowUnreached && result?._searchInfo) {
+    result._searchInfo.searchWindowUnreached = scanState.searchWindowUnreached;
+  }
+  // A step failed without answering and a later one answered: its results
+  // are a fallback's, so mark them rather than present them as complete.
+  if (scanState.incomplete && result?._searchInfo) {
+    result._searchInfo.incomplete = true;
+    result._searchInfo.failure =
+      result._searchInfo.failure || scanState.failure;
+  }
+  return result;
+}
+
+/** The ladder itself; see progressiveSearch. */
+async function runSearchLadder(
+  endpoint,
+  accessToken,
+  searchTerms,
+  filterTerms,
+  maxCount,
+  selectFields,
+  scanState
+) {
+  // Track search strategies attempted
+  const searchAttempts = [];
 
   // 0. If raw KQL query provided, use it directly. The kqlQuery branch
   //    *terminates* — if Graph returns 0 (or throws), we surface that
@@ -306,30 +402,29 @@ async function progressiveSearch(
   //    would drop the user's filter and return unrelated recent emails
   //    with a misleading "combined-search" strategy line. (#169)
   if (searchTerms.kqlQuery) {
-    // Pass the user's KQL through as-is. The user is responsible for
-    // their own phrase quoting (e.g. `subject:"foo bar"`); we do NOT
-    // auto-wrap, which previously produced broken nested quotes like
-    // `"subject:"foo bar""` on Graph $search and silently returned
-    // recent unfiltered messages. (#169 V37-F-1)
+    // Graph reads KQL (operators, `received>=…`, mixed terms) only when the
+    // whole expression is one double-quoted string. Unquoted, a multi-word
+    // expression comes back as the newest mail, unfiltered, and a comparison
+    // is a 400. So the expression is sent quoted: as written when it already
+    // is one quoted string, otherwise wrapped with the caller's own `"` and
+    // `\` escaped (`body:"a b"` becomes `"body:\"a b\""`, never the broken
+    // `"body:"a b""` of #169 V37-F-1). (#333)
+    //
+    // The exception is an expression made only of `from:`/`to:`/`subject:`
+    // terms. It keeps the v3.14.1 sequence, as written first and then the
+    // OData filters, so its results (substring match, every folder searched,
+    // date and boolean params applied by the filters) do not change in a
+    // patch release. Which of the two should answer it waits on a Microsoft
+    // 365 test matrix (#334).
     const trimmedKql = searchTerms.kqlQuery.trim();
-    const alreadyQuoted =
-      trimmedKql.startsWith('"') && trimmedKql.endsWith('"');
-    const looksLikeExpression =
-      trimmedKql.includes(':') || /\s/.test(trimmedKql);
-    // Already-quoted phrases and KQL-looking expressions (field syntax
-    // or multi-word) are passed through as-is; only bare single tokens
-    // are wrapped so Graph treats them as phrase searches. The wrapped
-    // token's own `"` and `\` are escaped so they cannot end the phrase. (#251)
-    let kqlForSearch;
-    if (alreadyQuoted || looksLikeExpression) {
-      kqlForSearch = trimmedKql;
-    } else {
-      kqlForSearch = `"${escapeSearchPhrase(trimmedKql)}"`;
-    }
+    const kqlForSearch = parseFieldScopedExpression(trimmedKql)
+      ? trimmedKql
+      : quoteSearchExpression(trimmedKql);
 
-    // Graph rejects field-scoped expressions outright on personal accounts
-    // ("Syntax error: character ':' is not valid"), so the translated retry
-    // has to be reachable from the catch as well as the empty-result path.
+    // Graph rejects an unquoted field scope on personal accounts ("Syntax
+    // error: character ':' is not valid") and some tenants answer it with
+    // nothing, so the translated retry is reachable from the catch and from
+    // the empty path.
     const translationContext = {
       endpoint,
       accessToken,
@@ -370,6 +465,9 @@ async function progressiveSearch(
         filterTerms: filterTerms,
         kqlApplied: kqlForSearch,
         appliedTerms: ['kqlQuery'],
+        // `$search` carries no `$filter`, so the date/boolean window never
+        // reached Graph. Report it rather than imply it was applied. (#329)
+        ignoredFilters: activeWindowFilters(filterTerms),
         // noResults flips on the helpful "Suggestions" block in the
         // formatter — without it, an empty kqlQuery result would render
         // the bare "No emails found matching your search criteria" line
@@ -386,6 +484,7 @@ async function progressiveSearch(
           const retry = await retryFieldScopedExpression(translationContext);
           if (retry) return retry;
         } catch (retryError) {
+          if (retryError instanceof SearchAbort) throw retryError;
           log.debug(`Translated retry failed: ${retryError.message}`);
         }
       }
@@ -394,6 +493,10 @@ async function progressiveSearch(
       // would ignore kqlQuery and return unrelated emails.
       return response;
     } catch (error) {
+      // A 401 or 403 stops here; a failure (not a refusal) leaves the search
+      // incomplete whatever the translated retry finds.
+      noteFailure(scanState, error);
+      const refused = classifyFailure(error) === 'refusal';
       log.debug(`Raw KQL search failed: ${error.message}`);
       searchAttempts.push('raw-kql-error');
 
@@ -408,6 +511,7 @@ async function progressiveSearch(
           return retry;
         }
       } catch (retryError) {
+        if (retryError instanceof SearchAbort) throw retryError;
         log.debug(`Translated retry also failed: ${retryError.message}`);
       }
 
@@ -420,8 +524,19 @@ async function progressiveSearch(
           originalTerms: searchTerms,
           filterTerms: filterTerms,
           kqlError: error.message,
+          // Graph's own reason, when it rejected the expression itself.
+          // Nothing was searched then, so the result is incomplete too. (#340)
+          ...(refused && {
+            kqlRejected: graphErrorMessage(error),
+            incomplete: true,
+          }),
           appliedTerms: ['kqlQuery'],
+          ignoredFilters: activeWindowFilters(filterTerms),
           noResults: true,
+          ...(scanState.incomplete && {
+            incomplete: true,
+            failure: scanState.failure,
+          }),
         },
       };
     }
@@ -434,6 +549,12 @@ async function progressiveSearch(
     searchTerms.to ||
     searchTerms.subject;
 
+  // The combined step's request when it answered with no rows. A single-term
+  // step that would send exactly the same request (only `from` or `subject`
+  // given) can't find anything else, so it isn't sent again: on an empty
+  // result the sorted shape costs about 2 s per request (#364).
+  let emptyCombinedRequest = null;
+
   // 1. Try combined search (most specific) — skip if only boolean filters
   if (
     !hasSearchTerms &&
@@ -442,11 +563,24 @@ async function progressiveSearch(
     // Skip directly to boolean-only filter (step 3) — combined search is redundant
     log.debug('Only boolean filters provided, skipping combined search');
   } else {
+    // `query` with `from`/`to`/`subject`: Graph takes `$search` only on its
+    // own, so the structured terms go out as the `$filter` (the narrower set)
+    // and `query` is matched locally, rather than narrowing a `$search` page
+    // of mostly other senders. (#261 follow-up)
+    const structuredQuery =
+      Boolean(searchTerms.query) &&
+      Boolean(searchTerms.from || searchTerms.to || searchTerms.subject);
+    // Narrowing reads full pages, so a window costs few requests.
+    const narrows =
+      structuredQuery ||
+      (Boolean(searchTerms.query) &&
+        activeWindowFilters(filterTerms).length > 0);
+    const pageSize = narrows ? NARROW_PAGE_SIZE : Math.min(50, maxCount);
     try {
       const params = buildSearchParams(
-        searchTerms,
+        structuredQuery ? { ...searchTerms, query: undefined } : searchTerms,
         filterTerms,
-        Math.min(50, maxCount),
+        pageSize,
         selectFields
       );
       log.debug('Attempting combined search with params:', params);
@@ -457,9 +591,24 @@ async function progressiveSearch(
         'GET',
         endpoint,
         params,
-        maxCount
+        narrows ? pageSize : maxCount
       );
-      if (response.value && response.value.length > 0) {
+      const narrowCtx = {
+        accessToken,
+        pageSize,
+        maxCount,
+        searchTerms,
+        filterTerms,
+        searchAttempts,
+        scanState,
+      };
+      if (params.$search) {
+        const fromSearch = await narrowSearchPage(response, narrowCtx);
+        if (fromSearch) return fromSearch;
+      } else if (structuredQuery) {
+        const fromFilter = await narrowStructuredPage(response, narrowCtx);
+        if (fromFilter) return fromFilter;
+      } else if (response.value && response.value.length > 0) {
         log.debug(
           `Combined search successful: found ${response.value.length} results`
         );
@@ -472,8 +621,11 @@ async function progressiveSearch(
           appliedTerms: SEARCH_TERM_KEYS.filter((t) => searchTerms[t]),
         };
         return response;
+      } else if (!params.$search && !structuredQuery) {
+        emptyCombinedRequest = requestKey(params);
       }
     } catch (error) {
+      noteFailure(scanState, error);
       log.debug(`Combined search failed: ${error.message}`);
     }
   }
@@ -525,25 +677,110 @@ async function progressiveSearch(
           .join(' and ');
       }
 
-      // Add boolean filters if applicable
+      // Sorted, with `receivedDateTime` leading, so the newest matches come
+      // back: unsorted, Graph returns the oldest first. The recipient lambda
+      // stays unsorted (unverified where Graph accepts it). If Graph refuses
+      // the sort, the unsorted request this step always sent is retried, and
+      // its page is put in date order locally. (#331)
+      const termClause = simplifiedParams.$filter;
       addBooleanFilters(simplifiedParams, filterTerms);
+      const sortedParams =
+        term === 'to'
+          ? null
+          : {
+              ...simplifiedParams,
+              $filter: [
+                buildSearchParams({}, filterTerms, 1, selectFields).$filter ||
+                  receivedFirstClauses()[0],
+                termClause,
+              ].join(' and '),
+              $orderby: 'receivedDateTime desc',
+            };
 
-      const response = await callGraphAPIPaginated(
-        accessToken,
-        'GET',
-        endpoint,
-        simplifiedParams,
-        maxCount
-      );
+      const sameAsCombined =
+        emptyCombinedRequest !== null &&
+        requestKey(sortedParams || simplifiedParams) === emptyCombinedRequest;
+      if (sameAsCombined) {
+        log.debug(
+          `Search with only ${term} is the request combined-search already sent, with no results; not sending it again`
+        );
+      }
+      const response = sameAsCombined
+        ? { value: [] }
+        : await fetchSortedOrUnsorted(
+            accessToken,
+            endpoint,
+            sortedParams,
+            simplifiedParams,
+            maxCount
+          );
       if (response.value && response.value.length > 0) {
         // This $filter carried only `term`. Apply every other supplied search
         // term locally before returning — otherwise we hand back the
         // single-term superset while claiming the filter was applied. (#229)
-        const { matched, secondaryApplied } = applySecondarySearchTerms(
+        const narrowedPage = applySecondarySearchTerms(
           response.value,
           searchTerms,
           term
         );
+        const { secondaryApplied } = narrowedPage;
+        let { matched } = narrowedPage;
+        let examined = response.value.length;
+        let bothEnds = false;
+        // The sorted page is the newest matches, and the other terms are
+        // matched locally, so it can miss a match that sits in old mail.
+        // When Graph had more than this page, also read the unsorted page
+        // this step used to send (the oldest matches) and keep what passes
+        // from either end: one more request for the other end of the range.
+        // Not when the unsorted shape is what answered (that page already is
+        // the oldest matches), nor when the newest page fills `count`.
+        const oldestOnly = Boolean(response._unsortedPage);
+        if (
+          secondaryApplied.length > 0 &&
+          sortedParams &&
+          !oldestOnly &&
+          matched.length < maxCount &&
+          hadMore(response)
+        ) {
+          try {
+            // Ask for the oldest matches outright. Unsorted, Graph usually
+            // returns them, but not always: for the name-or-address `from`
+            // filter it returned recent mail, so the "other end" was read
+            // from the wrong place (#377). Only if Graph refuses the
+            // ascending sort is the unsorted page used, and it counts as the
+            // other end only when it really is older than the newest page.
+            let rows;
+            try {
+              const oldest = await callGraphAPIPaginated(
+                accessToken,
+                'GET',
+                endpoint,
+                { ...sortedParams, $orderby: 'receivedDateTime asc' },
+                maxCount
+              );
+              rows = oldest.value || [];
+              bothEnds = true;
+            } catch (ascError) {
+              if (classifyFailure(ascError) !== 'refusal') throw ascError;
+              log.debug('Ascending sort refused, reading the unsorted page');
+              const unsorted = await callGraphAPIPaginated(
+                accessToken,
+                'GET',
+                endpoint,
+                simplifiedParams,
+                maxCount
+              );
+              rows = unsorted.value || [];
+              bothEnds = isOlderPage(rows, response.value);
+            }
+            examined += rows.length;
+            const again = applySecondarySearchTerms(rows, searchTerms, term);
+            matched = newestFirstUnique([...matched, ...again.matched]);
+          } catch (oldestError) {
+            noteFailure(scanState, oldestError);
+            log.debug(`Unsorted ${term} page failed: ${oldestError.message}`);
+          }
+        }
         if (matched.length > 0) {
           const narrowing =
             secondaryApplied.length > 0
@@ -552,7 +789,16 @@ async function progressiveSearch(
           log.debug(
             `Search with ${term} successful: found ${matched.length} results${narrowing}`
           );
-          narrowResponse(response, matched);
+          narrowResponse(response, matched.slice(0, maxCount));
+          if (bothEnds) {
+            // Whatever lies between the two pages was not read.
+            response.hasMore = true;
+            response._partialNarrowing = { examined, bothEnds: true };
+          } else if (examined > response.value.length) {
+            // A second page was read, but not provably the oldest.
+            response.hasMore = true;
+            response._partialNarrowing = { examined };
+          }
           response._searchInfo = {
             attemptsCount: searchAttempts.length,
             strategies: searchAttempts,
@@ -565,12 +811,19 @@ async function progressiveSearch(
           };
           return response;
         }
-        recordNarrowingMiss(scanState, response.value.length);
+        recordNarrowingMiss(
+          scanState,
+          examined,
+          hadMore(response),
+          bothEnds,
+          oldestOnly
+        );
         log.debug(
           `Search with ${term} found ${response.value.length} results, but none also satisfied ${secondaryApplied.join(', ')} — continuing`
         );
       }
     } catch (error) {
+      noteFailure(scanState, error);
       log.debug(`Search with ${term} failed: ${error.message}`);
       // Fall through to the client-side fallback below.
     }
@@ -580,7 +833,12 @@ async function progressiveSearch(
     // 'query' have a local matcher. Keeping this outside the server-side
     // try/catch prevents the double-scan/double-label a throw inside a
     // success-path fallback would otherwise cause. (#169)
-    if (term === 'to' || term === 'query') {
+    // The `query` scan would read the same candidates as a `to` scan that
+    // already ran and apply the same tests to them (each applies the other
+    // term locally), so it can't find anything new: skip it.
+    const scannedAlready =
+      term === 'query' && scanState.candidatesScanned !== undefined;
+    if ((term === 'to' || term === 'query') && !scannedAlready) {
       log.debug(
         `${term} unsatisfied server-side, trying client-side filtering`
       );
@@ -596,8 +854,27 @@ async function progressiveSearch(
           term,
           scanState
         );
-        if (fallback) return fallback;
+        if (fallback) {
+          // A scan that filled its budget is partial. If a server-side
+          // `subject` or `query` step can still run, it reaches further
+          // back than the scan did, so let it run and merge the two.
+          const moreSelectiveStepLeft =
+            term === 'to' && Boolean(searchTerms.subject || searchTerms.query);
+          if (!(fallback._searchInfo.truncated && moreSelectiveStepLeft)) {
+            return fallback;
+          }
+          scanState.pendingScan = {
+            ...fallback,
+            _searchInfo: {
+              ...fallback._searchInfo,
+              strategies: [...searchAttempts],
+              attemptsCount: searchAttempts.length,
+            },
+          };
+        }
       } catch (fallbackError) {
+        // A scan that stopped part-way has not checked the mailbox.
+        noteFailure(scanState, fallbackError);
         log.debug(
           `Client-side ${term} fallback also failed: ${fallbackError.message}`
         );
@@ -620,13 +897,17 @@ async function progressiveSearch(
         $select: selectFields,
       };
 
-      // Add the boolean + date filters
-      addBooleanFilters(filterOnlyParams, filterTerms);
-
-      // Only add $orderby if no $filter (they can conflict on personal accounts)
-      if (!filterOnlyParams.$filter) {
-        filterOnlyParams.$orderby = 'receivedDateTime desc';
-      }
+      // Sorted, with `receivedDateTime` leading the filter as Graph requires.
+      // Unsorted, Graph returned the oldest matches first, so a search with
+      // more matches than `count` showed the oldest ones. If Graph refuses the
+      // sort, the catch below retries the old unsorted shape. (#331)
+      filterOnlyParams.$filter = buildSearchParams(
+        {},
+        filterTerms,
+        filterOnlyParams.$top,
+        selectFields
+      ).$filter;
+      filterOnlyParams.$orderby = 'receivedDateTime desc';
 
       const response = await callGraphAPIPaginated(
         accessToken,
@@ -660,11 +941,13 @@ async function progressiveSearch(
         };
         return response;
       }
-      recordNarrowingMiss(scanState, response.value.length);
+      recordNarrowingMiss(scanState, response.value.length, hadMore(response));
       log.debug(
         `Boolean filter search found ${response.value.length} results, but none satisfied ${secondaryApplied.join(', ')} — continuing`
       );
     } catch (error) {
+      scanState.lastStepError = error;
+      noteFailure(scanState, error);
       log.debug(`Boolean filter search failed: ${error.message}`);
       // Retry without $orderby if it was the issue
       if (error.message && error.message.includes('InefficientFilter')) {
@@ -675,12 +958,16 @@ async function progressiveSearch(
             $select: selectFields,
           };
           addBooleanFilters(retryParams, filterTerms);
-          const response = await callGraphAPIPaginated(
-            accessToken,
-            'GET',
-            endpoint,
-            retryParams,
-            maxCount
+          // Graph returns this page in its own order, so it is put in date
+          // order here, as the single-term steps do. (#342)
+          const response = orderUnsortedPage(
+            await callGraphAPIPaginated(
+              accessToken,
+              'GET',
+              endpoint,
+              retryParams,
+              maxCount
+            )
           );
           const { matched, secondaryApplied } = applySecondarySearchTerms(
             response.value || [],
@@ -705,11 +992,19 @@ async function progressiveSearch(
             };
             return response;
           }
-          recordNarrowingMiss(scanState, response.value.length);
+          recordNarrowingMiss(
+            scanState,
+            response.value.length,
+            hadMore(response),
+            false,
+            true
+          );
           log.debug(
             `Boolean filter retry found ${response.value.length} results, but none satisfied ${secondaryApplied.join(', ')} — continuing`
           );
         } catch (retryError) {
+          scanState.lastStepError = retryError;
+          noteFailure(scanState, retryError);
           log.debug(`Boolean filter retry also failed: ${retryError.message}`);
         }
       }
@@ -750,9 +1045,29 @@ async function progressiveSearch(
         // the winning filter returned, so say how much that was. (#229)
         ...(scanState.narrowedCandidates !== undefined && {
           narrowedCandidates: scanState.narrowedCandidates,
+          ...(scanState.narrowedBothEnds && { narrowedBothEnds: true }),
+          ...(scanState.narrowedOldestOnly &&
+            !scanState.narrowedBothEnds && { narrowedOldestOnly: true }),
+        }),
+        // A step failed without answering (a 5xx, a timeout), so nothing
+        // here proves the mailbox holds no match.
+        ...(scanState.incomplete && {
+          incomplete: true,
+          failure: scanState.failure,
         }),
       },
     };
+  }
+
+  // Only date or boolean filters were given, and the step that applies them
+  // did not answer (it returns even when empty). Recent mail without them
+  // would be presented as a filtered result, so stop with an error.
+  if (hasBooleanFilters || hasDateFilters) {
+    throw new SearchAbort(
+      'unfilterable',
+      scanState.lastStepError,
+      activeWindowFilters(filterTerms)
+    );
   }
 
   // No search filters specified — return recent emails (list mode)
@@ -781,6 +1096,83 @@ async function progressiveSearch(
     filterTerms: filterTerms,
   };
 
+  return response;
+}
+
+/**
+ * Run `sorted` (a date-first `$filter` with `$orderby`); if Graph refuses the
+ * sort, run `unsorted` and order that page newest first locally.
+ * @param {object|null} sorted - Sorted params, or null to go straight to unsorted
+ */
+/**
+ * Whether every row of `page` is older than every row of `newest`, i.e. the
+ * page really is the other end of a newest-first read (#377).
+ * @param {Array} page
+ * @param {Array} newest
+ * @returns {boolean}
+ */
+function isOlderPage(page, newest) {
+  if (!page.length || !newest?.length) return false;
+  const time = (m) => Date.parse(m.receivedDateTime) || 0;
+  const oldestOfNewest = Math.min(...newest.map(time));
+  return page.every((m) => time(m) < oldestOfNewest);
+}
+
+/**
+ * A request's parameters as a comparable string, key order ignored (#364).
+ * @param {object} params - Graph query parameters
+ * @returns {string}
+ */
+function requestKey(params) {
+  return JSON.stringify(
+    Object.keys(params)
+      .sort()
+      .map((k) => [k, params[k]])
+  );
+}
+
+async function fetchSortedOrUnsorted(
+  accessToken,
+  endpoint,
+  sorted,
+  unsorted,
+  maxCount
+) {
+  if (sorted) {
+    try {
+      return await callGraphAPIPaginated(
+        accessToken,
+        'GET',
+        endpoint,
+        sorted,
+        maxCount
+      );
+    } catch (error) {
+      if (classifyFailure(error) !== 'refusal') throw error;
+      log.debug('Sorted filter refused, retrying unsorted');
+    }
+  }
+  const response = await callGraphAPIPaginated(
+    accessToken,
+    'GET',
+    endpoint,
+    unsorted,
+    maxCount
+  );
+  return sorted ? orderUnsortedPage(response) : response;
+}
+
+/**
+ * Put the page Graph returned for an unsorted request in date order, newest
+ * first, and mark it: it is whichever matches Graph chose to return (usually
+ * its oldest), not the newest, and the advice in the result has to say so.
+ */
+function orderUnsortedPage(response) {
+  if (Array.isArray(response?.value)) {
+    const time = (m) => Date.parse(m.receivedDateTime) || 0;
+    response.value = [...response.value].sort((a, b) => time(b) - time(a));
+    response._unsortedPage = true;
+  }
   return response;
 }
 
@@ -814,7 +1206,12 @@ function buildFromFilter(val) {
   } else if (type === 'email') {
     return `from/emailAddress/address eq '${escapeODataString(val)}'`;
   }
-  return `contains(from/emailAddress/name, '${escapeODataString(val)}')`;
+  // No `@` and no `.`: a display name, or a bare domain label such as
+  // `examplecorp`. Match either field; a label never appears in the display
+  // name, so a name-only match missed that sender's mail entirely. The `or`
+  // is parenthesised because callers AND this onto other conditions. (#328)
+  const escaped = escapeODataString(val);
+  return `(contains(from/emailAddress/name, '${escaped}') or contains(from/emailAddress/address, '${escaped}'))`;
 }
 
 /**
@@ -835,9 +1232,12 @@ function buildToFilter(val) {
       val
     )}')`;
   }
-  return `toRecipients/any(r: contains(r/emailAddress/name, '${escapeODataString(
-    val
-  )}'))`;
+  // No `@` and no `.`: a display name, or a bare domain label such as
+  // `examplecorp`. Match either field of the same recipient, as
+  // buildFromFilter does for the sender (#328) and filterToClientSide does
+  // locally; the `or` sits inside the lambda, so it needs no parentheses. (#332)
+  const escaped = escapeODataString(val);
+  return `toRecipients/any(r: contains(r/emailAddress/name, '${escaped}') or contains(r/emailAddress/address, '${escaped}'))`;
 }
 
 /**
@@ -935,8 +1335,10 @@ function filterFromClientSide(messages, fromValue) {
   }
 
   const needle = fromValue.toLowerCase();
-  return messages.filter((m) =>
-    (m.from?.emailAddress?.name || '').toLowerCase().includes(needle)
+  return messages.filter(
+    (m) =>
+      (m.from?.emailAddress?.name || '').toLowerCase().includes(needle) ||
+      (m.from?.emailAddress?.address || '').toLowerCase().includes(needle)
   );
 }
 
@@ -1000,13 +1402,179 @@ const CLIENT_SIDE_TERM_MATCHERS = {
  * @param {Array} matched - The rows that survived narrowing
  */
 function narrowResponse(response, matched) {
-  const dropped = (response.value || []).length !== matched.length;
+  const examined = (response.value || []).length;
+  const dropped = examined !== matched.length;
   response.value = matched;
   if (dropped) {
+    const more = Boolean(response.hasMore || response['@odata.nextLink']);
     delete response['@odata.count'];
     delete response['@odata.nextLink'];
     delete response.hasMore;
+    // Rows beyond this page were never checked, so more matches may exist:
+    // say so rather than present the survivors as the whole answer.
+    // (#261 follow-up)
+    if (more) {
+      response.hasMore = true;
+      response._partialNarrowing = { examined };
+    }
   }
+}
+
+/** Page size a narrowing search requests, so a window costs few requests. */
+const NARROW_PAGE_SIZE = 50;
+
+/** The most results one search-emails call returns. */
+const MAX_COUNT = 50;
+
+/**
+ * Most messages a narrowing search reads (five full pages) before it stops
+ * and reports partial coverage. (#261 follow-up)
+ */
+const NARROW_SCAN_LIMIT = 250;
+
+/**
+ * Read pages from a first response, keeping the rows `narrow` accepts, until
+ * `maxCount` are kept, Graph has no more, NARROW_SCAN_LIMIT rows have been
+ * read, or (for newest-first `$search` results) a page ends before
+ * `stopBefore`, past which nothing can match. A failed follow-up page keeps
+ * what was found and reports that more may exist.
+ *
+ * @returns {Promise<{kept: Array, scanned: number, pages: number, more: boolean}>}
+ */
+async function collectNarrowed(first, narrow, ctx, stopBefore) {
+  let rows = first.value || [];
+  let scanned = rows.length;
+  let pages = 1;
+  let failed = false;
+  const kept = narrow(rows);
+  let nextLink = first['@odata.nextLink'];
+  let more = Boolean(first.hasMore || nextLink);
+  const pastWindow = (page) =>
+    stopBefore !== undefined &&
+    page.length > 0 &&
+    (Date.parse(page[page.length - 1].receivedDateTime) || 0) < stopBefore;
+
+  while (
+    kept.length < ctx.maxCount &&
+    nextLink &&
+    scanned < NARROW_SCAN_LIMIT &&
+    !pastWindow(rows)
+  ) {
+    let next;
+    try {
+      next = await callGraphAPIPaginated(
+        ctx.accessToken,
+        'GET',
+        nextLink,
+        {},
+        ctx.pageSize
+      );
+    } catch (error) {
+      // The read stopped early: that is a failure, not the end of the stream.
+      noteFailure(ctx.scanState, error);
+      failed = true;
+      log.debug(`Narrowing stopped on a failed page: ${error.message}`);
+      break;
+    }
+    rows = next?.value || [];
+    scanned += rows.length;
+    pages += 1;
+    kept.push(...narrow(rows));
+    nextLink = next?.['@odata.nextLink'];
+    more = Boolean(next?.hasMore || nextLink);
+  }
+  // `$search` is newest first: rows past the window's start can't match.
+  const crossed = pastWindow(rows);
+  if (crossed) more = false;
+  return { kept, scanned, pages, more, crossed, failed };
+}
+
+/**
+ * Put the narrowed rows on the response: newest first when `sort`, cut to
+ * `maxCount`, with `hasMore` and a partial-coverage marker when rows were
+ * dropped and Graph had more to read. (#261 follow-up)
+ */
+function finishNarrowed(response, { kept, scanned, more }, maxCount, sort) {
+  const time = (m) => Date.parse(m.receivedDateTime) || 0;
+  const ordered = sort ? [...kept].sort((a, b) => time(b) - time(a)) : kept;
+  const hasMore = more || ordered.length > maxCount;
+  response.value = ordered.slice(0, maxCount);
+  delete response['@odata.count'];
+  delete response['@odata.nextLink'];
+  delete response.hasMore;
+  delete response._partialNarrowing;
+  if (hasMore) {
+    response.hasMore = true;
+    if (scanned > kept.length) {
+      response._partialNarrowing = {
+        examined: scanned,
+        capped: scanned >= NARROW_SCAN_LIMIT,
+      };
+    }
+  }
+}
+
+/** Graph's `error.message` from a failed call, trimmed; '' when there is none. */
+function graphErrorMessage(error) {
+  const text = String(error?.message || '');
+  const match = /"message"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(text);
+  return (match ? match[1].replace(/\\(.)/g, '$1') : '').slice(0, 300);
+}
+
+/** A failure the ladder must not absorb: the handler turns it into a tool error. */
+class SearchAbort extends Error {
+  /**
+   * @param {'auth'|'forbidden'|'unfilterable'} kind
+   * @param {Error} [cause]
+   * @param {string[]} [filters] - for `unfilterable`: the filters left unapplied
+   */
+  constructor(kind, cause, filters = []) {
+    super(`search aborted: ${kind}`);
+    this.kind = kind;
+    this.cause = cause;
+    this.filters = filters;
+  }
+}
+
+/**
+ * Record what a failed step means. A refusal is an answer and is ignored. A
+ * 401 or 403 stops the search. Anything else marks the search incomplete, so
+ * a search that then finds nothing isn't reported as a search of the mailbox.
+ */
+function noteFailure(scanState, error) {
+  if (error instanceof SearchAbort) throw error;
+  const kind = classifyFailure(error);
+  if (kind === 'auth' || kind === 'forbidden') {
+    throw new SearchAbort(kind, error);
+  }
+  if (kind === 'failure' && scanState) {
+    scanState.incomplete = true;
+    scanState.failure = failureLabel(error);
+  }
+}
+
+/** Messages newest first, each ID once. */
+function newestFirstUnique(messages) {
+  const time = (m) => Date.parse(m.receivedDateTime) || 0;
+  const seen = new Set();
+  return messages
+    .filter((m) => (seen.has(m.id) ? false : seen.add(m.id)))
+    .sort((a, b) => time(b) - time(a));
+}
+
+/**
+ * Whether a narrowing read left rows unread that could still match. Not when
+ * it crossed `receivedAfter`: everything after that is outside the window,
+ * whichever page it was crossed on, the capped one included.
+ */
+function unreadBeyond(collected) {
+  if (collected.crossed) return false;
+  return Boolean(collected.more || collected.scanned >= NARROW_SCAN_LIMIT);
+}
+
+/** Whether Graph had rows beyond the page it returned. */
+function hadMore(response) {
+  return Boolean(response?.hasMore || response?.['@odata.nextLink']);
 }
 
 /**
@@ -1016,9 +1584,25 @@ function narrowResponse(response, matched) {
  *
  * @param {object} scanState - Side-channel carried to the no-results rung
  * @param {number} examined - How many rows the narrowing pass saw
+ * @param {boolean} [more] - Whether Graph had rows beyond those examined
+ * @param {boolean} [bothEnds] - The newest and the oldest pages were both read
+ * @param {boolean} [oldestOnly] - The page read was Graph's unsorted one
  */
-function recordNarrowingMiss(scanState, examined) {
-  if (!scanState) return;
+function recordNarrowingMiss(
+  scanState,
+  examined,
+  more = true,
+  bothEnds = false,
+  oldestOnly = false
+) {
+  // With no further page, the pass saw every message the server-side filter
+  // matched, so there is nothing "beyond that page" to warn about.
+  if (!scanState || !more) return;
+  // The newest and the oldest pages were both read: what's unread lies
+  // between them, which changes the advice.
+  if (bothEnds) scanState.narrowedBothEnds = true;
+  // Graph refused the sort, so the page read was its oldest matches.
+  if (oldestOnly) scanState.narrowedOldestOnly = true;
   scanState.narrowedCandidates = Math.max(
     scanState.narrowedCandidates || 0,
     examined
@@ -1036,6 +1620,175 @@ function applySecondarySearchTerms(messages, searchTerms, appliedTerm) {
   return { matched, secondaryApplied: secondary };
 }
 
+/** Date/boolean filters, in the order they are reported. */
+const WINDOW_FILTER_KEYS = [
+  'receivedAfter',
+  'receivedBefore',
+  'hasAttachments',
+  'unreadOnly',
+];
+
+/**
+ * The date/boolean filters the caller actually set. The booleans only count
+ * when `true`: `false` filters nothing, so it is never applied or dropped.
+ * @param {object} filterTerms - Filter terms
+ * @returns {string[]} - Keys in WINDOW_FILTER_KEYS order
+ */
+function activeWindowFilters(filterTerms) {
+  return WINDOW_FILTER_KEYS.filter((k) =>
+    k === 'hasAttachments' || k === 'unreadOnly'
+      ? filterTerms[k] === true
+      : Boolean(filterTerms[k])
+  );
+}
+
+/** `a`, `a` and `b`, `a`, `b` and `c` (backticked). */
+function listParams(keys) {
+  const quoted = keys.map((k) => `\`${k}\``);
+  return quoted.length > 1
+    ? `${quoted.slice(0, -1).join(', ')} and ${quoted[quoted.length - 1]}`
+    : quoted[0];
+}
+
+/**
+ * Say which filters an untranslated `searchExpression` left out. (#329)
+ * @param {string[]} keys - The ignored filter keys
+ * @returns {string}
+ */
+function ignoredFiltersNote(keys) {
+  const verb = keys.length === 1 ? 'was' : 'were';
+  return `${listParams(keys)} ${verb} not applied: \`searchExpression\` goes to Graph \`$search\`, which takes no date or boolean filters. To limit by date, put it in the expression, e.g. \`invoice AND received>=2026-01-01\``;
+}
+
+/**
+ * Finish the combined step's `$search` request. Graph accepts `$search` only
+ * on its own (#261), so the other search terms and the date/boolean window
+ * are applied here, to the page it returned, and the survivors are sorted
+ * newest first. Graph returns message `$search` results by sent date; the
+ * local sort by received date makes that order explicit.
+ *
+ * A window reads further pages (collectNarrowed) rather than narrowing one
+ * page and dropping the rest. (#261 follow-up)
+ *
+ * @returns {Promise<object|null>} - The narrowed response, or null to continue the ladder
+ */
+async function narrowSearchPage(response, ctx) {
+  const { searchTerms, filterTerms, searchAttempts, scanState } = ctx;
+  const secondaryApplied = SEARCH_TERM_KEYS.filter(
+    (t) => t !== 'query' && searchTerms[t]
+  );
+  const narrow = (rows) =>
+    applyBooleanDateFilters(
+      applySecondarySearchTerms(rows, searchTerms, 'query').matched,
+      filterTerms
+    );
+  const after = filterTerms.receivedAfter
+    ? Date.parse(filterTerms.receivedAfter)
+    : NaN;
+  // Graph returns `$search` results newest first by sent date; a message is
+  // received after it is sent, so once a page ends before `receivedAfter`,
+  // later pages hold nothing in the window.
+  const collected = await collectNarrowed(
+    response,
+    narrow,
+    ctx,
+    Number.isNaN(after) ? undefined : after
+  );
+  if (collected.kept.length === 0) {
+    if (collected.scanned > 0) {
+      recordNarrowingMiss(
+        scanState,
+        collected.scanned,
+        unreadBeyond(collected)
+      );
+    }
+    // Graph's `$search` stream is newest first and stops after a few hundred
+    // rows, so a window older than what was read can't be reached by paging.
+    // (Not when the read stopped because it had passed `receivedAfter`:
+    // `more` is false then.)
+    // Nor when a page failed: the read was cut short, which says nothing
+    // about where the window is.
+    if (
+      scanState &&
+      activeWindowFilters(filterTerms).length > 0 &&
+      !collected.failed &&
+      unreadBeyond(collected)
+    ) {
+      scanState.searchWindowUnreached = collected.scanned;
+    }
+    log.debug(
+      `$search returned ${collected.scanned} results, none passing the other filters — continuing`
+    );
+    return null;
+  }
+
+  finishNarrowed(response, collected, ctx.maxCount, true);
+  const localFilters = [
+    ...secondaryApplied,
+    ...activeWindowFilters(filterTerms),
+  ];
+  log.debug(
+    `$search successful: ${collected.kept.length} of ${collected.scanned} kept`
+  );
+  response._searchInfo = {
+    attemptsCount: searchAttempts.length,
+    strategies: searchAttempts,
+    originalTerms: searchTerms,
+    filterTerms,
+    appliedTerms: ['query', ...secondaryApplied],
+    ...(localFilters.length > 0 && { clientSideTerms: localFilters }),
+    orderedWithinPage: true,
+    searchPageSize: collected.scanned,
+    searchPages: collected.pages,
+  };
+  return response;
+}
+
+/**
+ * Finish the combined step for `query` with `from`/`to`/`subject`: Graph
+ * applied the structured terms and the window as `$filter`; `query` is
+ * matched here against subject, preview and sender, reading further pages
+ * until `count` match. (#261 follow-up)
+ *
+ * @returns {Promise<object|null>} - The narrowed response, or null to continue the ladder
+ */
+async function narrowStructuredPage(response, ctx) {
+  const { searchTerms, filterTerms, searchAttempts, scanState } = ctx;
+  const collected = await collectNarrowed(
+    response,
+    (rows) => filterQueryClientSide(rows, searchTerms.query),
+    ctx
+  );
+  if (collected.kept.length === 0) {
+    if (collected.scanned > 0) {
+      recordNarrowingMiss(
+        scanState,
+        collected.scanned,
+        unreadBeyond(collected)
+      );
+    }
+    log.debug(
+      `Combined $filter returned ${collected.scanned} results, none matching query — continuing`
+    );
+    return null;
+  }
+
+  finishNarrowed(response, collected, ctx.maxCount, false);
+  log.debug(
+    `Combined search successful: ${collected.kept.length} of ${collected.scanned} matched query`
+  );
+  response._searchInfo = {
+    attemptsCount: searchAttempts.length,
+    strategies: searchAttempts,
+    originalTerms: searchTerms,
+    filterTerms,
+    appliedTerms: SEARCH_TERM_KEYS.filter((t) => searchTerms[t]),
+    clientSideTerms: ['query'],
+    queryMatchedLocally: true,
+  };
+  return response;
+}
+
 /**
  * Fetch a window of recent messages for the client-side filtering fallback.
  * Uses the 'search' field preset (includes toRecipients and bodyPreview).
@@ -1049,20 +1802,60 @@ function applySecondarySearchTerms(messages, searchTerms, appliedTerm) {
  * @param {number} scanLimit - Max messages to scan
  * @returns {Promise<{messages: Array, candidatesScanned: number, truncated: boolean}>}
  */
-async function fetchRecentCandidates(accessToken, endpoint, scanLimit) {
+async function fetchRecentCandidates(
+  accessToken,
+  endpoint,
+  scanLimit,
+  filterTerms = {}
+) {
   const searchFields = getEmailFields('search');
   const params = {
     $top: Math.min(50, scanLimit),
     $select: searchFields,
     $orderby: 'receivedDateTime desc',
   };
-  const response = await callGraphAPIPaginated(
-    accessToken,
-    'GET',
-    endpoint,
-    params,
-    scanLimit
-  );
+  // Scan inside the caller's date window, not from today backwards: the
+  // budget is then spent on the newest messages the window allows, so mail
+  // older than the 500 most recent can be reached. `receivedDateTime` leads
+  // the filter, as the sort needs.
+  const window = {
+    receivedAfter: validDateOrEmpty(filterTerms.receivedAfter, 'receivedAfter'),
+    receivedBefore: validDateOrEmpty(
+      filterTerms.receivedBefore,
+      'receivedBefore'
+    ),
+  };
+  const windowed =
+    window.receivedAfter || window.receivedBefore
+      ? { ...params, $filter: receivedFirstClauses(window).join(' and ') }
+      : null;
+  let response;
+  if (windowed) {
+    try {
+      response = await callGraphAPIPaginated(
+        accessToken,
+        'GET',
+        endpoint,
+        windowed,
+        scanLimit
+      );
+    } catch (error) {
+      // A failure is a failure; only a refusal falls back to the old scan.
+      if (classifyFailure(error) !== 'refusal') throw error;
+      log.debug(
+        `Windowed scan refused, scanning recent mail: ${error.message}`
+      );
+    }
+  }
+  response =
+    response ||
+    (await callGraphAPIPaginated(
+      accessToken,
+      'GET',
+      endpoint,
+      params,
+      scanLimit
+    ));
   const messages = response.value || [];
   return {
     messages,
@@ -1133,7 +1926,12 @@ async function runClientSideFallback(
   scanState
 ) {
   const { messages, candidatesScanned, truncated } =
-    await fetchRecentCandidates(accessToken, endpoint, CLIENT_SCAN_LIMIT);
+    await fetchRecentCandidates(
+      accessToken,
+      endpoint,
+      CLIENT_SCAN_LIMIT,
+      filterTerms
+    );
   // Record scan coverage even when nothing matches, so the eventual
   // no-results response can still disclose that the scan was bounded. (#169)
   if (scanState) {
@@ -1165,6 +1963,7 @@ async function runClientSideFallback(
   );
   return {
     value: matched.slice(0, maxCount),
+    ...(matched.length > maxCount && { hasMore: true }),
     _searchInfo: {
       attemptsCount: searchAttempts.length,
       strategies: searchAttempts,
@@ -1177,6 +1976,58 @@ async function runClientSideFallback(
       truncated,
     },
   };
+}
+
+/** Lower bound that is true for every message; see receivedFirstClauses. */
+const EARLIEST_RECEIVED = '1900-01-01T00:00:00Z';
+
+/**
+ * The date window as `$filter` clauses, only for the bounds that were given.
+ * @param {{receivedAfter?: string, receivedBefore?: string}} window
+ * @returns {string[]}
+ */
+function receivedWindowClauses({ receivedAfter, receivedBefore } = {}) {
+  const clauses = [];
+  if (receivedAfter) {
+    clauses.push(
+      `receivedDateTime ge ${new Date(receivedAfter).toISOString()}`
+    );
+  }
+  if (receivedBefore) {
+    clauses.push(
+      `receivedDateTime le ${new Date(receivedBefore).toISOString()}`
+    );
+  }
+  return clauses;
+}
+
+/**
+ * The clauses that must open a `$filter` sent with
+ * `$orderby=receivedDateTime desc`. Graph allows the sort only when the sorted
+ * property leads the filter (otherwise 400 InefficientFilter), so without
+ * `receivedAfter` an always-true lower bound stands in. Shared by search-emails
+ * (#331) and the export search (#263). An invalid date throws a RangeError.
+ * @param {{receivedAfter?: string, receivedBefore?: string}} window
+ * @returns {string[]} - One or two clauses, `receivedDateTime ge …` first
+ */
+function receivedFirstClauses(window = {}) {
+  const clauses = receivedWindowClauses(window);
+  return window.receivedAfter
+    ? clauses
+    : [`receivedDateTime ge ${EARLIEST_RECEIVED}`, ...clauses];
+}
+
+/**
+ * A date the window helpers can take, or '' (logged) when it does not parse,
+ * so a bad value is left out of the request as it always has been here.
+ */
+function validDateOrEmpty(value, label) {
+  if (!value) return '';
+  if (Number.isNaN(new Date(value).getTime())) {
+    log.debug(`Invalid ${label} date: ${value}`);
+    return '';
+  }
+  return value;
 }
 
 /**
@@ -1195,13 +2046,19 @@ function buildSearchParams(searchTerms, filterTerms, count, selectFields) {
     $select: selectFields,
   };
 
-  // Track if we're using email address filters (which are incompatible with $orderby)
-  let usesEmailFilter = false;
-
-  // Handle search terms - use $search only for free-text query
+  // Free-text `query` goes out as `$search`, and alone: Graph rejects
+  // `$search` with `$orderby` (400 SearchWithOrderBy) and with `$filter`
+  // (400 SearchWithFilter). Sending either made this step fail on every
+  // query search, so `query` never reached `$search`. The caller applies the
+  // other terms and the date/boolean window to the returned page. (#261)
   if (searchTerms.query) {
     params.$search = quoteSearchPhrase(searchTerms.query);
+    return params;
   }
+
+  // Only the recipient lambda goes out without `$orderby`: personal accounts
+  // reject it outright, and the sorted form is unverified where it is accepted.
+  let usesRecipientFilter = false;
 
   // Build filter conditions array - use $filter for structured fields (more reliable)
   const filterConditions = [];
@@ -1214,18 +2071,15 @@ function buildSearchParams(searchTerms, filterTerms, count, selectFields) {
   }
 
   // Use $filter for from/to email addresses (much more reliable than $search)
-  // NOTE: $filter on email addresses is incompatible with $orderby - Graph API limitation
   if (searchTerms.from) {
-    usesEmailFilter = true;
     filterConditions.push(buildFromFilter(searchTerms.from));
   }
 
   if (searchTerms.to) {
-    usesEmailFilter = true;
+    usesRecipientFilter = true;
     filterConditions.push(buildToFilter(searchTerms.to));
   }
 
-  // Add boolean filters (these ARE compatible with $orderby)
   if (filterTerms.hasAttachments === true) {
     filterConditions.push('hasAttachments eq true');
   }
@@ -1234,28 +2088,29 @@ function buildSearchParams(searchTerms, filterTerms, count, selectFields) {
     filterConditions.push('isRead eq false');
   }
 
-  // Add date range filters
-  if (filterTerms.receivedAfter) {
-    try {
-      const afterDate = new Date(filterTerms.receivedAfter).toISOString();
-      filterConditions.push(`receivedDateTime ge ${afterDate}`);
-    } catch (_e) {
-      log.debug(`Invalid receivedAfter date: ${filterTerms.receivedAfter}`);
-    }
-  }
+  const window = {
+    receivedAfter: validDateOrEmpty(filterTerms.receivedAfter, 'receivedAfter'),
+    receivedBefore: validDateOrEmpty(
+      filterTerms.receivedBefore,
+      'receivedBefore'
+    ),
+  };
+  const hasWindow = Boolean(window.receivedAfter || window.receivedBefore);
 
-  if (filterTerms.receivedBefore) {
-    try {
-      const beforeDate = new Date(filterTerms.receivedBefore).toISOString();
-      filterConditions.push(`receivedDateTime le ${beforeDate}`);
-    } catch (_e) {
-      log.debug(`Invalid receivedBefore date: ${filterTerms.receivedBefore}`);
+  if (usesRecipientFilter) {
+    // Unsorted (`to`): the window follows the field clauses, as it always has.
+    if (hasWindow) {
+      filterConditions.push(...receivedWindowClauses(window));
     }
-  }
-
-  // Only add $orderby if we're NOT using email address filters
-  if (!usesEmailFilter) {
+  } else {
+    // Sorted. Graph takes `$orderby` next to a `$filter` only when the sorted
+    // property leads the filter, otherwise 400 InefficientFilter (which cost
+    // every `subject` search a failed request on personal accounts). A `from`
+    // filter is sorted too: unsorted, Graph returned its oldest matches. (#331)
     params.$orderby = 'receivedDateTime desc';
+    if (filterConditions.length > 0 || hasWindow) {
+      filterConditions.unshift(...receivedFirstClauses(window));
+    }
   }
 
   // Combine all filter conditions
@@ -1282,24 +2137,18 @@ function addBooleanFilters(params, filterTerms) {
     filterConditions.push('isRead eq false');
   }
 
-  // Add date range filters
-  if (filterTerms.receivedAfter) {
-    try {
-      const afterDate = new Date(filterTerms.receivedAfter).toISOString();
-      filterConditions.push(`receivedDateTime ge ${afterDate}`);
-    } catch (_e) {
-      log.debug(`Invalid receivedAfter date: ${filterTerms.receivedAfter}`);
-    }
-  }
-
-  if (filterTerms.receivedBefore) {
-    try {
-      const beforeDate = new Date(filterTerms.receivedBefore).toISOString();
-      filterConditions.push(`receivedDateTime le ${beforeDate}`);
-    } catch (_e) {
-      log.debug(`Invalid receivedBefore date: ${filterTerms.receivedBefore}`);
-    }
-  }
+  filterConditions.push(
+    ...receivedWindowClauses({
+      receivedAfter: validDateOrEmpty(
+        filterTerms.receivedAfter,
+        'receivedAfter'
+      ),
+      receivedBefore: validDateOrEmpty(
+        filterTerms.receivedBefore,
+        'receivedBefore'
+      ),
+    })
+  );
 
   // AND onto any $filter the caller already built — never replace it.
   //
@@ -1319,6 +2168,39 @@ function addBooleanFilters(params, filterTerms) {
 }
 
 /**
+ * Candidates are read newest first, so what a bounded read misses is older
+ * mail: the way to reach it is an earlier upper bound, not a lower one.
+ */
+function earlierBeforeAdvice(filterTerms = {}) {
+  return filterTerms.receivedBefore
+    ? 'set an earlier `receivedBefore`'
+    : 'set `receivedBefore`';
+}
+
+/**
+ * What to say when `$search` was read to its paging limit and none of it fell
+ * in the date window, so a subject-only step answered (or nothing did). (#261)
+ * @param {object} searchInfo - `_searchInfo` with `searchWindowUnreached` (rows read)
+ * @returns {string}
+ */
+function searchWindowNote(searchInfo) {
+  const read = searchInfo.searchWindowUnreached;
+  const window = searchInfo.filterTerms || {};
+  const day = (value) => new Date(value).toISOString().slice(0, 10);
+  const bounds = [
+    window.receivedAfter && `received>=${day(window.receivedAfter)}`,
+    window.receivedBefore && `received<=${day(window.receivedBefore)}`,
+    window.unreadOnly === true && 'isread:false',
+    window.hasAttachments === true && 'hasattachment:true',
+  ].filter(Boolean);
+  const example =
+    bounds.length > 0
+      ? ` To search bodies there, put the condition in a \`searchExpression\`, e.g. \`<words> AND ${bounds.join(' AND ')}\`.`
+      : '';
+  return `Graph \`$search\` returned its ${read} newest results and none fell inside the date window or passed the other filters, so the window lies beyond what \`$search\` paging can reach. Anything listed here comes from a filter-based fallback that matches \`query\` against the subject, newest first; a message that matches only in its body is not included.${example}`;
+}
+
+/**
  * Build no-results guidance from what the caller actually supplied and what the
  * progressive-search ladder actually attempted, rather than printing the same
  * four lines on every empty search. (#231)
@@ -1332,19 +2214,52 @@ function addBooleanFilters(params, filterTerms) {
  * @param {boolean} searchAllFolders - Whether the search already spanned all folders
  * @returns {string[]} - Ordered suggestion lines, without the leading bullet
  */
-function buildNoResultsSuggestions(searchInfo, searchAllFolders) {
+function buildNoResultsSuggestions(
+  searchInfo,
+  searchAllFolders,
+  folder = '',
+  countAtMax = false
+) {
   const filters = searchInfo.originalTerms || {};
   const strategies = searchInfo.strategies || [];
   const suggestions = [];
 
   // Scope — only worth suggesting when it isn't already what we just did.
-  if (searchAllFolders) {
+  // Say nothing in the mailbox matches only when every filter was checked
+  // server-side; a local pass over a bounded scan or one page is not proof
+  // of absence, and the notes below say how much was examined. (#328)
+  const partialCoverage = Boolean(
+    searchInfo.truncated ||
+    searchInfo.narrowedCandidates ||
+    searchInfo.incomplete
+  );
+  // A `searchExpression` answered by `$search` alone never reached Deleted
+  // Items or Junk Email, so it is not proof of absence either. (#333)
+  const answeredBySearchOnly =
+    Boolean(filters.kqlQuery) && !strategies.includes('raw-kql-translated');
+  if (searchInfo.kqlRejected !== undefined) {
+    // Graph refused the expression itself, so no mail was searched at all.
+    suggestions.push(
+      `Microsoft Graph rejected the \`searchExpression\`, so nothing was searched${searchInfo.kqlRejected ? `: ${searchInfo.kqlRejected}` : ''}. Check the KQL (operators are upper-case, phrases need their own quotes) and try again`
+    );
+  } else if (searchAllFolders && partialCoverage) {
+    suggestions.push(
+      'All folders were searched, but some filters could only be checked against part of the mailbox (see below), so a match may still exist'
+    );
+  } else if (searchAllFolders && answeredBySearchOnly) {
+    suggestions.push(
+      'Graph `$search` across all folders leaves out Deleted Items and Junk Email, so a match may still exist there (name the folder to search inside one)'
+    );
+  } else if (searchAllFolders) {
     suggestions.push(
       'All folders were already searched, so no message in this mailbox matches these filters'
     );
   } else {
+    const others = /^archive$/i.test(String(folder).trim())
+      ? 'including the Inbox and Junk Email'
+      : 'including Archive and Junk Email';
     suggestions.push(
-      'Try `searchAllFolders: true` to search across all folders, including Archive and Junk Email (mail from a new sender often lands in Junk)'
+      `Try \`searchAllFolders: true\` to search across all folders, ${others} (mail from a new sender often lands in Junk)`
     );
     suggestions.push(
       'Specify the correct folder if emails have been moved (use the `folders` tool to list folders)'
@@ -1361,7 +2276,7 @@ function buildNoResultsSuggestions(searchInfo, searchAllFolders) {
     if (searchInfo.candidatesScanned) {
       note += ` — ${searchInfo.candidatesScanned} recent messages examined`;
       if (searchInfo.truncated) {
-        note += `, hitting the ${searchInfo.scanLimit} scan limit, so older matches were not seen (narrow with \`receivedAfter\`)`;
+        note += `, hitting the ${searchInfo.scanLimit} scan limit, so older matches were not seen (${earlierBeforeAdvice(searchInfo.filterTerms)} to reach them)`;
       }
     }
     suggestions.push(note);
@@ -1371,20 +2286,44 @@ function buildNoResultsSuggestions(searchInfo, searchAllFolders) {
   // server-side filter returned — a much weaker basis for "none exists" than
   // the bounded client-side scan, so say so rather than implying otherwise.
   if (searchInfo.narrowedCandidates) {
+    const examined = `${searchInfo.narrowedCandidates} message${searchInfo.narrowedCandidates === 1 ? '' : 's'}`;
+    let narrowedNote;
+    if (searchInfo.narrowedBothEnds) {
+      narrowedNote = `The other filters were applied locally to ${examined} the server-side filter returned, the newest and the oldest, so a match between them would not have been seen — set \`receivedAfter\` and \`receivedBefore\` around the dates you expect`;
+    } else if (searchInfo.narrowedOldestOnly) {
+      narrowedNote = `The other filters were applied locally to the ${examined} the server-side filter returned, oldest first (Graph refused to sort them), so a newer match beyond that page would not have been seen — ${countAtMax ? '' : 'raise `count`, or '}set \`receivedAfter\``;
+    }
     suggestions.push(
-      `The other filters were applied locally to the ${searchInfo.narrowedCandidates} message${searchInfo.narrowedCandidates === 1 ? '' : 's'} the server-side filter returned, so a match beyond that page would not have been seen — raise \`count\`, or narrow with \`receivedAfter\``
+      narrowedNote ||
+        `The other filters were applied locally to the ${examined} the server-side filter returned, newest first, so an older match beyond that page would not have been seen — ${countAtMax ? '' : 'raise `count`, or '}${earlierBeforeAdvice(searchInfo.filterTerms)}`
     );
+  }
+
+  // Not for a rejected `searchExpression`: Graph answered, the first line
+  // says so, and running the same expression again would not help.
+  if (searchInfo.incomplete && searchInfo.kqlRejected === undefined) {
+    suggestions.push(
+      `A request to Microsoft Graph failed (${searchInfo.failure || 'no response'}), so not everything was checked — run the search again`
+    );
+  }
+
+  if (searchInfo.ignoredFilters?.length > 0) {
+    suggestions.push(ignoredFiltersNote(searchInfo.ignoredFilters));
+  }
+
+  if (searchInfo.searchWindowUnreached) {
+    suggestions.push(searchWindowNote(searchInfo));
   }
 
   if (filters.kqlQuery) {
     suggestions.push(
-      'Structured filters (`from`, `to`, `subject`) reach messages that `searchExpression` cannot on personal accounts'
+      '`searchExpression` is a Graph `$search`: it matches whole words or their beginnings. The structured filters (`from`, `to`, `subject`) match substrings'
     );
   }
 
   if (filters.query) {
     suggestions.push(
-      'Free-text `query` falls back to a subject match on personal accounts — try `subject` directly, or fewer words'
+      '`query` was tried as a Graph `$search` (subject, body and sender) and as a subject match — try fewer words, or `subject` directly'
     );
   }
 
@@ -1414,7 +2353,15 @@ function buildNoResultsSuggestions(searchInfo, searchAllFolders) {
  * @param {boolean} [searchAllFolders] - Whether the search spanned all folders
  * @returns {object} - MCP response object
  */
-function formatSearchResults(response, folder, verbosity, searchAllFolders) {
+function formatSearchResults(
+  response,
+  folder,
+  verbosity,
+  searchAllFolders,
+  requestedCount
+) {
+  // Advice to raise `count` is only useful below the maximum.
+  const countAtMax = requestedCount >= MAX_COUNT;
   // Build metadata
   const meta = {
     returned: (response.value || []).length,
@@ -1437,9 +2384,14 @@ function formatSearchResults(response, folder, verbosity, searchAllFolders) {
       (k) => response._searchInfo.originalTerms?.[k]
     );
     const appliedTerms = response._searchInfo.appliedTerms ?? suppliedTerms;
-    const droppedFilters = suppliedTerms
-      .filter((k) => !appliedTerms.includes(k))
-      .map((k) => FILTER_LABELS[k] || k);
+    const droppedFilters = [
+      ...suppliedTerms
+        .filter((k) => !appliedTerms.includes(k))
+        .map((k) => FILTER_LABELS[k] || k),
+      ...(response._searchInfo.ignoredFilters || []).map(
+        (k) => FILTER_LABELS[k] || k
+      ),
+    ];
 
     meta.searchMetadata = {
       strategiesAttempted: response._searchInfo.strategies,
@@ -1457,6 +2409,30 @@ function formatSearchResults(response, folder, verbosity, searchAllFolders) {
       // than something the caller has to take on trust. (#217)
       ...(response._searchInfo.kqlTranslatedTo && {
         kqlTranslatedTo: response._searchInfo.kqlTranslatedTo,
+      }),
+      // A `query` answered by `$search` is sorted newest first by us, within
+      // the page Graph returned, not across the whole mailbox. (#261)
+      ...(response._searchInfo.orderedWithinPage && {
+        orderedWithinPage: true,
+      }),
+      // Rows were dropped by local narrowing while Graph had more to read,
+      // so matches beyond those examined may exist. (#261 follow-up)
+      ...(response._partialNarrowing && {
+        narrowedCandidates: response._partialNarrowing.examined,
+        partialCoverage: true,
+      }),
+      ...(response._searchInfo.incomplete && {
+        incomplete: true,
+        partialCoverage: true,
+      }),
+      // Graph refused the sort, so the page is its unsorted one, put in date
+      // order locally: not necessarily the newest matches. (#342)
+      ...(response._unsortedPage && { sortRefused: true }),
+      // `$search` never reached the date window; a fallback step answered.
+      ...(response._searchInfo.searchWindowUnreached && {
+        partialCoverage: true,
+        searchWindowUnreached: true,
+        searchResultsRead: response._searchInfo.searchWindowUnreached,
       }),
       // Surface client-side scan coverage so callers can tell when a fallback
       // result may be incomplete (older matches beyond the scan budget). (#169)
@@ -1483,7 +2459,9 @@ function formatSearchResults(response, folder, verbosity, searchAllFolders) {
 
       const suggestions = buildNoResultsSuggestions(
         response._searchInfo,
-        searchAllFolders
+        searchAllFolders,
+        folder,
+        countAtMax
       );
 
       const bullets = suggestions.map((line) => `- ${line}`).join('\n');
@@ -1515,8 +2493,25 @@ function formatSearchResults(response, folder, verbosity, searchAllFolders) {
         '\n\n**Note**: No search filters were applied — showing recent emails.';
     } else if (strategy.startsWith('client-side-')) {
       searchNote = `\n\n_Search strategy: ${strategy} (filtered locally due to personal account API limitations)_`;
+    } else if (response._searchInfo.orderedWithinPage) {
+      const page = response._searchInfo.searchPageSize;
+      const local = response._searchInfo.clientSideTerms || [];
+      const filtered =
+        local.length > 0
+          ? `, filtered locally by ${local.map((k) => `\`${k}\``).join(', ')}`
+          : '';
+      const pages = response._searchInfo.searchPages || 1;
+      const span = pages > 1 ? `across ${pages} pages` : 'within that page';
+      searchNote = `\n\n_Search strategy: ${strategy} (Graph \`$search\` over subject, body and sender: ${page} message${page === 1 ? '' : 's'} returned${filtered}, sorted newest first ${span})_`;
+    } else if (response._searchInfo.queryMatchedLocally) {
+      searchNote = `\n\n_Search strategy: ${strategy} (\`from\`/\`to\`/\`subject\` and dates applied by Graph; \`query\` matched locally against subject, preview and sender)_`;
     } else {
       searchNote = `\n\n_Search strategy: ${strategy}_`;
+    }
+
+    const ignored = response._searchInfo.ignoredFilters || [];
+    if (ignored.length > 0) {
+      searchNote += `\n\n> **Not applied**: ${ignoredFiltersNote(ignored)}.`;
     }
 
     // A local scan that filled its budget did not see the whole mailbox, so
@@ -1524,6 +2519,25 @@ function formatSearchResults(response, folder, verbosity, searchAllFolders) {
     // says so only when the search returns nothing; a truncated scan that
     // DID match is exactly as incomplete and reads as authoritative. On a
     // large archive that silently caps historical searches.
+    if (response._searchInfo.incomplete) {
+      searchNote += `\n\n> **Partial coverage**: A request to Microsoft Graph failed (${response._searchInfo.failure || 'no response'}), so these results may be incomplete. Run the search again.`;
+    }
+    if (response._searchInfo.searchWindowUnreached) {
+      searchNote += `\n\n> **Partial coverage**: ${searchWindowNote(response._searchInfo)}`;
+    }
+    if (response._partialNarrowing) {
+      const examined = response._partialNarrowing.examined;
+      let next = 'Raise `count` (up to 50) to read further.';
+      if (response._partialNarrowing.capped) {
+        next = `A filtered search reads at most ${NARROW_SCAN_LIMIT} messages, so narrow it: add words to \`query\` or a date window.`;
+      } else if (countAtMax) {
+        next =
+          '`count` is already at its maximum of 50, so narrow the search: add a filter or a date window.';
+      }
+      searchNote += response._partialNarrowing.bothEnds
+        ? `\n\n> **Partial coverage**: these were filtered locally from ${examined} messages matching the server-side filter, the newest and the oldest. Other matches may exist between the two; set \`receivedAfter\` and \`receivedBefore\` around the dates you expect.`
+        : `\n\n> **Partial coverage**: these were filtered locally from the first ${examined} message${examined === 1 ? '' : 's'} Graph returned, and more were available beyond them, so other matches may exist. ${next}`;
+    }
     if (response._searchInfo.truncated) {
       const scanned = response._searchInfo.candidatesScanned;
       const limit = response._searchInfo.scanLimit;
@@ -1536,7 +2550,8 @@ function formatSearchResults(response, folder, verbosity, searchAllFolders) {
     response.value,
     `Search Results (${folder})`,
     verbosity,
-    meta
+    meta,
+    { countAtMax }
   );
 
   return {
@@ -1650,4 +2665,5 @@ module.exports = {
   filterQueryClientSide,
   filterFromClientSide,
   filterSubjectClientSide,
+  receivedFirstClauses,
 };

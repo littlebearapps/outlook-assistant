@@ -18,7 +18,8 @@ const {
 const { getEmailFields } = require('../utils/field-presets');
 const { resolveFolderPath } = require('./folder-utils');
 const { buildMailboxPrefix } = require('../utils/mailbox');
-const { quoteSearchPhrase } = require('../utils/odata-helpers');
+const { escapeODataString } = require('../utils/odata-helpers');
+const { buildFromFilter, receivedFirstClauses } = require('./search');
 const { safeAttachmentFilename } = require('./attachments');
 const {
   writeClaimedFile,
@@ -31,6 +32,7 @@ const {
   OutputPathError,
 } = require('../utils/safe-write');
 const { toolError, authRequiredError } = require('../utils/tool-error');
+const { accessError } = require('../utils/graph-failure');
 const { log } = require('../utils/logger');
 
 // Export format constants
@@ -133,6 +135,7 @@ async function handleExportEmail(args) {
     // Export based on format
     let content;
     let attachmentsSaved = [];
+    let attachmentOutcome = { skipped: [] };
 
     if (format === EXPORT_FORMATS.MIME || format === EXPORT_FORMATS.EML) {
       // MIME export - raw RFC822 format
@@ -193,13 +196,14 @@ async function handleExportEmail(args) {
 
     // Handle attachments
     if (includeAttachments && email.hasAttachments) {
-      attachmentsSaved = await saveAttachments(
+      attachmentOutcome = await saveAttachments(
         accessToken,
         emailId,
         path.dirname(finalPath),
         prefix,
         claimedPaths
       );
+      attachmentsSaved = attachmentOutcome.saved;
     }
 
     // Build response
@@ -220,6 +224,7 @@ async function handleExportEmail(args) {
         resultText += `- \`${att.filename}\` (${att.size.toLocaleString()} bytes)\n`;
       }
     }
+    resultText += attachmentProblemsText(attachmentOutcome);
 
     return {
       content: [
@@ -234,6 +239,12 @@ async function handleExportEmail(args) {
         format: format,
         sizeBytes: content.length,
         attachmentsSaved: attachmentsSaved.length,
+        ...(attachmentOutcome.error && {
+          attachmentsError: attachmentOutcome.error,
+        }),
+        ...(attachmentOutcome.skipped.length > 0 && {
+          attachmentsSkipped: attachmentOutcome.skipped,
+        }),
         emailId: emailId,
       },
     };
@@ -451,6 +462,30 @@ async function handleBatchExportEmails(args) {
       resultText += `\n> ${disambiguated.length} file name(s) were disambiguated with a numeric suffix — messages sharing a timestamp and subject, or names already present in the output directory. Nothing was overwritten.\n`;
     }
 
+    const attachmentsSaved = successful.reduce(
+      (sum, r) => sum + (r.attachments || 0),
+      0
+    );
+    const attachmentErrors = successful
+      .filter((r) => r.attachmentError)
+      .map((r) => ({ emailId: r.emailId, error: r.attachmentError }));
+    const attachmentsSkipped = successful.reduce(
+      (sum, r) => sum + (r.attachmentsSkipped || []).length,
+      0
+    );
+    if (includeAttachments) {
+      resultText += `| Attachments Saved | ${attachmentsSaved} |\n`;
+    }
+    if (attachmentErrors.length > 0) {
+      resultText += `\n> For ${attachmentErrors.length} message(s), some or all attachments were not saved (the messages themselves were exported). To get them, use the \`attachments\` tool:\n`;
+      for (const a of attachmentErrors.slice(0, 10)) {
+        resultText += `> - ID \`${a.emailId}\`: ${a.error}\n`;
+      }
+    }
+    if (attachmentsSkipped > 0) {
+      resultText += `\n> ${attachmentsSkipped} attachment(s) were not saved because they aren't files (a forwarded item or a cloud link).\n`;
+    }
+
     if (failed.length > 0) {
       resultText += `\n### Failed Exports\n\n`;
       for (const f of failed.slice(0, 10)) {
@@ -475,6 +510,8 @@ async function handleBatchExportEmails(args) {
         successful: successful.length,
         failed: failed.length,
         totalBytes: totalBytes,
+        ...(includeAttachments && { attachmentsSaved }),
+        ...(attachmentErrors.length > 0 && { attachmentErrors }),
         manifest,
       },
     };
@@ -482,6 +519,8 @@ async function handleBatchExportEmails(args) {
     if (error.message === 'Authentication required') {
       return authRequiredError();
     }
+    const denied = accessError(error, mailbox, 'export');
+    if (denied) return denied;
 
     return toolError(`Batch export failed: ${error.message}`);
   }
@@ -518,41 +557,31 @@ async function searchEmailsForExport(accessToken, query, mailbox = null) {
   const folder = query.folder || 'inbox';
   const maxResults = Math.min(query.maxResults || 25, 100);
 
-  // Build filter conditions
-  const filterParts = [];
-  if (query.receivedAfter) {
-    filterParts.push(
-      `receivedDateTime ge ${new Date(query.receivedAfter).toISOString()}`
-    );
+  // One `$filter`, built from the same predicates search-emails uses: `from`
+  // via buildFromFilter, `subject` via contains(). The old `$search` wrapped
+  // `from:x subject:y` in a single quoted phrase, so Graph matched that
+  // literal text rather than the two fields, and a date window added a
+  // `$filter` that Graph rejects next to `$search` (SearchWithFilter). (#263)
+  //
+  // `receivedDateTime` comes first: Graph allows `$orderby` only when the
+  // sorted property leads the filter (otherwise 400 InefficientFilter), so
+  // without `receivedAfter` an always-true lower bound stands in.
+  const filterParts = receivedFirstClauses(query);
+  if (query.from) {
+    filterParts.push(buildFromFilter(query.from));
   }
-  if (query.receivedBefore) {
+  if (query.subject) {
     filterParts.push(
-      `receivedDateTime le ${new Date(query.receivedBefore).toISOString()}`
+      `contains(subject, '${escapeODataString(query.subject)}')`
     );
   }
 
   const params = {
     $select: 'id',
     $top: maxResults,
+    $filter: filterParts.join(' and '),
     $orderby: 'receivedDateTime desc',
   };
-
-  if (filterParts.length > 0) {
-    params.$filter = filterParts.join(' and ');
-  }
-
-  // Add search for from/subject if provided
-  const searchParts = [];
-  if (query.from) {
-    searchParts.push(`from:${query.from}`);
-  }
-  if (query.subject) {
-    searchParts.push(`subject:${query.subject}`);
-  }
-  if (searchParts.length > 0) {
-    params.$search = quoteSearchPhrase(searchParts.join(' '));
-    delete params.$orderby; // Can't combine $search with $orderby
-  }
 
   // resolveFolderPath handles well-known names, custom/localized names, nested
   // paths, and raw IDs, scoped to the signed-in user or the shared mailbox.
@@ -663,16 +692,15 @@ async function exportSingleForBatch(
     );
 
     // Handle attachments if requested
-    let attachmentCount = 0;
+    let attachmentOutcome = { saved: [], skipped: [] };
     if (includeAttachments && email.hasAttachments) {
-      const saved = await saveAttachments(
+      attachmentOutcome = await saveAttachments(
         accessToken,
         emailId,
         outputDir,
         prefix,
         claimedPaths
       );
-      attachmentCount = saved.length;
     }
 
     return {
@@ -680,7 +708,11 @@ async function exportSingleForBatch(
       emailId: emailId,
       filePath: filePath,
       sizeBytes: content.length,
-      attachments: attachmentCount,
+      attachments: attachmentOutcome.saved.length,
+      attachmentsSkipped: attachmentOutcome.skipped,
+      ...(attachmentOutcome.error && {
+        attachmentError: attachmentOutcome.error,
+      }),
     };
   } catch (error) {
     return {
@@ -697,6 +729,10 @@ async function exportSingleForBatch(
  * @param {string} emailId
  * @param {string} outputDir
  * @param {string} [prefix] - Mailbox resource prefix (`me` or `users/{email}`)
+ * @returns {Promise<{saved: object[], skipped: string[], error?: string}>}
+ *   `skipped` names attachments that aren't files (forwarded items, cloud
+ *   links); `error` is set when the list couldn't be read or a file couldn't
+ *   be written (#365)
  */
 async function saveAttachments(
   accessToken,
@@ -706,20 +742,23 @@ async function saveAttachments(
   claimedPaths
 ) {
   const saved = [];
+  const skipped = [];
 
   try {
+    // No $select: `contentBytes` exists only on fileAttachment, and Graph
+    // rejects it on the base attachment type with a 400 (#365).
     const response = await callGraphAPI(
       accessToken,
       'GET',
-      `${prefix}/messages/${emailId}/attachments`,
-      null,
-      { $select: 'id,name,contentBytes,size,contentType' }
+      `${prefix}/messages/${emailId}/attachments`
     );
 
-    if (!response.value) return saved;
+    if (!response.value) return { saved, skipped };
 
     for (const att of response.value) {
-      if (att.contentBytes) {
+      if (!att.contentBytes) {
+        skipped.push(att.name || att.id || 'unnamed attachment');
+      } else {
         // The attachment name is sender-controlled (GHSA-755c-c45g-69rv):
         // reduce it to a safe basename. The per-message tag is derived from a
         // hash of the id, never the raw caller-supplied id, so it can't carry
@@ -743,9 +782,26 @@ async function saveAttachments(
     }
   } catch (error) {
     log.debug(`Failed to save attachments: ${error.message}`);
+    return { saved, skipped, error: error.message };
   }
 
-  return saved;
+  return { saved, skipped };
+}
+
+/**
+ * Markdown lines saying which attachments are missing from an export (#365).
+ * @param {{skipped: string[], error?: string}} outcome
+ * @returns {string} '' when every attachment was saved
+ */
+function attachmentProblemsText({ skipped = [], error } = {}) {
+  let text = '';
+  if (error) {
+    text += `\n> Some or all attachments were not saved: ${error}. The message itself was exported. To get them, use the \`attachments\` tool.\n`;
+  }
+  if (skipped.length > 0) {
+    text += `\n> ${skipped.length} attachment(s) were not saved because they aren't files (a forwarded item or a cloud link): ${skipped.map((n) => `\`${n}\``).join(', ')}.\n`;
+  }
+  return text;
 }
 
 /**

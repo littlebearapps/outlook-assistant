@@ -37,3 +37,39 @@ describe('package files', () => {
     }
   });
 });
+
+/**
+ * The Docker image (used by the Glama listing) copies files one by one, so it
+ * drifts from `files` unless something checks (#320: it lacked server.js,
+ * tools.js and request-handler.js, so the image failed on start).
+ */
+function dockerCopySources() {
+  const dockerfile = fs.readFileSync(path.join(ROOT, 'Dockerfile'), 'utf8');
+  const sources = [];
+  for (const line of dockerfile.split('\n')) {
+    const match = /^\s*COPY\s+(.+)$/i.exec(line);
+    if (!match) continue;
+    const parts = match[1].trim().split(/\s+/);
+    if (parts.some((p) => p.startsWith('--from'))) continue;
+    // The last token is the destination.
+    sources.push(...parts.slice(0, -1).filter((p) => !p.startsWith('--')));
+  }
+  return sources.map((s) => s.replace(/\*$/, ''));
+}
+
+describe('Dockerfile (#320)', () => {
+  const copied = new Set(dockerCopySources());
+  const runtime = files.filter((f) => f.endsWith('.js') || f.endsWith('/'));
+
+  test.each(runtime)(
+    'copies %s, a runtime entry in package.json files',
+    (entry) => {
+      expect(copied.has(entry)).toBe(true);
+    }
+  );
+
+  test('copies nothing that package.json files leaves out', () => {
+    const allowed = new Set([...files, 'package.json', 'package-lock.json']);
+    expect([...copied].filter((s) => !allowed.has(s))).toEqual([]);
+  });
+});

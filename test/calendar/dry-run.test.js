@@ -110,7 +110,11 @@ describe('create-event dryRun', () => {
     expect(text).toContain(
       "Creates 'Team sync' on 2026-04-03T09:00:00 to 2026-04-03T10:00:00"
     );
-    expect(text).toContain('emails invitations to 3 attendees (1 external)');
+    // The room is emailed too, so it is counted, as manage-event does (#323).
+    expect(text).toContain(
+      'emails invitations to 4 recipients (1 external): 3 attendees, 1 room or resource'
+    );
+    expect(result._meta).toMatchObject({ notified: 4, external: 1 });
     expect(text).toContain('x@partner.org (external)');
     expect(text).toContain('room@company.com');
     expect(result._meta.dryRun).toBe(true);
@@ -130,7 +134,7 @@ describe('create-event dryRun', () => {
 
     expect(writeCalls()).toEqual([]);
     expect(textOf(result)).toContain(
-      'emails invitations to 3 attendees (external count unknown)'
+      'emails invitations to 4 recipients (external count unknown): 3 attendees, 1 room or resource'
     );
   });
 
@@ -166,14 +170,14 @@ describe('manage-event cancel dryRun', () => {
     const text = textOf(result);
     expect(text).toMatch(/^DRY RUN — nothing was changed\./);
     expect(text).toMatch(
-      /Cancels 'Team sync' on 3 Apr 2026, 9:00 am .* and emails a cancellation to 6 attendees \(2 external\)/
+      /Cancels 'Team sync' on 3 Apr 2026, 9:00 am .* and emails a cancellation to 7 recipients \(2 external\): 6 attendees, 1 room or resource/
     );
     expect(text).toContain('room@company.com');
     expect(text).toContain('Message: "Moving to next week"');
     expect(result._meta).toMatchObject({
       dryRun: true,
       eventId: 'evt-1',
-      notified: 6,
+      notified: 7,
       external: 2,
     });
   });
@@ -183,7 +187,9 @@ describe('manage-event cancel dryRun', () => {
 
     const result = await handleCancelEvent({ eventId: 'evt-1', dryRun: true });
 
-    expect(textOf(result)).toContain('6 attendees (2 external)');
+    expect(textOf(result)).toContain(
+      '7 recipients (2 external): 6 attendees, 1 room or resource'
+    );
     expect(textOf(result)).toContain('No message');
   });
 
@@ -268,10 +274,10 @@ describe('manage-event delete dryRun', () => {
     expect(writeCalls()).toEqual([]);
     const text = textOf(result);
     expect(text).toMatch(
-      /Deletes 'Team sync' on 3 Apr 2026.* from your calendar and emails a cancellation to 6 attendees \(2 external\)/
+      /Deletes 'Team sync' on 3 Apr 2026.* from your calendar and emails a cancellation to 7 recipients \(2 external\): 6 attendees, 1 room or resource/
     );
     expect(text).toMatch(/doesn't document a guaranteed way to restore/);
-    expect(result._meta).toMatchObject({ notified: 6, external: 2 });
+    expect(result._meta).toMatchObject({ notified: 7, external: 2 });
   });
 
   test('attendee: nobody is emailed and the organiser is not told', async () => {
@@ -404,5 +410,111 @@ describe('previews of events with missing fields', () => {
     const text = textOf(result);
     expect(text).not.toContain('the organiser, the organiser');
     expect(text).toContain("Nobody is emailed: the organiser isn't told");
+  });
+});
+
+// Review follow-up to #323: a rooms-only event still emails the room, and an
+// address listed twice in different case is one recipient.
+describe('previews count rooms-only events and each address once (#323)', () => {
+  const ROOM_ONLY = {
+    ...EVENT,
+    attendees: [attendee('room@company.com', 'resource')],
+  };
+  const DUPLICATED = {
+    ...EVENT,
+    attendees: [
+      attendee('a@ext.com'),
+      attendee('A@ext.com'),
+      attendee('room@company.com', 'resource'),
+      attendee('Room@Company.com', 'resource'),
+      attendee('me@company.com'),
+    ],
+  };
+
+  test('cancel on a rooms-only event counts the room', async () => {
+    mockReads(ROOM_ONLY);
+
+    const result = await handleCancelEvent({ eventId: 'evt-1', dryRun: true });
+
+    expect(writeCalls()).toEqual([]);
+    expect(result._meta).toMatchObject({ notified: 1, external: 0 });
+    const text = textOf(result);
+    expect(text).toContain(
+      'emails a cancellation to 1 recipient (0 external): 1 room or resource'
+    );
+    expect(text).not.toContain('nobody is emailed');
+  });
+
+  test('organiser delete on a rooms-only event counts the room', async () => {
+    mockReads(ROOM_ONLY);
+
+    const result = await handleDeleteEvent({ eventId: 'evt-1', dryRun: true });
+
+    expect(writeCalls()).toEqual([]);
+    expect(result._meta).toMatchObject({ notified: 1, external: 0 });
+    const text = textOf(result);
+    expect(text).toContain(
+      'emails a cancellation to 1 recipient (0 external): 1 room or resource'
+    );
+    expect(text).not.toContain('Nobody is emailed');
+  });
+
+  test('create with only a room counts it too (control)', async () => {
+    mockReads(null);
+
+    const result = await handleCreateEvent({
+      subject: 'Room hold',
+      start: '2026-04-03T09:00:00',
+      end: '2026-04-03T10:00:00',
+      attendees: [{ email: 'room@company.com', type: 'resource' }],
+      dryRun: true,
+    });
+
+    expect(result._meta).toMatchObject({ notified: 1, external: 0 });
+  });
+
+  test('an event with no attendees still emails nobody (control)', async () => {
+    mockReads({ ...EVENT, attendees: [] });
+
+    const cancel = await handleCancelEvent({ eventId: 'evt-1', dryRun: true });
+    const del = await handleDeleteEvent({ eventId: 'evt-1', dryRun: true });
+
+    expect(cancel._meta.notified).toBe(0);
+    expect(del._meta.notified).toBe(0);
+    expect(textOf(cancel)).toContain('nobody is emailed');
+  });
+
+  test.each([
+    ['cancel', (args) => handleCancelEvent(args)],
+    ['delete', (args) => handleDeleteEvent(args)],
+  ])(
+    '%s: the same address in another case is one recipient',
+    async (_name, call) => {
+      mockReads(DUPLICATED);
+
+      const result = await call({ eventId: 'evt-1', dryRun: true });
+
+      // a@ext.com once, the room once; the signed-in user is left out.
+      expect(result._meta).toMatchObject({ notified: 2, external: 1 });
+      const text = textOf(result);
+      expect(text).toContain(
+        '2 recipients (1 external): 1 attendee, 1 room or resource'
+      );
+      expect(text.match(/@ext\.com/gi)).toHaveLength(1);
+    }
+  );
+
+  test('create: duplicate attendee addresses are counted once', async () => {
+    mockReads(null);
+
+    const result = await handleCreateEvent({
+      subject: 'Dupes',
+      start: '2026-04-03T09:00:00',
+      end: '2026-04-03T10:00:00',
+      attendees: ['a@ext.com', 'A@ext.com'],
+      dryRun: true,
+    });
+
+    expect(result._meta).toMatchObject({ notified: 1, external: 1 });
   });
 });

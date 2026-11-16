@@ -197,7 +197,7 @@ params:
   sequence: 1
 ```
 
-The result lists every rule in its new order and names any other rule Exchange renumbered, with its old and new number (or says none was). Deleting a rule later doesn't shift them back, so note the order if you might want to restore it.
+The result lists every rule in its new order and names any other rule Exchange renumbered, with its old and new number (or says none was). If it can't read the rules back afterwards, it says other rules may have been renumbered; list the rules to check. Deleting a rule later doesn't shift them back, so note the order if you might want to restore it.
 
 ## Delete a Rule
 

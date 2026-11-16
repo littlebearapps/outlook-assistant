@@ -199,7 +199,48 @@ describe('handleReadEmail', () => {
     callGraphAPI.mockResolvedValue(null);
 
     const result = await handleReadEmail({ id: 'bad-id' });
+    expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('not found');
+    expect(result.content[0].text).toContain('Next step:');
+  });
+
+  it('explains a Graph 404 without exposing the raw error JSON', async () => {
+    callGraphAPI.mockRejectedValue(
+      new Error(
+        'API call failed with status 404: {"error":{"code":"ErrorItemNotFound","message":"The specified object was not found in the store."}}'
+      )
+    );
+
+    const result = await handleReadEmail({ id: 'moved-id' });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/may have been moved or deleted/i);
+    expect(result.content[0].text).toContain('Next step:');
+    expect(result.content[0].text).toContain('sharedMailbox');
+    expect(result.content[0].text).not.toContain('ErrorItemNotFound');
+    expect(result.content[0].text).not.toContain('API call failed');
+  });
+
+  it('classifies a structured Graph 404 even without a status string', async () => {
+    callGraphAPI.mockRejectedValue(
+      Object.assign(new Error('Not Found'), { status: 404 })
+    );
+
+    const result = await handleReadEmail({ id: 'deleted-id' });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/may have been moved or deleted/i);
+    expect(result.content[0].text).toContain('Next step:');
+  });
+
+  it('reads the 404 from the Graph error, not from other text in the message', async () => {
+    callGraphAPI.mockRejectedValue(new Error('socket hang up near status 404'));
+
+    const result = await handleReadEmail({ id: 'some-id' });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Failed to read email');
+    expect(result.content[0].text).not.toMatch(/moved or deleted/i);
   });
 
   it('should require email ID', async () => {
@@ -794,5 +835,114 @@ describe('handleListEmailsDelta sync phase across pages (#262)', () => {
     const result = await handleListEmailsDelta({ deltaToken: skip(99) });
     expect(result._meta.syncType).toBe('unknown');
     expect(result.content[0].text).toMatch(/initial or incremental unknown/);
+  });
+});
+
+// #322: minimal verbosity listed only counts and a token, so callers could not
+// act on what changed.
+describe('handleListEmailsDelta minimal verbosity lists the changes (#322)', () => {
+  const DELTA =
+    "https://graph.microsoft.com/v1.0/me/mailFolders('f')/messages/delta?$deltatoken=next";
+
+  it('lists each changed item with ID, subject and sender, and removed IDs', async () => {
+    callGraphAPI.mockResolvedValue({
+      value: [
+        {
+          id: 'AAMkChanged1',
+          subject: 'Quarterly report',
+          from: { emailAddress: { name: 'Ann', address: 'ann@example.com' } },
+        },
+        { id: 'AAMkChanged2', subject: '', from: null },
+        { id: 'AAMkGone1', '@removed': { reason: 'deleted' } },
+        { id: 'AAMkGone2', '@removed': { reason: 'changed' } },
+      ],
+      '@odata.deltaLink': DELTA,
+    });
+
+    const result = await handleListEmailsDelta({
+      deltaToken: DELTA,
+      outputVerbosity: 'minimal',
+    });
+    const text = result.content[0].text;
+
+    expect(text).toContain(
+      '1. AAMkChanged1 | Quarterly report | ann@example.com'
+    );
+    expect(text).toContain('2. AAMkChanged2 | (no subject) | unknown');
+    expect(text).toMatch(/Removed \(2\)/);
+    expect(text).toContain('`AAMkGone1`');
+    expect(text).toContain('`AAMkGone2`');
+    // Removed items are not listed as changed.
+    expect(text).not.toMatch(/\d\. AAMkGone1/);
+    // Still compact: no standard-verbosity blocks.
+    expect(text).not.toContain('### Emails');
+    expect(text).not.toContain('From:');
+  });
+
+  it('lists the items of an initial sync page too', async () => {
+    callGraphAPI.mockImplementation((_t, _m, path) =>
+      Promise.resolve(
+        /delta/.test(path)
+          ? {
+              value: [
+                {
+                  id: 'AAMkFirst',
+                  subject: 'Hello',
+                  from: { emailAddress: { address: 'bo@example.com' } },
+                },
+              ],
+              '@odata.deltaLink': DELTA,
+            }
+          : { id: 'f' }
+      )
+    );
+
+    const result = await handleListEmailsDelta({ outputVerbosity: 'minimal' });
+    const text = result.content[0].text;
+
+    expect(text).toContain('1. AAMkFirst | Hello | bo@example.com');
+    expect(text).not.toMatch(/Removed \(/);
+  });
+
+  // Live (2026-10-08): an incremental update carries only the changed
+  // properties, e.g. { id, parentFolderId, isRead }, not subject or from.
+  it('names the changed fields when Graph returns no subject or sender', async () => {
+    callGraphAPI.mockResolvedValue({
+      value: [
+        {
+          '@odata.type': '#microsoft.graph.message',
+          id: 'AAMkPartial',
+          parentFolderId: 'inbox-id',
+          isRead: false,
+        },
+      ],
+      '@odata.deltaLink': DELTA,
+    });
+
+    for (const outputVerbosity of ['minimal', 'standard']) {
+      const result = await handleListEmailsDelta({
+        deltaToken: DELTA,
+        outputVerbosity,
+      });
+      const text = result.content[0].text;
+      expect(text).toContain('AAMkPartial');
+      expect(text).not.toContain('(no subject)');
+      expect(text).not.toMatch(/unknown/i);
+      expect(text).toMatch(/only the changed properties/);
+      if (outputVerbosity === 'minimal') {
+        expect(text).toContain('1. AAMkPartial | changed: isRead');
+      }
+    }
+  });
+
+  it('says plainly when the page has no changes', async () => {
+    callGraphAPI.mockResolvedValue({ value: [], '@odata.deltaLink': DELTA });
+
+    const result = await handleListEmailsDelta({
+      deltaToken: DELTA,
+      outputVerbosity: 'minimal',
+    });
+
+    expect(result.content[0].text).toMatch(/No changes on this page/);
   });
 });

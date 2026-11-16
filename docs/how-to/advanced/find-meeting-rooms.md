@@ -73,7 +73,9 @@ This is particularly useful when booking rooms for presentations (need a display
 
 ## Required Permissions
 
-The tool first queries `/places`, which needs the `Place.Read.All` Microsoft Graph permission (admin consent required). Outlook Assistant doesn't ask for it at sign-in, so to use `/places`, add it to your app registration in Azure Portal, have an administrator grant consent, then re-authenticate with `auth action=authenticate force=true`. Without it, the tool falls back to `me/findRooms`, which doesn't need `Place.Read.All` but is currently unreliable on Graph v1.0 (tracked in [#240](https://github.com/littlebearapps/outlook-assistant/issues/240)). Your Exchange administrator must also have configured room resources in your organisation's directory.
+Meeting rooms are a Microsoft 365 (work or school) feature. On a personal Microsoft account (Outlook.com, Hotmail, Live), Graph doesn't support room lookup, so the tool returns an error saying so.
+
+The tool first reads Graph `places`, every page up to 1,000 rooms. That needs the `Place.Read.All` permission (admin consent required), which Outlook Assistant doesn't request at sign-in yet ([#337](https://github.com/littlebearapps/outlook-assistant/issues/337)). If an administrator has granted it to your app registration, `auth action=about` shows whether it is in your token. When Graph refuses `places`, the tool falls back to the beta `findRooms` call, which needs only `User.Read` but returns names and addresses only, for at most the first 100 rooms; the result says when it did this, and `building`, `floor` and `capacity` can't be applied to it. Your Exchange administrator must also have configured room resources in your organisation's directory.
 
 ## Parameter Reference
 
@@ -89,8 +91,10 @@ The tool first queries `/places`, which needs the `Place.Read.All` Microsoft Gra
 
 | Problem | Cause | Fix |
 |---------|-------|-----|
-| No results returned | Missing permission or no rooms configured | Add `Place.Read.All` permission; check with Exchange admin |
-| "Forbidden" error | Permission not granted | Grant `Place.Read.All` in Azure Portal |
+| No results returned | No rooms configured, or filters too narrow | Check with your Exchange admin; drop `building`/`floor`/`capacity` |
+| "Listed with the beta `findRooms` call" note | `places` was refused for want of `Place.Read.All` | Expected until [#337](https://github.com/littlebearapps/outlook-assistant/issues/337); the list has names and addresses only |
+| "Couldn't list meeting rooms" error | Both `places` and the beta `findRooms` failed | Read the Graph error in the message; add the room by its email address if you know it |
+| "Meeting rooms are a Microsoft 365 … feature" error | Personal Microsoft account | Sign in with a work or school account |
 
 ## Tips
 

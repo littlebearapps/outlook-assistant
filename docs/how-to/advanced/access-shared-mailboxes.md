@@ -25,7 +25,7 @@ Use the device-code flow (the default) to sign in. The browser flow (`npm run au
 
 If your organisation blocks user consent, an administrator has to grant consent for the shared scopes. If they won't, unset `OUTLOOK_SHARED_MAILBOX` and you'll sign in with the standard scopes again.
 
-While the setting is off, `access-shared-mailbox` behaves as it always has (a well-known folder name or folder ID, using whatever access your existing token has). Every other tool's `sharedMailbox` parameter is refused with these setup steps.
+While the setting is off, every tool's `sharedMailbox` parameter, `access-shared-mailbox` included, is refused with these setup steps before any request is made. Before v3.14.2, `access-shared-mailbox` still sent a read for a well-known folder name or folder ID with your existing sign-in; it no longer does.
 
 ## Read from a Shared Mailbox
 
@@ -74,7 +74,7 @@ params:
   folderId: "AAMkAGI2..."
 ```
 
-Custom names and nested paths need `OUTLOOK_SHARED_MAILBOX`; with it off, `folder` must be a well-known name (`inbox`, `sentitems`, `archive`...) or you pass `folderId`.
+Names and nested paths are looked up in the shared mailbox's own folder tree; a `folderId` is used as given.
 
 ## Control the Number of Results
 
@@ -161,7 +161,7 @@ The shared mailbox address must be a plain email address in printable ASCII (for
 |---------|-------|-----|
 | "Shared-mailbox support is turned off" | `OUTLOOK_SHARED_MAILBOX` isn't set | Follow [Turn On Shared-Mailbox Support](#turn-on-shared-mailbox-support) |
 | "Access denied" or 403 error | Missing `Mail.Read.Shared` (read) / `Mail.ReadWrite.Shared` (write) permission, or no delegate access | Add the permission in Azure Portal, check `auth action=about`, then re-authenticate with `force=true` |
-| "Shared mailbox … not found, or you can't access it" | Incorrect email address, no access granted, or (on a work account) the shared-mailbox scopes aren't enabled: while `OUTLOOK_SHARED_MAILBOX` is off, the message adds how to turn them on | Verify the address; if the message says the scopes aren't enabled, set `OUTLOOK_SHARED_MAILBOX=read`, restart and run `auth action=authenticate force=true`; otherwise check access with your Exchange admin |
+| "Shared mailbox … not found, or you can't access it" | Incorrect email address, or no access granted | Verify the address, then check access with your Exchange admin |
 | `Invalid mailbox "…"` | The address isn't a plain printable-ASCII email address | Retype it without spaces, look-alike characters, `#`, `%` or `/` |
 | Empty results | Mailbox is empty or folder doesn't exist | Try `folder: "inbox"`, or `listFolders: true` to see what's there |
 | `404 ErrorInvalidMailboxItemId` or "folder not found" on a read, move, categorise or flag | `sharedMailbox` was omitted, so the call addressed your own mailbox where the shared ID doesn't exist | Pass the same `sharedMailbox` on every call that uses an ID from the shared mailbox |

@@ -93,6 +93,20 @@ afterEach(() => {
 });
 
 describe('read-only mode on', () => {
+  test('export refusal explains local file writes rather than mailbox deletion', async () => {
+    const tools = spiedTools();
+    const result = await call(tools, 'export', validArgs('export'));
+    const text = result.content[0].text;
+
+    expect(result.isError).toBe(true);
+    expect(text).toContain('export would write files on this computer');
+    expect(text).not.toContain('delete something');
+    expect(classify('export')).toBe('destructive');
+    expect(
+      tools.find((t) => t.name === 'export').handler
+    ).not.toHaveBeenCalled();
+  });
+
   test('covers every non-read class', () => {
     const classes = new Set(writes.map(([, , cls]) => cls));
     expect([...classes].sort()).toEqual([

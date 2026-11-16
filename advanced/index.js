@@ -13,11 +13,7 @@ const { ensureAuthenticated } = require('../auth');
 const { FIELD_PRESETS } = require('../utils/field-presets');
 const config = require('../config');
 const { DEFAULT_TIMEZONE } = config;
-const {
-  buildMailboxPrefix,
-  validateMailboxPrefix,
-  SHARED_MAILBOX_DISABLED_MESSAGE,
-} = require('../utils/mailbox');
+const { buildMailboxPrefix } = require('../utils/mailbox');
 const { resolveFolder } = require('../folder/resolve');
 const { getAllFoldersHierarchy } = require('../folder/list');
 const {
@@ -58,23 +54,12 @@ function formatEmail(email, verbosity = 'standard') {
 }
 
 /**
- * Shared-mailbox hint appended to access errors while OUTLOOK_SHARED_MAILBOX
- * is off (the token then carries no `.Shared` scope).
- */
-const ENABLE_SHARED_HINT =
-  '\n\nShared-mailbox scopes are not enabled. Reading a mailbox other than your own normally needs `Mail.Read.Shared`: set OUTLOOK_SHARED_MAILBOX=read (work/school accounts only), restart the server, and run `auth action=authenticate force=true`.';
-
-/**
  * Access shared mailbox handler.
  *
- * With OUTLOOK_SHARED_MAILBOX off this behaves exactly as before the opt-in
- * flag existed: `folder` (or `folderId`) is used as given — a well-known name
- * or a folder ID — and the read is sent to Graph with whatever scopes the
- * token already has; a 403 or 404 gets the setup hint. This is deliberate and
- * documented (#338): it is the one tool that makes a request for another
- * mailbox while the opt-in is off. Every other tool goes through
- * buildMailboxPrefix, which refuses first. With the flag on, custom/localized
- * names and nested paths are resolved, and `listFolders` is available.
+ * Refuses before signing in or any Graph request while OUTLOOK_SHARED_MAILBOX
+ * is off (#338), through buildMailboxPrefix like every other tool that takes
+ * a mailbox. With it on, `folder` takes a well-known name, a custom/localized
+ * name, a nested path or a folder ID, and `listFolders` is available.
  */
 async function handleAccessSharedMailbox(args) {
   // F-46: accept `email` as alias for `sharedMailbox`. The original
@@ -88,13 +73,11 @@ async function handleAccessSharedMailbox(args) {
     );
   }
 
-  // Validate up front, through the same helper every other tool uses. The
-  // ungated variant keeps this tool's pre-opt-in behaviour when
-  // OUTLOOK_SHARED_MAILBOX is off; with it on, buildMailboxPrefix and
-  // validateMailboxPrefix agree.
+  // Enforce the opt-in before authentication, folder resolution or any Graph
+  // request, exactly as the other mailbox-taking tools do.
   let mailboxPrefix;
   try {
-    mailboxPrefix = validateMailboxPrefix(sharedMailbox);
+    mailboxPrefix = buildMailboxPrefix(sharedMailbox);
   } catch (error) {
     return toolError(error.message);
   }
@@ -106,12 +89,7 @@ async function handleAccessSharedMailbox(args) {
 
   // listFolders mode: enumerate the shared mailbox's folder tree so callers
   // can discover custom subfolder names/IDs to read from.
-  const sharedEnabled = config.SHARED_MAILBOX_MODE !== 'off';
-
   if (listFolders) {
-    if (!sharedEnabled) {
-      return toolError(SHARED_MAILBOX_DISABLED_MESSAGE);
-    }
     return handleListSharedMailboxFolders(sharedMailbox, args);
   }
 
@@ -126,31 +104,26 @@ async function handleAccessSharedMailbox(args) {
     // shared mailbox. A raw `folderId` (from `listFolders`) is used as-is;
     // otherwise custom and localized folder names are resolved via the tree.
     let resolvedFolder;
-    if (!sharedEnabled) {
-      // Pre-opt-in behaviour: no folder resolution.
-      resolvedFolder = folderId || mailFolder;
-    } else {
-      try {
-        const resolved = await resolveFolder(accessToken, {
-          id: folderId,
-          name: mailFolder,
-          mailbox: sharedMailbox,
-        });
-        resolvedFolder = resolved.id;
-      } catch (resolveError) {
-        // Only resolution failures get the discovery hint — a Graph error
-        // (access denied, 5xx) must fall through to the generic handler below
-        // rather than masquerading as "folder not found".
-        if (!/not found|ambiguous/i.test(resolveError.message)) {
-          throw resolveError;
-        }
-        return toolError(
-          `${resolveError.message}\n\n` +
-            `Searched in ${sharedMailbox}. List its folders first to get exact names/IDs:\n` +
-            '- `access-shared-mailbox` with `listFolders: true`, or\n' +
-            `- \`folders\` tool with \`action: list\`, \`sharedMailbox: "${sharedMailbox}"\``
-        );
+    try {
+      const resolved = await resolveFolder(accessToken, {
+        id: folderId,
+        name: mailFolder,
+        mailbox: sharedMailbox,
+      });
+      resolvedFolder = resolved.id;
+    } catch (resolveError) {
+      // Only resolution failures get the discovery hint — a Graph error
+      // (access denied, 5xx) must fall through to the generic handler below
+      // rather than masquerading as "folder not found".
+      if (!/not found|ambiguous/i.test(resolveError.message)) {
+        throw resolveError;
       }
+      return toolError(
+        `${resolveError.message}\n\n` +
+          `Searched in ${sharedMailbox}. List its folders first to get exact names/IDs:\n` +
+          '- `access-shared-mailbox` with `listFolders: true`, or\n' +
+          `- \`folders\` tool with \`action: list\`, \`sharedMailbox: "${sharedMailbox}"\``
+      );
     }
 
     // Build endpoint for shared mailbox
@@ -239,13 +212,13 @@ async function handleAccessSharedMailbox(args) {
       error.message.includes('403')
     ) {
       return toolError(
-        `Access denied to shared mailbox "${sharedMailbox}".\n\n**Possible causes:**\n- You don't have access to this shared mailbox\n- The Mail.Read.Shared permission is not granted\n- The shared mailbox address is incorrect${sharedEnabled ? '' : ENABLE_SHARED_HINT}`
+        `Access denied to shared mailbox "${sharedMailbox}".\n\n**Possible causes:**\n- You don't have access to this shared mailbox\n- The Mail.Read.Shared permission is not granted\n- The shared mailbox address is incorrect`
       );
     }
 
     if (error.message.includes('not found') || error.message.includes('404')) {
       return toolError(
-        `Shared mailbox "${sharedMailbox}" not found, or you can't access it. Please verify the email address.${sharedEnabled ? '' : ENABLE_SHARED_HINT}`
+        `Shared mailbox "${sharedMailbox}" not found, or you can't access it. Please verify the email address.`
       );
     }
 
@@ -858,7 +831,7 @@ const advancedTools = [
   {
     name: 'access-shared-mailbox',
     description:
-      "List emails or folders in a shared mailbox the signed-in user can access (read-only). While the server setting OUTLOOK_SHARED_MAILBOX is unset, this tool still sends the read to Microsoft Graph with whatever access the current sign-in has, for a well-known `folder` name or a `folderId` only, and adds the setup steps on a 403 or 404; every other tool's `sharedMailbox` parameter is refused before any request. With the setting on (work/school only), `folder` also takes a custom/localized display name (e.g. `Archiv`) or a nested path (e.g. `Inbox/Vendors/Acme`), and `listFolders: true` enumerates the mailbox's folder tree. Returns messages from `sharedMailbox` (alias `email`) and `folder` (default `inbox`) with id/subject/from/receivedDateTime/preview. Needs the mailbox delegated to the signed-in user in Exchange (admin-configured). `outputVerbosity` sets field count and `count` (default 25, max 50) page size. `search-emails` with `sharedMailbox` searches and filters a shared mailbox.",
+      "List emails or folders in a shared mailbox the signed-in user can access (read-only). Needs the server setting OUTLOOK_SHARED_MAILBOX (work/school only); while it is unset, every call is refused before any request to Microsoft Graph. Returns messages from `sharedMailbox` (alias `email`) and `folder` (default `inbox`) with id/subject/from/receivedDateTime/preview. `folder` takes a well-known name (inbox, sent, archive…), a custom/localized display name (e.g. `Archiv`), a nested path (e.g. `Inbox/Vendors/Acme`), or pass a raw `folderId`. `listFolders: true` enumerates the mailbox's folder tree (names, paths, IDs, counts). Needs the mailbox delegated to the signed-in user in Exchange (admin-configured). `outputVerbosity` sets field count and `count` (default 25, max 50) page size. `search-emails` with `sharedMailbox` searches and filters a shared mailbox.",
     ...toolMetadata('access-shared-mailbox', 'Shared Mailbox'),
     inputSchema: {
       type: 'object',

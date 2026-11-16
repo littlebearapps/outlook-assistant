@@ -14,6 +14,7 @@ const {
 const { getEmailFields } = require('../utils/field-presets');
 const { buildMailboxPrefix } = require('../utils/mailbox');
 const { toolError, authRequiredError } = require('../utils/tool-error');
+const { failureDetails } = require('../utils/graph-failure');
 const { log } = require('../utils/logger');
 
 function messageNotFoundError() {
@@ -125,11 +126,9 @@ async function handleReadEmail(args) {
         return toolError(
           `The email ID seems invalid or doesn't belong to your mailbox. Please try with a different email ID.`
         );
-      } else if (
-        error.status === 404 ||
-        error.statusCode === 404 ||
-        /\b(?:status|HTTP)\s+404\b/i.test(error.message)
-      ) {
+      } else if (failureDetails(error).status === 404) {
+        // The status comes from the Graph client's error, never from other
+        // text in the message (#341).
         return messageNotFoundError();
       } else {
         return toolError(`Failed to read email: ${error.message}`);

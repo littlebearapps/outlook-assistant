@@ -233,6 +233,16 @@ describe('handleReadEmail', () => {
     expect(result.content[0].text).toContain('Next step:');
   });
 
+  it('reads the 404 from the Graph error, not from other text in the message', async () => {
+    callGraphAPI.mockRejectedValue(new Error('socket hang up near status 404'));
+
+    const result = await handleReadEmail({ id: 'some-id' });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Failed to read email');
+    expect(result.content[0].text).not.toMatch(/moved or deleted/i);
+  });
+
   it('should require email ID', async () => {
     const result = await handleReadEmail({});
     expect(result.content[0].text).toBe('Email ID is required.');

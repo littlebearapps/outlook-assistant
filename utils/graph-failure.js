@@ -114,6 +114,7 @@ function accessError(error, sharedMailbox, what) {
 }
 
 module.exports = {
+  failureDetails,
   classifyFailure,
   failureLabel,
   forbiddenError,

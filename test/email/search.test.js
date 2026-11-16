@@ -54,6 +54,26 @@ afterEach(() => {
   console.error.mockRestore();
 });
 
+describe('date-filter validation', () => {
+  test.each([
+    ['receivedAfter', 'not-a-date'],
+    ['receivedBefore', 'not-a-date'],
+    ['receivedAfter', '2026-13-01'],
+    ['receivedBefore', '2026-02-30T25:00:00Z'],
+  ])('rejects invalid %s before reading the mailbox', async (field, value) => {
+    const result = await handleSearchEmails({
+      query: 'confidential',
+      receivedAfter: '2026-01-01',
+      [field]: value,
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain(field);
+    expect(ensureAuthenticated).not.toHaveBeenCalled();
+    expect(resolveFolderPath).not.toHaveBeenCalled();
+    expect(callGraphAPIPaginated).not.toHaveBeenCalled();
+  });
+});
+
 // ──────────────────────────────────────────────────
 // classifyEmailFilter
 // ──────────────────────────────────────────────────

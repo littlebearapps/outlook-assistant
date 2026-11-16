@@ -25,6 +25,7 @@ const {
   describeSessionLimits,
   resolveSessionLimit,
   RATE_LIMITED_TOOLS,
+  getRecipientAllowlist,
 } = require('../utils/safety');
 const { log } = require('../utils/logger');
 
@@ -203,12 +204,15 @@ async function handleAbout() {
   const rateLimitConfigured = Object.keys(RATE_LIMITED_TOOLS).some(
     (tool) => resolveSessionLimit(tool).limit !== null
   );
-  const allowlistConfigured = Boolean(process.env.OUTLOOK_ALLOWED_RECIPIENTS);
+  // Match the normalization used by recipient enforcement: separators and
+  // whitespace alone do not create an effective allowlist.
+  const allowlistConfigured = Boolean(getRecipientAllowlist());
   const rateLimit = rateLimitConfigured
     ? sessionLimits.join('; ')
     : 'Unlimited (no limit set; 0 would block)';
-  const allowlist =
-    process.env.OUTLOOK_ALLOWED_RECIPIENTS || 'None (all recipients allowed)';
+  const allowlist = allowlistConfigured
+    ? process.env.OUTLOOK_ALLOWED_RECIPIENTS
+    : 'None (all recipients allowed)';
 
   // F-2: surface the authenticated user's email so callers and AI
   // agents can confirm which mailbox is connected. Uses a single
@@ -265,10 +269,14 @@ async function handleAbout() {
   // sending is significantly safer with a session rate limit and a
   // recipient allowlist; both are off by default.
   if (!rateLimitConfigured || !allowlistConfigured) {
+    const missingSafeguards = [
+      ...(!rateLimitConfigured ? ['rate limit'] : []),
+      ...(!allowlistConfigured ? ['recipient allowlist'] : []),
+    ];
     lines.push('');
     lines.push('## ⚠ Safety Belts Not Configured\n');
     lines.push(
-      'No rate limit or recipient allowlist is set. For safer AI-assisted sending, add to your `.mcp.json` env block:'
+      `No ${missingSafeguards.join(' or ')} is set. For safer AI-assisted sending, add to your \`.mcp.json\` env block:`
     );
     lines.push('```');
     if (!rateLimitConfigured) {

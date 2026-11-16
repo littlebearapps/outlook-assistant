@@ -81,7 +81,7 @@ async function createMailFolder(accessToken, folderName, parentSpec) {
           success: false,
           message: `Parent folder could not be resolved: ${resolveError.message}`,
           nextStep:
-            'Use `folders` action=list to identify an unambiguous parentFolderId, then retry.',
+            'Use `folders` action=list to find the parent, then retry with its full path in `parentFolder` or its ID in `parentFolderId`.',
         };
       }
     }

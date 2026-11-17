@@ -145,18 +145,18 @@ params:
   comment: "Thanks, we'll check and get back to you."
 ```
 
-- `send-email` sends from the shared address and saves the sent copy in the shared mailbox's Sent Items.
+- `send-email` sends from the shared address and saves the sent copy in the shared mailbox's Sent Items, unless you pass `saveToSentItems: false`.
 - `draft` create, update, send and delete work in the shared mailbox's Drafts. Reply, reply-all and forward take a message ID from the shared mailbox, so pass the same `sharedMailbox` you found it with, and again on the follow-up `update`/`send`.
 - The recipient allowlist, session limits, `dryRun` and `checkRecipients` apply exactly as for your own mailbox. A `dryRun` preview shows the shared address as `From`.
 
-Your account also needs permissions on the mailbox in Exchange (Exchange admin center → the shared mailbox → Delegation): **Full Access**, because drafts and the sent copy live in the shared mailbox, plus one of these two:
+Your account also needs permissions on the mailbox in Exchange (Exchange admin center → the shared mailbox → Delegation): **Full Access**, which Microsoft requires for sending through the shared mailbox (drafts live there too), plus one of these two:
 
 | Permission | What recipients see |
 |------------|---------------------|
 | **Send As** | The shared address as the sender |
 | **Send on Behalf** | "You on behalf of" the shared address |
 
-With neither, Graph answers 403 (often `ErrorSendAsDenied`) and nothing is sent; the tool says so and names both permissions. `auth action=about` shows whether `Mail.Send.Shared` was granted.
+Without these permissions, Graph answers 403 (often `ErrorSendAsDenied`) and nothing is sent; the tool says so and names all three permissions. `auth action=about` shows whether `Mail.Send.Shared` was granted.
 
 ## Required Permissions
 
@@ -196,7 +196,7 @@ The shared mailbox address must be a plain email address in printable ASCII (for
 | `404 ErrorInvalidMailboxItemId` or "folder not found" on a read, move, categorise or flag | `sharedMailbox` was omitted, so the call addressed your own mailbox where the shared ID doesn't exist | Pass the same `sharedMailbox` on every call that uses an ID from the shared mailbox |
 | 403 access denied on a move/categorise/flag with `sharedMailbox` set | Token lacks `Mail.ReadWrite.Shared` (for example `OUTLOOK_SHARED_MAILBOX=read`) or delegate access is missing — the request stays shared-mailbox-scoped and fails; it does not fall back to your own mailbox | Set `OUTLOOK_SHARED_MAILBOX=true`, add the scope in Azure, grant delegate access, and re-authenticate |
 | "Sending and drafting as a shared mailbox is turned off" | `OUTLOOK_SHARED_MAILBOX` isn't `send` | Set it to `send`, restart, and re-authenticate with `force=true` |
-| 403 or `ErrorSendAsDenied` when sending or drafting as a shared mailbox | No "Send As" or "Send on Behalf" on the mailbox, or no `Mail.Send.Shared` in the token | Check `auth action=about`; ask an Exchange admin for one of the two permissions |
+| 403 or `ErrorSendAsDenied` when sending, drafting or checking recipients as a shared mailbox | No Full Access to the mailbox, no "Send As" or "Send on Behalf" on it, or no `Mail.Send.Shared` in the token | Check `auth action=about`; ask an Exchange admin for Full Access plus one of the two send permissions |
 
 ## Tips
 

@@ -114,7 +114,7 @@ Outlook Assistant needs permission to access your mailbox data. These are **dele
 |------------|----------------|
 | `Mail.Read.Shared` | Read shared mailboxes. Requested only when you set `OUTLOOK_SHARED_MAILBOX=read`, `true` or `send` (work/school accounts) |
 | `Mail.ReadWrite.Shared` | Organise shared mailboxes — move/categorise/flag/mark-read/create folders via `sharedMailbox`, and keep drafts there. Requested only with `OUTLOOK_SHARED_MAILBOX=true` or `send` |
-| `Mail.Send.Shared` | Send as a shared mailbox (`send-email` and `draft` with `sharedMailbox`). Requested only with `OUTLOOK_SHARED_MAILBOX=send`; also needs "Send As" or "Send on Behalf" on the mailbox in Exchange |
+| `Mail.Send.Shared` | Send as a shared mailbox (`send-email` and `draft` with `sharedMailbox`). Requested only with `OUTLOOK_SHARED_MAILBOX=send`; also needs Full Access plus "Send As" or "Send on Behalf" on the mailbox in Exchange |
 | `Place.Read.All` | Search for meeting rooms (only if you use the `find-meeting-rooms` tool) |
 
 > **Tip**: You can add all permissions now, or start with the required ones and add optional ones later. You'll need to re-authenticate (`auth action=authenticate force=true`) after adding new permissions — a token refresh keeps the scopes you were originally granted. See [Access Shared Mailboxes](../how-to/advanced/access-shared-mailboxes.md) for turning on the `.Shared` scopes.

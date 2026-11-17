@@ -114,9 +114,10 @@ function accessError(error, sharedMailbox, what) {
 }
 
 /**
- * Graph refused to send or draft as a shared mailbox: a 403, or a send-as
- * denial under any status. Null for every other error, and for calls on the
- * signed-in user's own mailbox, which the handler reports in its own words.
+ * Graph refused a send, draft or recipient check as a shared mailbox: a 403,
+ * or a send-as denial under any status. Null for every other error, and for
+ * calls on the signed-in user's own mailbox, which the handler reports in its
+ * own words.
  * @param {Error} error - The failed call
  * @param {string|null} sharedMailbox - The shared mailbox the call acted as
  * @param {string} what - What was refused, e.g. "sending email"
@@ -127,10 +128,10 @@ function sharedSendError(error, sharedMailbox, what) {
   const { status, code } = failureDetails(error);
   if (status !== 403 && code !== 'ErrorSendAsDenied') return null;
   return toolError(
-    `Microsoft Graph refused this call (${what}) as shared mailbox "${sharedMailbox}" (${failureLabel(error)}).\n\n**Possible causes:**\n- Your account has neither "Send As" nor "Send on Behalf" on this mailbox in Exchange\n- Mail.Send.Shared (sending) or Mail.ReadWrite.Shared (drafts) is not granted to the token\n- You have no delegate access to the mailbox, or the address is wrong`,
+    `Microsoft Graph refused this call (${what}) as shared mailbox "${sharedMailbox}" (${failureLabel(error)}).\n\n**Possible causes:**\n- Your account lacks Full Access to this mailbox in Exchange, or has neither "Send As" nor "Send on Behalf" on it (sending as a shared mailbox needs Full Access plus one of the two)\n- The token lacks the shared-mailbox scopes (Mail.Read.Shared, Mail.ReadWrite.Shared, Mail.Send.Shared)\n- The address is wrong`,
     {
       nextStep:
-        'Run `auth` with action=about to check the granted scopes; re-authenticate with `auth action=authenticate force=true` if Mail.Send.Shared is missing. Otherwise an Exchange admin has to grant "Send As" (mail shows the shared address as sender) or "Send on Behalf" (mail shows "you on behalf of the shared address"). A 403 is final: report it, and do not resend from another mailbox or tool.',
+        'Run `auth` with action=about to check the granted scopes; re-authenticate with `auth action=authenticate force=true` if one is missing. Otherwise an Exchange admin has to grant Full Access plus "Send As" (mail shows the shared address as sender) or "Send on Behalf" (mail shows "you on behalf of the shared address"). A 403 is final: report it, and do not resend from another mailbox or tool.',
     }
   );
 }

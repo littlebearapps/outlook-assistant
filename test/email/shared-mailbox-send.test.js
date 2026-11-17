@@ -240,18 +240,51 @@ describe('send-email as a shared mailbox', () => {
   test.each([
     [403, 'ErrorAccessDenied'],
     [400, 'ErrorSendAsDenied'],
-  ])('a %i %s explains Send As / Send on Behalf', async (status, code) => {
-    callGraphAPI.mockRejectedValue(graphError(status, code));
+  ])(
+    'a %i %s explains Full Access, Send As and Send on Behalf',
+    async (status, code) => {
+      callGraphAPI.mockRejectedValue(graphError(status, code));
+      const result = await handleSendEmail({
+        ...SEND_ARGS,
+        sharedMailbox: SHARED,
+      });
+      const text = result.content[0].text;
+      expect(result.isError).toBe(true);
+      expect(text).toContain(SHARED);
+      expect(text).toContain('Full Access');
+      expect(text).toContain('Send As');
+      expect(text).toContain('Send on Behalf');
+      expect(text).toContain('Mail.Send.Shared');
+    }
+  );
+
+  test('a 403 from the shared recipient check gives the same guidance, not "retry"', async () => {
+    callGraphAPI.mockRejectedValue(graphError(403, 'ErrorAccessDenied'));
     const result = await handleSendEmail({
       ...SEND_ARGS,
       sharedMailbox: SHARED,
+      checkRecipients: true,
     });
     const text = result.content[0].text;
     expect(result.isError).toBe(true);
-    expect(text).toContain(SHARED);
-    expect(text).toContain('Send As');
-    expect(text).toContain('Send on Behalf');
-    expect(text).toContain('Mail.Send.Shared');
+    expect(text).toContain('Email not sent: the recipient check failed');
+    expect(text).toContain('checking recipients');
+    expect(text).toContain('Full Access');
+    expect(text).not.toContain('Retry the call');
+    expect(callGraphAPI).toHaveBeenCalledTimes(1);
+    expect(callGraphAPI.mock.calls[0][2]).toBe(`users/${SHARED}/getMailTips`);
+  });
+
+  test('a 403 from the own recipient check keeps the generic error', async () => {
+    callGraphAPI.mockRejectedValue(graphError(403, 'ErrorAccessDenied'));
+    const result = await handleSendEmail({
+      ...SEND_ARGS,
+      checkRecipients: true,
+    });
+    const text = result.content[0].text;
+    expect(text).toContain('Error getting mail tips');
+    expect(text).toContain('Retry the call');
+    expect(text).not.toContain('Full Access');
   });
 
   test('a 403 on the own mailbox keeps the plain error', async () => {
@@ -351,6 +384,13 @@ describe('draft as a shared mailbox', () => {
     });
     expect(result.isError).toBe(true);
     expect(calls()).toEqual([`GET users/${SHARED}/messages/draft-1`]);
+    // The follow-up hint must address the shared draft, not your own Drafts.
+    expect(result.content[0].text).toContain(
+      `still in the Drafts of ${SHARED}`
+    );
+    expect(result.content[0].text).toContain(
+      `draft action=update sharedMailbox=${SHARED}`
+    );
   });
 
   test('send shares the send-email session limit', async () => {
@@ -426,6 +466,53 @@ describe('draft as a shared mailbox', () => {
       `POST users/${SHARED}/messages/msg-1/createReplyAll`,
       `DELETE users/${SHARED}/messages/reply-1`,
     ]);
+    // The suggested alternatives must stay in the shared mailbox.
+    expect(result.content[0].text).toContain(
+      `draft action=create addressed to them, both with sharedMailbox=${SHARED}`
+    );
+  });
+
+  test('the alternatives hint for your own blocked reply-all is unchanged', async () => {
+    process.env.OUTLOOK_ALLOWED_RECIPIENTS = 'partner.test';
+    graph({ ...draft, id: 'reply-1' });
+    const result = await handleDraft({ action: 'reply-all', id: 'msg-1' });
+    expect(result.content[0].text).toContain(
+      'or draft action=create addressed to them), or ask the user'
+    );
+    expect(result.content[0].text).not.toContain('sharedMailbox=');
+  });
+
+  test('a blocked reply whose cleanup fails names the shared mailbox in the delete hint', async () => {
+    process.env.OUTLOOK_ALLOWED_RECIPIENTS = 'partner.test';
+    callGraphAPI.mockImplementation((_t, method) =>
+      method === 'DELETE'
+        ? Promise.reject(graphError(503, 'ServiceUnavailable'))
+        : Promise.resolve({ ...draft, id: 'reply-1' })
+    );
+    const result = await handleDraft({
+      action: 'reply',
+      sharedMailbox: SHARED,
+      id: 'msg-1',
+    });
+    const text = result.content[0].text;
+    expect(result.isError).toBe(true);
+    expect(text).toContain(`still in the Drafts of ${SHARED}`);
+    expect(text).toContain(
+      `draft action=delete id=reply-1 sharedMailbox=${SHARED}`
+    );
+  });
+
+  test('the same cleanup hint for your own mailbox is unchanged', async () => {
+    process.env.OUTLOOK_ALLOWED_RECIPIENTS = 'partner.test';
+    callGraphAPI.mockImplementation((_t, method) =>
+      method === 'DELETE'
+        ? Promise.reject(graphError(503, 'ServiceUnavailable'))
+        : Promise.resolve({ ...draft, id: 'reply-1' })
+    );
+    const result = await handleDraft({ action: 'reply', id: 'msg-1' });
+    const text = result.content[0].text;
+    expect(text).toContain('still in Drafts with ID');
+    expect(text).toContain('draft action=delete id=reply-1 (or in Outlook)');
   });
 
   test('forward drafts on the shared message, from the shared address', async () => {
@@ -513,5 +600,18 @@ describe('tool schemas accept the new parameter', () => {
   ])('%s with %o', (name, args) => {
     const tool = TOOLS.find((t) => t.name === name);
     expect(coerceArgsAgainstSchema(args, tool.inputSchema).error).toBeFalsy();
+  });
+});
+
+describe('handleGetMailTips mailbox argument', () => {
+  test.each([
+    ['omitted', undefined],
+    ['an empty object', {}],
+    ['the own-mailbox resolution', { prefix: 'me', sharedMailbox: null }],
+  ])('%s checks as the signed-in user', async (_label, mailbox) => {
+    const { handleGetMailTips } = require('../../email/mail-tips');
+    callGraphAPI.mockResolvedValue({ value: [] });
+    await handleGetMailTips({ recipients: ['someone@example.com'] }, mailbox);
+    expect(callGraphAPI.mock.calls[0][2]).toBe('me/getMailTips');
   });
 });

@@ -148,7 +148,7 @@ async function handleSendEmail(args) {
       const allAddresses = allRecipients.map((r) => r.emailAddress.address);
       const tipsResult = await handleGetMailTips(
         { recipients: allAddresses },
-        prefix
+        { prefix, sharedMailbox }
       );
 
       const tipsText = tipsResult.content[0]?.text || '';
@@ -213,7 +213,7 @@ async function handleSendEmail(args) {
     const accessToken = await ensureAuthenticated();
 
     // Make API call to send email. For a shared mailbox, `users/{mailbox}`
-    // keeps the sent copy in that mailbox's Sent Items.
+    // saves the sent copy (by default) in that mailbox's Sent Items.
     await callGraphAPI(accessToken, 'POST', `${prefix}/sendMail`, emailObject);
 
     const sentText = `Email sent successfully!\n\n${sharedMailbox ? `From: ${sharedMailbox}\n` : ''}Subject: ${subject}\nRecipients: ${toRecipients.length}${ccRecipients.length > 0 ? ` + ${ccRecipients.length} CC` : ''}${bccRecipients.length > 0 ? ` + ${bccRecipients.length} BCC` : ''}\nMessage Length: ${body.length} characters`;

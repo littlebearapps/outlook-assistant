@@ -14,11 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the read and organise scopes. `send-email` and every `draft` action
   (create, update, send, delete, reply, reply-all, forward) then accept
   `sharedMailbox` (alias `email`): requests go to `users/{mailbox}/…`, so
-  the mail goes out from the shared address, its sent copy lands in that
-  mailbox's Sent Items and drafts live in its Drafts. The recipient
+  the mail goes out from the shared address, drafts live in that mailbox's
+  Drafts, and the sent copy lands in its Sent Items unless
+  `saveToSentItems: false`. The recipient
   allowlist, session limits, `dryRun` and `checkRecipients` apply
-  unchanged. A 403 or `ErrorSendAsDenied` explains the Exchange "Send As"
-  and "Send on Behalf" permissions. With any other mode, or the setting
+  unchanged, and mail tips are checked as the sending mailbox. A 403 or
+  `ErrorSendAsDenied` on the shared path (from the send, a draft action or
+  the recipient check) comes with guidance on the Exchange permissions the
+  account needs: Full Access plus "Send As" or "Send on Behalf". With any other mode, or the setting
   unset, nothing changes: same scopes, same consent prompt, and a
   `sharedMailbox` on these tools is refused before any request. Switching
   from `true` to `send` needs `auth action=authenticate force=true`.

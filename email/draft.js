@@ -86,6 +86,16 @@ function buildMessageObject(args) {
   return message;
 }
 
+/** "Drafts", or "the Drafts of shared@…" for a shared mailbox. */
+function draftsOf(sharedMailbox) {
+  return sharedMailbox ? `the Drafts of ${sharedMailbox}` : 'Drafts';
+}
+
+/** " sharedMailbox=shared@…" for a follow-up call hint, or '' for your own. */
+function sharedMailboxArg(sharedMailbox) {
+  return sharedMailbox ? ` sharedMailbox=${sharedMailbox}` : '';
+}
+
 /**
  * Format a draft response with key details
  * @param {object} draft - Graph API message response
@@ -235,7 +245,10 @@ async function handleCreateDraft(args, { prefix, sharedMailbox }) {
   let tipsResult = null;
   if (doCheckRecipients && allRecipients.length > 0) {
     const allAddresses = allRecipients.map((r) => r.emailAddress.address);
-    tipsResult = await handleGetMailTips({ recipients: allAddresses }, prefix);
+    tipsResult = await handleGetMailTips(
+      { recipients: allAddresses },
+      { prefix, sharedMailbox }
+    );
     const tipsText = tipsResult.content[0]?.text || '';
 
     if (dryRun) {
@@ -361,10 +374,9 @@ async function handleSendDraft(args, { prefix, sharedMailbox }) {
     const blocked = findBlockedRecipients(recipientsOf(draft));
     if (blocked) {
       return toolError(
-        `Draft not sent: it is addressed to ${blocked.blocked.join(', ')}, which OUTLOOK_ALLOWED_RECIPIENTS does not allow (allowed recipients/domains: ${blocked.allowed.join(', ')}). The draft is unchanged and still in Drafts.`,
+        `Draft not sent: it is addressed to ${blocked.blocked.join(', ')}, which OUTLOOK_ALLOWED_RECIPIENTS does not allow (allowed recipients/domains: ${blocked.allowed.join(', ')}). The draft is unchanged and still in ${draftsOf(sharedMailbox)}.`,
         {
-          nextStep:
-            'Remove those recipients from the draft (in Outlook, or with draft action=update), or ask the user to add them to OUTLOOK_ALLOWED_RECIPIENTS.',
+          nextStep: `Remove those recipients from the draft (in Outlook, or with draft action=update${sharedMailboxArg(sharedMailbox)}), or ask the user to add them to OUTLOOK_ALLOWED_RECIPIENTS.`,
         }
       );
     }
@@ -477,7 +489,7 @@ async function handleReplyDraft(args, { prefix, sharedMailbox }, endpoint) {
     // only be checked once the draft exists.
     const refusal = await refuseBlockedReply(
       accessToken,
-      prefix,
+      { prefix, sharedMailbox },
       draft,
       actionName
     );
@@ -508,13 +520,19 @@ async function handleReplyDraft(args, { prefix, sharedMailbox }, endpoint) {
  * on a new reply draft. If any is not allowed, delete the draft and return a
  * refusal; otherwise return null.
  * @param {string} accessToken - Graph access token
- * @param {string} prefix - Mailbox prefix the draft was created in
+ * @param {{prefix: string, sharedMailbox: string|null}} mailbox - The
+ *   mailbox the draft was created in
  * @param {object} draft - The draft Graph returned from createReply/createReplyAll
  * @param {string} actionName - 'reply' or 'reply-all'
  * @returns {Promise<{error: object, draftDeleted: boolean}|null>} The
  *   refusal and whether its draft was deleted, or null to keep the draft
  */
-async function refuseBlockedReply(accessToken, prefix, draft, actionName) {
+async function refuseBlockedReply(
+  accessToken,
+  { prefix, sharedMailbox },
+  draft,
+  actionName
+) {
   if (!getRecipientAllowlist()) return null;
 
   let reason;
@@ -533,8 +551,10 @@ async function refuseBlockedReply(accessToken, prefix, draft, actionName) {
     const blocked = findBlockedRecipients(recipientsOf(message));
     if (!blocked) return null;
     reason = `The ${actionName} draft would be addressed to ${blocked.blocked.join(', ')}, which OUTLOOK_ALLOWED_RECIPIENTS does not allow (allowed recipients/domains: ${blocked.allowed.join(', ')}).`;
-    nextStep =
-      'Reply only to allowed recipients (for example, action=reply rather than reply-all, or draft action=create addressed to them), or ask the user to add those recipients to OUTLOOK_ALLOWED_RECIPIENTS.';
+    const inMailbox = sharedMailbox
+      ? `, both with sharedMailbox=${sharedMailbox}`
+      : '';
+    nextStep = `Reply only to allowed recipients (for example, action=reply rather than reply-all, or draft action=create addressed to them${inMailbox}), or ask the user to add those recipients to OUTLOOK_ALLOWED_RECIPIENTS.`;
   } catch (error) {
     // Unchecked recipients are treated like blocked ones.
     reason = `The ${actionName} draft's recipients could not be checked against OUTLOOK_ALLOWED_RECIPIENTS (${error.message}).`;
@@ -545,9 +565,9 @@ async function refuseBlockedReply(accessToken, prefix, draft, actionName) {
     await callGraphAPI(accessToken, 'DELETE', `${prefix}/messages/${draft.id}`);
   } catch (error) {
     const stillThere = toolError(
-      `${reason} The draft Graph created could not be deleted (${error.message}), so it is still in Drafts with ID \`${draft.id}\`. Do not send it.`,
+      `${reason} The draft Graph created could not be deleted (${error.message}), so it is still in ${draftsOf(sharedMailbox)} with ID \`${draft.id}\`. Do not send it.`,
       {
-        nextStep: `Delete it with draft action=delete id=${draft.id} (or in Outlook). ${nextStep}`,
+        nextStep: `Delete it with draft action=delete id=${draft.id}${sharedMailboxArg(sharedMailbox)} (or in Outlook). ${nextStep}`,
       }
     );
     return { error: stillThere, draftDeleted: false };

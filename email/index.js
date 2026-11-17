@@ -313,7 +313,7 @@ const emailTools = [
         sharedMailbox: {
           type: 'string',
           description:
-            'Email address of a shared mailbox to send as (default: the signed-in account). The mail goes out from that address and its sent copy is saved in that mailbox\'s Sent Items. Work/school only; needs the server opt-in setting OUTLOOK_SHARED_MAILBOX=send (otherwise the call is refused with setup guidance) and an Exchange permission on the mailbox: "Send As" shows the shared address as the sender, "Send on Behalf" shows "you on behalf of" it. With neither, Graph answers 403 and the email is not sent. Saving the sent copy in the shared Sent Items also needs Full Access to the mailbox.',
+            'Email address of a shared mailbox to send as (default: the signed-in account). The mail goes out from that address, and its sent copy is saved in that mailbox\'s Sent Items unless saveToSentItems is false. Work/school only; needs the server opt-in setting OUTLOOK_SHARED_MAILBOX=send (otherwise the call is refused with setup guidance) and Exchange permissions on the mailbox: Full Access, plus "Send As" (the shared address is the sender) or "Send on Behalf" ("you on behalf of" it). Without them, Graph answers 403 and the email is not sent.',
         },
         email: {
           type: 'string',
@@ -395,7 +395,7 @@ const emailTools = [
         sharedMailbox: {
           type: 'string',
           description:
-            'Email address of a shared mailbox to draft in and send as (default: the signed-in account). Drafts are created in, updated in, sent from and deleted from that mailbox\'s Drafts; reply/reply-all/forward take a message id from that mailbox. Pass it on every call for those ids. Work/school only; needs the server opt-in setting OUTLOOK_SHARED_MAILBOX=send (otherwise the call is refused with setup guidance) and Exchange permissions on the mailbox: Full Access (drafts live in it), plus "Send As" (the shared address is the sender) or "Send on Behalf" ("you on behalf of" it). Without them, Graph answers 403.',
+            'Email address of a shared mailbox to draft in and send as (default: the signed-in account). Drafts are created in, updated in, sent from and deleted from that mailbox\'s Drafts; reply/reply-all/forward take a message id from that mailbox. Pass it on every call for those ids. Work/school only; needs the server opt-in setting OUTLOOK_SHARED_MAILBOX=send (otherwise the call is refused with setup guidance) and Exchange permissions on the mailbox: Full Access, plus "Send As" (the shared address is the sender) or "Send on Behalf" ("you on behalf of" it). Without them, Graph answers 403.',
         },
         email: {
           type: 'string',

@@ -33,8 +33,8 @@ const SHARED_MAILBOX_SEND_DISABLED_MESSAGE =
   'work/school only: set OUTLOOK_SHARED_MAILBOX=send in the MCP server ' +
   'environment, restart the server, then re-authenticate with ' +
   '`auth action=authenticate force=true` so the token carries ' +
-  'Mail.Send.Shared. Your account also needs "Send As" (or "Send on Behalf") ' +
-  'on the shared mailbox in Exchange, and Full Access to it for drafts.';
+  'Mail.Send.Shared. Your account also needs Full Access to the shared ' +
+  'mailbox in Exchange, plus "Send As" or "Send on Behalf" on it.';
 
 /**
  * Validate a mailbox and build its Graph resource prefix, WITHOUT checking

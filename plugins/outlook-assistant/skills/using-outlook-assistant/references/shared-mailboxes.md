@@ -38,7 +38,7 @@ Message, attachment and folder IDs are scoped to the mailbox they came from. Onc
 - Only with `OUTLOOK_SHARED_MAILBOX=send`. In any other mode `send-email` and `draft` refuse `sharedMailbox`; relay the setup steps, and never send from the user's own address instead without asking.
 - Name the sender when you confirm: "send as support@… to …". The hard rules apply unchanged: draft first, send only when asked, `dryRun` to preview (it shows the shared `From`).
 - `draft` reply, reply-all and forward on a shared-mailbox message need the same `sharedMailbox`, and so do the follow-up `update`, `send` and `delete` on that draft.
-- A 403 or `ErrorSendAsDenied` means the user's account lacks "Send As" or "Send on Behalf" in Exchange, or the token lacks `Mail.Send.Shared`. It is final: report it, don't retry from another mailbox, and don't work around it with rules or forwarding.
+- A 403 or `ErrorSendAsDenied` means the user's account lacks "Send As" or "Send on Behalf" in Exchange, or the token lacks `Mail.Send.Shared`. A send can also fail when the account lacks Full Access to the shared mailbox, which Microsoft requires in addition. It is final: report it, don't retry from another mailbox, and don't work around it with rules or forwarding.
 
 ## Writes affect everyone
 

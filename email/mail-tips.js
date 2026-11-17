@@ -7,6 +7,7 @@
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { toolError, authRequiredError } = require('../utils/tool-error');
+const { sharedSendError } = require('../utils/graph-failure');
 
 /**
  * All available mail tip types from Microsoft Graph API
@@ -188,12 +189,16 @@ function hasTipContent(tip) {
 /**
  * Get mail tips for specified recipients
  * @param {object} args - Tool arguments
- * @param {string} [prefix] - Sending mailbox (`me` or `users/{mailbox}`):
- *   delivery restrictions depend on the sender. Internal callers only; the
- *   tool itself always checks as the signed-in user.
+ * @param {{prefix: string, sharedMailbox: string|null}} [mailbox] - Sending
+ *   mailbox, as `resolveSendMailbox` returns it: delivery restrictions depend
+ *   on the sender. Internal callers only; the tool itself always checks as
+ *   the signed-in user.
  * @returns {object} - MCP response
  */
-async function handleGetMailTips(args, prefix = 'me') {
+async function handleGetMailTips(
+  args,
+  { prefix = 'me', sharedMailbox = null } = {}
+) {
   const { recipients, tipTypes } = args;
 
   if (!recipients || recipients.length === 0) {
@@ -293,6 +298,8 @@ async function handleGetMailTips(args, prefix = 'me') {
     if (error.message === 'Authentication required') {
       return authRequiredError();
     }
+    const denied = sharedSendError(error, sharedMailbox, 'checking recipients');
+    if (denied) return denied;
     return toolError(`Error getting mail tips: ${error.message}`);
   }
 }

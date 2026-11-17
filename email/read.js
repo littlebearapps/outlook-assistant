@@ -14,7 +14,11 @@ const {
 const { getEmailFields } = require('../utils/field-presets');
 const { buildMailboxPrefix } = require('../utils/mailbox');
 const { toolError, authRequiredError } = require('../utils/tool-error');
-const { failureDetails } = require('../utils/graph-failure');
+const {
+  failureDetails,
+  failureLabel,
+  accessError,
+} = require('../utils/graph-failure');
 const { log } = require('../utils/logger');
 
 function messageNotFoundError() {
@@ -25,6 +29,22 @@ function messageNotFoundError() {
         'Use `search-emails` to find a current message ID, then retry. If the message belongs to a shared mailbox, pass the same `sharedMailbox`.',
     }
   );
+}
+
+function safeReadFailure(error, action = 'Failed to read email') {
+  const { status } = failureDetails(error);
+  let nextStep;
+  if (status === 400) {
+    nextStep =
+      'Use `search-emails` to get a fresh message ID and retry with that ID.';
+  } else if (status === 429 || status >= 500) {
+    nextStep =
+      'Retry later. If this persists, check Microsoft Graph service health.';
+  } else {
+    nextStep =
+      'Use `search-emails` to get a fresh message ID, and check `auth` with action=about if necessary.';
+  }
+  return toolError(`${action} (${failureLabel(error)}).`, { nextStep });
 }
 
 /**
@@ -121,17 +141,24 @@ async function handleReadEmail(args) {
     } catch (error) {
       log.debug(`Error reading email: ${error.message}`);
 
+      const denied = accessError(error, sharedMailbox, 'read email');
+      if (denied) return denied;
+
       // Improved error handling with more specific messages
       if (error.message.includes("doesn't belong to the targeted mailbox")) {
         return toolError(
           `The email ID seems invalid or doesn't belong to your mailbox. Please try with a different email ID.`
+        );
+      } else if (error.message.startsWith('Invalid resource path')) {
+        return toolError(
+          'Invalid resource path. Use a valid email ID from `search-emails`.'
         );
       } else if (failureDetails(error).status === 404) {
         // The status comes from the Graph client's error, never from other
         // text in the message (#341).
         return messageNotFoundError();
       } else {
-        return toolError(`Failed to read email: ${error.message}`);
+        return safeReadFailure(error);
       }
     }
   } catch (error) {
@@ -139,7 +166,9 @@ async function handleReadEmail(args) {
       return authRequiredError();
     }
 
-    return toolError(`Error accessing email: ${error.message}`);
+    log.debug(`Error accessing email: ${error.message}`);
+    const denied = accessError(error, sharedMailbox, 'read email');
+    return denied || safeReadFailure(error, 'Error accessing email');
   }
 }
 

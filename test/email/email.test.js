@@ -270,6 +270,49 @@ describe('handleReadEmail', () => {
     const result = await handleReadEmail({ id: 'email-1' });
     expect(result.content[0].text).toContain('Failed to read email');
   });
+
+  it('reports Graph 503 status and code without returning private response bodies', async () => {
+    callGraphAPI.mockRejectedValue(
+      new Error(
+        'API call failed with status 503: {"error":{"code":"ServiceUnavailable","message":"private-mailbox-details"}}'
+      )
+    );
+
+    const result = await handleReadEmail({ id: 'email-1' });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('503 ServiceUnavailable');
+    expect(result.content[0].text).toContain('Next step:');
+    expect(result.content[0].text).toMatch(/retry later/i);
+    expect(result.content[0].text).not.toContain('private-mailbox-details');
+    expect(result.content[0].text).not.toContain('API call failed');
+  });
+
+  it('explains how to recover from Graph 400 without exposing the Graph body', async () => {
+    callGraphAPI.mockRejectedValue(
+      new Error(
+        'API call failed with status 400: {"error":{"code":"ErrorInvalidIdMalformed","message":"sensitive-diagnostic"}}'
+      )
+    );
+
+    const result = await handleReadEmail({ id: 'email-1' });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('400 ErrorInvalidIdMalformed');
+    expect(result.content[0].text).toContain('search-emails');
+    expect(result.content[0].text).not.toContain('sensitive-diagnostic');
+  });
+
+  it('does not leak errors raised before the Graph request', async () => {
+    ensureAuthenticated.mockRejectedValue(
+      new Error(
+        'API call failed with status 503: {"error":{"code":"ServiceUnavailable","message":"private-auth-details"}}'
+      )
+    );
+
+    const result = await handleReadEmail({ id: 'email-1' });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('503 ServiceUnavailable');
+    expect(result.content[0].text).not.toContain('private-auth-details');
+  });
 });
 
 // ──────────────────────────────────────────────────

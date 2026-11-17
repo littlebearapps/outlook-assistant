@@ -27,7 +27,7 @@ When the setting is off, any `sharedMailbox` parameter, and every `access-shared
 | Search with filters             | `search-emails` with `sharedMailbox` (every mode, including delta)                         |
 | Read one message                | `read-email` with the same `sharedMailbox`                                                 |
 | Attachments, export             | `attachments` / `export` with the same `sharedMailbox`                                     |
-| Flag, categorise, move, folders | `update-email` / `apply-category` / `folders` with the same `sharedMailbox` (needs `true`) |
+| Flag, categorise, move, folders | `update-email` / `apply-category` / `folders` with the same `sharedMailbox` (needs `true` or `send`) |
 
 ## IDs belong to their mailbox
 

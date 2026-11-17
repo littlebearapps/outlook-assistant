@@ -113,7 +113,7 @@ Leaving it out makes the tool look the ID up in your own mailbox, which fails wi
 
 ## Organise a Shared Mailbox
 
-With `OUTLOOK_SHARED_MAILBOX=true`, these accept `sharedMailbox` too:
+With `OUTLOOK_SHARED_MAILBOX=true` or `send`, these accept `sharedMailbox` too:
 
 - `update-email`: mark read or unread, flag, unflag, complete
 - `apply-category`: set, add or remove categories. The category names must already exist in the shared mailbox's master list, because `manage-category` only manages your own.
@@ -194,7 +194,7 @@ The shared mailbox address must be a plain email address in printable ASCII (for
 | `Invalid mailbox "…"` | The address isn't a plain printable-ASCII email address | Retype it without spaces, look-alike characters, `#`, `%` or `/` |
 | Empty results | Mailbox is empty or folder doesn't exist | Try `folder: "inbox"`, or `listFolders: true` to see what's there |
 | `404 ErrorInvalidMailboxItemId` or "folder not found" on a read, move, categorise or flag | `sharedMailbox` was omitted, so the call addressed your own mailbox where the shared ID doesn't exist | Pass the same `sharedMailbox` on every call that uses an ID from the shared mailbox |
-| 403 access denied on a move/categorise/flag with `sharedMailbox` set | Token lacks `Mail.ReadWrite.Shared` (for example `OUTLOOK_SHARED_MAILBOX=read`) or delegate access is missing — the request stays shared-mailbox-scoped and fails; it does not fall back to your own mailbox | Set `OUTLOOK_SHARED_MAILBOX=true`, add the scope in Azure, grant delegate access, and re-authenticate |
+| 403 access denied on a move/categorise/flag with `sharedMailbox` set | Token lacks `Mail.ReadWrite.Shared` (for example `OUTLOOK_SHARED_MAILBOX=read`) or delegate access is missing — the request stays shared-mailbox-scoped and fails; it does not fall back to your own mailbox | Set `OUTLOOK_SHARED_MAILBOX=true` (or `send`, which also allows sending), add the scope in Azure, grant delegate access, and re-authenticate |
 | "Sending and drafting as a shared mailbox is turned off" | `OUTLOOK_SHARED_MAILBOX` isn't `send` | Set it to `send`, restart, and re-authenticate with `force=true` |
 | 403 or `ErrorSendAsDenied` when sending, drafting or checking recipients as a shared mailbox | No Full Access to the mailbox, no "Send As" or "Send on Behalf" on it, or no `Mail.Send.Shared` in the token | Check `auth action=about`; ask an Exchange admin for Full Access plus one of the two send permissions |
 

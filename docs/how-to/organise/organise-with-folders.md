@@ -175,7 +175,7 @@ The preview counts up to 100 subfolders; beyond that it says "at least".
 | `folderId` | Folder ID (stats or delete) | `stats`, `delete` |
 | `folderName` | Folder name or path to delete (resolved to ID) | `delete` |
 | `dryRun` | Preview the folder, items and subfolders that would be lost, without deleting | `delete` |
-| `sharedMailbox` | Act on a shared mailbox's folders instead of your own (alias `email`; opt-in, `create`/`move`/`delete` need `OUTLOOK_SHARED_MAILBOX=true`) | All |
+| `sharedMailbox` | Act on a shared mailbox's folders instead of your own (alias `email`; opt-in, `create`/`move`/`delete` need `OUTLOOK_SHARED_MAILBOX=true` or `send`) | All |
 
 ## Tips
 

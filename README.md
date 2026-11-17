@@ -396,8 +396,9 @@ a server that would ignore it.
    - `MailboxSettings.ReadWrite` — settings, auto-replies, categories
    - `People.Read` — people search
 3. Optionally add **org-only** permissions (work/school accounts only):
-   - `Mail.Read.Shared` — shared mailbox read access (requested only when `OUTLOOK_SHARED_MAILBOX=read` or `=true`)
-   - `Mail.ReadWrite.Shared` — shared mailbox writes (move/categorise/flag/mark-read; requested only when `OUTLOOK_SHARED_MAILBOX=true`)
+   - `Mail.Read.Shared` — shared mailbox read access (requested only when `OUTLOOK_SHARED_MAILBOX=read`, `=true` or `=send`)
+   - `Mail.ReadWrite.Shared` — shared mailbox writes (move/categorise/flag/mark-read, and drafts; requested only when `OUTLOOK_SHARED_MAILBOX=true` or `=send`)
+   - `Mail.Send.Shared` — sending as a shared mailbox (requested only when `OUTLOOK_SHARED_MAILBOX=send`; also needs Full Access plus "Send As" or "Send on Behalf" in Exchange)
    - `Place.Read.All` — full meeting room list (requires admin consent; the server doesn't request it at sign-in yet, [#337](https://github.com/littlebearapps/outlook-assistant/issues/337))
 4. Click **Add permissions**
 
@@ -438,7 +439,7 @@ USE_TEST_MODE=false
 | `OUTLOOK_DEFAULT_TIMEZONE` | IANA timezone applied to calendar events when callers don't pass one (e.g. `Europe/London`, `America/New_York`). | `Australia/Melbourne` |
 | `OUTLOOK_MAX_EMAILS_PER_SESSION` | Default per-session cap for each rate-limited tool, counted separately until the server restarts: `send-email` (including `draft action=send`), `draft` create/update/reply/reply-all/forward, `manage-rules` and `create-event`. Override one tool with `OUTLOOK_MAX_<TOOL>_PER_SESSION`, e.g. `OUTLOOK_MAX_SEND_EMAIL_PER_SESSION`. Unset or empty means no limit; **`0` blocks the tool** (before v3.14.1, `0` meant no limit), and so does any value that isn't a whole number. | no limit |
 | `OUTLOOK_ALLOWED_RECIPIENTS` | Comma-separated allowlist of domains/addresses for sends, drafts, rule forwards and calendar invitations (`create-event` and `manage-event` update attendees). Not applied to cancellation/decline messages or automatic replies. | unrestricted |
-| `OUTLOOK_SHARED_MAILBOX` | Opt-in shared-mailbox support (work/school only). `read` requests `Mail.Read.Shared`; `true` (or `readwrite`/`1`) also requests `Mail.ReadWrite.Shared`. Unset leaves sign-in unchanged. After enabling, restart and run `auth action=authenticate force=true`. | unset (off) |
+| `OUTLOOK_SHARED_MAILBOX` | Opt-in shared-mailbox support (work/school only). `read` requests `Mail.Read.Shared`; `true` (or `readwrite`/`1`) also requests `Mail.ReadWrite.Shared`; `send` requests both plus `Mail.Send.Shared`, for sending and drafting as the mailbox. Unset leaves sign-in unchanged. After enabling, restart and run `auth action=authenticate force=true`. | unset (off) |
 | `OUTLOOK_SEARCH_SCAN_LIMIT` | How many recent messages the client-side search fallback scans. Personal accounts match `to` locally within this window, so the default caps how far back a `to` search reaches. Max 5000. | `500` |
 | `OUTLOOK_REQUEST_TIMEOUT_MS` | Inactivity timeout for each Graph request attempt, in milliseconds: an attempt that receives no data for this long is abandoned with a timeout error. It isn't an overall deadline, so a slow response that keeps arriving isn't cut off. Throttled (`429`) and busy (`503`/`504`) responses are retried automatically, honouring `Retry-After`. | `60000` |
 | `OUTLOOK_READ_ONLY` | Read-only mode: `true` (or `1`/`yes`/`on`) refuses every tool call or action that isn't a read, including dry runs, exports and attachment downloads, before it runs. Signing in still works. An unrecognised value also turns it on, with a warning. Restart the server after changing it. | off |

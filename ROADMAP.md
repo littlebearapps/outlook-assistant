@@ -9,6 +9,7 @@ For shipped work, see [`CHANGELOG.md`](CHANGELOG.md).
 The next patch: small user-facing fixes that are safe to ship alone, so v3.15.0 can stay structural. Most come from the v3.14.2 live test (2026-11-02) and are pre-existing in v3.14.1.
 
 - **#389** fix(read-email): malformed IDs and 401/403 still return raw or generic errors — community PR #391.
+- **#408** fix(read-email): other Graph failures still show the raw Graph error body — found while reviewing #391.
 - **#402** fix(search): an invalid receivedAfter/receivedBefore is silently dropped and widens the search — split from #288; community PR #400.
 - **#367** fix(search): no attachment marker at standard verbosity on listings and `from`/`subject`/`hasAttachments` searches
 - **#368** fix(search): footer says "raise `count`" when the read cap stopped the search or `count` is already 50

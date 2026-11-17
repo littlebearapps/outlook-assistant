@@ -22,10 +22,19 @@ const config = require('../config');
 
 const SHARED_MAILBOX_DISABLED_MESSAGE =
   'Shared-mailbox support is turned off. It is opt-in and work/school only: ' +
-  'set OUTLOOK_SHARED_MAILBOX=read (read) or OUTLOOK_SHARED_MAILBOX=true ' +
-  '(read and organise) in the MCP server environment, restart the server, then ' +
+  'set OUTLOOK_SHARED_MAILBOX=read (read), OUTLOOK_SHARED_MAILBOX=true ' +
+  '(read and organise) or OUTLOOK_SHARED_MAILBOX=send (also send and draft ' +
+  'as the shared mailbox) in the MCP server environment, restart the server, then ' +
   're-authenticate with `auth action=authenticate force=true` so the token ' +
   'carries the shared-mailbox scopes.';
+
+const SHARED_MAILBOX_SEND_DISABLED_MESSAGE =
+  'Sending and drafting as a shared mailbox is turned off. It is opt-in and ' +
+  'work/school only: set OUTLOOK_SHARED_MAILBOX=send in the MCP server ' +
+  'environment, restart the server, then re-authenticate with ' +
+  '`auth action=authenticate force=true` so the token carries ' +
+  'Mail.Send.Shared. Your account also needs "Send As" (or "Send on Behalf") ' +
+  'on the shared mailbox in Exchange, and Full Access to it for drafts.';
 
 /**
  * Validate a mailbox and build its Graph resource prefix, WITHOUT checking
@@ -70,8 +79,56 @@ function buildMailboxPrefix(mailbox) {
   return prefix;
 }
 
+/**
+ * Build the Graph resource prefix for sending or drafting. A non-`me`
+ * mailbox requires OUTLOOK_SHARED_MAILBOX=send, the only mode that requests
+ * Mail.Send.Shared.
+ * @param {string|null} [mailbox] - Shared mailbox email address, or null/empty for the signed-in user
+ * @returns {string} - `me` or `users/{mailbox}`
+ * @throws {Error} If `mailbox` is invalid, or shared sending is off
+ */
+function buildSendMailboxPrefix(mailbox) {
+  const prefix = validateMailboxPrefix(mailbox);
+  if (prefix !== 'me' && config.SHARED_MAILBOX_MODE !== 'send') {
+    throw new Error(SHARED_MAILBOX_SEND_DISABLED_MESSAGE);
+  }
+  return prefix;
+}
+
+/**
+ * The mailbox send-email/draft act as, from `sharedMailbox` (alias `email`).
+ * @param {object} args - Tool arguments
+ * @returns {{prefix: string, sharedMailbox: string|null}} Graph prefix, and
+ *   the shared address (null for the signed-in user)
+ * @throws {Error} If the address is invalid, or shared sending is off
+ */
+function resolveSendMailbox(args) {
+  const prefix = buildSendMailboxPrefix(args.sharedMailbox || args.email);
+  return {
+    prefix,
+    sharedMailbox: prefix === 'me' ? null : prefix.slice('users/'.length),
+  };
+}
+
+/**
+ * `from` for a message composed as a shared mailbox, or undefined for the
+ * signed-in user. With "Send on Behalf" (no "Send As"), Exchange shows
+ * "you on behalf of" this address.
+ * @param {string|null} sharedMailbox
+ * @returns {object|undefined}
+ */
+function sharedFrom(sharedMailbox) {
+  return sharedMailbox
+    ? { emailAddress: { address: sharedMailbox } }
+    : undefined;
+}
+
 module.exports = {
   buildMailboxPrefix,
+  buildSendMailboxPrefix,
+  resolveSendMailbox,
+  sharedFrom,
   validateMailboxPrefix,
   SHARED_MAILBOX_DISABLED_MESSAGE,
+  SHARED_MAILBOX_SEND_DISABLED_MESSAGE,
 };

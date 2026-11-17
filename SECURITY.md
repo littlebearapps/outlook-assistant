@@ -55,11 +55,12 @@ At sign-in this server requests the following Microsoft Graph delegated permissi
 
 Opt-in, work/school accounts only:
 
-- `Mail.Read.Shared` — shared mailbox reads, requested only when `OUTLOOK_SHARED_MAILBOX=read` or `true`
-- `Mail.ReadWrite.Shared` — shared mailbox organising, requested only when `OUTLOOK_SHARED_MAILBOX=true`
+- `Mail.Read.Shared` — shared mailbox reads, requested only when `OUTLOOK_SHARED_MAILBOX=read`, `true` or `send`
+- `Mail.ReadWrite.Shared` — shared mailbox organising and drafts, requested only when `OUTLOOK_SHARED_MAILBOX=true` or `send`
+- `Mail.Send.Shared` — sending as a shared mailbox, requested only when `OUTLOOK_SHARED_MAILBOX=send`
 - `Place.Read.All` — meeting room search; not requested by default, add it in Azure with admin consent if you need `find-meeting-rooms`
 
-`Mail.Send.Shared` is never requested. Token refresh asks only for the scopes
+No other mode requests `Mail.Send.Shared`. Token refresh asks only for the scopes
 recorded as granted at sign-in, plus `offline_access`, so a refresh never
 widens access.
 

@@ -188,9 +188,12 @@ function hasTipContent(tip) {
 /**
  * Get mail tips for specified recipients
  * @param {object} args - Tool arguments
+ * @param {string} [prefix] - Sending mailbox (`me` or `users/{mailbox}`):
+ *   delivery restrictions depend on the sender. Internal callers only; the
+ *   tool itself always checks as the signed-in user.
  * @returns {object} - MCP response
  */
-async function handleGetMailTips(args) {
+async function handleGetMailTips(args, prefix = 'me') {
   const { recipients, tipTypes } = args;
 
   if (!recipients || recipients.length === 0) {
@@ -236,7 +239,7 @@ async function handleGetMailTips(args) {
     const response = await callGraphAPI(
       accessToken,
       'POST',
-      'me/getMailTips',
+      `${prefix}/getMailTips`,
       requestBody
     );
 

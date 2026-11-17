@@ -173,7 +173,7 @@ function grantedScopesOf(tokens) {
  */
 function describeSharedMailboxStatus(granted) {
   if (config.SHARED_MAILBOX_MODE === 'off' || !config.SHARED_SCOPES.length) {
-    return 'Disabled (opt-in, work/school only: set `OUTLOOK_SHARED_MAILBOX=read` or `=true`, restart, then `auth action=authenticate force=true`)';
+    return 'Disabled (opt-in, work/school only: set `OUTLOOK_SHARED_MAILBOX=read`, `=true` or `=send`, restart, then `auth action=authenticate force=true`)';
   }
   const lowerGranted = (granted || []).map((s) => s.toLowerCase());
   const parts = config.SHARED_SCOPES.map(

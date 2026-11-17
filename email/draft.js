@@ -16,6 +16,8 @@ const {
 } = require('../utils/safety');
 const { handleGetMailTips } = require('./mail-tips');
 const { toolError, authRequiredError } = require('../utils/tool-error');
+const { resolveSendMailbox, sharedFrom } = require('../utils/mailbox');
+const { sharedSendError } = require('../utils/graph-failure');
 
 /**
  * Format comma-separated email string into Graph API recipient objects
@@ -122,19 +124,26 @@ class DraftGuardError extends Error {}
  * DELETE and /send accept any message id, so without this check a received
  * or sent message could be edited, deleted or re-sent (#246).
  * @param {string} accessToken - Graph access token
+ * @param {string} prefix - Mailbox prefix: `me` or `users/{mailbox}`
  * @param {string} id - Message id the caller passed as the draft id
  * @param {string} action - The draft action being guarded (for the message)
  * @param {string[]} [extraFields] - Further fields to fetch in the same GET
  * @returns {Promise<object>} The draft, with id, isDraft, subject and extraFields
  * @throws {DraftGuardError} If the id is not a draft or does not exist
  */
-async function assertIsDraft(accessToken, id, action, extraFields = []) {
+async function assertIsDraft(
+  accessToken,
+  prefix,
+  id,
+  action,
+  extraFields = []
+) {
   let message;
   try {
     message = await callGraphAPI(
       accessToken,
       'GET',
-      `me/messages/${id}`,
+      `${prefix}/messages/${id}`,
       null,
       {
         $select: ['id', 'isDraft', 'subject', ...extraFields].join(','),
@@ -143,7 +152,7 @@ async function assertIsDraft(accessToken, id, action, extraFields = []) {
   } catch (error) {
     if (/status 404\b|ErrorItemNotFound/.test(error.message)) {
       throw new DraftGuardError(
-        `Draft not found: \`${id}\`. It may already have been sent or deleted, or the ID is wrong.`
+        `Draft not found: \`${id}\`. It may already have been sent or deleted, or the ID is wrong. IDs belong to their mailbox: pass the \`sharedMailbox\` the draft was created in, or leave it out for your own drafts.`
       );
     }
     throw error;
@@ -172,21 +181,29 @@ async function handleDraft(args) {
     );
   }
 
+  // Refused before any request, dry runs included, while the opt-in is off.
+  let mailbox;
+  try {
+    mailbox = resolveSendMailbox(args);
+  } catch (error) {
+    return toolError(`Nothing was changed: ${error.message}`);
+  }
+
   switch (action) {
     case 'create':
-      return handleCreateDraft(args);
+      return handleCreateDraft(args, mailbox);
     case 'update':
-      return handleUpdateDraft(args);
+      return handleUpdateDraft(args, mailbox);
     case 'send':
-      return handleSendDraft(args);
+      return handleSendDraft(args, mailbox);
     case 'delete':
-      return handleDeleteDraft(args);
+      return handleDeleteDraft(args, mailbox);
     case 'reply':
-      return handleReplyDraft(args, 'createReply');
+      return handleReplyDraft(args, mailbox, 'createReply');
     case 'reply-all':
-      return handleReplyDraft(args, 'createReplyAll');
+      return handleReplyDraft(args, mailbox, 'createReplyAll');
     case 'forward':
-      return handleForwardDraft(args);
+      return handleForwardDraft(args, mailbox);
     default:
       return toolError(
         `Invalid action '${action}'. Use 'create', 'update', 'send', 'delete', 'reply', 'reply-all', or 'forward'.`
@@ -197,9 +214,10 @@ async function handleDraft(args) {
 /**
  * Create a new draft
  */
-async function handleCreateDraft(args) {
+async function handleCreateDraft(args, { prefix, sharedMailbox }) {
   const { dryRun = false, checkRecipients: doCheckRecipients = false } = args;
   const message = buildMessageObject(args);
+  if (sharedMailbox) message.from = sharedFrom(sharedMailbox);
 
   // Check recipient allowlist if recipients specified
   const allRecipients = [
@@ -217,7 +235,7 @@ async function handleCreateDraft(args) {
   let tipsResult = null;
   if (doCheckRecipients && allRecipients.length > 0) {
     const allAddresses = allRecipients.map((r) => r.emailAddress.address);
-    tipsResult = await handleGetMailTips({ recipients: allAddresses });
+    tipsResult = await handleGetMailTips({ recipients: allAddresses }, prefix);
     const tipsText = tipsResult.content[0]?.text || '';
 
     if (dryRun) {
@@ -262,7 +280,7 @@ async function handleCreateDraft(args) {
     const draft = await callGraphAPI(
       accessToken,
       'POST',
-      'me/messages',
+      `${prefix}/messages`,
       message
     );
     const response = formatDraftResponse(draft, 'Draft created');
@@ -272,14 +290,14 @@ async function handleCreateDraft(args) {
     }
     return response;
   } catch (error) {
-    return handleError('creating draft', error);
+    return handleError('creating draft', error, sharedMailbox);
   }
 }
 
 /**
  * Update an existing draft
  */
-async function handleUpdateDraft(args) {
+async function handleUpdateDraft(args, { prefix, sharedMailbox }) {
   const { id } = args;
 
   if (!id) {
@@ -302,7 +320,7 @@ async function handleUpdateDraft(args) {
   try {
     const accessToken = await ensureAuthenticated();
     // Refusals must not consume a rate-limit slot, so check before counting
-    await assertIsDraft(accessToken, id, 'update');
+    await assertIsDraft(accessToken, prefix, id, 'update');
 
     const rateLimitError = checkRateLimit('draft');
     if (rateLimitError) return rateLimitError;
@@ -310,19 +328,19 @@ async function handleUpdateDraft(args) {
     const draft = await callGraphAPI(
       accessToken,
       'PATCH',
-      `me/messages/${id}`,
+      `${prefix}/messages/${id}`,
       message
     );
     return formatDraftResponse(draft, 'Draft updated');
   } catch (error) {
-    return handleError('updating draft', error);
+    return handleError('updating draft', error, sharedMailbox);
   }
 }
 
 /**
  * Send an existing draft
  */
-async function handleSendDraft(args) {
+async function handleSendDraft(args, { prefix, sharedMailbox }) {
   const { id } = args;
 
   if (!id) {
@@ -335,6 +353,7 @@ async function handleSendDraft(args) {
     // (here or in Outlook) since it was created.
     const draft = await assertIsDraft(
       accessToken,
+      prefix,
       id,
       'send',
       RECIPIENT_FIELDS
@@ -354,24 +373,27 @@ async function handleSendDraft(args) {
     const rateLimitError = checkRateLimit('send-email');
     if (rateLimitError) return rateLimitError;
 
-    await callGraphAPI(accessToken, 'POST', `me/messages/${id}/send`);
+    await callGraphAPI(accessToken, 'POST', `${prefix}/messages/${id}/send`);
+    const sentItems = sharedMailbox
+      ? `the Sent Items of ${sharedMailbox}`
+      : 'Sent Items';
     return {
       content: [
         {
           type: 'text',
-          text: `Draft sent successfully.\n\n**Note**: The draft ID \`${id}\` is no longer valid — the message has been moved to Sent Items with a new ID.`,
+          text: `Draft sent successfully.\n\n**Note**: The draft ID \`${id}\` is no longer valid — the message has been moved to ${sentItems} with a new ID.`,
         },
       ],
     };
   } catch (error) {
-    return handleError('sending draft', error);
+    return handleError('sending draft', error, sharedMailbox);
   }
 }
 
 /**
  * Delete a draft
  */
-async function handleDeleteDraft(args) {
+async function handleDeleteDraft(args, { prefix, sharedMailbox }) {
   const { id } = args;
 
   if (!id) {
@@ -380,8 +402,8 @@ async function handleDeleteDraft(args) {
 
   try {
     const accessToken = await ensureAuthenticated();
-    await assertIsDraft(accessToken, id, 'delete');
-    await callGraphAPI(accessToken, 'DELETE', `me/messages/${id}`);
+    await assertIsDraft(accessToken, prefix, id, 'delete');
+    await callGraphAPI(accessToken, 'DELETE', `${prefix}/messages/${id}`);
     return {
       content: [
         {
@@ -391,14 +413,14 @@ async function handleDeleteDraft(args) {
       ],
     };
   } catch (error) {
-    return handleError('deleting draft', error);
+    return handleError('deleting draft', error, sharedMailbox);
   }
 }
 
 /**
  * Create a reply or reply-all draft from an existing message
  */
-async function handleReplyDraft(args, endpoint) {
+async function handleReplyDraft(args, { prefix, sharedMailbox }, endpoint) {
   const { id, body, comment } = args;
 
   if (!id) {
@@ -424,6 +446,13 @@ async function handleReplyDraft(args, endpoint) {
       },
     };
   }
+  // Graph refuses `comment` together with message.body, not with other fields.
+  if (sharedMailbox) {
+    requestBody.message = {
+      ...requestBody.message,
+      from: sharedFrom(sharedMailbox),
+    };
+  }
 
   const actionName = endpoint === 'createReplyAll' ? 'reply-all' : 'reply';
 
@@ -440,13 +469,18 @@ async function handleReplyDraft(args, endpoint) {
     draft = await callGraphAPI(
       accessToken,
       'POST',
-      `me/messages/${id}/${endpoint}`,
+      `${prefix}/messages/${id}/${endpoint}`,
       Object.keys(requestBody).length > 0 ? requestBody : null
     );
 
     // Graph fills in the recipients from the original message, so they can
     // only be checked once the draft exists.
-    const refusal = await refuseBlockedReply(accessToken, draft, actionName);
+    const refusal = await refuseBlockedReply(
+      accessToken,
+      prefix,
+      draft,
+      actionName
+    );
     if (refusal) {
       if (refusal.draftDeleted) releaseRateLimit('draft');
       return refusal.error;
@@ -465,7 +499,7 @@ async function handleReplyDraft(args, endpoint) {
     if (!draft && rejected && rejected[1] !== '408') {
       releaseRateLimit('draft');
     }
-    return handleError(`creating ${actionName} draft`, error);
+    return handleError(`creating ${actionName} draft`, error, sharedMailbox);
   }
 }
 
@@ -474,12 +508,13 @@ async function handleReplyDraft(args, endpoint) {
  * on a new reply draft. If any is not allowed, delete the draft and return a
  * refusal; otherwise return null.
  * @param {string} accessToken - Graph access token
+ * @param {string} prefix - Mailbox prefix the draft was created in
  * @param {object} draft - The draft Graph returned from createReply/createReplyAll
  * @param {string} actionName - 'reply' or 'reply-all'
  * @returns {Promise<{error: object, draftDeleted: boolean}|null>} The
  *   refusal and whether its draft was deleted, or null to keep the draft
  */
-async function refuseBlockedReply(accessToken, draft, actionName) {
+async function refuseBlockedReply(accessToken, prefix, draft, actionName) {
   if (!getRecipientAllowlist()) return null;
 
   let reason;
@@ -490,7 +525,7 @@ async function refuseBlockedReply(accessToken, draft, actionName) {
       message = await callGraphAPI(
         accessToken,
         'GET',
-        `me/messages/${draft.id}`,
+        `${prefix}/messages/${draft.id}`,
         null,
         { $select: ['id', ...RECIPIENT_FIELDS].join(',') }
       );
@@ -507,7 +542,7 @@ async function refuseBlockedReply(accessToken, draft, actionName) {
   }
 
   try {
-    await callGraphAPI(accessToken, 'DELETE', `me/messages/${draft.id}`);
+    await callGraphAPI(accessToken, 'DELETE', `${prefix}/messages/${draft.id}`);
   } catch (error) {
     const stillThere = toolError(
       `${reason} The draft Graph created could not be deleted (${error.message}), so it is still in Drafts with ID \`${draft.id}\`. Do not send it.`,
@@ -530,7 +565,7 @@ async function refuseBlockedReply(accessToken, draft, actionName) {
 /**
  * Create a forward draft from an existing message
  */
-async function handleForwardDraft(args) {
+async function handleForwardDraft(args, { prefix, sharedMailbox }) {
   const { id, to, body, comment } = args;
 
   if (!id) {
@@ -570,25 +605,34 @@ async function handleForwardDraft(args) {
       },
     };
   }
+  if (sharedMailbox) {
+    requestBody.message = {
+      ...requestBody.message,
+      from: sharedFrom(sharedMailbox),
+    };
+  }
 
   try {
     const accessToken = await ensureAuthenticated();
     const draft = await callGraphAPI(
       accessToken,
       'POST',
-      `me/messages/${id}/createForward`,
+      `${prefix}/messages/${id}/createForward`,
       requestBody
     );
     return formatDraftResponse(draft, 'Forward draft created');
   } catch (error) {
-    return handleError('creating forward draft', error);
+    return handleError('creating forward draft', error, sharedMailbox);
   }
 }
 
 /**
  * Standard error handler
+ * @param {string} actionLabel - e.g. "creating draft"
+ * @param {Error} error - The failure
+ * @param {string|null} [sharedMailbox] - The shared mailbox acted as, if any
  */
-function handleError(actionLabel, error) {
+function handleError(actionLabel, error, sharedMailbox = null) {
   if (error instanceof DraftGuardError) {
     return {
       content: [{ type: 'text', text: error.message }],
@@ -599,6 +643,9 @@ function handleError(actionLabel, error) {
   if (error.message === 'Authentication required') {
     return authRequiredError();
   }
+
+  const denied = sharedSendError(error, sharedMailbox, actionLabel);
+  if (denied) return denied;
 
   return toolError(`Error ${actionLabel}: ${error.message}`);
 }

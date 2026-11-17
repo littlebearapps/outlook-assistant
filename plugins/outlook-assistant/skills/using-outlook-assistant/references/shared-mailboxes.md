@@ -1,6 +1,6 @@
 # Shared mailboxes
 
-Read this when the user wants to read, search or organise a shared or delegated mailbox (a team inbox, support queue or service account).
+Read this when the user wants to read, search, organise, or send or draft as a shared or delegated mailbox (a team inbox, support queue or service account).
 
 ## Turned off unless the user opts in
 
@@ -11,6 +11,7 @@ Shared-mailbox support is work/school only and off by default. The user (not you
 | unset (default)              | Nothing: every call for another mailbox is refused                          |
 | `read`                       | Search, read, export and attachments in shared mailboxes                    |
 | `true` (or `readwrite`, `1`) | Also organise them: move, flag, categorise, mark read, manage folders       |
+| `send`                       | Also send and draft as them (`send-email`, every `draft` action)            |
 
 After changing it, the user restarts the server and you run `auth action=authenticate force=true`, so the new token carries the shared scopes. A token refresh never adds them on its own. `auth action=about` (Shared mailboxes row) shows whether each shared scope was actually granted. If the organisation blocks consent, an administrator has to grant it; that is final for you.
 
@@ -18,7 +19,7 @@ When the setting is off, any `sharedMailbox` parameter, and every `access-shared
 
 ## Which tools accept it
 
-`sharedMailbox` (alias `email`) works on `search-emails`, `read-email`, `attachments`, `export`, `update-email`, `apply-category` and `folders`. `access-shared-mailbox` lists a shared mailbox's messages (`folder` or `folderId`) or its folder tree (`listFolders: true`).
+`sharedMailbox` (alias `email`) works on `search-emails`, `read-email`, `attachments`, `export`, `update-email`, `apply-category` and `folders`, and with `send` on `send-email` and `draft`. `access-shared-mailbox` lists a shared mailbox's messages (`folder` or `folderId`) or its folder tree (`listFolders: true`).
 
 | Task                            | Call                                                                                       |
 | ------------------------------- | ------------------------------------------------------------------------------------------ |
@@ -32,11 +33,12 @@ When the setting is off, any `sharedMailbox` parameter, and every `access-shared
 
 Message, attachment and folder IDs are scoped to the mailbox they came from. Once you start working in a shared mailbox, pass the same `sharedMailbox` on every follow-up call for those IDs. Leaving it out makes the tool look in the user's own mailbox and fails with `404 ErrorInvalidMailboxItemId`. A delta token already encodes its mailbox.
 
-## Never send as the shared mailbox
+## Sending as the shared mailbox
 
-- `send-email` and `draft` have no `sharedMailbox` parameter. They always act on the signed-in user's own mailbox, and sending as or on behalf of a shared mailbox is not supported.
-- `draft` action=`reply`, `reply-all` and `forward` look IDs up in the user's own mailbox, so they don't work on a shared-mailbox message ID. If the user wants to answer from their own address, draft a new message with `draft` action=`create`, and say first that the recipient will see the user, not the team address. To reply as the team, the user does it in Outlook.
-- Don't try to work around this with rules, forwarding or another mailbox.
+- Only with `OUTLOOK_SHARED_MAILBOX=send`. In any other mode `send-email` and `draft` refuse `sharedMailbox`; relay the setup steps, and never send from the user's own address instead without asking.
+- Name the sender when you confirm: "send as support@… to …". The hard rules apply unchanged: draft first, send only when asked, `dryRun` to preview (it shows the shared `From`).
+- `draft` reply, reply-all and forward on a shared-mailbox message need the same `sharedMailbox`, and so do the follow-up `update`, `send` and `delete` on that draft.
+- A 403 or `ErrorSendAsDenied` means the user's account lacks "Send As" or "Send on Behalf" in Exchange, or the token lacks `Mail.Send.Shared`. It is final: report it, don't retry from another mailbox, and don't work around it with rules or forwarding.
 
 ## Writes affect everyone
 

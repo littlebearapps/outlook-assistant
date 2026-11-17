@@ -260,7 +260,7 @@ const emailTools = [
   {
     name: 'send-email',
     description:
-      'Compose and send an email immediately (destructive: sends external comms). Returns a confirmation. Safety controls: `dryRun: true` returns the composed message for review without sending; `checkRecipients: true` runs `get-mail-tips` first and returns its warnings. If the tips show an out-of-office reply, a full mailbox, a delivery restriction or external recipients, the send is refused until repeated with `acknowledgeWarnings: true`. Personal Outlook.com accounts return no tips, and no warnings is not proof of delivery. Subject to the session limit (`OUTLOOK_MAX_SEND_EMAIL_PER_SESSION`, else `OUTLOOK_MAX_EMAILS_PER_SESSION`; 0 refuses every send) and recipient allowlist (`OUTLOOK_ALLOWED_RECIPIENTS`) when configured; both refuse before any Graph request. For a review-before-send workflow, use `draft` (action=`create` → `update` → `send`); a draft can be checked in Outlook before it goes. Comma-separated recipient strings or arrays both accepted.',
+      'Compose and send an email immediately (destructive: sends external comms). Safety controls: `dryRun: true` returns the composed message for review without sending; `checkRecipients: true` runs `get-mail-tips` first and returns its warnings. If the tips show an out-of-office reply, a full mailbox, a delivery restriction or external recipients, the send is refused until repeated with `acknowledgeWarnings: true`. Personal Outlook.com accounts return no tips, and no warnings is not proof of delivery. Subject to the session limit (`OUTLOOK_MAX_SEND_EMAIL_PER_SESSION`, else `OUTLOOK_MAX_EMAILS_PER_SESSION`; 0 refuses every send) and recipient allowlist (`OUTLOOK_ALLOWED_RECIPIENTS`) when configured; both refuse before any Graph request. For a review-before-send workflow, use `draft` (action=`create` → `update` → `send`); a draft can be checked in Outlook before it goes. Comma-separated recipient strings or arrays both accepted. `sharedMailbox` (alias `email`) sends as a shared mailbox, with the same checks.',
     ...toolMetadata('send-email', 'Send Email'),
     inputSchema: {
       type: 'object',
@@ -310,6 +310,15 @@ const emailTools = [
           description:
             'Send even though checkRecipients flagged an out-of-office reply, a full mailbox, a delivery restriction or external recipients (default: false). Without it those warnings refuse the send. Pass only after the user has seen the warnings. No effect without checkRecipients.',
         },
+        sharedMailbox: {
+          type: 'string',
+          description:
+            'Email address of a shared mailbox to send as (default: the signed-in account). The mail goes out from that address and its sent copy is saved in that mailbox\'s Sent Items. Work/school only; needs the server opt-in setting OUTLOOK_SHARED_MAILBOX=send (otherwise the call is refused with setup guidance) and an Exchange permission on the mailbox: "Send As" shows the shared address as the sender, "Send on Behalf" shows "you on behalf of" it. With neither, Graph answers 403 and the email is not sent. Saving the sent copy in the shared Sent Items also needs Full Access to the mailbox.',
+        },
+        email: {
+          type: 'string',
+          description: 'Alias for `sharedMailbox`.',
+        },
       },
       additionalProperties: false,
       required: ['to', 'subject', 'body'],
@@ -319,7 +328,7 @@ const emailTools = [
   {
     name: 'draft',
     description:
-      "Draft lifecycle for review-before-send workflows (destructive: covers `send` and `delete`). action=`create` saves a new draft and returns its id (`dryRun: true` previews without saving; `checkRecipients: true` runs mail-tips first). action=`update` patches a draft by `id` (only fields passed change). action=`send` sends a draft and counts against the `send-email` session limit (0 refuses every send). action=`delete` moves a draft to Recoverable Items (restorable for a limited time). update/send/delete refuse any `id` that is not an unsent draft. action=`reply`/`reply-all` creates a reply draft from a message `id` (`comment` prepends text; not with `body`). action=`forward` creates a forward draft (needs `id` and `to`). The recipient allowlist (OUTLOOK_ALLOWED_RECIPIENTS) applies to create/update/forward, to the draft's current to/cc/bcc on send, and to reply/reply-all, whose draft is deleted if a recipient is not allowed. Returns the draft on create/update/reply/forward; a status on send/delete.",
+      "Draft lifecycle for review-before-send workflows (destructive: covers `send` and `delete`). action=`create` saves a new draft and returns its id (`dryRun: true` previews without saving; `checkRecipients: true` runs mail-tips first). action=`update` patches a draft by `id` (only fields passed change). action=`send` sends a draft and counts against the `send-email` session limit (0 refuses every send). action=`delete` moves a draft to Recoverable Items. update/send/delete refuse any `id` that is not an unsent draft. action=`reply`/`reply-all` creates a reply draft from a message `id` (`comment` prepends text; not with `body`). action=`forward` creates a forward draft (needs `id` and `to`). The recipient allowlist (OUTLOOK_ALLOWED_RECIPIENTS) applies to create/update/forward, to the draft's current to/cc/bcc on send, and to reply/reply-all, whose draft is deleted if a recipient is not allowed. `sharedMailbox` (alias `email`): act in and as a shared mailbox. Returns the draft, or a status on send/delete.",
     ...toolMetadata('draft', 'Draft Operations'),
     inputSchema: {
       type: 'object',
@@ -382,6 +391,15 @@ const emailTools = [
           type: 'boolean',
           description:
             'Check recipients for out-of-office, delivery restrictions before saving (action=create, default: false)',
+        },
+        sharedMailbox: {
+          type: 'string',
+          description:
+            'Email address of a shared mailbox to draft in and send as (default: the signed-in account). Drafts are created in, updated in, sent from and deleted from that mailbox\'s Drafts; reply/reply-all/forward take a message id from that mailbox. Pass it on every call for those ids. Work/school only; needs the server opt-in setting OUTLOOK_SHARED_MAILBOX=send (otherwise the call is refused with setup guidance) and Exchange permissions on the mailbox: Full Access (drafts live in it), plus "Send As" (the shared address is the sender) or "Send on Behalf" ("you on behalf of" it). Without them, Graph answers 403.',
+        },
+        email: {
+          type: 'string',
+          description: 'Alias for `sharedMailbox`.',
         },
       },
       additionalProperties: false,

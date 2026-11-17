@@ -8,7 +8,7 @@ tags: [outlook-assistant, advanced, how-to]
 
 Read and organise shared mailboxes like team inboxes, support queues, or service accounts that your Microsoft 365 account has access to.
 
-> **Scope:** shared-mailbox support covers reading and organising (search, read, export, attachments, flags/categories, moves, delta, conversations, folder management). **Sending, drafts, replies, and forwards from a shared mailbox are not supported** — `send-email` and `draft` always act on the signed-in user's own mailbox.
+> **Scope:** shared-mailbox support covers reading and organising (search, read, export, attachments, flags/categories, moves, delta, conversations, folder management), and, as a separate opt-in, [sending and drafting as the shared mailbox](#send-and-draft-as-a-shared-mailbox).
 
 ## Turn On Shared-Mailbox Support
 
@@ -17,6 +17,7 @@ Shared-mailbox support is **opt-in** and works with **work/school (Microsoft 365
 1. Add the setting to the MCP server's environment (for example the `env` block of your `.mcp.json`):
    - `OUTLOOK_SHARED_MAILBOX=read` — read, search, and export shared mailboxes (`Mail.Read.Shared`)
    - `OUTLOOK_SHARED_MAILBOX=true` — also organise them: move, flag, categorise, mark read, and manage folders (adds `Mail.ReadWrite.Shared`). `readwrite` and `1` mean the same.
+   - `OUTLOOK_SHARED_MAILBOX=send` — also send and draft as them (adds `Mail.Send.Shared`), see [Send and Draft as a Shared Mailbox](#send-and-draft-as-a-shared-mailbox)
 2. Restart the server.
 3. Re-authenticate so your token carries the new scopes: `auth action=authenticate force=true`. Existing tokens never gain them on their own, because a token refresh only asks for the scopes you were granted at sign-in.
 4. Check `auth action=about` — the **Shared mailboxes** row shows whether each shared scope was actually granted.
@@ -129,12 +130,40 @@ params:
 
 A shared-mailbox write always stays in the shared mailbox. If the token lacks `Mail.ReadWrite.Shared` it fails (usually 403); it never falls back to your own mailbox.
 
+## Send and Draft as a Shared Mailbox
+
+With `OUTLOOK_SHARED_MAILBOX=send`, `send-email` and every `draft` action accept `sharedMailbox` (alias `email`). `send` is the only mode that requests `Mail.Send.Shared`; `read` and `true` refuse these calls before any request, dry runs included.
+
+> "Reply to the supplier from the team address"
+
+```
+tool: draft
+params:
+  action: "reply"
+  sharedMailbox: "support@company.com"
+  id: "AAMkAGI2..."
+  comment: "Thanks, we'll check and get back to you."
+```
+
+- `send-email` sends from the shared address and saves the sent copy in the shared mailbox's Sent Items.
+- `draft` create, update, send and delete work in the shared mailbox's Drafts. Reply, reply-all and forward take a message ID from the shared mailbox, so pass the same `sharedMailbox` you found it with, and again on the follow-up `update`/`send`.
+- The recipient allowlist, session limits, `dryRun` and `checkRecipients` apply exactly as for your own mailbox. A `dryRun` preview shows the shared address as `From`.
+
+Your account also needs permissions on the mailbox in Exchange (Exchange admin center → the shared mailbox → Delegation): **Full Access**, because drafts and the sent copy live in the shared mailbox, plus one of these two:
+
+| Permission | What recipients see |
+|------------|---------------------|
+| **Send As** | The shared address as the sender |
+| **Send on Behalf** | "You on behalf of" the shared address |
+
+With neither, Graph answers 403 (often `ErrorSendAsDenied`) and nothing is sent; the tool says so and names both permissions. `auth action=about` shows whether `Mail.Send.Shared` was granted.
+
 ## Required Permissions
 
-Your Azure app registration needs the `Mail.Read.Shared` permission to **read** a shared mailbox, and `Mail.ReadWrite.Shared` to **organise** it (move messages between folders, apply categories, flag, mark read, create/delete folders). `Mail.Send.Shared` is deliberately **not** requested, because sending from a shared mailbox isn't supported:
+Your Azure app registration needs the `Mail.Read.Shared` permission to **read** a shared mailbox, and `Mail.ReadWrite.Shared` to **organise** it (move messages between folders, apply categories, flag, mark read, create/delete folders). `Mail.Send.Shared` is needed only to **send and draft as** it, and requested only with `OUTLOOK_SHARED_MAILBOX=send`:
 
 1. Go to [Azure Portal → App registrations](https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade) → your Outlook Assistant app
-2. Under **API permissions**, add the Microsoft Graph delegated permissions: `Mail.Read.Shared` (read) and `Mail.ReadWrite.Shared` (write)
+2. Under **API permissions**, add the Microsoft Graph delegated permissions: `Mail.Read.Shared` (read), `Mail.ReadWrite.Shared` (write) and, for sending, `Mail.Send.Shared`
 3. Grant admin consent if required by your organisation
 4. Set `OUTLOOK_SHARED_MAILBOX` (see [Turn On Shared-Mailbox Support](#turn-on-shared-mailbox-support)) and **re-authenticate** (`auth action=authenticate force=true`) so the token carries the new scopes — existing tokens won't have them
 
@@ -166,11 +195,13 @@ The shared mailbox address must be a plain email address in printable ASCII (for
 | Empty results | Mailbox is empty or folder doesn't exist | Try `folder: "inbox"`, or `listFolders: true` to see what's there |
 | `404 ErrorInvalidMailboxItemId` or "folder not found" on a read, move, categorise or flag | `sharedMailbox` was omitted, so the call addressed your own mailbox where the shared ID doesn't exist | Pass the same `sharedMailbox` on every call that uses an ID from the shared mailbox |
 | 403 access denied on a move/categorise/flag with `sharedMailbox` set | Token lacks `Mail.ReadWrite.Shared` (for example `OUTLOOK_SHARED_MAILBOX=read`) or delegate access is missing — the request stays shared-mailbox-scoped and fails; it does not fall back to your own mailbox | Set `OUTLOOK_SHARED_MAILBOX=true`, add the scope in Azure, grant delegate access, and re-authenticate |
+| "Sending and drafting as a shared mailbox is turned off" | `OUTLOOK_SHARED_MAILBOX` isn't `send` | Set it to `send`, restart, and re-authenticate with `force=true` |
+| 403 or `ErrorSendAsDenied` when sending or drafting as a shared mailbox | No "Send As" or "Send on Behalf" on the mailbox, or no `Mail.Send.Shared` in the token | Check `auth action=about`; ask an Exchange admin for one of the two permissions |
 
 ## Tips
 
 - `access-shared-mailbox` itself is read-only, so MCP clients that support annotations can auto-approve it
-- You can't *send, draft, reply, reply-all, or forward* from a shared mailbox through Outlook Assistant — those tools always act on your own mailbox. Use the Outlook UI for send-as or send-on-behalf.
+- Without `sharedMailbox`, `send-email` and `draft` act on your own mailbox, even with `OUTLOOK_SHARED_MAILBOX=send`
 - Use `outputVerbosity: "minimal"` for quick checks on high-volume shared inboxes
 - Mailbox settings, inbox rules and Focused Inbox always apply to your own mailbox
 

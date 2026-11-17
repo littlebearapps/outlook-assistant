@@ -339,6 +339,8 @@ const SHARED_MAILBOX_TOOLS = new Set([
   'apply-category',
   'export',
   'folders',
+  'send-email',
+  'draft',
 ]);
 
 /** Folder names and aliases the server resolves to Deleted Items. */
@@ -355,12 +357,13 @@ function count(n, noun) {
   return `${n} ${noun}${n === 1 ? '' : 's'}`;
 }
 
-function mailbox(tool, input) {
+/** " in the shared mailbox x@y" (or " as …" with `as`), or '' for your own. */
+function mailbox(tool, input, as = 'in') {
   if (!SHARED_MAILBOX_TOOLS.has(tool)) return '';
   // The server takes `sharedMailbox || email` (utils/mailbox.js callers).
   const shared = input.sharedMailbox || input.email;
   return typeof shared === 'string' && shared.includes('@')
-    ? ` in the shared mailbox ${cleanAddress(shared)}`
+    ? ` ${as} the shared mailbox ${cleanAddress(shared)}`
     : '';
 }
 
@@ -376,12 +379,12 @@ function describe(tool, action, input) {
   switch (`${tool}:${action ?? ''}`) {
     case 'send-email:': {
       const to = recipients(input) ?? 'to the recipients given';
-      return `Sends an email ${to}, subject ${quoted(input.subject, '(none)')}. It can't be unsent.`;
+      return `Sends an email${mailbox(tool, input, 'as')} ${to}, subject ${quoted(input.subject, '(none)')}. It can't be unsent.`;
     }
     case 'draft:send':
-      return `Sends ${named('draft', input, ['id'])} to everyone on it. It can't be unsent.`;
+      return `Sends ${named('draft', input, ['id'])}${mailbox(tool, input, 'as')} to everyone on it. It can't be unsent.`;
     case 'draft:delete':
-      return `Deletes ${named('draft', input, ['id'])}.`;
+      return `Deletes ${named('draft', input, ['id'])}${mailbox(tool, input)}.`;
     case 'create-event:': {
       const invited = addresses(input.attendees);
       const when = input.start ? ` at ${clean(input.start)}` : '';

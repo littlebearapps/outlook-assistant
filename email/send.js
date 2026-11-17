@@ -11,6 +11,8 @@ const {
 } = require('../utils/safety');
 const { handleGetMailTips } = require('./mail-tips');
 const { toolError, authRequiredError } = require('../utils/tool-error');
+const { resolveSendMailbox, sharedFrom } = require('../utils/mailbox');
+const { sharedSendError } = require('../utils/graph-failure');
 
 /**
  * Mail-tip issues that stop a send until the caller passes
@@ -71,6 +73,14 @@ async function handleSendEmail(args) {
     return toolError('Body content is required.');
   }
 
+  // Refused before any request, dry runs included, while the opt-in is off.
+  let prefix, sharedMailbox;
+  try {
+    ({ prefix, sharedMailbox } = resolveSendMailbox(args));
+  } catch (error) {
+    return toolError(`Email not sent: ${error.message}`);
+  }
+
   try {
     // Format recipients
     const toRecipients = to.split(',').map((email) => {
@@ -126,6 +136,7 @@ async function handleSendEmail(args) {
         ccRecipients: ccRecipients.length > 0 ? ccRecipients : undefined,
         bccRecipients: bccRecipients.length > 0 ? bccRecipients : undefined,
         importance,
+        from: sharedFrom(sharedMailbox),
       },
       saveToSentItems,
     };
@@ -135,9 +146,10 @@ async function handleSendEmail(args) {
     let mailTips = null;
     if (checkRecipients) {
       const allAddresses = allRecipients.map((r) => r.emailAddress.address);
-      const tipsResult = await handleGetMailTips({
-        recipients: allAddresses,
-      });
+      const tipsResult = await handleGetMailTips(
+        { recipients: allAddresses },
+        prefix
+      );
 
       const tipsText = tipsResult.content[0]?.text || '';
       const blocking = (tipsResult._meta?.issues || []).filter(
@@ -200,10 +212,11 @@ async function handleSendEmail(args) {
     // Get access token
     const accessToken = await ensureAuthenticated();
 
-    // Make API call to send email
-    await callGraphAPI(accessToken, 'POST', 'me/sendMail', emailObject);
+    // Make API call to send email. For a shared mailbox, `users/{mailbox}`
+    // keeps the sent copy in that mailbox's Sent Items.
+    await callGraphAPI(accessToken, 'POST', `${prefix}/sendMail`, emailObject);
 
-    const sentText = `Email sent successfully!\n\nSubject: ${subject}\nRecipients: ${toRecipients.length}${ccRecipients.length > 0 ? ` + ${ccRecipients.length} CC` : ''}${bccRecipients.length > 0 ? ` + ${bccRecipients.length} BCC` : ''}\nMessage Length: ${body.length} characters`;
+    const sentText = `Email sent successfully!\n\n${sharedMailbox ? `From: ${sharedMailbox}\n` : ''}Subject: ${subject}\nRecipients: ${toRecipients.length}${ccRecipients.length > 0 ? ` + ${ccRecipients.length} CC` : ''}${bccRecipients.length > 0 ? ` + ${bccRecipients.length} BCC` : ''}\nMessage Length: ${body.length} characters`;
 
     if (!mailTips) {
       return { content: [{ type: 'text', text: sentText }] };
@@ -228,6 +241,9 @@ async function handleSendEmail(args) {
     if (error.message === 'Authentication required') {
       return authRequiredError();
     }
+
+    const denied = sharedSendError(error, sharedMailbox, 'sending email');
+    if (denied) return denied;
 
     return toolError(`Error sending email: ${error.message}`);
   }

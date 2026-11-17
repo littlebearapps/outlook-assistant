@@ -19,7 +19,7 @@ Built by [Little Bear Apps](https://littlebearapps.com).
 - 8 email tools covering search, conversations, attachments, bulk export, pre-send mail tips, and draft management
 - Manage calendar events (upcoming by default, or past and named events via `startAfter`/`startBefore`/`subject`), contacts, rules, categories, and mailbox settings in one place
 - Export to multiple formats: MIME/EML, MBOX, Markdown, JSON, HTML, CSV
-- Opt-in shared-mailbox read and organise support (`sharedMailbox`, work/school accounts, `OUTLOOK_SHARED_MAILBOX`); sending from a shared mailbox is not supported
+- Opt-in shared-mailbox read and organise support (`sharedMailbox`, work/school accounts, `OUTLOOK_SHARED_MAILBOX`); sending and drafting as a shared mailbox with `OUTLOOK_SHARED_MAILBOX=send`
 
 ## Key Differentiators
 

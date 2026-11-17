@@ -67,7 +67,7 @@ Practical guides for managing your Microsoft 365 email, calendar, contacts, and 
 |-------|---------------|
 | [KQL Search Reference](advanced/kql-search-reference.md) | Advanced raw Graph `$search` expressions via `searchExpression` |
 | [Investigate Email Headers](advanced/investigate-email-headers.md) | Phishing investigation, DKIM, SPF, DMARC authentication, delivery chain, spam scores |
-| [Access Shared Mailboxes](advanced/access-shared-mailboxes.md) | Opt-in: read, search, export and organise team inboxes and service accounts, including custom folders (no sending) |
+| [Access Shared Mailboxes](advanced/access-shared-mailboxes.md) | Opt-in: read, search, export and organise team inboxes and service accounts, including custom folders; opt-in sending and drafting as the shared mailbox |
 | [Find Meeting Rooms](advanced/find-meeting-rooms.md) | Search by building, floor, or capacity |
 | [Batch Operations](advanced/batch-operations.md) | Bulk flag, move, export, and categorise |
 

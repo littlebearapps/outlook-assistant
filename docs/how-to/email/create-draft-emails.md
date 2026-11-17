@@ -165,6 +165,7 @@ With an allowlist set, `send` checks the draft's to, cc and bcc as they are at s
 - The draft-then-send workflow gives you a real draft in Outlook that you can also edit in the Outlook app
 - Reply/forward drafts preserve threading — the sent message appears in the correct conversation
 - No new Azure permissions needed — drafts use the same `Mail.ReadWrite` and `Mail.Send` scopes
+- To draft and send as a shared mailbox, pass `sharedMailbox` on every call (needs `OUTLOOK_SHARED_MAILBOX=send`, see [Access Shared Mailboxes](../advanced/access-shared-mailboxes.md#send-and-draft-as-a-shared-mailbox))
 
 ## Related
 

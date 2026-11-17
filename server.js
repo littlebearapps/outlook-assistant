@@ -24,7 +24,7 @@ function createServer(tools = TOOLS) {
       // -32601 rather than empty stubs. (#276)
       capabilities: { tools: { listChanged: false } },
       // Model-facing safety rules and usage tips, sent in the initialize
-      // result (#271), naming any tool a session limit of 0 blocks (#302).
+      // result (#271), naming any tool a zero or invalid session limit blocks (#302).
       instructions: serverInstructions({
         readOnly: config.READ_ONLY,
         blockedTools: blockedTools(),

@@ -14,7 +14,7 @@ const {
 const { getEmailFields } = require('../utils/field-presets');
 const { buildMailboxPrefix } = require('../utils/mailbox');
 const { toolError, authRequiredError } = require('../utils/tool-error');
-const { failureDetails } = require('../utils/graph-failure');
+const { failureDetails, accessError } = require('../utils/graph-failure');
 const { log } = require('../utils/logger');
 
 function messageNotFoundError() {
@@ -25,6 +25,13 @@ function messageNotFoundError() {
         'Use `search-emails` to find a current message ID, then retry. If the message belongs to a shared mailbox, pass the same `sharedMailbox`.',
     }
   );
+}
+
+function invalidMessageIdError() {
+  return toolError('That message ID is invalid.', {
+    nextStep:
+      'Use `search-emails` to find a current message ID, then retry. If the message belongs to a shared mailbox, pass the same `sharedMailbox`.',
+  });
 }
 
 /**
@@ -121,12 +128,18 @@ async function handleReadEmail(args) {
     } catch (error) {
       log.debug(`Error reading email: ${error.message}`);
 
+      const denied = accessError(error, sharedMailbox, 'read');
+      if (denied) return denied;
+
+      const { status, code } = failureDetails(error);
       // Improved error handling with more specific messages
       if (error.message.includes("doesn't belong to the targeted mailbox")) {
         return toolError(
           `The email ID seems invalid or doesn't belong to your mailbox. Please try with a different email ID.`
         );
-      } else if (failureDetails(error).status === 404) {
+      } else if (status === 400 && code === 'ErrorInvalidIdMalformed') {
+        return invalidMessageIdError();
+      } else if (status === 404) {
         // The status comes from the Graph client's error, never from other
         // text in the message (#341).
         return messageNotFoundError();

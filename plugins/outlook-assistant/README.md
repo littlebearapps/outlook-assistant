@@ -43,7 +43,7 @@ In Claude Code you can also enter the client ID when you enable the plugin.
 - An optional recipient allowlist for sends, drafts (including replies), rule forwards and meeting attendees.
 - An optional read-only mode that refuses every change before it runs.
 - MCP safety annotations on every tool.
-- Sending from shared mailboxes is never supported.
+- Sending and drafting as a shared mailbox only with the server setting `OUTLOOK_SHARED_MAILBOX=send`, under the same checks.
 
 ## Skill and safety hook
 

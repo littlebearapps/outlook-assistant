@@ -256,6 +256,7 @@ function formatDryRunPreview(emailObject) {
     .join(', ');
 
   let preview = `Email NOT sent.\n\n`;
+  if (msg.from) preview += `From: ${msg.from.emailAddress.address}\n`;
   preview += `To: ${to}\n`;
   if (cc) preview += `CC: ${cc}\n`;
   if (bcc) preview += `BCC: ${bcc}\n`;

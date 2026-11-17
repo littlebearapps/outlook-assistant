@@ -71,17 +71,22 @@ if (
 // nobody's consent prompt or token changes unless they enable it:
 //   OUTLOOK_SHARED_MAILBOX=read                 → Mail.Read.Shared
 //   OUTLOOK_SHARED_MAILBOX=true|readwrite|1     → Mail.Read.Shared + Mail.ReadWrite.Shared
-// Sending/drafts from a shared mailbox are out of scope (Mail.Send.Shared is
-// never requested). When enabled, the device-code flow falls back to
+//   OUTLOOK_SHARED_MAILBOX=send                 → both of those + Mail.Send.Shared
+// Only `send` lets send-email and draft act as a shared mailbox; no other
+// mode requests Mail.Send.Shared. When enabled, the device-code flow falls back to
 // BASE_SCOPES only on errors proving the account can't use `.Shared` scopes
 // (see auth/device-code.js isScopeConsentError); consent-required errors
 // (AADSTS65001) surface remediation instead of downgrading.
-const ALL_SHARED_SCOPES = ['Mail.Read.Shared', 'Mail.ReadWrite.Shared'];
+const ALL_SHARED_SCOPES = [
+  'Mail.Read.Shared',
+  'Mail.ReadWrite.Shared',
+  'Mail.Send.Shared',
+];
 
 /**
  * Parse OUTLOOK_SHARED_MAILBOX into a mode.
  * @param {string|undefined} raw
- * @returns {'off'|'read'|'readwrite'}
+ * @returns {'off'|'read'|'readwrite'|'send'}
  */
 function parseSharedMailboxMode(raw) {
   const value = String(raw || '')
@@ -89,11 +94,12 @@ function parseSharedMailboxMode(raw) {
     .toLowerCase();
   if (value === 'read') return 'read';
   if (['true', 'readwrite', '1'].includes(value)) return 'readwrite';
+  if (value === 'send') return 'send';
   if (value && !['false', '0', 'off', 'no'].includes(value)) {
     console.warn(
       // redact(): people sometimes put the shared mailbox's address here.
       `[outlook-assistant] OUTLOOK_SHARED_MAILBOX="${redact(raw)}" is not a recognised value. ` +
-        'Expected read, true/readwrite/1, or unset. Shared-mailbox support stays off.'
+        'Expected read, true/readwrite/1, send, or unset. Shared-mailbox support stays off.'
     );
   }
   return 'off';
@@ -105,7 +111,8 @@ const SHARED_MAILBOX_MODE = parseSharedMailboxMode(
 const SHARED_SCOPES_BY_MODE = {
   off: [],
   read: ['Mail.Read.Shared'],
-  readwrite: [...ALL_SHARED_SCOPES],
+  readwrite: ['Mail.Read.Shared', 'Mail.ReadWrite.Shared'],
+  send: [...ALL_SHARED_SCOPES],
 };
 const SHARED_SCOPES = SHARED_SCOPES_BY_MODE[SHARED_MAILBOX_MODE];
 
@@ -188,7 +195,7 @@ module.exports = {
   // `.Shared` scopes requested at sign-in for the configured mode ([] = off)
   SHARED_SCOPES,
   ALL_SHARED_SCOPES,
-  // 'off' | 'read' | 'readwrite' — from OUTLOOK_SHARED_MAILBOX (opt-in)
+  // 'off' | 'read' | 'readwrite' | 'send' — from OUTLOOK_SHARED_MAILBOX (opt-in)
   SHARED_MAILBOX_MODE,
   parseSharedMailboxMode,
 

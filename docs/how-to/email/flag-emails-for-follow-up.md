@@ -121,7 +121,7 @@ See [Batch Operations](../advanced/batch-operations.md) for more bulk workflows.
 | `ids` | Array of email IDs (batch) | `flag`, `unflag`, `complete` |
 | `dueDateTime` | Follow-up due date-time (ISO 8601; `Z`/offset = exact instant, no zone = configured timezone) | `flag` |
 | `startDateTime` | Follow-up start date-time (same format; defaults to 9 am on the due date) | `flag` |
-| `sharedMailbox` | Shared mailbox the messages belong to (alias `email`; needs `OUTLOOK_SHARED_MAILBOX=true`) | All actions |
+| `sharedMailbox` | Shared mailbox the messages belong to (alias `email`; needs `OUTLOOK_SHARED_MAILBOX=true` or `send`) | All actions |
 
 ## Tips
 

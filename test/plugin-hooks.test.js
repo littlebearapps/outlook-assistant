@@ -698,6 +698,34 @@ describe('reasons', () => {
     ).toMatch(/in the shared mailbox team@x\.com/);
   });
 
+  test('sending as a shared mailbox names it as the sender', () => {
+    expect(
+      reason(
+        pre('send-email', {
+          to: 'a@x.com',
+          subject: 'Hi',
+          sharedMailbox: 'team@x.com',
+        })
+      )
+    ).toBe(
+      "Outlook Assistant: Sends an email as the shared mailbox team@x.com to a@x.com, subject «Hi». It can't be unsent."
+    );
+    expect(
+      reason(pre('draft', { action: 'send', id: 'AAMk1', email: 'team@x.com' }))
+    ).toMatch(
+      /Sends the draft .* as the shared mailbox team@x\.com to everyone/
+    );
+    expect(
+      reason(
+        pre('draft', {
+          action: 'delete',
+          id: 'AAMk1',
+          sharedMailbox: 'team@x.com',
+        })
+      )
+    ).toMatch(/Deletes the draft .* in the shared mailbox team@x\.com\.$/);
+  });
+
   test('auto-replies name the external audience', () => {
     expect(
       reason(

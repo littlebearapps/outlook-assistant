@@ -203,11 +203,17 @@ describe('config scope exports', () => {
     expect(config.BASE_SCOPES).toContain('offline_access');
   });
 
-  it('ALL_SHARED_SCOPES contains exactly the two .Shared scopes', () => {
+  it('ALL_SHARED_SCOPES contains exactly the three .Shared scopes', () => {
     expect(config.ALL_SHARED_SCOPES).toEqual([
       'Mail.Read.Shared',
       'Mail.ReadWrite.Shared',
+      'Mail.Send.Shared',
     ]);
+  });
+
+  it('only OUTLOOK_SHARED_MAILBOX=send could request Mail.Send.Shared', () => {
+    expect(config.BASE_SCOPES).not.toContain('Mail.Send.Shared');
+    expect(config.AUTH_CONFIG.scopes).not.toContain('Mail.Send.Shared');
   });
 
   it('shared mailboxes are off by default: sign-in requests BASE_SCOPES only', () => {
@@ -255,6 +261,27 @@ describe('config scope exports', () => {
         ]);
       }
     );
+
+    it.each(['send', ' SEND '])(
+      '%p → all three .Shared scopes, Mail.Send.Shared included',
+      (value) => {
+        const c = loadConfigWith(value);
+        expect(c.SHARED_MAILBOX_MODE).toBe('send');
+        expect(c.AUTH_CONFIG.scopes).toEqual([
+          ...c.BASE_SCOPES,
+          'Mail.Read.Shared',
+          'Mail.ReadWrite.Shared',
+          'Mail.Send.Shared',
+        ]);
+        // A rejected `.Shared` set still falls back to base scopes only.
+        expect(c.AUTH_CONFIG.fallbackScopes).toEqual(c.BASE_SCOPES);
+      }
+    );
+
+    it.each(['read', 'true'])('%p never requests Mail.Send.Shared', (value) => {
+      const c = loadConfigWith(value);
+      expect(c.AUTH_CONFIG.scopes).not.toContain('Mail.Send.Shared');
+    });
 
     it.each(['', 'false', '0', 'off'])('%p → off', (value) => {
       const c = loadConfigWith(value);

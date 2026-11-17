@@ -186,6 +186,7 @@ params:
 | `checkRecipients` | Check recipients for issues before sending; flagged sends are refused | `false` |
 | `acknowledgeWarnings` | Send anyway after `checkRecipients` flagged recipients (use only once you've seen the warnings) | `false` |
 | `saveToSentItems` | Save to Sent Items folder | `true` |
+| `sharedMailbox` | Send as this shared mailbox (alias `email`; needs `OUTLOOK_SHARED_MAILBOX=send`, see [Access Shared Mailboxes](../advanced/access-shared-mailboxes.md#send-and-draft-as-a-shared-mailbox)) | your own mailbox |
 
 ## Draft Before Sending
 

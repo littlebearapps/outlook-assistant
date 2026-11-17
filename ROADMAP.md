@@ -1,46 +1,66 @@
 # Roadmap
 
-Active milestones for the Outlook Assistant MCP server. Items may shift or be cut as priorities evolve. The authoritative source is the [GitHub milestones page](https://github.com/littlebearapps/outlook-assistant/milestones); this document is a periodic snapshot (last synced 2026-11-16, with v3.14.2 live). Issues are listed under their current titles.
+Active milestones for the Outlook Assistant MCP server. Items may shift or be cut as priorities evolve. The authoritative source is the [GitHub milestones page](https://github.com/littlebearapps/outlook-assistant/milestones); this document is a periodic snapshot (last synced 2026-11-17, with v3.14.2 live). Issues are listed under their current titles.
 
 For shipped work, see [`CHANGELOG.md`](CHANGELOG.md).
+
+## v3.14.3 — Live-test fixes, part 2
+
+The next patch: small user-facing fixes that are safe to ship alone, so v3.15.0 can stay structural. Most come from the v3.14.2 live test (2026-11-02) and are pre-existing in v3.14.1.
+
+- **#389** fix(read-email): malformed IDs and 401/403 still return raw or generic errors — community PR #391.
+- **#408** fix(read-email): other Graph failures still show the raw Graph error body — found while reviewing #391.
+- **#402** fix(search): an invalid receivedAfter/receivedBefore is silently dropped and widens the search — split from #288; community PR #400.
+- **#367** fix(search): no attachment marker at standard verbosity on listings and `from`/`subject`/`hasAttachments` searches
+- **#368** fix(search): footer says "raise `count`" when the read cap stopped the search or `count` is already 50
+- **#117** feat: improve search-emails experience for Sent Items and non-inbox folders — only the `from:` hint on Sent Items remains; ships with #368.
+- **#370** fix(read-email): hidden newsletter preheader padding fills the default body budget
+- **#372** fix(rules): create and reorder report the requested sequence, not the one Exchange stored
+- **#250** fix(contacts): manage-contact folder param is unusable (no way to list contact folders) — adds a `list-folders` action.
+- **#376** chore: cosmetic wording and metadata notes from the v3.14.2 live test
+- **#403** ci: add Node 24 to the CI test matrix — repo-only, split from #325.
 
 ## v3.15.0 — Structured outputs, paging & Hermes
 
 Machine-readable results and real paging, Hermes Agent support, and the v3.14.0 follow-ups. Verified across the cross-client matrix ([`docs/cross-client-matrix.md`](docs/cross-client-matrix.md)).
 
-- **#285** feat: outputSchema + structuredContent on all tools — the structured and text halves must each stand alone, because clients surface them differently.
+- **#285** feat: outputSchema + structuredContent on all tools — the structured and text halves must each stand alone, because clients surface them differently. Write tools may slip to #406 (v3.16.0).
 - **#239** fix(calendar): list-events misses upcoming occurrences of recurring meetings — moves `list-events` to `calendarView`.
-- **#286** feat: real cursor pagination for search-emails, list-events and access-shared-mailbox — depends on #261 (v3.14.2) and #239.
+- **#405** feat(calendar): series guard on manage-event for recurring meetings — split from #125 to land with #239.
+- **#286** feat: real cursor pagination for search-emails, list-events and access-shared-mailbox — depends on #261 (v3.14.2), #239 and #285.
+- **#339** feat(search): push the date window into the $search expression instead of paging for it
+- **#371** perf(search): a `query` with no match reads 12 pages (8–19 s) — with #339.
 - **#264** perf(conversations): eml/mbox conversation export downloads MIME sequentially (up to 1000 requests) — bounded parallel downloads.
-- **#288** fix: input validation gaps
+- **#288** fix: input validation gaps — the silently dropped date window moved to #402 (v3.14.3).
 - **#289** chore: parameter naming consistency and alias deprecation — deprecated aliases keep working until v4.0.0.
+- **#404** fix(email): explicit text/html body type; stop guessing from tags — the bug half of #358.
 - **#243** fix(docs): tool descriptions contradict implemented behaviour — adds a description↔schema test.
 - **#93** docs: audit and improve all tool descriptions — umbrella issue; closes once #243's test lands.
+- **#324** test(evals): skill-evals grading can pass vacuously; sync-version --check misses a missing metadata.version — fixed before the Hermes work relies on the evals.
 - **#309** feat(plugin): Hermes Agent support, stage 1: scanner-safe skill text and plugin-catalog listing
 - **#310** feat(plugin): Hermes Agent support, stage 2: native approval guard plugin (outlook-assistant-guard)
-- **#324** test(evals): skill-evals grading can pass vacuously; sync-version --check misses a missing metadata.version — fixed before the Hermes work relies on the evals.
 - **#299** v3.14.0 follow-ups: hook prompt review and manual client checks — still open: a focused review of the hook's prompt text against the server's argument handling, and hand checks in VS Code with Copilot (Local agent), the Cursor desktop app, Claude Desktop, Gemini CLI, MCP Inspector and a local model.
 - **#290** ci: supply-chain hardening (image digests, SBOM, OpenSSF Scorecard)
-- **#334** test: Microsoft 365 live verification of the v3.14.2 changes — moved from v3.14.2, which shipped after a personal-account test only (needs a Microsoft 365 Business Basic trial).
-- **#367, #368, #370–#372, #376** follow-ups from the v3.14.2 live test (2026-11-02), all pre-existing in v3.14.1: attachment marker at standard verbosity, "raise `count`" advice, newsletter preheader padding, slow no-match `query`, rule sequence reporting, and cosmetic notes (#376). The rest of that batch (#369, #373–#375, #378) shipped in v3.14.2.
+- **#334** test: Microsoft 365 live verification of the v3.14.2 changes — moved from v3.14.2, which shipped after a personal-account test only (needs a Microsoft 365 Business Basic trial). Not a release gate.
 
 ## v3.16.0 — Calendar, tasks & contacts
 
 The next feature minor after v3.15.0. New scopes are opt-in and reported by `auth action=about`; nothing changes for existing sign-ins.
 
-- **#125** feat: recurring calendar events (create-event recurrence support) — with a series guard on `manage-event`; the read side lands in v3.15.0 via #239.
+- **#125** feat: recurring calendar events (create-event recurrence support) — creation only; the read side (#239) and the series guard (#405) land in v3.15.0.
 - **#127** feat: contact structured email fields (primary/secondary/tertiary)
-- **#250** fix(contacts): manage-contact folder param is unusable (no way to list contact folders)
 - **#89** feat: add manage-tasks tool for Microsoft To Do — behind an opt-in scope.
-- **#117** feat: improve search-emails experience for Sent Items and non-inbox folders
 - **#245** perf(email): use $batch for bulk flag/read/category updates
+- **#358** feat(email): rich-text formatting (bodyFormat markdown/html, sanitising, clear-formatting) — adds `markdown` to the `bodyFormat` from #404.
+- **#337** feat(auth): opt-in `Place.Read.All` for `find-meeting-rooms` — may close in v3.15.0 as docs-only, depending on #334.
+- **#406** feat: outputSchema + structuredContent for write tools (#285 phase 2) — only if they slip from v3.15.0.
 
 ## v4.0.0 — MCP 2026-07-28 & server-side confirmation
 
 Breaking. SDK v1.x gets fixes until at least late January 2027.
 
 - **#291** feat!: migrate to MCP TS SDK v2 / protocol 2026-07-28 — stateless requests, `server/discover`, multi-round-trip requests and URL-mode elicitation for device-code sign-in.
-- **#325** chore!: require Node 22+ and test on Node 24 — Node 18 and 20 are end of life; Node 24 joins the CI matrix earlier, repo-only.
+- **#325** chore!: require Node 22+ and test on Node 24 — Node 18 and 20 are end of life; Node 24 joins the CI matrix earlier via #403 (v3.14.3).
 - **#287** feat: progress notifications and cancellation for long operations — builds on #291 (the new handler context).
 - **#269** feat(safety): server-side confirmation for sends and destructive actions (two-phase confirm / MCP elicitation) — driven by the risk-class map and enforced in every client; builds on #291.
 - **#292** refactor!: split mixed read/write tools and trim the tool count — also removes the aliases deprecated in v3.15.0 (#289).

@@ -313,7 +313,7 @@ const emailTools = [
         sharedMailbox: {
           type: 'string',
           description:
-            'Email address of a shared mailbox to send as (default: the signed-in account). The mail goes out from that address, and its sent copy is saved in that mailbox\'s Sent Items unless saveToSentItems is false. Work/school only; needs the server opt-in setting OUTLOOK_SHARED_MAILBOX=send (otherwise the call is refused with setup guidance) and Exchange permissions on the mailbox: Full Access, plus "Send As" (the shared address is the sender) or "Send on Behalf" ("you on behalf of" it). Without them, Graph answers 403 and the email is not sent.',
+            'Email address of a shared mailbox to send as (default: the signed-in account). The mail goes out from that address, and its sent copy is saved in that mailbox\'s Sent Items; saveToSentItems: false skips that, unless an Exchange admin setting keeps a copy anyway. Work/school only; needs the server opt-in setting OUTLOOK_SHARED_MAILBOX=send (otherwise the call is refused with setup guidance) and Exchange permissions on the mailbox: Full Access, plus "Send As" (the shared address is the sender) or "Send on Behalf" ("you on behalf of" it). Without them, Graph answers 403 and the email is not sent.',
         },
         email: {
           type: 'string',

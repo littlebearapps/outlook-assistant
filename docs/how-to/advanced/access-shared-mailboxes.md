@@ -145,8 +145,8 @@ params:
   comment: "Thanks, we'll check and get back to you."
 ```
 
-- `send-email` sends from the shared address and saves the sent copy in the shared mailbox's Sent Items, unless you pass `saveToSentItems: false`.
-- `draft` create, update, send and delete work in the shared mailbox's Drafts. Reply, reply-all and forward take a message ID from the shared mailbox, so pass the same `sharedMailbox` you found it with, and again on the follow-up `update`/`send`.
+- `send-email` sends from the shared address and saves the sent copy in the shared mailbox's Sent Items. `saveToSentItems: false` skips that, unless an Exchange admin setting keeps a copy anyway.
+- `draft` create, update, send and delete work in the shared mailbox's Drafts; a sent draft goes to the shared mailbox's Sent Items (`draft` has no `saveToSentItems` option). Reply, reply-all and forward take a message ID from the shared mailbox, so pass the same `sharedMailbox` you found it with, and again on the follow-up `update`/`send`.
 - The recipient allowlist, session limits, `dryRun` and `checkRecipients` apply exactly as for your own mailbox. A `dryRun` preview shows the shared address as `From`.
 
 Your account also needs permissions on the mailbox in Exchange (Exchange admin center → the shared mailbox → Delegation): **Full Access**, which Microsoft requires for sending through the shared mailbox (drafts live there too), plus one of these two:

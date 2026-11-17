@@ -74,8 +74,16 @@ async function handleSearchEmails(args) {
   const subject = args.subject || '';
   const hasAttachments = args.hasAttachments;
   const unreadOnly = args.unreadOnly;
-  const receivedAfter = args.receivedAfter || '';
-  const receivedBefore = args.receivedBefore || '';
+  const receivedAfter = args.receivedAfter ?? '';
+  const receivedBefore = args.receivedBefore ?? '';
+  // Invalid boundaries must not silently turn a narrow search into a broad one.
+  // Reject them before authentication or any mailbox request.
+  try {
+    validDateOrEmpty(receivedAfter, 'receivedAfter');
+    validDateOrEmpty(receivedBefore, 'receivedBefore');
+  } catch (error) {
+    return toolError(error.message);
+  }
   const searchAllFolders = args.searchAllFolders || false;
   // `searchExpression` is the accurate name — it's a Microsoft Graph $search
   // expression, not full KQL. `kqlQuery` is retained as a deprecated alias.
@@ -2018,14 +2026,13 @@ function receivedFirstClauses(window = {}) {
 }
 
 /**
- * A date the window helpers can take, or '' (logged) when it does not parse,
- * so a bad value is left out of the request as it always has been here.
+ * A valid date the window helpers can take, or '' when no boundary was supplied.
+ * Never discard an invalid date: that would broaden the requested search.
  */
 function validDateOrEmpty(value, label) {
-  if (!value) return '';
-  if (Number.isNaN(new Date(value).getTime())) {
-    log.debug(`Invalid ${label} date: ${value}`);
-    return '';
+  if (value == null || value === '') return '';
+  if (typeof value !== 'string' || Number.isNaN(new Date(value).getTime())) {
+    throw new TypeError(`${label} must be a valid date.`);
   }
   return value;
 }
